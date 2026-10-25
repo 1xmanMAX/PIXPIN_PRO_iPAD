@@ -65,7 +65,9 @@ simulador)
 pruebas)
     udid="$(simulador)"
     echo "==> Simulador: $udid"
-    correr "$DIST/pruebas.log" test "${comun[@]}" -configuration Debug -destination "id=$udid"
+    # Sin quitar codigo muerto: las pruebas usan del nucleo cosas que la app no.
+    correr "$DIST/pruebas.log" test "${comun[@]}" -configuration Debug -destination "id=$udid" \
+        ARCHS=arm64 ONLY_ACTIVE_ARCH=YES DEAD_CODE_STRIPPING=NO
     ;;
 ipa)
     correr "$DIST/ipa.log" build "${comun[@]}" -configuration Release -sdk iphoneos \
