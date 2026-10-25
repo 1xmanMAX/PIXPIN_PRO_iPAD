@@ -1,0 +1,43 @@
+[package]
+name = "pixpin-voz"
+# Valores escritos a mano y no heredados: `por-adaptar/` esta fuera del
+# espacio de trabajo de apple/, y `pixpin-ia` (en nucleo/) carga este
+# manifiesto para su dependencia de Windows.
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[dependencies]
+thiserror = "2.0.20"
+tracing = "0.1.44"
+# Vosk contesta en JSON («{"result":[{"word":…,"start":…}],"text":…}») y es
+# el unico sitio del crate donde hace falta: no se escribe un analizador a
+# mano para eso teniendo serde_json ya en el arbol.
+serde_json = "1.0"
+# El `Sec-MS-GEC` de las voces de Microsoft (`edge`) es un SHA-256, y el
+# nombre de cada MP3 en su cache tambien. Ya esta en el arbol.
+sha2 = "0.10"
+# Media Foundation para decodificar el `.m4a` a PCM, y el cargador de DLL
+# para `libvosk.dll`. Sin `windows-core` suelto: aqui no hay `#[implement]`.
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+    # `LoadLibraryW` / `GetProcAddress` / `FreeLibrary`: el motor de voz se
+    # carga al vuelo, no se enlaza.
+    "Win32_System_LibraryLoader",
+    # `GetShortPathNameW`, para darle a Vosk una ruta que su `fopen` sepa
+    # abrir cuando la carpeta del usuario lleva tildes.
+    "Win32_Storage_FileSystem",
+    # SAPI 5: el reconocedor de voz que ya trae Windows (`sapi.rs`), y el
+    # flujo en memoria que se le da como audio.
+    "Win32_Media_Speech",
+    "Win32_Media_Audio",
+    "Win32_UI_Shell",
+    # Whisper: `GetSystemDirectoryW` para cargar el `onnxruntime.dll` de
+    # `System32` por su ruta entera, y WinHTTP para bajar el modelo una vez
+    # (ver `whisper::bajar`).
+    "Win32_System_SystemInformation",
+    "Win32_Networking_WinHttp",
+] }
