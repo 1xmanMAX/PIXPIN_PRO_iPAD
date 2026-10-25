@@ -269,7 +269,13 @@ mod pruebas {
         let v = trozos(t);
         assert_eq!(
             v,
-            [("Hola ", false), ("👨‍💻", true), (" mundo", false), ("❤️", true), ("!", false)]
+            [
+                ("Hola ", false),
+                ("👨‍💻", true),
+                (" mundo", false),
+                ("❤️", true),
+                ("!", false)
+            ]
         );
         assert_eq!(v.iter().map(|(x, _)| *x).collect::<String>(), t);
         // Caso negativo: sin emoticonos, un solo trozo de texto.
@@ -289,8 +295,22 @@ mod pruebas {
     fn el_mismo_emoticono_tiene_siempre_el_mismo_tono_pastel() {
         assert_eq!(tono_de("🔥"), tono_de("🔥"));
         assert!(TONOS.contains(&tono_de("👨‍💻")));
-        let muestra = ["🔥", "❤️", "✅", "⭐", "📌", "🏗️", "🇵🇪", "👨‍💻", "🛒", "📞", "💡", "🎓"];
-        let distintos: std::collections::HashSet<u32> = muestra.iter().map(|e| tono_de(e)).collect();
+        let muestra = [
+            "🔥",
+            "❤️",
+            "✅",
+            "⭐",
+            "📌",
+            "🏗️",
+            "🇵🇪",
+            "👨‍💻",
+            "🛒",
+            "📞",
+            "💡",
+            "🎓",
+        ];
+        let distintos: std::collections::HashSet<u32> =
+            muestra.iter().map(|e| tono_de(e)).collect();
         assert!(distintos.len() >= 4, "{distintos:?}");
         // Caso negativo: el tono no depende de lo que se pidio antes.
         let a = tono_de("🔥");

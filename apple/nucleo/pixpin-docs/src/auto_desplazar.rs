@@ -239,7 +239,11 @@ mod pruebas {
         // 16 ms a 30 px/s son 0,48 px: nada aun, pero se guarda.
         assert_eq!(m.paso(1016, 30.0, false), 0);
         assert_eq!(m.paso(1032, 30.0, false), 0);
-        assert_eq!(m.paso(1048, 30.0, false), 1, "tres vueltas pasan de un pixel");
+        assert_eq!(
+            m.paso(1048, 30.0, false),
+            1,
+            "tres vueltas pasan de un pixel"
+        );
         // Un parón largo cuenta una decima como mucho: 3 px, no 300.
         assert_eq!(m.paso(11_048, 30.0, false), 3);
     }

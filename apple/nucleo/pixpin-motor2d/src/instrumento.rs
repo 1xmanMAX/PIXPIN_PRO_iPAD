@@ -849,8 +849,10 @@ mod pruebas {
             assert!(o.iter().any(|o| matches!(o, Orden::Polilinea { .. })));
             assert!(o.iter().any(|o| matches!(o, Orden::Texto { .. })));
             if ejes > 1 {
-                assert!(o.iter().any(|o| matches!(o,
-                    Orden::Polilinea { color, .. } if (color.a - ALFA_DE_LA_REJILLA).abs() < 1e-6)));
+                assert!(
+                    o.iter().any(|o| matches!(o,
+                    Orden::Polilinea { color, .. } if (color.a - ALFA_DE_LA_REJILLA).abs() < 1e-6))
+                );
             }
         }
     }

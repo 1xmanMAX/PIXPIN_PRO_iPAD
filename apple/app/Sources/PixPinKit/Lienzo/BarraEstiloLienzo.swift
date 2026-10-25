@@ -1,7 +1,11 @@
 // **El panel de estilo del lienzo**: color del trazo, fondo, relleno,
 // grosor, linea, trazo a mano y opacidad. Es el panel lateral de Windows
-// (`pixpin-ui/src/panel_lateral.rs`, el de Excalidraw): una isla de 200 a la
-// izquierda, bajo la barra, con sus secciones en el orden de Excalidraw. Lo
+// (`pixpin-ui/src/panel_lateral.rs`, el de Excalidraw): una isla a la
+// izquierda, bajo la barra, con sus secciones en el orden de Excalidraw.
+// **Compacto** (Windows, 24-oct: «la barra de propiedades ocupa mucha de la
+// visualizacion, redisenala y pon un boton para mostrarla y quitarla»): 168
+// de ancho en vez de 200, menos relleno y aire, botones de 28, cuatro por
+// fila; el boton de quitarlo va solo en el lienzo del Mac (`BotonPlegarPanel`). Lo
 // que se elige queda para lo proximo que se dibuje y, si hay algo elegido,
 // se le aplica en un paso de deshacer (`EditorLienzo.cambiarEstilo`, ver
 // `pixpin-nucleo/src/editor_estilo.rs`). Lo que ensena es `EditorLienzo.estilo`:
@@ -166,8 +170,9 @@ extension IconoLienzo {
     ])
 }
 
-/// Un cuadradito de color (o el damero de «transparente»), de 22 como en
-/// Excalidraw; el elegido lleva el anillo del color de la barra.
+/// Un cuadradito de color (o el damero de «transparente»), de 20 como el
+/// panel compacto de Windows; el elegido lleva el anillo del color de la
+/// barra.
 private struct Muestra: View {
     let color: ColorEstilo?
     let elegida: Bool
@@ -183,7 +188,7 @@ private struct Muestra: View {
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(Color.black.opacity(0.12), lineWidth: 1)
         }
-        .frame(width: 20, height: 20)
+        .frame(width: 18, height: 18)
         .padding(2)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
@@ -212,7 +217,7 @@ private struct Damero: View {
     }
 }
 
-/// Un boton de opcion de 32 (relleno, grosor, linea, trazo a mano).
+/// Un boton de opcion de 28 (relleno, grosor, linea, trazo a mano).
 private struct BotonOpcion: View {
     let icono: IconoLienzo
     let elegida: Bool
@@ -224,8 +229,8 @@ private struct BotonOpcion: View {
 
     var body: some View {
         Button(action: accion) {
-            IconoLienzoVista(icono: icono, lado: 16, color: elegida ? tema.activoIcono : tema.icono)
-                .frame(width: 32, height: 32)
+            IconoLienzoVista(icono: icono, lado: 15, color: elegida ? tema.activoIcono : tema.icono)
+                .frame(width: 28, height: 28)
                 .background(elegida ? tema.activoFondo : (encima ? tema.hover : tema.separador.opacity(0.6)),
                             in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8)
@@ -239,7 +244,8 @@ private struct BotonOpcion: View {
     }
 }
 
-/// **El panel de estilo**, en su isla de 200 a la izquierda.
+/// **El panel de estilo**, en su isla de 168 a la izquierda (el compacto de
+/// Windows).
 struct PanelEstiloLienzo: View {
     @ObservedObject var modelo: ModeloEditorLienzo
 
@@ -247,9 +253,9 @@ struct PanelEstiloLienzo: View {
 
     var body: some View {
         let tema = TemaBarraLienzo.de(modelo)
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             seccion("Trazo", tema) {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     ForEach(OpcionesEstiloLienzo.trazos) { o in
                         Button { modelo.cambiarEstilo(.trazo(color: o.valor)) } label: {
                             Muestra(color: o.valor, elegida: OpcionesEstiloLienzo.igual(estilo.trazo, o.valor),
@@ -264,7 +270,7 @@ struct PanelEstiloLienzo: View {
                 }
             }
             seccion("Fondo", tema) {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     ForEach(OpcionesEstiloLienzo.fondos) { o in
                         Button { modelo.cambiarEstilo(.fondo(color: o.valor)) } label: {
                             Muestra(color: o.valor, elegida: OpcionesEstiloLienzo.igual(estilo.fondo, o.valor),
@@ -310,16 +316,29 @@ struct PanelEstiloLienzo: View {
                     .controlSize(.small)
                     .tint(tema.menuIconoElegido)
             }
+            // Lo elegido, a la biblioteca de figuras (la fila «Acciones» del
+            // panel de Windows: «Guardar en figuras»).
+            if modelo.hayElegidos, modelo.nucleo != nil {
+                seccion("Acciones", tema) {
+                    Button { modelo.guardarComoFigura() } label: {
+                        Label("Guardar en figuras", systemImage: "rectangle.stack.badge.plus")
+                            .font(.system(size: 12))
+                            .foregroundStyle(tema.icono)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Guardar lo elegido en tus figuras")
+                }
+            }
         }
-        .padding(12)
-        .frame(width: 200, alignment: .leading)
+        .padding(8)
+        .frame(width: MedidasBarraLienzo.anchoPanel, alignment: .leading)
         .modifier(IslaLienzo(tema: tema))
     }
 
     private func seccion(_ titulo: String, _ tema: TemaBarraLienzo,
                          @ViewBuilder _ contenido: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(titulo).font(.system(size: 12)).foregroundStyle(tema.icono.opacity(0.75))
+            Text(titulo).font(.system(size: 11)).foregroundStyle(tema.icono.opacity(0.75))
             contenido()
         }
     }
@@ -327,10 +346,16 @@ struct PanelEstiloLienzo: View {
     private func opciones<V>(_ lista: [OpcionEstiloLienzo<V>], tema: TemaBarraLienzo,
                              elegida: @escaping (V) -> Bool, icono: @escaping (V) -> IconoLienzo,
                              accion: @escaping (V) -> Void) -> some View {
-        HStack(spacing: 8) {
-            ForEach(lista) { o in
-                BotonOpcion(icono: icono(o.valor), elegida: elegida(o.valor), tema: tema, ayuda: o.nombre) {
-                    accion(o.valor)
+        // Cuatro por fila (los rellenos son cinco: el quinto baja).
+        let filas = stride(from: 0, to: lista.count, by: 4).map { Array(lista[$0..<min($0 + 4, lista.count)]) }
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(filas.indices, id: \.self) { f in
+                HStack(spacing: 6) {
+                    ForEach(filas[f]) { o in
+                        BotonOpcion(icono: icono(o.valor), elegida: elegida(o.valor), tema: tema, ayuda: o.nombre) {
+                            accion(o.valor)
+                        }
+                    }
                 }
             }
         }

@@ -30,7 +30,11 @@ pub const MINIMO: f32 = 0.01;
 ///
 /// `false` si no es una imagen o el trozo no tiene sentido (fuera de 0..1,
 /// vacio): entonces `e` no se toca.
-pub fn recortar_imagen(e: &mut Elemento, conservar: (f32, f32, f32, f32), natural: Option<(f32, f32)>) -> bool {
+pub fn recortar_imagen(
+    e: &mut Elemento,
+    conservar: (f32, f32, f32, f32),
+    natural: Option<(f32, f32)>,
+) -> bool {
     if !matches!(e.figura, Figura::Imagen { .. }) {
         return false;
     }
@@ -47,7 +51,9 @@ pub fn recortar_imagen(e: &mut Elemento, conservar: (f32, f32, f32, f32), natura
     }
     // Lo que se ve ahora, en pixeles del original.
     let (bx, by, bw, bh, nw, nh) = match e.extras.recorte {
-        Some(r) if r.ancho > 0.0 && r.alto > 0.0 && r.ancho_natural > 0.0 && r.alto_natural > 0.0 => {
+        Some(r)
+            if r.ancho > 0.0 && r.alto > 0.0 && r.ancho_natural > 0.0 && r.alto_natural > 0.0 =>
+        {
             (r.x, r.y, r.ancho, r.alto, r.ancho_natural, r.alto_natural)
         }
         _ => {
@@ -69,8 +75,15 @@ pub fn recortar_imagen(e: &mut Elemento, conservar: (f32, f32, f32, f32), natura
     // nuevo se gira alrededor del viejo.
     let centro_viejo = Punto2::nuevo(e.x + e.ancho / 2.0, e.y + e.alto / 2.0);
     let (ancho, alto) = (e.ancho * fw, e.alto * fh);
-    let local = Punto2::nuevo(e.x + e.ancho * fx + ancho / 2.0, e.y + e.alto * fy + alto / 2.0);
-    let centro = if e.angulo == 0.0 { local } else { local.girar(centro_viejo, e.angulo) };
+    let local = Punto2::nuevo(
+        e.x + e.ancho * fx + ancho / 2.0,
+        e.y + e.alto * fy + alto / 2.0,
+    );
+    let centro = if e.angulo == 0.0 {
+        local
+    } else {
+        local.girar(centro_viejo, e.angulo)
+    };
     e.x = centro.x - ancho / 2.0;
     e.y = centro.y - alto / 2.0;
     e.ancho = ancho;
@@ -119,7 +132,11 @@ mod pruebas {
     #[test]
     fn la_mitad_izquierda_conserva_su_sitio() {
         let mut e = foto();
-        assert!(recortar_imagen(&mut e, (0.0, 0.0, 0.5, 1.0), Some((800.0, 400.0))));
+        assert!(recortar_imagen(
+            &mut e,
+            (0.0, 0.0, 0.5, 1.0),
+            Some((800.0, 400.0))
+        ));
         assert_eq!((e.x, e.y, e.ancho, e.alto), (100.0, 50.0, 200.0, 200.0));
         let r = e.extras.recorte.unwrap();
         assert_eq!((r.x, r.ancho, r.ancho_natural), (0.0, 400.0, 800.0));
@@ -139,7 +156,11 @@ mod pruebas {
     #[test]
     fn lo_que_no_es_imagen_o_un_trozo_vacio_no_se_toca() {
         // Casos negativos.
-        let mut r = Elemento { ancho: 10.0, alto: 10.0, ..Default::default() };
+        let mut r = Elemento {
+            ancho: 10.0,
+            alto: 10.0,
+            ..Default::default()
+        };
         assert!(!recortar_imagen(&mut r, (0.0, 0.0, 0.5, 0.5), None));
         let mut e = foto();
         let antes = e.clone();
@@ -152,7 +173,12 @@ mod pruebas {
     fn en_la_escena_es_un_paso_de_deshacer() {
         let mut s = Escena::nueva();
         let id = s.anadir(foto());
-        assert!(recortar_imagen_en_escena(&mut s, id, (0.0, 0.0, 1.0, 0.5), None));
+        assert!(recortar_imagen_en_escena(
+            &mut s,
+            id,
+            (0.0, 0.0, 1.0, 0.5),
+            None
+        ));
         assert_eq!(s.buscar(id).unwrap().alto, 100.0);
         assert!(s.deshacer());
         assert_eq!(s.buscar(id).unwrap().alto, 200.0);

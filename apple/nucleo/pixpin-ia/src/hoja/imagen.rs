@@ -38,7 +38,12 @@ impl Analisis {
 
     /// Una caja reducida, en pixeles de la pagina.
     pub fn a_pagina(&self, x0: usize, y0: usize, x1: usize, y1: usize) -> Caja {
-        Caja::de_esquinas(x0 as f64 / self.f, y0 as f64 / self.f, x1 as f64 / self.f, y1 as f64 / self.f)
+        Caja::de_esquinas(
+            x0 as f64 / self.f,
+            y0 as f64 / self.f,
+            x1 as f64 / self.f,
+            y1 as f64 / self.f,
+        )
     }
 
     /// Que parte de la caja es tinta (0-1).
@@ -50,7 +55,10 @@ impl Analisis {
         }
         let mut t = 0;
         for y in y0..y1 {
-            t += self.tinta[y * self.w + x0..y * self.w + x1].iter().filter(|&&b| b).count();
+            t += self.tinta[y * self.w + x0..y * self.w + x1]
+                .iter()
+                .filter(|&&b| b)
+                .count();
         }
         t as f64 / n as f64
     }
@@ -75,7 +83,11 @@ impl Analisis {
             }
         }
         let media = s / n;
-        Estadisticas { tinta: t as f64 / n, medios: m as f64 / n, desviacion: (s2 / n - media * media).max(0.0).sqrt() }
+        Estadisticas {
+            tinta: t as f64 / n,
+            medios: m as f64 / n,
+            desviacion: (s2 / n - media * media).max(0.0).sqrt(),
+        }
     }
 }
 
@@ -92,7 +104,8 @@ impl Estadisticas {
     pub fn parece_foto(&self) -> bool {
         // Un titulo grande en negrita tambien llena celdas de tinta, pero
         // casi sin medios tonos: sin ellos no es foto.
-        self.medios > 0.30 || (self.medios > 0.15 && self.medios + self.tinta > 0.55 && self.desviacion > 22.0)
+        self.medios > 0.30
+            || (self.medios > 0.15 && self.medios + self.tinta > 0.55 && self.desviacion > 22.0)
     }
 }
 
@@ -101,7 +114,15 @@ impl Estadisticas {
 pub fn analizar(rgba: &[u8], ancho: u32, alto: u32) -> Analisis {
     let (aw, ah) = (ancho as usize, alto as usize);
     if aw == 0 || ah == 0 || rgba.len() < aw * ah * 4 {
-        return Analisis { f: 1.0, w: 0, h: 0, gris: Vec::new(), fondo: 255, umbral: 128, tinta: Vec::new() };
+        return Analisis {
+            f: 1.0,
+            w: 0,
+            h: 0,
+            gris: Vec::new(),
+            fondo: 255,
+            umbral: 128,
+            tinta: Vec::new(),
+        };
     }
     let k = aw.div_ceil(ANCHO_ANALISIS).max(1);
     let (w, h) = (aw.div_ceil(k), ah.div_ceil(k));
@@ -113,7 +134,10 @@ pub fn analizar(rgba: &[u8], ancho: u32, alto: u32) -> Analisis {
                 for x in rx * k..((rx + 1) * k).min(aw) {
                     let i = (y * aw + x) * 4;
                     let a = rgba[i + 3] as u32;
-                    let g = (rgba[i] as u32 * 299 + rgba[i + 1] as u32 * 587 + rgba[i + 2] as u32 * 114) / 1000;
+                    let g = (rgba[i] as u32 * 299
+                        + rgba[i + 1] as u32 * 587
+                        + rgba[i + 2] as u32 * 114)
+                        / 1000;
                     // Lo transparente cuenta como papel blanco.
                     s += (g * a + 255 * (255 - a)) / 255;
                     n += 1;
@@ -130,7 +154,15 @@ pub fn analizar(rgba: &[u8], ancho: u32, alto: u32) -> Analisis {
     let fondo = (100..256).max_by_key(|&g| (hist[g], g)).unwrap_or(255) as u8;
     let umbral = ((fondo as f64) * 0.62).round().clamp(60.0, 200.0) as u8;
     let tinta = gris.iter().map(|&g| g < umbral).collect();
-    Analisis { f: 1.0 / k as f64, w, h, gris, fondo, umbral, tinta }
+    Analisis {
+        f: 1.0 / k as f64,
+        w,
+        h,
+        gris,
+        fondo,
+        umbral,
+        tinta,
+    }
 }
 
 /// Una raya larga y fina, en pixeles de la pagina.
@@ -146,7 +178,11 @@ pub struct Raya {
 
 impl Raya {
     pub fn largo(&self) -> f64 {
-        if self.vertical { self.y1 - self.y0 } else { self.x1 - self.x0 }
+        if self.vertical {
+            self.y1 - self.y0
+        } else {
+            self.x1 - self.x0
+        }
     }
     pub fn caja(&self) -> Caja {
         let g = self.grosor / 2.0;
@@ -184,7 +220,13 @@ fn rayas_en(a: &Analisis, vertical: bool, largo_min: f64) -> Vec<Raya> {
         return Vec::new();
     }
     let minimo = ((largo as f64 * largo_min) as usize).max(24);
-    let en = |l: usize, i: usize| if vertical { a.tinta[i * a.w + l] } else { a.tinta[l * a.w + i] };
+    let en = |l: usize, i: usize| {
+        if vertical {
+            a.tinta[i * a.w + l]
+        } else {
+            a.tinta[l * a.w + i]
+        }
+    };
     let mut tramos: Vec<Tramo> = Vec::new();
     for l in 0..n_lineas {
         let mut i = 0;
@@ -209,7 +251,11 @@ fn rayas_en(a: &Analisis, vertical: bool, largo_min: f64) -> Vec<Raya> {
                 i += 1;
             }
             if fin + 1 - ini >= minimo {
-                tramos.push(Tramo { linea: l, a: ini, b: fin + 1 });
+                tramos.push(Tramo {
+                    linea: l,
+                    a: ini,
+                    b: fin + 1,
+                });
             }
         }
     }
@@ -245,9 +291,23 @@ fn rayas_en(a: &Analisis, vertical: bool, largo_min: f64) -> Vec<Raya> {
             let g = ((l1 + 1 - l0) as f64 / a.f).max(1.0);
             let (p0, p1) = (ia as f64 / a.f, ib as f64 / a.f);
             if vertical {
-                Raya { x0: c, y0: p0, x1: c, y1: p1, grosor: g, vertical: true }
+                Raya {
+                    x0: c,
+                    y0: p0,
+                    x1: c,
+                    y1: p1,
+                    grosor: g,
+                    vertical: true,
+                }
             } else {
-                Raya { x0: p0, y0: c, x1: p1, y1: c, grosor: g, vertical: false }
+                Raya {
+                    x0: p0,
+                    y0: c,
+                    x1: p1,
+                    y1: c,
+                    grosor: g,
+                    vertical: false,
+                }
             }
         })
         .collect()
@@ -261,7 +321,12 @@ pub fn fotos(a: &Analisis, minimo: f64) -> Vec<Caja> {
     let mut es = vec![false; cw * ch];
     for cy in 0..ch {
         for cx in 0..cw {
-            let c = a.a_pagina(cx * cs, cy * cs, ((cx + 1) * cs).min(a.w), ((cy + 1) * cs).min(a.h));
+            let c = a.a_pagina(
+                cx * cs,
+                cy * cs,
+                ((cx + 1) * cs).min(a.w),
+                ((cy + 1) * cs).min(a.h),
+            );
             es[cy * cw + cx] = a.estadisticas(&c).parece_foto();
         }
     }
@@ -269,9 +334,17 @@ pub fn fotos(a: &Analisis, minimo: f64) -> Vec<Caja> {
     let cerrado = dilatar(&es, cw, ch, 1);
     let mut v = Vec::new();
     for (x0, y0, x1, y1, n) in componentes(&cerrado, cw, ch) {
-        let caja = a.a_pagina(x0 * cs, y0 * cs, ((x1 + 1) * cs).min(a.w), ((y1 + 1) * cs).min(a.h));
+        let caja = a.a_pagina(
+            x0 * cs,
+            y0 * cs,
+            ((x1 + 1) * cs).min(a.w),
+            ((y1 + 1) * cs).min(a.h),
+        );
         // Que de verdad sea foto por dentro (no un borde de texto).
-        let de_foto = (y0..=y1).flat_map(|y| (x0..=x1).map(move |x| (x, y))).filter(|&(x, y)| es[y * cw + x]).count();
+        let de_foto = (y0..=y1)
+            .flat_map(|y| (x0..=x1).map(move |x| (x, y)))
+            .filter(|&(x, y)| es[y * cw + x])
+            .count();
         let area = (x1 + 1 - x0) * (y1 + 1 - y0);
         if caja.w >= minimo && caja.h >= minimo && n >= 6 && de_foto * 10 >= area * 4 {
             v.push(caja);
@@ -337,7 +410,12 @@ pub fn manchas(a: &Analisis, quitar: &[Caja], rayas: &[Raya], celda: f64) -> Vec
         .into_iter()
         .filter_map(|(x0, y0, x1, y1, _)| {
             // Ajustar a la tinta de verdad dentro de las celdas.
-            let (px0, py0, px1, py1) = (x0 * cs, y0 * cs, ((x1 + 1) * cs).min(a.w), ((y1 + 1) * cs).min(a.h));
+            let (px0, py0, px1, py1) = (
+                x0 * cs,
+                y0 * cs,
+                ((x1 + 1) * cs).min(a.w),
+                ((y1 + 1) * cs).min(a.h),
+            );
             let (mut mx0, mut my0, mut mx1, mut my1) = (usize::MAX, usize::MAX, 0, 0);
             for y in py0..py1 {
                 for x in px0..px1 {
@@ -353,7 +431,10 @@ pub fn manchas(a: &Analisis, quitar: &[Caja], rayas: &[Raya], celda: f64) -> Vec
                 return None;
             }
             let caja = a.a_pagina(mx0, my0, mx1, my1);
-            Some(Mancha { caja, est: a.estadisticas(&caja) })
+            Some(Mancha {
+                caja,
+                est: a.estadisticas(&caja),
+            })
         })
         .collect()
 }
@@ -415,7 +496,10 @@ fn componentes(m: &[bool], w: usize, h: usize) -> Vec<(usize, usize, usize, usiz
 pub fn recortar(rgba: &[u8], ancho: u32, alto: u32, c: &Caja) -> (Vec<u8>, u32, u32) {
     let c = c.dentro(ancho as f64, alto as f64);
     let (x0, y0) = (c.x.floor() as usize, c.y.floor() as usize);
-    let (x1, y1) = ((c.x1().ceil() as usize).min(ancho as usize), (c.y1().ceil() as usize).min(alto as usize));
+    let (x1, y1) = (
+        (c.x1().ceil() as usize).min(ancho as usize),
+        (c.y1().ceil() as usize).min(alto as usize),
+    );
     let (w, h) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
     let mut out = Vec::with_capacity(w * h * 4);
     for y in y0..y1 {
@@ -430,7 +514,12 @@ pub fn recortar(rgba: &[u8], ancho: u32, alto: u32, c: &Caja) -> (Vec<u8>, u32, 
 /// negro o gris oscuro (lo normal) o si no hay tinta.
 pub fn color_de_tinta(rgba: &[u8], ancho: u32, alto: u32, c: &Caja, umbral: u8) -> Option<[u8; 3]> {
     let c = c.dentro(ancho as f64, alto as f64);
-    let (x0, y0, x1, y1) = (c.x as usize, c.y as usize, (c.x1() as usize).min(ancho as usize), (c.y1() as usize).min(alto as usize));
+    let (x0, y0, x1, y1) = (
+        c.x as usize,
+        c.y as usize,
+        (c.x1() as usize).min(ancho as usize),
+        (c.y1() as usize).min(alto as usize),
+    );
     let (mut s, mut n) = ([0u64; 3], 0u64);
     // El nucleo del trazo: bastante mas oscuro que el umbral (el borde es
     // mezcla con el papel).
@@ -475,7 +564,12 @@ pub fn fondos(a: &Analisis, minimo: f64) -> Vec<Caja> {
     let tope = a.fondo.saturating_sub(5) as u32;
     for cy in 0..ch {
         for cx in 0..cw {
-            let (x0, y0, x1, y1) = (cx * cs, cy * cs, ((cx + 1) * cs).min(a.w), ((cy + 1) * cs).min(a.h));
+            let (x0, y0, x1, y1) = (
+                cx * cs,
+                cy * cs,
+                ((cx + 1) * cs).min(a.w),
+                ((cy + 1) * cs).min(a.h),
+            );
             let (mut s, mut n, mut t, mut lo, mut hi) = (0u32, 0u32, 0u32, 255u8, 0u8);
             for y in y0..y1 {
                 for x in x0..x1 {
@@ -498,7 +592,14 @@ pub fn fondos(a: &Analisis, minimo: f64) -> Vec<Caja> {
     componentes(&cerrado, cw, ch)
         .into_iter()
         .filter(|&(_, _, _, _, n)| n >= 6)
-        .map(|(x0, y0, x1, y1, _)| a.a_pagina(x0 * cs, y0 * cs, ((x1 + 1) * cs).min(a.w), ((y1 + 1) * cs).min(a.h)))
+        .map(|(x0, y0, x1, y1, _)| {
+            a.a_pagina(
+                x0 * cs,
+                y0 * cs,
+                ((x1 + 1) * cs).min(a.w),
+                ((y1 + 1) * cs).min(a.h),
+            )
+        })
         .filter(|c| c.w >= minimo && c.h >= minimo)
         .collect()
 }

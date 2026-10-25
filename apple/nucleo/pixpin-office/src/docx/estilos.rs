@@ -73,8 +73,9 @@ impl PropCorrida {
     /// `otro` manda sobre `self` en lo que diga.
     pub fn mezclar(&mut self, otro: &PropCorrida) {
         mezclar_campos!(
-            self, otro, estilo, familia, familia_ea, tam, negrita, cursiva, subrayado, tachado, color, resaltado, sombreado, mayusculas, versalitas,
-            oculto, vertical, espaciado, posicion
+            self, otro, estilo, familia, familia_ea, tam, negrita, cursiva, subrayado, tachado,
+            color, resaltado, sombreado, mayusculas, versalitas, oculto, vertical, espaciado,
+            posicion
         );
     }
 
@@ -115,7 +116,8 @@ impl PropCorrida {
                         "double" => Some(Subrayado::Doble),
                         "thick" => Some(Subrayado::Grueso),
                         "dotted" | "dottedHeavy" => Some(Subrayado::Puntos),
-                        "dash" | "dashedHeavy" | "dashLong" | "dashLongHeavy" | "dotDash" | "dotDotDash" => Some(Subrayado::Rayas),
+                        "dash" | "dashedHeavy" | "dashLong" | "dashLongHeavy" | "dotDash"
+                        | "dotDotDash" => Some(Subrayado::Rayas),
                         "wave" | "wavyHeavy" | "wavyDouble" => Some(Subrayado::Ondulado),
                         _ => Some(Subrayado::Simple),
                     })
@@ -135,8 +137,14 @@ impl PropCorrida {
                 // El relleno de texto de Word 2010 (`w14:textFill`): el color
                 // liso o la primera parada del degradado.
                 "textFill" => {
-                    let fuente = e.hijo("solidFill").or_else(|| e.hijo("gradFill").and_then(|g| g.hijo("gsLst")).and_then(|l| l.hijo("gs")));
-                    if let Some(c) = fuente.and_then(|f| tema::color_hijo(f, tema, &HashMap::new(), None)) {
+                    let fuente = e.hijo("solidFill").or_else(|| {
+                        e.hijo("gradFill")
+                            .and_then(|g| g.hijo("gsLst"))
+                            .and_then(|l| l.hijo("gs"))
+                    });
+                    if let Some(c) =
+                        fuente.and_then(|f| tema::color_hijo(f, tema, &HashMap::new(), None))
+                    {
                         p.color = Some(ColorW::Fijo(c));
                     }
                 }
@@ -154,7 +162,11 @@ pub fn color_w(e: &Nodo, tema: &Tema) -> Option<ColorW> {
         && let Some(c) = tema.esquema(tc, &HashMap::new())
     {
         let hexf = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-        return Some(ColorW::Fijo(tema::tinte_word(c, hexf(e.atributo("themeTint")), hexf(e.atributo("themeShade")))));
+        return Some(ColorW::Fijo(tema::tinte_word(
+            c,
+            hexf(e.atributo("themeTint")),
+            hexf(e.atributo("themeShade")),
+        )));
     }
     match e.valor() {
         "auto" | "" => Some(ColorW::Auto),
@@ -168,7 +180,11 @@ pub fn sombreado(e: &Nodo, tema: &Tema) -> Option<Color> {
     let base = if !tf.is_empty() {
         tema.esquema(tf, &HashMap::new()).map(|c| {
             let hexf = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-            tema::tinte_word(c, hexf(e.atributo("themeFillTint")), hexf(e.atributo("themeFillShade")))
+            tema::tinte_word(
+                c,
+                hexf(e.atributo("themeFillTint")),
+                hexf(e.atributo("themeFillShade")),
+            )
         })
     } else {
         match e.atributo("fill") {
@@ -186,7 +202,11 @@ pub fn sombreado(e: &Nodo, tema: &Tema) -> Option<Color> {
         let fondo = base.unwrap_or(Color::BLANCO);
         let t = pct / 100.0;
         let m = |a: u8, b: u8| (a as f32 * (1.0 - t) + b as f32 * t).round() as u8;
-        return Some(Color::rgb(m(fondo.r, trama.r), m(fondo.g, trama.g), m(fondo.b, trama.b)));
+        return Some(Color::rgb(
+            m(fondo.r, trama.r),
+            m(fondo.g, trama.g),
+            m(fondo.b, trama.b),
+        ));
     }
     if val == "solid" {
         return match e.atributo("color") {
@@ -204,14 +224,21 @@ pub fn borde(e: &Nodo, tema: &Tema) -> Option<Trazo> {
         return None;
     }
     // `sz` va en octavos de punto.
-    let grosor = attr_num(e, "sz", 8.0).map(|s| s / 8.0).unwrap_or(0.5).max(0.25);
+    let grosor = attr_num(e, "sz", 8.0)
+        .map(|s| s / 8.0)
+        .unwrap_or(0.5)
+        .max(0.25);
     // En un borde, `w:val` es el tipo de linea y el color va en `w:color`.
     let tc = e.atributo("themeColor");
     let color = if !tc.is_empty()
         && let Some(c) = tema.esquema(tc, &HashMap::new())
     {
         let hexf = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-        tema::tinte_word(c, hexf(e.atributo("themeTint")), hexf(e.atributo("themeShade")))
+        tema::tinte_word(
+            c,
+            hexf(e.atributo("themeTint")),
+            hexf(e.atributo("themeShade")),
+        )
     } else {
         Color::hex(e.atributo("color")).unwrap_or(Color::NEGRO)
     };
@@ -226,7 +253,11 @@ pub fn borde(e: &Nodo, tema: &Tema) -> Option<Trazo> {
         "thick" => grosor.max(1.0),
         _ => grosor,
     };
-    Some(Trazo { color, grosor, discontinuo })
+    Some(Trazo {
+        color,
+        grosor,
+        discontinuo,
+    })
 }
 
 /// Un tope de tabulador de un `w:tabs`.
@@ -362,7 +393,8 @@ impl PropParrafo {
                     p.alineacion = Some(match e.valor() {
                         "center" => Alineacion::Centro,
                         "right" | "end" => Alineacion::Derecha,
-                        "both" | "lowKashida" | "mediumKashida" | "highKashida" | "thaiDistribute" => Alineacion::Justificada,
+                        "both" | "lowKashida" | "mediumKashida" | "highKashida"
+                        | "thaiDistribute" => Alineacion::Justificada,
                         "distribute" => Alineacion::Distribuida,
                         _ => Alineacion::Izquierda,
                     })
@@ -389,10 +421,12 @@ impl PropParrafo {
                         p.despues = Some(twips(v));
                     }
                     if !e.atributo("beforeAutospacing").is_empty() {
-                        p.antes_auto = Some(!matches!(e.atributo("beforeAutospacing"), "0" | "false"));
+                        p.antes_auto =
+                            Some(!matches!(e.atributo("beforeAutospacing"), "0" | "false"));
                     }
                     if !e.atributo("afterAutospacing").is_empty() {
-                        p.despues_auto = Some(!matches!(e.atributo("afterAutospacing"), "0" | "false"));
+                        p.despues_auto =
+                            Some(!matches!(e.atributo("afterAutospacing"), "0" | "false"));
                     }
                     if let Some(v) = attr_num(e, "line", 20.0) {
                         p.interlineado = Some(match e.atributo("lineRule") {
@@ -422,7 +456,12 @@ impl PropParrafo {
                             "heavy" => Some('_'),
                             _ => None,
                         };
-                        p.topes.push(TopeW { pos, tipo, relleno, quitar: v == "clear" });
+                        p.topes.push(TopeW {
+                            pos,
+                            tipo,
+                            relleno,
+                            quitar: v == "clear",
+                        });
                     }
                 }
                 "keepNext" => p.con_siguiente = Some(interruptor(e)),
@@ -461,7 +500,13 @@ impl Margenes {
     pub fn leer(n: &Nodo) -> Margenes {
         let mut m = Margenes::default();
         for e in n.elementos() {
-            let v = ancho_tabla(e).and_then(|a| if let AnchoW::Puntos(p) = a { Some(p) } else { None });
+            let v = ancho_tabla(e).and_then(|a| {
+                if let AnchoW::Puntos(p) = a {
+                    Some(p)
+                } else {
+                    None
+                }
+            });
             match e.nombre.as_str() {
                 "top" => m.arriba = v,
                 "bottom" => m.abajo = v,
@@ -490,7 +535,11 @@ pub fn ancho_tabla(e: &Nodo) -> Option<AnchoW> {
     let w = e.atributo("w");
     match e.atributo("type") {
         "pct" => {
-            let v = if let Some(p) = w.strip_suffix('%') { p.trim().parse::<f32>().ok()? / 100.0 } else { w.parse::<f32>().ok()? / 5000.0 };
+            let v = if let Some(p) = w.strip_suffix('%') {
+                p.trim().parse::<f32>().ok()? / 100.0
+            } else {
+                w.parse::<f32>().ok()? / 5000.0
+            };
             Some(AnchoW::Porcentaje(v))
         }
         "auto" => Some(AnchoW::Auto),
@@ -533,11 +582,27 @@ impl PropTabla {
                         _ => Alineacion::Izquierda,
                     })
                 }
-                "tblInd" => p.sangria = ancho_tabla(e).and_then(|a| if let AnchoW::Puntos(v) = a { Some(v) } else { None }),
+                "tblInd" => {
+                    p.sangria = ancho_tabla(e).and_then(|a| {
+                        if let AnchoW::Puntos(v) = a {
+                            Some(v)
+                        } else {
+                            None
+                        }
+                    })
+                }
                 "tblBorders" => p.bordes = Bordes::leer(e, tema),
                 "tblCellMar" => p.margenes = Margenes::leer(e),
                 "shd" => p.sombreado = Some(sombreado(e, tema)),
-                "tblCellSpacing" => p.espacio_celdas = ancho_tabla(e).and_then(|a| if let AnchoW::Puntos(v) = a { Some(v) } else { None }),
+                "tblCellSpacing" => {
+                    p.espacio_celdas = ancho_tabla(e).and_then(|a| {
+                        if let AnchoW::Puntos(v) = a {
+                            Some(v)
+                        } else {
+                            None
+                        }
+                    })
+                }
                 "tblLook" => {
                     let bit = |k: &str, mascara: u32| -> Option<bool> {
                         let a = e.atributo(k);
@@ -680,7 +745,10 @@ impl Estilos {
             let id = s.atributo("styleId").to_string();
             let tipo = s.atributo("type").to_string();
             let defecto = matches!(s.atributo("default"), "1" | "true" | "on");
-            let mut w = EstiloW { tipo: tipo.clone(), ..Default::default() };
+            let mut w = EstiloW {
+                tipo: tipo.clone(),
+                ..Default::default()
+            };
             for h in s.elementos() {
                 match h.nombre.as_str() {
                     "basedOn" => w.basado = Some(h.valor().to_string()),
@@ -747,7 +815,9 @@ impl Estilos {
             p.mezclar(&s.ppr);
             r.mezclar(&s.rpr);
         }
-        self.cache_p.borrow_mut().insert(id.to_string(), (p.clone(), r.clone()));
+        self.cache_p
+            .borrow_mut()
+            .insert(id.to_string(), (p.clone(), r.clone()));
         (p, r)
     }
 
@@ -766,7 +836,16 @@ impl Estilos {
 
     /// Un estilo de tabla resuelto: sus propiedades y sus condicionales,
     /// con la herencia aplicada.
-    pub fn de_tabla(&self, id: &str) -> (PropTabla, PropCelda, PropParrafo, PropCorrida, HashMap<String, Condicional>) {
+    pub fn de_tabla(
+        &self,
+        id: &str,
+    ) -> (
+        PropTabla,
+        PropCelda,
+        PropParrafo,
+        PropCorrida,
+        HashMap<String, Condicional>,
+    ) {
         let mut t = PropTabla::default();
         let mut c = PropCelda::default();
         let mut p = PropParrafo::default();
@@ -825,7 +904,10 @@ mod pruebas {
 
     #[test]
     fn la_sangria_francesa_es_negativa() {
-        let p = PropParrafo::leer(&leer(r#"<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>"#).unwrap(), &Tema::default());
+        let p = PropParrafo::leer(
+            &leer(r#"<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>"#).unwrap(),
+            &Tema::default(),
+        );
         assert_eq!(p.izq, Some(36.0));
         assert_eq!(p.primera, Some(-18.0));
     }
@@ -838,6 +920,9 @@ mod pruebas {
         );
         let Some(ColorW::Fijo(c)) = c else { panic!() };
         // El acento por defecto (4472C4) al 75 % de luminosidad: 2F5496.
-        assert!((c.r as i32 - 0x2F).abs() <= 2 && (c.b as i32 - 0x96).abs() <= 2, "{c:?}");
+        assert!(
+            (c.r as i32 - 0x2F).abs() <= 2 && (c.b as i32 - 0x96).abs() <= 2,
+            "{c:?}"
+        );
     }
 }

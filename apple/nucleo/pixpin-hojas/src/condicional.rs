@@ -122,12 +122,18 @@ impl Periodo {
 static DESFASE_MIN: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 pub fn fijar_desfase_horario(minutos_este_de_utc: i32) {
-    DESFASE_MIN.store(minutos_este_de_utc.clamp(-14 * 60, 14 * 60), std::sync::atomic::Ordering::Relaxed);
+    DESFASE_MIN.store(
+        minutos_este_de_utc.clamp(-14 * 60, 14 * 60),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 /// El numero de serie de hoy (sistema 1900, dia local).
 fn hoy_serie() -> f64 {
-    let s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
     let local = s + i64::from(DESFASE_MIN.load(std::sync::atomic::Ordering::Relaxed)) * 60;
     local.div_euclid(86_400) as f64 + 25_569.0
 }
@@ -245,7 +251,14 @@ impl Conjunto {
     /// Los limites por defecto de Excel: porcentajes iguales (33, 67...).
     fn cortes_defecto(self) -> Vec<(Punto, bool)> {
         let k = self.cantidad();
-        (1..k).map(|i| (Punto::Porcentaje((100.0 * i as f64 / k as f64).floor()), true)).collect()
+        (1..k)
+            .map(|i| {
+                (
+                    Punto::Porcentaje((100.0 * i as f64 / k as f64).floor()),
+                    true,
+                )
+            })
+            .collect()
     }
 }
 
@@ -520,13 +533,21 @@ pub fn leer(raiz: &Nodo, tema: &Tema, paleta: &[u32]) -> Vec<Condicional> {
     let mut bloques = Vec::new();
     raiz.todos("conditionalFormatting", &mut bloques);
     for b in bloques {
-        let rangos: Vec<Rango> = b.attr("sqref").unwrap_or("").split_whitespace().filter_map(Rango::leer).collect();
+        let rangos: Vec<Rango> = b
+            .attr("sqref")
+            .unwrap_or("")
+            .split_whitespace()
+            .filter_map(Rango::leer)
+            .collect();
         if rangos.is_empty() {
             continue;
         }
         let mut reglas = Vec::new();
         for r in b.hijos_de("cfRule") {
-            let prioridad = r.attr("priority").and_then(|p| p.parse().ok()).unwrap_or(i32::MAX);
+            let prioridad = r
+                .attr("priority")
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(i32::MAX);
             let parar = si(r, "stopIfTrue", false);
             let Some(regla) = regla_de(r, tema, paleta) else {
                 continue;
@@ -572,7 +593,11 @@ fn regla_de(r: &Nodo, tema: &Tema, paleta: &[u32]) -> Option<Regla> {
                 "beginsWith" => 2,
                 _ => 3,
             };
-            Regla::Texto { modo, texto: texto.to_lowercase(), dxf }
+            Regla::Texto {
+                modo,
+                texto: texto.to_lowercase(),
+                dxf,
+            }
         }
         "top10" => Regla::Primeros {
             rango: r.attr("rank").and_then(|v| v.parse().ok()).unwrap_or(10),
@@ -588,7 +613,10 @@ fn regla_de(r: &Nodo, tema: &Tema, paleta: &[u32]) -> Option<Regla> {
         },
         "duplicateValues" => Regla::Duplicados { unicos: false, dxf },
         "uniqueValues" => Regla::Duplicados { unicos: true, dxf },
-        "timePeriod" => Regla::Periodo { periodo: Periodo::de(r.attr("timePeriod")?)?, dxf },
+        "timePeriod" => Regla::Periodo {
+            periodo: Periodo::de(r.attr("timePeriod")?)?,
+            dxf,
+        },
         "containsBlanks" => Regla::Vacios { si: true, dxf },
         "notContainsBlanks" => Regla::Vacios { si: false, dxf },
         "containsErrors" => Regla::Errores { si: true, dxf },
@@ -596,16 +624,24 @@ fn regla_de(r: &Nodo, tema: &Tema, paleta: &[u32]) -> Option<Regla> {
         "colorScale" => {
             let e = r.hijo("colorScale")?;
             let ps: Vec<Punto> = e.hijos_de("cfvo").map(punto).collect();
-            let cs: Vec<Rgb> = e.hijos_de("color").map(|c| color_de(c, tema, paleta).unwrap_or(Rgb::BLANCO)).collect();
+            let cs: Vec<Rgb> = e
+                .hijos_de("color")
+                .map(|c| color_de(c, tema, paleta).unwrap_or(Rgb::BLANCO))
+                .collect();
             if ps.len() < 2 || ps.len() != cs.len() {
                 return None;
             }
-            Regla::Escala { puntos: ps.into_iter().zip(cs).collect() }
+            Regla::Escala {
+                puntos: ps.into_iter().zip(cs).collect(),
+            }
         }
         "dataBar" => {
             let e = r.hijo("dataBar")?;
             let ps: Vec<Punto> = e.hijos_de("cfvo").map(punto).collect();
-            let color = e.hijo("color").and_then(|c| color_de(c, tema, paleta)).unwrap_or(COLOR_BARRA);
+            let color = e
+                .hijo("color")
+                .and_then(|c| color_de(c, tema, paleta))
+                .unwrap_or(COLOR_BARRA);
             Regla::Barra(BarraCf {
                 min: ps.first().copied().unwrap_or(Punto::Minimo),
                 max: ps.get(1).copied().unwrap_or(Punto::Maximo),
@@ -624,12 +660,19 @@ fn regla_de(r: &Nodo, tema: &Tema, paleta: &[u32]) -> Option<Regla> {
     })
 }
 
-const COLOR_BARRA: Rgb = Rgb { r: 0x63, g: 0x8E, b: 0xC6 };
+const COLOR_BARRA: Rgb = Rgb {
+    r: 0x63,
+    g: 0x8E,
+    b: 0xC6,
+};
 
 fn iconos(conjunto: Conjunto, e: &Nodo, ext: Option<String>) -> Regla {
     let k = conjunto.cantidad();
     // El primer `cfvo` es el limite inferior del primer icono: no cuenta.
-    let mut cortes: Vec<(Punto, bool)> = hijos_l(e, "cfvo").skip(1).map(|c| (punto(c), si(c, "gte", true))).collect();
+    let mut cortes: Vec<(Punto, bool)> = hijos_l(e, "cfvo")
+        .skip(1)
+        .map(|c| (punto(c), si(c, "gte", true)))
+        .collect();
     if cortes.len() != k - 1 {
         cortes = conjunto.cortes_defecto();
     }
@@ -644,7 +687,14 @@ fn iconos(conjunto: Conjunto, e: &Nodo, ext: Option<String>) -> Regla {
     } else {
         Vec::new()
     };
-    Regla::Iconos { conjunto, cortes, invertir: si(e, "reverse", false), ver_valor: si(e, "showValue", true), a_mano, ext }
+    Regla::Iconos {
+        conjunto,
+        cortes,
+        invertir: si(e, "reverse", false),
+        ver_valor: si(e, "showValue", true),
+        a_mano,
+        ext,
+    }
 }
 
 /// La extension x14: barras con negativos y borde, e iconos extra o a mano.
@@ -652,24 +702,47 @@ fn leer_x14(raiz: &Nodo, tema: &Tema, paleta: &[u32], v: &mut Vec<Condicional>) 
     let mut bloques = Vec::new();
     todos_con_prefijo(raiz, "conditionalFormatting", &mut bloques);
     for b in bloques {
-        let rangos: Vec<Rango> = hijo_l(b, "sqref").map(|s| s.texto.split_whitespace().filter_map(Rango::leer).collect()).unwrap_or_default();
+        let rangos: Vec<Rango> = hijo_l(b, "sqref")
+            .map(|s| s.texto.split_whitespace().filter_map(Rango::leer).collect())
+            .unwrap_or_default();
         for r in hijos_l(b, "cfRule") {
-            let prioridad = r.attr("priority").and_then(|p| p.parse().ok()).unwrap_or(i32::MAX);
+            let prioridad = r
+                .attr("priority")
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(i32::MAX);
             let parar = si(r, "stopIfTrue", false);
             let id = r.attr("id").map(str::to_string);
             let col = |n: Option<&Nodo>| n.and_then(|c| color_de(c, tema, paleta));
             let nueva = match r.attr("type").unwrap_or("") {
                 "dataBar" => {
-                    let Some(e) = hijo_l(r, "dataBar") else { continue };
+                    let Some(e) = hijo_l(r, "dataBar") else {
+                        continue;
+                    };
                     let ps: Vec<Punto> = hijos_l(e, "cfvo").map(punto).collect();
                     let borde_propio = col(hijo_l(e, "borderColor"));
                     let mismo_neg = si(e, "negativeBarColorSameAsPositive", false);
                     let x14 = BarraX14 {
                         degradado: si(e, "gradient", true),
-                        borde: si(e, "border", false).then_some(borde_propio.unwrap_or(COLOR_BARRA)),
-                        negativo: if mismo_neg { COLOR_BARRA } else { col(hijo_l(e, "negativeFillColor")).unwrap_or(Rgb { r: 0xFF, g: 0, b: 0 }) },
-                        borde_negativo: (si(e, "border", false) && !si(e, "negativeBarBorderColorSameAsPositive", true))
-                            .then(|| col(hijo_l(e, "negativeBorderColor")).unwrap_or(Rgb { r: 0xFF, g: 0, b: 0 })),
+                        borde: si(e, "border", false)
+                            .then_some(borde_propio.unwrap_or(COLOR_BARRA)),
+                        negativo: if mismo_neg {
+                            COLOR_BARRA
+                        } else {
+                            col(hijo_l(e, "negativeFillColor")).unwrap_or(Rgb {
+                                r: 0xFF,
+                                g: 0,
+                                b: 0,
+                            })
+                        },
+                        borde_negativo: (si(e, "border", false)
+                            && !si(e, "negativeBarBorderColorSameAsPositive", true))
+                        .then(|| {
+                            col(hijo_l(e, "negativeBorderColor")).unwrap_or(Rgb {
+                                r: 0xFF,
+                                g: 0,
+                                b: 0,
+                            })
+                        }),
                         eje: match e.attr("axisPosition") {
                             Some("middle") => Eje::Medio,
                             Some("none") => Eje::Ninguno,
@@ -677,16 +750,38 @@ fn leer_x14(raiz: &Nodo, tema: &Tema, paleta: &[u32], v: &mut Vec<Condicional>) 
                         },
                         color_eje: col(hijo_l(e, "axisColor")).unwrap_or(Rgb::NEGRO),
                         derecha_a_izquierda: e.attr("direction") == Some("rightToLeft"),
-                        largo_min: e.attr("minLength").and_then(|x| x.parse::<f32>().ok()).unwrap_or(10.0).clamp(0.0, 100.0) / 100.0,
-                        largo_max: e.attr("maxLength").and_then(|x| x.parse::<f32>().ok()).unwrap_or(90.0).clamp(0.0, 100.0) / 100.0,
+                        largo_min: e
+                            .attr("minLength")
+                            .and_then(|x| x.parse::<f32>().ok())
+                            .unwrap_or(10.0)
+                            .clamp(0.0, 100.0)
+                            / 100.0,
+                        largo_max: e
+                            .attr("maxLength")
+                            .and_then(|x| x.parse::<f32>().ok())
+                            .unwrap_or(90.0)
+                            .clamp(0.0, 100.0)
+                            / 100.0,
                     };
                     let min = ps.first().copied().unwrap_or(Punto::AutoMinimo);
                     let max = ps.get(1).copied().unwrap_or(Punto::AutoMaximo);
-                    Regla::Barra(BarraCf { min, max, color: COLOR_BARRA, ver_valor: true, ext: id.clone(), x14: Some(x14) })
+                    Regla::Barra(BarraCf {
+                        min,
+                        max,
+                        color: COLOR_BARRA,
+                        ver_valor: true,
+                        ext: id.clone(),
+                        x14: Some(x14),
+                    })
                 }
                 "iconSet" => {
-                    let Some(e) = hijo_l(r, "iconSet") else { continue };
-                    let Some(conjunto) = Conjunto::de_nombre(e.attr("iconSet").unwrap_or("")) else { continue };
+                    let Some(e) = hijo_l(r, "iconSet") else {
+                        continue;
+                    };
+                    let Some(conjunto) = Conjunto::de_nombre(e.attr("iconSet").unwrap_or(""))
+                    else {
+                        continue;
+                    };
                     iconos(conjunto, e, id.clone())
                 }
                 _ => continue,
@@ -723,7 +818,8 @@ fn leer_x14(raiz: &Nodo, tema: &Tema, paleta: &[u32], v: &mut Vec<Condicional>) 
                 }
             }
             if !hecho && !rangos.is_empty() {
-                if let Some(c) = Condicional::nuevo(rangos.clone(), vec![(prioridad, nueva, parar)]) {
+                if let Some(c) = Condicional::nuevo(rangos.clone(), vec![(prioridad, nueva, parar)])
+                {
                     v.push(c);
                 }
             }
@@ -739,7 +835,13 @@ impl Condicional {
         reglas.sort_by_key(|r| r.0);
         let necesita_texto = reglas.iter().any(|r| r.1.mira_texto());
         let con_vacios = reglas.iter().any(|r| matches!(r.1, Regla::Vacios { .. }));
-        Some(Condicional { rangos, reglas, estadistica: None, necesita_texto, con_vacios })
+        Some(Condicional {
+            rangos,
+            reglas,
+            estadistica: None,
+            necesita_texto,
+            con_vacios,
+        })
     }
 
     pub fn aplica(&self, fila: u32, col: u32) -> bool {
@@ -753,7 +855,11 @@ impl Condicional {
         let (mut numeros, mut repetidos, mut fechas) = (false, false, false);
         for (_, r, _) in &self.reglas {
             match r {
-                Regla::Primeros { .. } | Regla::Promedio { .. } | Regla::Escala { .. } | Regla::Barra(_) | Regla::Iconos { .. } => numeros = true,
+                Regla::Primeros { .. }
+                | Regla::Promedio { .. }
+                | Regla::Escala { .. }
+                | Regla::Barra(_)
+                | Regla::Iconos { .. } => numeros = true,
                 Regla::Duplicados { .. } => repetidos = true,
                 Regla::Periodo { .. } => fechas = true,
                 _ => {}
@@ -798,7 +904,11 @@ impl Condicional {
             nums.sort_by(|a, b| a.total_cmp(b));
             let n = nums.len() as f64;
             let media = nums.iter().sum::<f64>() / n;
-            let var = if nums.len() > 1 { nums.iter().map(|x| (x - media).powi(2)).sum::<f64>() / (n - 1.0) } else { 0.0 };
+            let var = if nums.len() > 1 {
+                nums.iter().map(|x| (x - media).powi(2)).sum::<f64>() / (n - 1.0)
+            } else {
+                0.0
+            };
             est.min = nums[0];
             est.max = nums[nums.len() - 1];
             est.media = media;
@@ -834,8 +944,19 @@ impl Condicional {
         let Some(x) = &b.x14 else {
             // Barra de 2007: siempre desde la izquierda, con degradado; Excel
             // deja un 10 % minimo y un 90 % maximo.
-            let t = if z > a { ((v - a) / (z - a)).clamp(0.0, 1.0) } else { 1.0 };
-            return BarraPintada { desde: 0.0, hasta: 0.1 + 0.8 * t as f32, color: b.color, borde: None, degradado: true, eje: None };
+            let t = if z > a {
+                ((v - a) / (z - a)).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            return BarraPintada {
+                desde: 0.0,
+                hasta: 0.1 + 0.8 * t as f32,
+                color: b.color,
+                borde: None,
+                degradado: true,
+                eje: None,
+            };
         };
         let (lmin, lmax) = (x.largo_min.min(x.largo_max), x.largo_max.max(x.largo_min));
         // Donde cae el eje (fraccion de la celda desde la izquierda).
@@ -844,7 +965,11 @@ impl Condicional {
             Eje::Medio => 0.5,
             Eje::Automatico => {
                 if a < 0.0 {
-                    if z <= 0.0 { 1.0 } else { ((-a) / (z - a)).clamp(0.0, 1.0) as f32 }
+                    if z <= 0.0 {
+                        1.0
+                    } else {
+                        ((-a) / (z - a)).clamp(0.0, 1.0) as f32
+                    }
                 } else {
                     0.0
                 }
@@ -853,27 +978,59 @@ impl Condicional {
         let con_eje = eje_pos > 0.0;
         let (desde, hasta, color, borde) = if v >= 0.0 {
             let lo = a.max(0.0);
-            let t = if z > lo { ((v - lo) / (z - lo)).clamp(0.0, 1.0) } else { 1.0 };
+            let t = if z > lo {
+                ((v - lo) / (z - lo)).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
             let largo = (1.0 - eje_pos) * (lmin + (lmax - lmin) * t as f32);
             (eje_pos, eje_pos + largo, b.color, x.borde)
         } else {
-            let t = if a < 0.0 { (v / a).clamp(0.0, 1.0) } else { 0.0 };
+            let t = if a < 0.0 {
+                (v / a).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
             let sitio = if con_eje { eje_pos } else { 1.0 };
             let largo = sitio * (lmin + (lmax - lmin) * t as f32);
             let ini = if con_eje { eje_pos - largo } else { 0.0 };
-            (ini, ini + largo, x.negativo, x.borde.map(|_| x.borde_negativo.unwrap_or(x.borde.unwrap_or(x.negativo))))
+            (
+                ini,
+                ini + largo,
+                x.negativo,
+                x.borde
+                    .map(|_| x.borde_negativo.unwrap_or(x.borde.unwrap_or(x.negativo))),
+            )
         };
         let (desde, hasta, eje) = if x.derecha_a_izquierda {
-            (1.0 - hasta, 1.0 - desde, con_eje.then_some((1.0 - eje_pos, x.color_eje)))
+            (
+                1.0 - hasta,
+                1.0 - desde,
+                con_eje.then_some((1.0 - eje_pos, x.color_eje)),
+            )
         } else {
             (desde, hasta, con_eje.then_some((eje_pos, x.color_eje)))
         };
-        BarraPintada { desde, hasta, color, borde, degradado: x.degradado, eje: if x.eje == Eje::Ninguno { None } else { eje } }
+        BarraPintada {
+            desde,
+            hasta,
+            color,
+            borde,
+            degradado: x.degradado,
+            eje: if x.eje == Eje::Ninguno { None } else { eje },
+        }
     }
 
     /// Lo que las reglas de este bloque hacen a la celda, sobre `ef`.
     /// Devuelve `true` si una regla pidio parar (`stopIfTrue`).
-    pub fn evaluar(&self, hoja: &Hoja, celda: &Celda, texto: &str, dxfs: &[Dxf], ef: &mut Efecto) -> bool {
+    pub fn evaluar(
+        &self,
+        hoja: &Hoja,
+        celda: &Celda,
+        texto: &str,
+        dxfs: &[Dxf],
+        ef: &mut Efecto,
+    ) -> bool {
         let Some(e) = &self.estadistica else {
             return false;
         };
@@ -887,7 +1044,9 @@ impl Condicional {
                     let cmp = |d: &Dato| -> Option<std::cmp::Ordering> {
                         match (d, num) {
                             (Dato::Numero(x), Some(v)) => v.partial_cmp(x),
-                            (Dato::Texto(t), None) => Some(texto.to_lowercase().cmp(&t.to_lowercase())),
+                            (Dato::Texto(t), None) => {
+                                Some(texto.to_lowercase().cmp(&t.to_lowercase()))
+                            }
                             _ => None,
                         }
                     };
@@ -903,13 +1062,21 @@ impl Condicional {
                         OpCelda::MenorIgual => matches!(a, Some(Less | Equal)),
                         OpCelda::Entre | OpCelda::NoEntre => {
                             // Entre en cualquier orden de los dos limites.
-                            let dentro = matches!((a, b), (Some(Greater | Equal), Some(Less | Equal)) | (Some(Less | Equal), Some(Greater | Equal)));
+                            let dentro = matches!(
+                                (a, b),
+                                (Some(Greater | Equal), Some(Less | Equal))
+                                    | (Some(Less | Equal), Some(Greater | Equal))
+                            );
                             (a.is_some() && b.is_some()) && (dentro == (*op == OpCelda::Entre))
                         }
                     };
                     (ok, *dxf)
                 }
-                Regla::Texto { modo, texto: buscado, dxf } => {
+                Regla::Texto {
+                    modo,
+                    texto: buscado,
+                    dxf,
+                } => {
                     let t = texto.to_lowercase();
                     let ok = match modo {
                         0 => t.contains(buscado.as_str()),
@@ -919,34 +1086,65 @@ impl Condicional {
                     };
                     (ok && celda.valor != Valor::Vacio, *dxf)
                 }
-                Regla::Primeros { rango, porcentaje, ultimos, dxf } => {
+                Regla::Primeros {
+                    rango,
+                    porcentaje,
+                    ultimos,
+                    dxf,
+                } => {
                     let ok = num.is_some_and(|v| {
                         let n = e.ordenados.len();
-                        let k = if *porcentaje { ((n as f64 * *rango as f64 / 100.0).floor() as usize).max(1) } else { *rango as usize }.min(n);
+                        let k = if *porcentaje {
+                            ((n as f64 * *rango as f64 / 100.0).floor() as usize).max(1)
+                        } else {
+                            *rango as usize
+                        }
+                        .min(n);
                         if k == 0 {
                             return false;
                         }
-                        if *ultimos { v <= e.ordenados[k - 1] } else { v >= e.ordenados[n - k] }
+                        if *ultimos {
+                            v <= e.ordenados[k - 1]
+                        } else {
+                            v >= e.ordenados[n - k]
+                        }
                     });
                     (ok, *dxf)
                 }
-                Regla::Promedio { encima, igual, desv, dxf } => {
+                Regla::Promedio {
+                    encima,
+                    igual,
+                    desv,
+                    dxf,
+                } => {
                     let ok = num.is_some_and(|v| {
-                        let limite = e.media + if *encima { 1.0 } else { -1.0 } * e.desv * f64::from(*desv);
-                        if *encima { v > limite || (*igual && v == limite) } else { v < limite || (*igual && v == limite) }
+                        let limite =
+                            e.media + if *encima { 1.0 } else { -1.0 } * e.desv * f64::from(*desv);
+                        if *encima {
+                            v > limite || (*igual && v == limite)
+                        } else {
+                            v < limite || (*igual && v == limite)
+                        }
                     });
                     (ok, *dxf)
                 }
                 Regla::Duplicados { unicos, dxf } => {
-                    let veces = clave_de(celda, hoja).and_then(|k| e.cuentas.get(&k).copied()).unwrap_or(0);
+                    let veces = clave_de(celda, hoja)
+                        .and_then(|k| e.cuentas.get(&k).copied())
+                        .unwrap_or(0);
                     (if *unicos { veces == 1 } else { veces > 1 }, *dxf)
                 }
-                Regla::Periodo { periodo, dxf } => (num.is_some_and(|v| periodo.cumple(v, e.hoy)), *dxf),
+                Regla::Periodo { periodo, dxf } => {
+                    (num.is_some_and(|v| periodo.cumple(v, e.hoy)), *dxf)
+                }
                 Regla::Vacios { si, dxf } => ((celda.valor == Valor::Vacio) == *si, *dxf),
                 Regla::Errores { si, dxf } => (matches!(celda.valor, Valor::Error(_)) == *si, *dxf),
                 Regla::Escala { puntos } => {
                     if let (Some(v), None) = (num, ef.escala) {
-                        let pos: Vec<(f64, Rgb)> = puntos.iter().map(|(p, c)| (self.valor_de(*p, e), *c)).collect();
+                        let pos: Vec<(f64, Rgb)> = puntos
+                            .iter()
+                            .map(|(p, c)| (self.valor_de(*p, e), *c))
+                            .collect();
                         ef.escala = Some(interpolar(v, &pos));
                     }
                     (false, None)
@@ -958,7 +1156,14 @@ impl Condicional {
                     }
                     (false, None)
                 }
-                Regla::Iconos { conjunto, cortes, invertir, ver_valor, a_mano, .. } => {
+                Regla::Iconos {
+                    conjunto,
+                    cortes,
+                    invertir,
+                    ver_valor,
+                    a_mano,
+                    ..
+                } => {
                     if let (Some(v), None) = (num, ef.icono) {
                         let k = conjunto.cantidad();
                         // El icono mas alto cuyo limite se cumple.
@@ -972,7 +1177,13 @@ impl Condicional {
                         }
                         let idx = idx.min(k - 1);
                         let idx = if *invertir { k - 1 - idx } else { idx };
-                        ef.icono = Some(a_mano.get(idx).copied().flatten().unwrap_or((*conjunto, idx as u8)));
+                        ef.icono = Some(
+                            a_mano
+                                .get(idx)
+                                .copied()
+                                .flatten()
+                                .unwrap_or((*conjunto, idx as u8)),
+                        );
                         ef.ocultar_valor |= !ver_valor;
                     }
                     (false, None)
@@ -1001,7 +1212,11 @@ fn interpolar(v: f64, pos: &[(f64, Rgb)]) -> Rgb {
     for w in pos.windows(2) {
         let ((a, ca), (b, cb)) = (w[0], w[1]);
         if v <= b {
-            let t = if b > a { ((v - a) / (b - a)) as f32 } else { 1.0 };
+            let t = if b > a {
+                ((v - a) / (b - a)) as f32
+            } else {
+                1.0
+            };
             return cb.mezcla(ca, t);
         }
     }
@@ -1014,7 +1229,11 @@ mod pruebas {
     use crate::xml;
 
     fn celda(v: f64) -> Celda {
-        Celda { col: 0, xf: 0, valor: Valor::Numero(v) }
+        Celda {
+            col: 0,
+            xf: 0,
+            valor: Valor::Numero(v),
+        }
     }
 
     fn est(nums: &[f64]) -> Estadistica {
@@ -1023,19 +1242,35 @@ mod pruebas {
         let n = o.len() as f64;
         let media = o.iter().sum::<f64>() / n;
         let desv = (o.iter().map(|x| (x - media).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
-        Estadistica { min: o[0], max: o[o.len() - 1], media, desv, ordenados: o, ..Default::default() }
+        Estadistica {
+            min: o[0],
+            max: o[o.len() - 1],
+            media,
+            desv,
+            ordenados: o,
+            ..Default::default()
+        }
     }
 
     fn una(xml_regla: &str) -> Condicional {
-        let x = format!("<x><conditionalFormatting sqref=\"A1:A10\">{xml_regla}</conditionalFormatting></x>");
-        let mut cs = leer(&xml::arbol(x.as_bytes()), &Tema::default(), &crate::estilos::PALETA);
+        let x = format!(
+            "<x><conditionalFormatting sqref=\"A1:A10\">{xml_regla}</conditionalFormatting></x>"
+        );
+        let mut cs = leer(
+            &xml::arbol(x.as_bytes()),
+            &Tema::default(),
+            &crate::estilos::PALETA,
+        );
         assert_eq!(cs.len(), 1, "{xml_regla}");
         cs.remove(0)
     }
 
     fn efecto(c: &Condicional, v: f64) -> Efecto {
         let hoja = Hoja::vacia_para_pruebas();
-        let dxfs = vec![Dxf { negrita: Some(true), ..Default::default() }];
+        let dxfs = vec![Dxf {
+            negrita: Some(true),
+            ..Default::default()
+        }];
         let mut ef = Efecto::default();
         c.evaluar(&hoja, &celda(v), "", &dxfs, &mut ef);
         ef
@@ -1047,11 +1282,20 @@ mod pruebas {
         let mut cs = leer(&xml::arbol(x), &Tema::default(), &crate::estilos::PALETA);
         assert_eq!(cs.len(), 1);
         let c = &mut cs[0];
-        c.estadistica = Some(Estadistica { min: 0.0, max: 10.0, media: 5.0, ordenados: (0..=10).map(f64::from).collect(), ..Default::default() });
+        c.estadistica = Some(Estadistica {
+            min: 0.0,
+            max: 10.0,
+            media: 5.0,
+            ordenados: (0..=10).map(f64::from).collect(),
+            ..Default::default()
+        });
         let ef = efecto(c, 10.0);
         assert_eq!(ef.dxf.negrita, Some(true));
         assert_eq!(ef.escala, Some(Rgb::NEGRO));
-        assert!(ef.barra.is_some_and(|b| (b.hasta - 0.9).abs() < 1e-6 && b.desde == 0.0 && b.degradado));
+        assert!(
+            ef.barra
+                .is_some_and(|b| (b.hasta - 0.9).abs() < 1e-6 && b.desde == 0.0 && b.degradado)
+        );
         assert!(ef.ocultar_valor);
         let ef = efecto(c, 0.0);
         assert_eq!(ef.dxf.negrita, None);
@@ -1060,17 +1304,36 @@ mod pruebas {
 
     #[test]
     fn escala_de_tres_colores_pasa_por_el_medio() {
-        let mut c = una(r#"<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FFFFFF00"/><color rgb="FF00FF00"/></colorScale></cfRule>"#);
+        let mut c = una(
+            r#"<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FFFFFF00"/><color rgb="FF00FF00"/></colorScale></cfRule>"#,
+        );
         c.estadistica = Some(est(&[0.0, 5.0, 10.0]));
         assert_eq!(efecto(&c, 0.0).escala, Some(Rgb { r: 255, g: 0, b: 0 }));
-        assert_eq!(efecto(&c, 5.0).escala, Some(Rgb { r: 255, g: 255, b: 0 }));
+        assert_eq!(
+            efecto(&c, 5.0).escala,
+            Some(Rgb {
+                r: 255,
+                g: 255,
+                b: 0
+            })
+        );
         assert_eq!(efecto(&c, 10.0).escala, Some(Rgb { r: 0, g: 255, b: 0 }));
         let m = efecto(&c, 7.5).escala.unwrap();
         assert_eq!((m.r, m.g, m.b), (128, 255, 0));
         // Caso negativo: un texto no tiene color.
         let hoja = Hoja::vacia_para_pruebas();
         let mut ef = Efecto::default();
-        c.evaluar(&hoja, &Celda { col: 0, xf: 0, valor: Valor::Logico(true) }, "x", &[], &mut ef);
+        c.evaluar(
+            &hoja,
+            &Celda {
+                col: 0,
+                xf: 0,
+                valor: Valor::Logico(true),
+            },
+            "x",
+            &[],
+            &mut ef,
+        );
         assert_eq!(ef.escala, None);
         // Una escala con un solo color se descarta.
         let x = br#"<x><conditionalFormatting sqref="A1"><cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><color rgb="FFFF0000"/></colorScale></cfRule></conditionalFormatting></x>"#;
@@ -1079,19 +1342,29 @@ mod pruebas {
 
     #[test]
     fn iconos_por_porcentaje_con_invertido() {
-        let mut c = una(r#"<cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule>"#);
+        let mut c = una(
+            r#"<cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule>"#,
+        );
         c.estadistica = Some(est(&[0.0, 100.0]));
         assert_eq!(efecto(&c, 10.0).icono, Some((Conjunto::Flechas3, 0)));
         assert_eq!(efecto(&c, 50.0).icono, Some((Conjunto::Flechas3, 1)));
         assert_eq!(efecto(&c, 90.0).icono, Some((Conjunto::Flechas3, 2)));
-        assert_eq!(efecto(&c, 67.0).icono, Some((Conjunto::Flechas3, 2)), "el limite cuenta con >=");
-        let mut c = una(r#"<cfRule type="iconSet" priority="1"><iconSet iconSet="4Rating" reverse="1" showValue="0"/></cfRule>"#);
+        assert_eq!(
+            efecto(&c, 67.0).icono,
+            Some((Conjunto::Flechas3, 2)),
+            "el limite cuenta con >="
+        );
+        let mut c = una(
+            r#"<cfRule type="iconSet" priority="1"><iconSet iconSet="4Rating" reverse="1" showValue="0"/></cfRule>"#,
+        );
         c.estadistica = Some(est(&[0.0, 100.0]));
         let ef = efecto(&c, 99.0);
         assert_eq!(ef.icono, Some((Conjunto::Valoracion4, 0)));
         assert!(ef.ocultar_valor);
         // Con `gte="0"` el limite exacto no sube de icono.
-        let mut c = una(r#"<cfRule type="iconSet" priority="1"><iconSet iconSet="3Flags"><cfvo type="num" val="0"/><cfvo type="num" val="5" gte="0"/><cfvo type="num" val="10" gte="0"/></iconSet></cfRule>"#);
+        let mut c = una(
+            r#"<cfRule type="iconSet" priority="1"><iconSet iconSet="3Flags"><cfvo type="num" val="0"/><cfvo type="num" val="5" gte="0"/><cfvo type="num" val="10" gte="0"/></iconSet></cfRule>"#,
+        );
         c.estadistica = Some(est(&[0.0, 20.0]));
         assert_eq!(efecto(&c, 5.0).icono, Some((Conjunto::Banderas3, 0)));
         assert_eq!(efecto(&c, 5.5).icono, Some((Conjunto::Banderas3, 1)));
@@ -1117,9 +1390,21 @@ mod pruebas {
         let x = br#"<x xmlns:x14="u" xmlns:xm="m"><extLst><ext><x14:conditionalFormattings><x14:conditionalFormatting><x14:cfRule type="iconSet" priority="1" id="{A}"><x14:iconSet iconSet="3Triangles" custom="1"><x14:cfvo type="percent"><xm:f>0</xm:f></x14:cfvo><x14:cfvo type="num"><xm:f>10</xm:f></x14:cfvo><x14:cfvo type="num"><xm:f>20</xm:f></x14:cfvo><x14:cfIcon iconSet="3Stars" iconId="2"/><x14:cfIcon iconSet="NoHay" iconId="0"/><x14:cfIcon iconSet="3Stars" iconId="9"/></x14:iconSet></x14:cfRule><xm:sqref>B2:B5</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></x>"#;
         let mut cs = leer(&xml::arbol(x), &Tema::default(), &crate::estilos::PALETA);
         assert_eq!(cs.len(), 1);
-        assert_eq!(cs[0].rangos, vec![Rango { fila0: 1, col0: 1, fila1: 4, col1: 1 }]);
+        assert_eq!(
+            cs[0].rangos,
+            vec![Rango {
+                fila0: 1,
+                col0: 1,
+                fila1: 4,
+                col1: 1
+            }]
+        );
         cs[0].estadistica = Some(est(&[0.0, 30.0]));
-        assert_eq!(efecto(&cs[0], 5.0).icono, Some((Conjunto::Estrellas3, 2)), "icono a mano");
+        assert_eq!(
+            efecto(&cs[0], 5.0).icono,
+            Some((Conjunto::Estrellas3, 2)),
+            "icono a mano"
+        );
         // El segundo (conjunto inexistente) y el tercero (indice fuera) caen en el de siempre.
         assert_eq!(efecto(&cs[0], 15.0).icono, Some((Conjunto::Triangulos3, 1)));
         assert_eq!(efecto(&cs[0], 25.0).icono, Some((Conjunto::Triangulos3, 2)));
@@ -1133,29 +1418,67 @@ mod pruebas {
         cs[0].estadistica = Some(est(&[-10.0, 30.0]));
         let b = efecto(&cs[0], 30.0).barra.unwrap();
         // Eje en 10/40 = 0,25; la positiva ocupa el resto.
-        assert!((b.desde - 0.25).abs() < 1e-6 && (b.hasta - 1.0).abs() < 1e-6, "{b:?}");
+        assert!(
+            (b.desde - 0.25).abs() < 1e-6 && (b.hasta - 1.0).abs() < 1e-6,
+            "{b:?}"
+        );
         assert!(!b.degradado);
-        assert_eq!(b.borde, Some(Rgb { r: 0, g: 0xB0, b: 0x50 }));
-        assert_eq!(b.color, Rgb { r: 0, g: 0xB0, b: 0x50 }, "el color sale de la regla de siempre");
+        assert_eq!(
+            b.borde,
+            Some(Rgb {
+                r: 0,
+                g: 0xB0,
+                b: 0x50
+            })
+        );
+        assert_eq!(
+            b.color,
+            Rgb {
+                r: 0,
+                g: 0xB0,
+                b: 0x50
+            },
+            "el color sale de la regla de siempre"
+        );
         assert_eq!(b.eje.map(|e| e.0), Some(0.25));
         let n = efecto(&cs[0], -10.0).barra.unwrap();
-        assert!((n.desde - 0.0).abs() < 1e-6 && (n.hasta - 0.25).abs() < 1e-6, "{n:?}");
+        assert!(
+            (n.desde - 0.0).abs() < 1e-6 && (n.hasta - 0.25).abs() < 1e-6,
+            "{n:?}"
+        );
         assert_eq!(n.color, Rgb { r: 255, g: 0, b: 0 });
-        assert_eq!(n.borde, Some(Rgb { r: 0x80, g: 0, b: 0 }));
+        assert_eq!(
+            n.borde,
+            Some(Rgb {
+                r: 0x80,
+                g: 0,
+                b: 0
+            })
+        );
         // Un valor intermedio positivo.
         let m = efecto(&cs[0], 10.0).barra.unwrap();
-        assert!((m.desde - 0.25).abs() < 1e-6 && (m.hasta - 0.5).abs() < 1e-6, "{m:?}");
+        assert!(
+            (m.desde - 0.25).abs() < 1e-6 && (m.hasta - 0.5).abs() < 1e-6,
+            "{m:?}"
+        );
     }
 
     #[test]
     fn barras_x14_sin_negativos_derecha_a_izquierda_y_sin_eje() {
         let x = br#"<x xmlns:x14="u" xmlns:xm="m"><extLst><ext><x14:conditionalFormattings><x14:conditionalFormatting><x14:cfRule type="dataBar" id="{ZZ}"><x14:dataBar direction="rightToLeft" axisPosition="none"><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar></x14:cfRule><xm:sqref>A1:A3</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></x>"#;
         let mut cs = leer(&xml::arbol(x), &Tema::default(), &crate::estilos::PALETA);
-        assert_eq!(cs.len(), 1, "una extension sin regla de siempre se queda sola");
+        assert_eq!(
+            cs.len(),
+            1,
+            "una extension sin regla de siempre se queda sola"
+        );
         cs[0].estadistica = Some(est(&[10.0, 50.0]));
         let b = efecto(&cs[0], 50.0).barra.unwrap();
         // Minimo automatico = 0: 50 de 50 es el 90 %, pegado a la derecha.
-        assert!((b.desde - 0.1).abs() < 1e-6 && (b.hasta - 1.0).abs() < 1e-6, "{b:?}");
+        assert!(
+            (b.desde - 0.1).abs() < 1e-6 && (b.hasta - 1.0).abs() < 1e-6,
+            "{b:?}"
+        );
         assert_eq!(b.eje, None);
         // Caso negativo: una extension de otro tipo no crea reglas.
         let x = br#"<x xmlns:x14="u" xmlns:xm="m"><extLst><ext><x14:conditionalFormattings><x14:conditionalFormatting><x14:cfRule type="expression" id="{Q}"/><xm:sqref>A1</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></x>"#;
@@ -1169,9 +1492,15 @@ mod pruebas {
         assert_eq!(efecto(&c, 5.0).dxf.negrita, Some(true));
         assert_eq!(efecto(&c, 4.0).dxf.negrita, Some(true));
         assert_eq!(efecto(&c, 3.0).dxf.negrita, None);
-        let mut c = una(r#"<cfRule type="top10" dxfId="0" priority="1" rank="40" percent="1" bottom="1"/>"#);
+        let mut c = una(
+            r#"<cfRule type="top10" dxfId="0" priority="1" rank="40" percent="1" bottom="1"/>"#,
+        );
         c.estadistica = Some(est(&[1.0, 2.0, 3.0, 4.0, 5.0]));
-        assert_eq!(efecto(&c, 2.0).dxf.negrita, Some(true), "el 40 % de 5 son 2 celdas");
+        assert_eq!(
+            efecto(&c, 2.0).dxf.negrita,
+            Some(true),
+            "el 40 % de 5 son 2 celdas"
+        );
         assert_eq!(efecto(&c, 3.0).dxf.negrita, None);
     }
 
@@ -1180,8 +1509,14 @@ mod pruebas {
         let mut c = una(r#"<cfRule type="aboveAverage" dxfId="0" priority="1"/>"#);
         c.estadistica = Some(est(&[1.0, 2.0, 3.0, 4.0, 5.0]));
         assert_eq!(efecto(&c, 3.5).dxf.negrita, Some(true));
-        assert_eq!(efecto(&c, 3.0).dxf.negrita, None, "igual a la media no cuenta");
-        let mut c = una(r#"<cfRule type="aboveAverage" dxfId="0" priority="1" aboveAverage="0" equalAverage="1"/>"#);
+        assert_eq!(
+            efecto(&c, 3.0).dxf.negrita,
+            None,
+            "igual a la media no cuenta"
+        );
+        let mut c = una(
+            r#"<cfRule type="aboveAverage" dxfId="0" priority="1" aboveAverage="0" equalAverage="1"/>"#,
+        );
         c.estadistica = Some(est(&[1.0, 2.0, 3.0, 4.0, 5.0]));
         assert_eq!(efecto(&c, 3.0).dxf.negrita, Some(true));
         assert_eq!(efecto(&c, 3.1).dxf.negrita, None);
@@ -1202,21 +1537,38 @@ mod pruebas {
         assert!(Periodo::Manana.cumple(45001.0, hoy));
         assert!(Periodo::Ultimos7.cumple(44994.0, hoy) && !Periodo::Ultimos7.cumple(44993.0, hoy));
         // La semana va de domingo (12) a sabado (18).
-        assert!(Periodo::EstaSemana.cumple(44997.0, hoy) && Periodo::EstaSemana.cumple(45003.0, hoy));
-        assert!(!Periodo::EstaSemana.cumple(44996.0, hoy) && !Periodo::EstaSemana.cumple(45004.0, hoy));
-        assert!(Periodo::SemanaPasada.cumple(44996.0, hoy) && Periodo::SemanaPasada.cumple(44990.0, hoy));
+        assert!(
+            Periodo::EstaSemana.cumple(44997.0, hoy) && Periodo::EstaSemana.cumple(45003.0, hoy)
+        );
+        assert!(
+            !Periodo::EstaSemana.cumple(44996.0, hoy) && !Periodo::EstaSemana.cumple(45004.0, hoy)
+        );
+        assert!(
+            Periodo::SemanaPasada.cumple(44996.0, hoy)
+                && Periodo::SemanaPasada.cumple(44990.0, hoy)
+        );
         assert!(!Periodo::SemanaPasada.cumple(44989.0, hoy));
-        assert!(Periodo::SemanaSiguiente.cumple(45004.0, hoy) && !Periodo::SemanaSiguiente.cumple(45011.0, hoy));
+        assert!(
+            Periodo::SemanaSiguiente.cumple(45004.0, hoy)
+                && !Periodo::SemanaSiguiente.cumple(45011.0, hoy)
+        );
         // Marzo 2023: del 44986 (1-mar) al 45016 (31-mar).
         assert!(Periodo::EsteMes.cumple(44986.0, hoy) && Periodo::EsteMes.cumple(45016.0, hoy));
-        assert!(Periodo::MesPasado.cumple(44985.0, hoy) && !Periodo::MesPasado.cumple(44986.0, hoy));
+        assert!(
+            Periodo::MesPasado.cumple(44985.0, hoy) && !Periodo::MesPasado.cumple(44986.0, hoy)
+        );
         assert!(Periodo::MesSiguiente.cumple(45017.0, hoy));
         // Un numero que no es fecha (0 o negativo) no es de «este mes».
-        assert!(!Periodo::EsteMes.cumple(0.0, 45000.0) && !Periodo::MesPasado.cumple(-5.0, 45000.0));
+        assert!(
+            !Periodo::EsteMes.cumple(0.0, 45000.0) && !Periodo::MesPasado.cumple(-5.0, 45000.0)
+        );
         assert_eq!(Periodo::de("quizas"), None);
         // Y la regla se lee y se evalua con el hoy guardado en las cuentas.
         let mut c = una(r#"<cfRule type="timePeriod" dxfId="0" priority="1" timePeriod="today"/>"#);
-        c.estadistica = Some(Estadistica { hoy: 45000.0, ..Default::default() });
+        c.estadistica = Some(Estadistica {
+            hoy: 45000.0,
+            ..Default::default()
+        });
         assert_eq!(efecto(&c, 45000.0).dxf.negrita, Some(true));
         assert_eq!(efecto(&c, 44999.0).dxf.negrita, None);
         let x = br#"<x><conditionalFormatting sqref="A1"><cfRule type="timePeriod" dxfId="0" priority="1" timePeriod="lastDecade"/></conditionalFormatting></x>"#;
@@ -1234,7 +1586,16 @@ mod pruebas {
         assert_eq!(e.cuentas.len(), 3);
         let eval = |c: &Condicional, v: f64| {
             let mut ef = Efecto::default();
-            c.evaluar(&hoja, &celda(v), "", &[Dxf { negrita: Some(true), ..Default::default() }], &mut ef);
+            c.evaluar(
+                &hoja,
+                &celda(v),
+                "",
+                &[Dxf {
+                    negrita: Some(true),
+                    ..Default::default()
+                }],
+                &mut ef,
+            );
             ef.dxf.negrita == Some(true)
         };
         assert!(!eval(&c, 1.0));
@@ -1251,7 +1612,9 @@ mod pruebas {
     #[test]
     fn solo_se_hacen_las_cuentas_que_se_piden() {
         let hoja = Hoja::vacia_para_pruebas();
-        let mut c = una(r#"<cfRule type="cellIs" dxfId="0" priority="1" operator="equal"><formula>1</formula></cfRule>"#);
+        let mut c = una(
+            r#"<cfRule type="cellIs" dxfId="0" priority="1" operator="equal"><formula>1</formula></cfRule>"#,
+        );
         c.calcular(&hoja);
         let e = c.estadistica.unwrap();
         assert!(e.ordenados.is_empty() && e.cuentas.is_empty() && e.hoy == 0.0);
@@ -1266,16 +1629,53 @@ mod pruebas {
         c.calcular(&Hoja::vacia_para_pruebas());
         let hoja = Hoja::vacia_para_pruebas();
         let mut ef = Efecto::default();
-        c.evaluar(&hoja, &Celda { col: 0, xf: 0, valor: Valor::Error(2) }, "", &[Dxf { negrita: Some(true), ..Default::default() }], &mut ef);
+        c.evaluar(
+            &hoja,
+            &Celda {
+                col: 0,
+                xf: 0,
+                valor: Valor::Error(2),
+            },
+            "",
+            &[Dxf {
+                negrita: Some(true),
+                ..Default::default()
+            }],
+            &mut ef,
+        );
         assert_eq!(ef.dxf.negrita, Some(true));
         let mut ef = Efecto::default();
-        c.evaluar(&hoja, &celda(1.0), "", &[Dxf { negrita: Some(true), ..Default::default() }], &mut ef);
+        c.evaluar(
+            &hoja,
+            &celda(1.0),
+            "",
+            &[Dxf {
+                negrita: Some(true),
+                ..Default::default()
+            }],
+            &mut ef,
+        );
         assert_eq!(ef.dxf.negrita, None);
-        let mut c = una(r#"<cfRule type="containsText" dxfId="0" priority="1" operator="containsText" text="Ab"/>"#);
+        let mut c = una(
+            r#"<cfRule type="containsText" dxfId="0" priority="1" operator="containsText" text="Ab"/>"#,
+        );
         assert!(c.necesita_texto);
         c.calcular(&hoja);
         let mut ef = Efecto::default();
-        c.evaluar(&hoja, &Celda { col: 0, xf: 0, valor: Valor::Compartido(0) }, "xxABxx", &[Dxf { negrita: Some(true), ..Default::default() }], &mut ef);
+        c.evaluar(
+            &hoja,
+            &Celda {
+                col: 0,
+                xf: 0,
+                valor: Valor::Compartido(0),
+            },
+            "xxABxx",
+            &[Dxf {
+                negrita: Some(true),
+                ..Default::default()
+            }],
+            &mut ef,
+        );
         assert_eq!(ef.dxf.negrita, Some(true));
     }
 

@@ -214,8 +214,11 @@ fn indice(c: &mut Ctx, args: &[Ev]) -> Resultado {
     Ok(m.en(c, f as u64 - 1, k as u64 - 1))
 }
 
+/// La linea, si es una columna y sus valores con su posicion.
+type LineaUnica = (Matriz, bool, Vec<(u64, Valor)>);
+
 /// Una linea (columna o fila) para `COINCIDIR` y `BUSCARX`.
-fn linea_unica(c: &mut Ctx, e: &Ev) -> Result<(Matriz, bool, Vec<(u64, Valor)>), ErrorFormula> {
+fn linea_unica(c: &mut Ctx, e: &Ev) -> Result<LineaUnica, ErrorFormula> {
     let m = Matriz::de(e);
     let (filas, cols) = m.dim();
     if filas != 1 && cols != 1 {
@@ -284,7 +287,7 @@ fn buscarx(c: &mut Ctx, args: &[Ev]) -> Resultado {
         Some(s) => c.entero(s)?,
         None => 1,
     };
-    if !matches!(modo, -1 | 0 | 1 | 2) || !matches!(sentido, -2 | -1 | 1 | 2) {
+    if !matches!(modo, -1..=2) || !matches!(sentido, -2 | -1 | 1 | 2) {
         return Err(ErrorFormula::Sintaxis);
     }
     if sentido < 0 {

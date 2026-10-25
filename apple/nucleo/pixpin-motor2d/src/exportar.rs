@@ -558,7 +558,10 @@ fn elegido(escena: &Escena, seleccion: &[u64], papel: Option<(f32, f32)>) -> Opt
         return de_un_marco(escena, solo, papel);
     }
     let ids = marco::con_contenidos(&escena.elementos, seleccion);
-    let dentro: Vec<&Elemento> = escena.a_la_vista().filter(|e| ids.contains(&e.id)).collect();
+    let dentro: Vec<&Elemento> = escena
+        .a_la_vista()
+        .filter(|e| ids.contains(&e.id))
+        .collect();
     let caja = con_margen(dentro.iter().map(|e| caja_de(e)).reduce(union)?, MARGEN);
     if !es_valida(caja) {
         return None;
@@ -581,6 +584,24 @@ fn elegido(escena: &Escena, seleccion: &[u64], papel: Option<(f32, f32)>) -> Opt
         granos,
         grafitos,
     })
+}
+
+/// **Las hojas de un lienzo dentro de una carpeta de paginas** (el
+/// cuaderno, 26-oct-2026): lo que va sobre la plantilla —su pagina, una
+/// hoja por plantilla y en orden de lectura—; sin plantilla, cada marco que
+/// puso el usuario; sin marcos, todo lo dibujado. Es la regla que pidio el
+/// usuario para exportar la carpeta como PDF: «de cada lienzo solo lo que va
+/// sobre la plantilla o sobre el marco; si no hay ninguno, todo».
+pub fn hojas_de_cuaderno(escena: &Escena, papel: Option<(f32, f32)>) -> Vec<Hoja> {
+    let papel = papel.filter(|(w, h)| *w > 0.0 && *h > 0.0);
+    let de_plantillas: Vec<Hoja> = crate::hoja_de_plantilla::plantillas(escena)
+        .into_iter()
+        .filter_map(|p| de_una_zona(escena, p.caja, papel))
+        .collect();
+    if !de_plantillas.is_empty() {
+        return de_plantillas;
+    }
+    hojas(escena, Alcance::Marcos, &[], papel)
 }
 
 /// El tamano en pixeles de una hoja exportada a `escala`, y la escala que de
@@ -848,6 +869,43 @@ mod pruebas {
             (cx0 - MARGEN, cy0 - MARGEN, cx1 + MARGEN, cy1 + MARGEN)
         );
         assert!(!h[0].ordenes.is_empty());
+    }
+
+    #[test]
+    fn en_el_cuaderno_manda_la_plantilla_luego_el_marco_y_si_no_todo() {
+        // Sin plantilla ni marcos: todo.
+        let suelto = escena_con(vec![rect(0, 10.0, 20.0, 100.0, 50.0)]);
+        assert_eq!(
+            hojas_de_cuaderno(&suelto, None),
+            hojas(&suelto, Alcance::Todo, &[], None)
+        );
+        // Con un marco: el marco, y no lo de fuera.
+        let con_marco = escena_con(vec![
+            marco_en(0, 0.0, 0.0, 200.0, 200.0, "Hoja"),
+            rect(1, 20.0, 20.0, 50.0, 50.0),
+            rect(2, 900.0, 900.0, 50.0, 50.0),
+        ]);
+        let h = hojas_de_cuaderno(&con_marco, None);
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].caja, (0.0, 0.0, 200.0, 200.0));
+        // Con una plantilla de serie y algo escrito lejos: solo su pagina.
+        let f = crate::figuras_de_serie::catalogo()
+            .into_iter()
+            .find(|f| f.id == "serie-planificador-semanal")
+            .unwrap();
+        let mut e = Escena::nueva();
+        let (w, hh) = f.tamano();
+        crate::biblioteca::estampar_en_escena(&mut e, &f, Punto2::nuevo(w / 2.0, hh / 2.0));
+        e.anadir(rect(0, 5000.0, 5000.0, 50.0, 50.0));
+        let h = hojas_de_cuaderno(&e, None);
+        assert_eq!(h.len(), 1);
+        let (x0, y0, x1, y1) = h[0].caja;
+        assert!(
+            x1 < 2000.0 && y1 < 2000.0,
+            "lo de lejos no entra: {:?}",
+            h[0].caja
+        );
+        assert!(x1 - x0 > 500.0 && y1 - y0 > 500.0);
     }
 
     #[test]

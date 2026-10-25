@@ -107,6 +107,13 @@
 //!   [`agente::Evento`] para pintar la respuesta en vivo.
 //! - El lienzo recibe un `.excalidraw` ya hecho ([`lienzo::documento`]) y lo
 //!   lee con `pixpin_motor2d::excalidraw::leer`, como un fichero del movil.
+//! - [`guardas`] y [`pasos`] (25-oct): lo que el bucle comprueba sin modelo
+//!   (no dibujar otro al lado de lo que se pidio cambiar, no acabar
+//!   anunciando trabajo) y la lista de pasos del pedido que el modelo marca.
+
+// `!(x > 0.0)` y parecidos son a proposito: un NaN no cumple la
+// comparacion y se rechaza con ella (`partial_cmp` lo esconderia).
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
 
 pub mod acciones;
 pub mod acciones_documentos;
@@ -115,45 +122,53 @@ pub mod anotacion;
 pub mod base64;
 pub mod calcar;
 pub mod calculo;
-pub mod conocimiento;
 pub mod complejidad;
 pub mod conexiones;
+pub mod conocimiento;
 pub mod contexto;
 pub mod cronograma;
-pub mod diagrama;
 pub mod descarga;
+pub mod diagrama;
+pub mod diario;
 // Las fechas dichas viven en `pixpin-frase` (18-oct-2026): las comparte el
 // plugin de Flow Launcher, que no puede cargar este crate.
 pub use pixpin_frase::fechas;
 pub mod documentos;
-pub mod edicion;
 pub mod ecuacion;
+pub mod edicion;
 pub mod figuras;
 pub mod fisica;
 pub mod funciones;
+pub mod guardas;
 pub mod herramientas;
 pub mod hoja;
 pub mod hoja_trabajo;
 pub mod lienzo;
+pub mod lint;
+pub mod manual;
+pub mod memoria;
 pub mod modelos;
 pub mod motor;
 pub mod nube;
 pub mod ojos;
-pub mod pizarra;
-pub mod relevo;
+pub mod orquesta;
+pub mod pasos;
 pub mod pensar;
+pub mod pizarra;
+pub mod preguntar;
 pub mod problema;
 pub mod puente;
 pub mod rapido;
+pub mod relevo;
+pub mod revision_tabla;
 pub mod rotulos;
 pub mod seleccion;
 pub mod servidor;
-pub mod tabla_escaneada;
-pub mod tabla_aspecto;
-pub mod revision_tabla;
 pub mod sse;
-pub mod tareas;
 pub mod svg;
+pub mod tabla_aspecto;
+pub mod tabla_escaneada;
+pub mod tareas;
 
 pub use agente::{Ejecutor, Evento, turno};
 pub use herramientas::{Herramienta, Llamada, catalogo};
@@ -165,7 +180,9 @@ pub use motor::{Mensaje, Motor, Parte, Peticion, Respuesta, Rol};
 pub enum ErrorIa {
     #[error("no se pudo bajar {que}: {detalle}")]
     Descarga { que: String, detalle: String },
-    #[error("el fichero {que} esta danado (su huella no coincide); se borra y hay que bajarlo otra vez")]
+    #[error(
+        "el fichero {que} esta danado (su huella no coincide); se borra y hay que bajarlo otra vez"
+    )]
     HuellaDistinta { que: String },
     #[error("falta {0}: hay que bajar el asistente primero")]
     Falta(String),

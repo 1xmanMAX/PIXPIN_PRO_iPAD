@@ -28,7 +28,9 @@ use std::collections::BTreeMap;
 
 use crate::ErrorHojas;
 use crate::cfb::Cfb;
-use crate::hoja::{Cabecera, Celda, Cola, Columnas, FilaNueva, Hipervinculo, Rango, VistaHoja, Valor};
+use crate::hoja::{
+    Cabecera, Celda, Cola, Columnas, FilaNueva, Hipervinculo, Rango, Valor, VistaHoja,
+};
 use crate::libro::{TipoHoja, Visibilidad};
 
 const MAX_CELDAS: usize = 5_000_000;
@@ -108,13 +110,22 @@ struct Cursor<'a, 'b> {
 
 impl<'a, 'b> Cursor<'a, 'b> {
     fn nuevo(partes: &'b [&'a [u8]]) -> Self {
-        Cursor { partes, parte: 0, pos: 0 }
+        Cursor {
+            partes,
+            parte: 0,
+            pos: 0,
+        }
     }
 
     /// Pasa a la siguiente parte si la actual se agoto. Devuelve si empezo una.
     fn asentar(&mut self) -> bool {
         let mut movido = false;
-        while self.partes.get(self.parte).is_some_and(|p| self.pos >= p.len()) && self.parte + 1 < self.partes.len() {
+        while self
+            .partes
+            .get(self.parte)
+            .is_some_and(|p| self.pos >= p.len())
+            && self.parte + 1 < self.partes.len()
+        {
             self.parte += 1;
             self.pos = 0;
             movido = true;
@@ -134,7 +145,12 @@ impl<'a, 'b> Cursor<'a, 'b> {
     }
 
     fn u32(&mut self) -> Option<u32> {
-        Some(u32::from_le_bytes([self.u8()?, self.u8()?, self.u8()?, self.u8()?]))
+        Some(u32::from_le_bytes([
+            self.u8()?,
+            self.u8()?,
+            self.u8()?,
+            self.u8()?,
+        ]))
     }
 
     fn saltar(&mut self, n: usize) -> Option<()> {
@@ -148,8 +164,16 @@ impl<'a, 'b> Cursor<'a, 'b> {
     }
 
     fn quedan(&self) -> usize {
-        let aqui = self.partes.get(self.parte).map_or(0, |p| p.len().saturating_sub(self.pos));
-        aqui + self.partes.iter().skip(self.parte + 1).map(|p| p.len()).sum::<usize>()
+        let aqui = self
+            .partes
+            .get(self.parte)
+            .map_or(0, |p| p.len().saturating_sub(self.pos));
+        aqui + self
+            .partes
+            .iter()
+            .skip(self.parte + 1)
+            .map(|p| p.len())
+            .sum::<usize>()
     }
 
     /// `cch` caracteres, comprimidos (un byte) o UTF-16. Si pasan a un
@@ -161,11 +185,18 @@ impl<'a, 'b> Cursor<'a, 'b> {
         }
         let mut unidades: Vec<u16> = Vec::with_capacity(cch.min(self.quedan()));
         while unidades.len() < cch {
-            let al_final = self.partes.get(self.parte).is_none_or(|p| self.pos >= p.len());
+            let al_final = self
+                .partes
+                .get(self.parte)
+                .is_none_or(|p| self.pos >= p.len());
             if al_final && self.asentar() {
                 alto = self.u8()? & 1 != 0;
             }
-            unidades.push(if alto { self.u16()? } else { u16::from(self.u8()?) });
+            unidades.push(if alto {
+                self.u16()?
+            } else {
+                u16::from(self.u8()?)
+            });
         }
         Some(String::from_utf16_lossy(&unidades))
     }
@@ -189,8 +220,16 @@ impl<'a, 'b> Cursor<'a, 'b> {
     fn cadena_rica(&mut self) -> Option<String> {
         let cch = usize::from(self.u16()?);
         let marcas = self.u8()?;
-        let tramos = if marcas & 0x08 != 0 { usize::from(self.u16()?) } else { 0 };
-        let ext = if marcas & 0x04 != 0 { self.u32()? as usize } else { 0 };
+        let tramos = if marcas & 0x08 != 0 {
+            usize::from(self.u16()?)
+        } else {
+            0
+        };
+        let ext = if marcas & 0x04 != 0 {
+            self.u32()? as usize
+        } else {
+            0
+        };
         let texto = self.caracteres(cch, marcas & 1 != 0)?;
         self.saltar(tramos.saturating_mul(4).saturating_add(ext))?;
         Some(texto)
@@ -276,7 +315,9 @@ impl Presupuesto {
     fn celda(&mut self) -> Result<(), ErrorHojas> {
         self.celdas += 1;
         if self.celdas > MAX_CELDAS {
-            return Err(ErrorHojas::Limite("xls: mas de cinco millones de celdas".into()));
+            return Err(ErrorHojas::Limite(
+                "xls: mas de cinco millones de celdas".into(),
+            ));
         }
         Ok(())
     }
@@ -294,7 +335,10 @@ fn bof(id: u16, datos: &[u8]) -> Result<(u16, u16), ErrorHojas> {
     if id != BOF || datos.len() < 4 {
         return Err(mal("un subflujo no empieza con BOF"));
     }
-    Ok((u16::from_le_bytes([datos[0], datos[1]]), u16::from_le_bytes([datos[2], datos[3]])))
+    Ok((
+        u16::from_le_bytes([datos[0], datos[1]]),
+        u16::from_le_bytes([datos[2], datos[3]]),
+    ))
 }
 
 fn globales(flujo: &[u8], pres: &mut Presupuesto) -> Result<Globales, ErrorHojas> {
@@ -330,16 +374,31 @@ fn globales(flujo: &[u8], pres: &mut Presupuesto) -> Result<Globales, ErrorHojas
                 }
                 let estado = c.u8().ok_or_else(|| mal("BOUNDSHEET cortado"))?;
                 let tipo = c.u8().ok_or_else(|| mal("BOUNDSHEET cortado"))?;
-                let nombre = c.cadena_corta().ok_or_else(|| mal("nombre de hoja cortado"))?;
+                let nombre = c
+                    .cadena_corta()
+                    .ok_or_else(|| mal("nombre de hoja cortado"))?;
                 let visibilidad = match estado & 3 {
                     0 => Visibilidad::Visible,
                     1 => Visibilidad::Oculta,
                     _ => Visibilidad::MuyOculta,
                 };
-                g.hojas.push(Hoja8 { pos, nombre, visibilidad, tipo });
+                g.hojas.push(Hoja8 {
+                    pos,
+                    nombre,
+                    visibilidad,
+                    tipo,
+                });
             }
-            0x0022 => g.fecha_1904 = datos.get(..2).is_some_and(|d| u16::from_le_bytes([d[0], d[1]]) == 1),
-            0x003D => g.activa = datos.get(10..12).map_or(0, |d| usize::from(u16::from_le_bytes([d[0], d[1]]))),
+            0x0022 => {
+                g.fecha_1904 = datos
+                    .get(..2)
+                    .is_some_and(|d| u16::from_le_bytes([d[0], d[1]]) == 1)
+            }
+            0x003D => {
+                g.activa = datos
+                    .get(10..12)
+                    .map_or(0, |d| usize::from(u16::from_le_bytes([d[0], d[1]])))
+            }
             0x0031 | 0x0231 => {
                 if g.fuentes.len() < MAX_FUENTES {
                     let partes = [datos];
@@ -384,12 +443,26 @@ fn fuente(c: &mut Cursor<'_, '_>) -> Option<FuenteB> {
     let subrayado = c.u8()?;
     c.saltar(3)?;
     let nombre = c.cadena_corta().unwrap_or_default();
-    Some(FuenteB { altura, marcas, color, peso, escrito, subrayado, nombre })
+    Some(FuenteB {
+        altura,
+        marcas,
+        color,
+        peso,
+        escrito,
+        subrayado,
+        nombre,
+    })
 }
 
 fn xf(d: &[u8]) -> XfB {
-    let u16_en = |i: usize| d.get(i..i + 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]));
-    let u32_en = |i: usize| d.get(i..i + 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    let u16_en = |i: usize| {
+        d.get(i..i + 2)
+            .map_or(0, |b| u16::from_le_bytes([b[0], b[1]]))
+    };
+    let u32_en = |i: usize| {
+        d.get(i..i + 4)
+            .map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
     let alin = d.get(6).copied().unwrap_or(0);
     let sangria_byte = d.get(8).copied().unwrap_or(0);
     let b1 = u32_en(10);
@@ -404,8 +477,18 @@ fn xf(d: &[u8]) -> XfB {
         giro: d.get(7).copied().unwrap_or(0),
         sangria: sangria_byte & 0x0F,
         encoger: sangria_byte & 0x10 != 0,
-        borde: [(b1 & 0xF) as u8, ((b1 >> 4) & 0xF) as u8, ((b1 >> 8) & 0xF) as u8, ((b1 >> 12) & 0xF) as u8],
-        color_borde: [((b1 >> 16) & 0x7F) as u8, ((b1 >> 23) & 0x7F) as u8, (b2 & 0x7F) as u8, ((b2 >> 7) & 0x7F) as u8],
+        borde: [
+            (b1 & 0xF) as u8,
+            ((b1 >> 4) & 0xF) as u8,
+            ((b1 >> 8) & 0xF) as u8,
+            ((b1 >> 12) & 0xF) as u8,
+        ],
+        color_borde: [
+            ((b1 >> 16) & 0x7F) as u8,
+            ((b1 >> 23) & 0x7F) as u8,
+            (b2 & 0x7F) as u8,
+            ((b2 >> 7) & 0x7F) as u8,
+        ],
         diagonal: ((b1 >> 30) & 3) as u8,
         color_diagonal: ((b2 >> 14) & 0x7F) as u8,
         estilo_diagonal: ((b2 >> 21) & 0xF) as u8,
@@ -417,16 +500,26 @@ fn xf(d: &[u8]) -> XfB {
 
 fn paleta(d: &[u8]) -> Option<Vec<[u8; 3]>> {
     let n = usize::from(u16::from_le_bytes([*d.first()?, *d.get(1)?]));
-    let v: Vec<[u8; 3]> = d.get(2..)?.chunks_exact(4).take(n.min(56)).map(|c| [c[0], c[1], c[2]]).collect();
+    let v: Vec<[u8; 3]> = d
+        .get(2..)?
+        .chunks_exact(4)
+        .take(n.min(56))
+        .map(|c| [c[0], c[1], c[2]])
+        .collect();
     (!v.is_empty()).then_some(v)
 }
 
-fn cadenas_compartidas(partes: &[&[u8]], pres: &mut Presupuesto) -> Result<Vec<String>, ErrorHojas> {
+fn cadenas_compartidas(
+    partes: &[&[u8]],
+    pres: &mut Presupuesto,
+) -> Result<Vec<String>, ErrorHojas> {
     let mut c = Cursor::nuevo(partes);
     let _total = c.u32().ok_or_else(|| mal("SST cortado"))?;
     let unicas = c.u32().ok_or_else(|| mal("SST cortado"))? as usize;
     if unicas > MAX_CADENAS {
-        return Err(ErrorHojas::Limite("xls: demasiados textos compartidos".into()));
+        return Err(ErrorHojas::Limite(
+            "xls: demasiados textos compartidos".into(),
+        ));
     }
     // Cada texto ocupa al menos tres bytes: la cuenta no puede pasar de lo que hay.
     let mut v = Vec::with_capacity(unicas.min(c.quedan() / 3));
@@ -479,7 +572,11 @@ fn error_de(codigo: u8) -> u8 {
 }
 
 fn rk(v: u32) -> f64 {
-    let n = if v & 2 != 0 { f64::from((v as i32) >> 2) } else { f64::from_bits(u64::from(v & 0xFFFF_FFFC) << 32) };
+    let n = if v & 2 != 0 {
+        f64::from((v as i32) >> 2)
+    } else {
+        f64::from_bits(u64::from(v & 0xFFFF_FFFC) << 32)
+    };
     if v & 1 != 0 { n / 100.0 } else { n }
 }
 
@@ -503,7 +600,14 @@ struct Estado {
 }
 
 impl Estado {
-    fn poner(&mut self, fila: u32, col: u32, xf: u32, valor: Valor, pres: &mut Presupuesto) -> Result<(), ErrorHojas> {
+    fn poner(
+        &mut self,
+        fila: u32,
+        col: u32,
+        xf: u32,
+        valor: Valor,
+        pres: &mut Presupuesto,
+    ) -> Result<(), ErrorHojas> {
         // Una celda vacia solo se guarda si su estilo pinta algo.
         if valor == Valor::Vacio && !self.visible.get(xf as usize).copied().unwrap_or(false) {
             return Ok(());
@@ -512,7 +616,10 @@ impl Estado {
             return Ok(());
         }
         pres.celda()?;
-        let f = self.filas.entry(fila).or_insert_with(|| FilaTmp { alto: f32::NAN, ..Default::default() });
+        let f = self.filas.entry(fila).or_insert_with(|| FilaTmp {
+            alto: f32::NAN,
+            ..Default::default()
+        });
         f.celdas.push(Celda { col, xf, valor });
         Ok(())
     }
@@ -524,8 +631,17 @@ impl Estado {
     }
 }
 
-fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> Result<HojaXls, ErrorHojas> {
-    let tipo = if h.tipo == 0 { TipoHoja::Hoja } else { TipoHoja::Grafico };
+fn leer_hoja(
+    flujo: &[u8],
+    h: &Hoja8,
+    g: &Globales,
+    pres: &mut Presupuesto,
+) -> Result<HojaXls, ErrorHojas> {
+    let tipo = if h.tipo == 0 {
+        TipoHoja::Hoja
+    } else {
+        TipoHoja::Grafico
+    };
     let vacia = |cabecera| HojaXls {
         nombre: h.nombre.clone(),
         visibilidad: h.visibilidad,
@@ -539,7 +655,9 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
         return Ok(vacia(Cabecera::default()));
     }
     let mut regs = Registros::nuevo(flujo, h.pos);
-    let Some((id, datos)) = regs.siguiente() else { return Err(mal("la hoja apunta fuera del flujo")) };
+    let Some((id, datos)) = regs.siguiente() else {
+        return Err(mal("la hoja apunta fuera del flujo"));
+    };
     let (version, dt) = bof(id, datos)?;
     if version != BIFF8 || dt != 0x0010 {
         // No es una hoja de calculo: se deja vacia.
@@ -560,8 +678,16 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
     let mut formula_pendiente: Option<(u32, u32, u32)> = None;
     while let Some((id, datos)) = regs.siguiente() {
         pres.registro()?;
-        let u16_en = |i: usize| datos.get(i..i + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
-        let u32_en = |i: usize| datos.get(i..i + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+        let u16_en = |i: usize| {
+            datos
+                .get(i..i + 2)
+                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        };
+        let u32_en = |i: usize| {
+            datos
+                .get(i..i + 4)
+                .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        };
         // El valor de texto de una formula viene en el STRING que le sigue.
         if id != 0x0207 {
             formula_pendiente = formula_pendiente.filter(|_| id == CONTINUE);
@@ -576,18 +702,31 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
             }
             _ if profundidad > 0 => {}
             0x0200 => {
-                if let (Some(f0), Some(f1), Some(c0), Some(c1)) = (u32_en(0), u32_en(4), u16_en(8), u16_en(10)) {
+                if let (Some(f0), Some(f1), Some(c0), Some(c1)) =
+                    (u32_en(0), u32_en(4), u16_en(8), u16_en(10))
+                {
                     if f1 > f0 && c1 > c0 {
-                        e.cabecera.dimension = Some(Rango { fila0: f0, col0: u32::from(c0), fila1: (f1 - 1).min(1_048_575), col1: u32::from(c1 - 1) });
+                        e.cabecera.dimension = Some(Rango {
+                            fila0: f0,
+                            col0: u32::from(c0),
+                            fila1: (f1 - 1).min(1_048_575),
+                            col1: u32::from(c1 - 1),
+                        });
                     }
                 }
             }
             0x0208 => {
                 // ROW: fila, alto, marcas y estilo.
-                let (Some(fila), Some(alto), Some(marcas)) = (u16_en(0), u16_en(6), u16_en(12)) else { continue };
+                let (Some(fila), Some(alto), Some(marcas)) = (u16_en(0), u16_en(6), u16_en(12))
+                else {
+                    continue;
+                };
                 let ghost = marcas & 0x80 != 0;
                 let ixfe = u16_en(14).map(|x| u32::from(x & 0x0FFF));
-                let f = e.filas.entry(u32::from(fila)).or_insert_with(|| FilaTmp { alto: f32::NAN, ..Default::default() });
+                let f = e.filas.entry(u32::from(fila)).or_insert_with(|| FilaTmp {
+                    alto: f32::NAN,
+                    ..Default::default()
+                });
                 // El bit alto dice «alto por defecto».
                 if alto & 0x8000 == 0 {
                     f.alto = f32::from(alto) / 20.0;
@@ -599,15 +738,29 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
             }
             0x0203 => {
                 // NUMBER
-                if let (Some(r), Some(c), Some(x), Some(v)) = (u16_en(0), u16_en(2), u16_en(4), datos.get(6..14)) {
+                if let (Some(r), Some(c), Some(x), Some(v)) =
+                    (u16_en(0), u16_en(2), u16_en(4), datos.get(6..14))
+                {
                     let n = f64::from_le_bytes(v.try_into().unwrap_or([0; 8]));
-                    let valor = if n.is_finite() { Valor::Numero(n) } else { Valor::Vacio };
+                    let valor = if n.is_finite() {
+                        Valor::Numero(n)
+                    } else {
+                        Valor::Vacio
+                    };
                     e.poner(u32::from(r), u32::from(c), u32::from(x), valor, pres)?;
                 }
             }
             0x027E => {
-                if let (Some(r), Some(c), Some(x), Some(v)) = (u16_en(0), u16_en(2), u16_en(4), u32_en(6)) {
-                    e.poner(u32::from(r), u32::from(c), u32::from(x), Valor::Numero(rk(v)), pres)?;
+                if let (Some(r), Some(c), Some(x), Some(v)) =
+                    (u16_en(0), u16_en(2), u16_en(4), u32_en(6))
+                {
+                    e.poner(
+                        u32::from(r),
+                        u32::from(c),
+                        u32::from(x),
+                        Valor::Numero(rk(v)),
+                        pres,
+                    )?;
                 }
             }
             0x00BD => {
@@ -617,27 +770,49 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
                     for (i, t) in cuerpo.chunks_exact(6).enumerate() {
                         let x = u16::from_le_bytes([t[0], t[1]]);
                         let v = u32::from_le_bytes([t[2], t[3], t[4], t[5]]);
-                        e.poner(u32::from(r), u32::from(c0) + i as u32, u32::from(x), Valor::Numero(rk(v)), pres)?;
+                        e.poner(
+                            u32::from(r),
+                            u32::from(c0) + i as u32,
+                            u32::from(x),
+                            Valor::Numero(rk(v)),
+                            pres,
+                        )?;
                     }
                 }
             }
             0x00FD => {
-                if let (Some(r), Some(c), Some(x), Some(i)) = (u16_en(0), u16_en(2), u16_en(4), u32_en(6)) {
-                    e.poner(u32::from(r), u32::from(c), u32::from(x), Valor::Compartido(i), pres)?;
+                if let (Some(r), Some(c), Some(x), Some(i)) =
+                    (u16_en(0), u16_en(2), u16_en(4), u32_en(6))
+                {
+                    e.poner(
+                        u32::from(r),
+                        u32::from(c),
+                        u32::from(x),
+                        Valor::Compartido(i),
+                        pres,
+                    )?;
                 }
             }
             0x0204 | 0x00D6 => {
                 // LABEL y RSTRING (el texto va tras fila, columna y estilo).
                 let partes = regs.con_continuaciones(datos);
                 let mut cur = Cursor::nuevo(&partes);
-                if let (Some(r), Some(c), Some(x), Some(s)) = (cur.u16(), cur.u16(), cur.u16(), cur.cadena()) {
+                if let (Some(r), Some(c), Some(x), Some(s)) =
+                    (cur.u16(), cur.u16(), cur.u16(), cur.cadena())
+                {
                     let v = e.texto_propio(s, pres)?;
                     e.poner(u32::from(r), u32::from(c), u32::from(x), v, pres)?;
                 }
             }
             0x0205 => {
-                if let (Some(r), Some(c), Some(x), Some(v), Some(es_error)) = (u16_en(0), u16_en(2), u16_en(4), datos.get(6), datos.get(7)) {
-                    let valor = if *es_error != 0 { Valor::Error(error_de(*v)) } else { Valor::Logico(*v != 0) };
+                if let (Some(r), Some(c), Some(x), Some(v), Some(es_error)) =
+                    (u16_en(0), u16_en(2), u16_en(4), datos.get(6), datos.get(7))
+                {
+                    let valor = if *es_error != 0 {
+                        Valor::Error(error_de(*v))
+                    } else {
+                        Valor::Logico(*v != 0)
+                    };
                     e.poner(u32::from(r), u32::from(c), u32::from(x), valor, pres)?;
                 }
             }
@@ -651,13 +826,23 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
                 if let (Some(r), Some(c0)) = (u16_en(0), u16_en(2)) {
                     let cuerpo = datos.get(4..datos.len().saturating_sub(2)).unwrap_or(&[]);
                     for (i, t) in cuerpo.chunks_exact(2).enumerate() {
-                        e.poner(u32::from(r), u32::from(c0) + i as u32, u32::from(u16::from_le_bytes([t[0], t[1]])), Valor::Vacio, pres)?;
+                        e.poner(
+                            u32::from(r),
+                            u32::from(c0) + i as u32,
+                            u32::from(u16::from_le_bytes([t[0], t[1]])),
+                            Valor::Vacio,
+                            pres,
+                        )?;
                     }
                 }
             }
             0x0006 => {
                 // FORMULA: solo se usa el valor guardado.
-                let (Some(r), Some(c), Some(x), Some(res)) = (u16_en(0), u16_en(2), u16_en(4), datos.get(6..14)) else { continue };
+                let (Some(r), Some(c), Some(x), Some(res)) =
+                    (u16_en(0), u16_en(2), u16_en(4), datos.get(6..14))
+                else {
+                    continue;
+                };
                 let (r, c, x) = (u32::from(r), u32::from(c), u32::from(x));
                 if res[6] == 0xFF && res[7] == 0xFF {
                     match res[0] {
@@ -671,7 +856,17 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
                     }
                 } else {
                     let n = f64::from_le_bytes(res.try_into().unwrap_or([0; 8]));
-                    e.poner(r, c, x, if n.is_finite() { Valor::Numero(n) } else { Valor::Vacio }, pres)?;
+                    e.poner(
+                        r,
+                        c,
+                        x,
+                        if n.is_finite() {
+                            Valor::Numero(n)
+                        } else {
+                            Valor::Vacio
+                        },
+                        pres,
+                    )?;
                 }
             }
             0x0207 => {
@@ -686,7 +881,9 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
             }
             0x007D => {
                 // COLINFO: primera, ultima, ancho en 1/256, estilo, marcas.
-                if let (Some(c0), Some(c1), Some(w), Some(x), Some(m)) = (u16_en(0), u16_en(2), u16_en(4), u16_en(6), u16_en(8)) {
+                if let (Some(c0), Some(c1), Some(w), Some(x), Some(m)) =
+                    (u16_en(0), u16_en(2), u16_en(4), u16_en(6), u16_en(8))
+                {
                     if c0 <= c1 && e.cabecera.columnas.len() < 20_000 {
                         e.cabecera.columnas.push(Columnas {
                             min: u32::from(c0),
@@ -699,18 +896,35 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
                 }
             }
             0x0055 => e.cabecera.ancho_base = u16_en(0).map(f64::from).filter(|v| *v > 0.0),
-            0x0099 => e.cabecera.ancho_defecto = u16_en(0).map(|v| f64::from(v) / 256.0).filter(|v| *v > 0.0),
-            0x0225 => e.cabecera.alto_defecto = u16_en(2).map(|v| f32::from(v & 0x7FFF) / 20.0).filter(|v| *v > 0.0),
+            0x0099 => {
+                e.cabecera.ancho_defecto =
+                    u16_en(0).map(|v| f64::from(v) / 256.0).filter(|v| *v > 0.0)
+            }
+            0x0225 => {
+                e.cabecera.alto_defecto = u16_en(2)
+                    .map(|v| f32::from(v & 0x7FFF) / 20.0)
+                    .filter(|v| *v > 0.0)
+            }
             0x00E5 => {
                 if let Some(n) = u16_en(0) {
-                    for t in datos.get(2..).unwrap_or(&[]).chunks_exact(8).take(usize::from(n)) {
+                    for t in datos
+                        .get(2..)
+                        .unwrap_or(&[])
+                        .chunks_exact(8)
+                        .take(usize::from(n))
+                    {
                         if e.cola.combinadas.len() >= MAX_COMBINADAS {
                             break;
                         }
                         let v = |i: usize| u32::from(u16::from_le_bytes([t[i], t[i + 1]]));
                         let (f0, f1, c0, c1) = (v(0), v(2), v(4), v(6));
                         if f0 <= f1 && c0 <= c1 && (f0 != f1 || c0 != c1) {
-                            e.cola.combinadas.push(Rango { fila0: f0, col0: c0, fila1: f1, col1: c1 });
+                            e.cola.combinadas.push(Rango {
+                                fila0: f0,
+                                col0: c0,
+                                fila1: f1,
+                                col1: c1,
+                            });
                         }
                     }
                 }
@@ -729,7 +943,9 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
             }
             0x0041 => {
                 // PANE: columnas y filas de la division, y la esquina de la zona que se mueve.
-                if let (Some(x), Some(y), Some(fila), Some(col)) = (u16_en(0), u16_en(2), u16_en(4), u16_en(6)) {
+                if let (Some(x), Some(y), Some(fila), Some(col)) =
+                    (u16_en(0), u16_en(2), u16_en(4), u16_en(6))
+                {
                     e.division = (u32::from(x), u32::from(y));
                     e.cabecera.vista.primera_fila = u32::from(fila);
                     e.cabecera.vista.primera_columna = u32::from(col);
@@ -742,11 +958,9 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
                     }
                 }
             }
-            0x01B8 => {
-                if e.cola.hipervinculos.len() < MAX_ENLACES {
-                    if let Some(h) = enlace(datos) {
-                        e.cola.hipervinculos.push(h);
-                    }
+            0x01B8 if e.cola.hipervinculos.len() < MAX_ENLACES => {
+                if let Some(h) = enlace(datos) {
+                    e.cola.hipervinculos.push(h);
                 }
             }
             _ => {}
@@ -768,9 +982,24 @@ fn leer_hoja(flujo: &[u8], h: &Hoja8, g: &Globales, pres: &mut Presupuesto) -> R
         f.celdas.sort_by_key(|c| c.col);
         // La ultima gana si una celda sale dos veces.
         f.celdas.dedup_by(|b, a| a.col == b.col);
-        filas.push(FilaNueva { indice, alto: f.alto, oculta: f.oculta, xf: f.xf, sin_alto: false, celdas: f.celdas });
+        filas.push(FilaNueva {
+            indice,
+            alto: f.alto,
+            oculta: f.oculta,
+            xf: f.xf,
+            sin_alto: false,
+            celdas: f.celdas,
+        });
     }
-    Ok(HojaXls { nombre: h.nombre.clone(), visibilidad: h.visibilidad, tipo, cabecera: e.cabecera, cola: e.cola, textos: e.textos, filas })
+    Ok(HojaXls {
+        nombre: h.nombre.clone(),
+        visibilidad: h.visibilidad,
+        tipo,
+        cabecera: e.cabecera,
+        cola: e.cola,
+        textos: e.textos,
+        filas,
+    })
 }
 
 /// HLINK ([MS-XLS] 2.4.140): el rango y a donde lleva.
@@ -780,7 +1009,12 @@ fn enlace(d: &[u8]) -> Option<Hipervinculo> {
     if f0 > f1 || c0 > c1 {
         return None;
     }
-    let rango = Rango { fila0: u32::from(f0), col0: u32::from(c0), fila1: u32::from(f1), col1: u32::from(c1) };
+    let rango = Rango {
+        fila0: u32::from(f0),
+        col0: u32::from(c0),
+        fila1: u32::from(f1),
+        col1: u32::from(c1),
+    };
     let mut p = 8 + 16 + 4;
     let marcas = u32::from_le_bytes(d.get(p..p + 4)?.try_into().ok()?);
     p += 4;
@@ -790,10 +1024,18 @@ fn enlace(d: &[u8]) -> Option<Hipervinculo> {
         *p += 4;
         let bytes = d.get(*p..p.checked_add(n.checked_mul(2)?)?)?;
         *p += n * 2;
-        let u: Vec<u16> = bytes.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).take_while(|&c| c != 0).collect();
+        let u: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .take_while(|&c| c != 0)
+            .collect();
         Some(String::from_utf16_lossy(&u))
     };
-    let ayuda = if marcas & 0x10 != 0 { cadena(&mut p).filter(|s| !s.is_empty()) } else { None };
+    let ayuda = if marcas & 0x10 != 0 {
+        cadena(&mut p).filter(|s| !s.is_empty())
+    } else {
+        None
+    };
     if marcas & 0x80 != 0 {
         cadena(&mut p)?;
     }
@@ -811,7 +1053,11 @@ fn enlace(d: &[u8]) -> Option<Hipervinculo> {
                 p += 4;
                 let bytes = d.get(p..p.checked_add(largo)?)?;
                 p += largo;
-                let u: Vec<u16> = bytes.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).take_while(|&c| c != 0).collect();
+                let u: Vec<u16> = bytes
+                    .chunks_exact(2)
+                    .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                    .take_while(|&c| c != 0)
+                    .collect();
                 destino = String::from_utf16_lossy(&u);
             } else if guid[..4] == [0x03, 0x03, 0x00, 0x00] {
                 // Moniker de fichero: cuantos «..\», y la ruta en ANSI.
@@ -821,7 +1067,11 @@ fn enlace(d: &[u8]) -> Option<Hipervinculo> {
                 p += 4;
                 let bytes = d.get(p..p.checked_add(largo)?)?;
                 p += largo;
-                let ruta: String = bytes.iter().take_while(|&&b| b != 0).map(|&b| b as char).collect();
+                let ruta: String = bytes
+                    .iter()
+                    .take_while(|&&b| b != 0)
+                    .map(|&b| b as char)
+                    .collect();
                 destino = format!("{}{}", "..\\".repeat(atras.min(32)), ruta);
             } else {
                 return None;
@@ -843,7 +1093,12 @@ fn enlace(d: &[u8]) -> Option<Hipervinculo> {
     if destino.is_empty() {
         return None;
     }
-    Some(Hipervinculo { rango, destino, externo, ayuda })
+    Some(Hipervinculo {
+        rango,
+        destino,
+        externo,
+        ayuda,
+    })
 }
 
 /// La cadena de lugar de un HLINK: va al final, tras el moniker.
@@ -856,7 +1111,11 @@ fn lugar(d: &[u8], desde: usize, marcas: u32) -> Option<String> {
     let n = u32::from_le_bytes(d.get(p..p + 4)?.try_into().ok()?) as usize;
     p += 4;
     let bytes = d.get(p..p.checked_add(n.checked_mul(2)?)?)?;
-    let u: Vec<u16> = bytes.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).take_while(|&c| c != 0).collect();
+    let u: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .take_while(|&c| c != 0)
+        .collect();
     Some(String::from_utf16_lossy(&u))
 }
 
@@ -945,7 +1204,10 @@ fn xml_estilos(g: &Globales) -> String {
     if !g.formatos.is_empty() {
         s.push_str("<numFmts>");
         for (id, codigo) in &g.formatos {
-            s.push_str(&format!("<numFmt numFmtId=\"{id}\" formatCode=\"{}\"/>", escapar(codigo)));
+            s.push_str(&format!(
+                "<numFmt numFmtId=\"{id}\" formatCode=\"{}\"/>",
+                escapar(codigo)
+            ));
         }
         s.push_str("</numFmts>");
     }
@@ -999,7 +1261,10 @@ fn xml_estilos(g: &Globales) -> String {
             if estilo == 0 {
                 format!("<{nombre}/>")
             } else {
-                format!("<{nombre} style=\"{}\"><color indexed=\"{color}\"/></{nombre}>", estilo_borde(estilo))
+                format!(
+                    "<{nombre} style=\"{}\"><color indexed=\"{color}\"/></{nombre}>",
+                    estilo_borde(estilo)
+                )
             }
         };
         let (sube, baja) = (x.diagonal & 2 != 0, x.diagonal & 1 != 0);
@@ -1011,7 +1276,15 @@ fn xml_estilos(g: &Globales) -> String {
             lado("right", x.borde[1], x.color_borde[1]),
             lado("top", x.borde[2], x.color_borde[2]),
             lado("bottom", x.borde[3], x.color_borde[3]),
-            lado("diagonal", if x.diagonal != 0 { x.estilo_diagonal } else { 0 }, x.color_diagonal)
+            lado(
+                "diagonal",
+                if x.diagonal != 0 {
+                    x.estilo_diagonal
+                } else {
+                    0
+                },
+                x.color_diagonal
+            )
         ));
     }
     if g.xfs.is_empty() {
@@ -1085,7 +1358,9 @@ impl XlsAbierto {
         let cf = Cfb::abrir(bytes).map_err(mal)?;
         let flujo = match cf.flujo("Workbook").map_err(mal)? {
             Some(f) => f,
-            None if cf.tiene_flujo("Book") => return Err(mal("libro de Excel 5.0/95 (BIFF5): no se lee")),
+            None if cf.tiene_flujo("Book") => {
+                return Err(mal("libro de Excel 5.0/95 (BIFF5): no se lee"));
+            }
             None => return Err(mal("no tiene flujo Workbook: no es un libro de Excel")),
         };
         let mut pres = Presupuesto::default();
@@ -1093,14 +1368,27 @@ impl XlsAbierto {
         if g.hojas.is_empty() {
             return Err(mal("el libro no tiene hojas"));
         }
-        let activa = if g.hojas.get(g.activa).is_some_and(|h| h.visibilidad == Visibilidad::Visible) {
+        let activa = if g
+            .hojas
+            .get(g.activa)
+            .is_some_and(|h| h.visibilidad == Visibilidad::Visible)
+        {
             g.activa
         } else {
-            g.hojas.iter().position(|h| h.visibilidad == Visibilidad::Visible).unwrap_or(0)
+            g.hojas
+                .iter()
+                .position(|h| h.visibilidad == Visibilidad::Visible)
+                .unwrap_or(0)
         };
         let estilos_xml = xml_estilos(&g).into_bytes();
         let textos_xml = xml_textos(&g.cadenas).into_bytes();
-        let libro = XlsAbierto { flujo, g, estilos_xml, textos_xml, activa };
+        let libro = XlsAbierto {
+            flujo,
+            g,
+            estilos_xml,
+            textos_xml,
+            activa,
+        };
         // Se lee la hoja activa ya: si no se entiende, el libro no se abre y
         // queda la vista previa de Office de respaldo.
         libro.hoja(activa)?;
@@ -1113,12 +1401,30 @@ impl XlsAbierto {
 
     /// Nombre, visibilidad y tipo de cada hoja.
     pub fn hojas(&self) -> Vec<(String, Visibilidad, TipoHoja)> {
-        self.g.hojas.iter().map(|h| (h.nombre.clone(), h.visibilidad, if h.tipo == 0 { TipoHoja::Hoja } else { TipoHoja::Grafico })).collect()
+        self.g
+            .hojas
+            .iter()
+            .map(|h| {
+                (
+                    h.nombre.clone(),
+                    h.visibilidad,
+                    if h.tipo == 0 {
+                        TipoHoja::Hoja
+                    } else {
+                        TipoHoja::Grafico
+                    },
+                )
+            })
+            .collect()
     }
 
     /// Lee la hoja `i` (cada llamada la vuelve a leer: quien la pide la guarda).
     pub fn hoja(&self, i: usize) -> Result<HojaXls, ErrorHojas> {
-        let h = self.g.hojas.get(i).ok_or_else(|| mal("hoja que no existe"))?;
+        let h = self
+            .g
+            .hojas
+            .get(i)
+            .ok_or_else(|| mal("hoja que no existe"))?;
         leer_hoja(&self.flujo, h, &self.g, &mut Presupuesto::default())
     }
 }
@@ -1130,7 +1436,13 @@ pub fn leer(bytes: &[u8]) -> Result<LibroXls, ErrorHojas> {
     for i in 0..a.g.hojas.len() {
         hojas.push(a.hoja(i)?);
     }
-    Ok(LibroXls { fecha_1904: a.g.fecha_1904, hojas, activa: a.activa, estilos_xml: a.estilos_xml, textos_xml: a.textos_xml })
+    Ok(LibroXls {
+        fecha_1904: a.g.fecha_1904,
+        hojas,
+        activa: a.activa,
+        estilos_xml: a.estilos_xml,
+        textos_xml: a.textos_xml,
+    })
 }
 
 #[cfg(test)]
@@ -1151,7 +1463,14 @@ pub(crate) mod pruebas {
         v
     }
 
-    fn xf_bytes(fuente: u16, formato: u16, alin: u8, borde: u32, relleno: u32, colores: u16) -> Vec<u8> {
+    fn xf_bytes(
+        fuente: u16,
+        formato: u16,
+        alin: u8,
+        borde: u32,
+        relleno: u32,
+        colores: u16,
+    ) -> Vec<u8> {
         let mut v = Vec::new();
         v.extend(fuente.to_le_bytes());
         v.extend(formato.to_le_bytes());
@@ -1197,7 +1516,17 @@ pub(crate) mod pruebas {
         g.extend(reg(0x041E, &fmt));
         // XF 0: por defecto; 1: negrita centrada con borde fino y relleno; 2: formato 164; 3: fecha 14; 4: fuente del indice 5 (la sexta).
         g.extend(reg(0x00E0, &xf_bytes(0, 0, 0x20, 0, 0, 0)));
-        g.extend(reg(0x00E0, &xf_bytes(1, 0, 0x02 | 0x08 | 0x10, 0x0000_1111 | (8 << 16) | (8 << 23), (1 << 26) | 13, 13 | (64 << 7))));
+        g.extend(reg(
+            0x00E0,
+            &xf_bytes(
+                1,
+                0,
+                0x02 | 0x08 | 0x10,
+                0x0000_1111 | (8 << 16) | (8 << 23),
+                (1 << 26) | 13,
+                13 | (64 << 7),
+            ),
+        ));
         g.extend(reg(0x00E0, &xf_bytes(0, 164, 0, 0, 0, 0)));
         g.extend(reg(0x00E0, &xf_bytes(0, 14, 0, 0, 0, 0)));
         g.extend(reg(0x00E0, &xf_bytes(6, 0, 0, 0, 0, 0)));
@@ -1375,10 +1704,22 @@ pub(crate) mod pruebas {
         assert_eq!(l.hojas[0].nombre, "Datos");
         assert_eq!(l.hojas[1].visibilidad, Visibilidad::Oculta);
         let h = &l.hojas[0];
-        let fila = |n: u32| h.filas.iter().find(|f| f.indice == n).unwrap_or_else(|| panic!("fila {n}"));
+        let fila = |n: u32| {
+            h.filas
+                .iter()
+                .find(|f| f.indice == n)
+                .unwrap_or_else(|| panic!("fila {n}"))
+        };
         let f0 = fila(0);
         assert_eq!(f0.alto, 30.0);
-        assert_eq!(f0.celdas[0], Celda { col: 0, xf: 1, valor: Valor::Numero(1234.5) });
+        assert_eq!(
+            f0.celdas[0],
+            Celda {
+                col: 0,
+                xf: 1,
+                valor: Valor::Numero(1234.5)
+            }
+        );
         assert_eq!(f0.celdas[1].valor, Valor::Compartido(1));
         assert_eq!(f0.celdas.len(), 3, "la celda vacia con relleno cuenta");
         assert!(fila(1).oculta);
@@ -1387,25 +1728,62 @@ pub(crate) mod pruebas {
         assert_eq!(f1.celdas[1].valor, Valor::Numero(12.5));
         let f2 = fila(2);
         assert!(f2.alto.is_nan(), "alto por defecto");
-        assert_eq!((f2.celdas[0].valor, f2.celdas[1].valor), (Valor::Numero(5.0), Valor::Numero(6.0)));
+        assert_eq!(
+            (f2.celdas[0].valor, f2.celdas[1].valor),
+            (Valor::Numero(5.0), Valor::Numero(6.0))
+        );
         let f3 = fila(3);
         assert_eq!(f3.celdas[0].valor, Valor::Logico(true));
         assert_eq!(f3.celdas[1].valor, Valor::Error(1));
-        assert_eq!(f3.celdas[2].valor, Valor::Numero(42.0), "valor guardado de la formula");
+        assert_eq!(
+            f3.celdas[2].valor,
+            Valor::Numero(42.0),
+            "valor guardado de la formula"
+        );
         assert!(matches!(f3.celdas[3].valor, Valor::Propio(0)));
         assert_eq!(h.textos, vec!["ok".to_string()]);
         // La fila 4 solo tenia una celda vacia con el estilo por defecto: no existe.
-        assert!(!h.filas.iter().any(|f| f.indice == 4 && f.celdas.iter().any(|c| c.col == 1)));
+        assert!(
+            !h.filas
+                .iter()
+                .any(|f| f.indice == 4 && f.celdas.iter().any(|c| c.col == 1))
+        );
         // Cabecera y cola.
-        assert_eq!(h.cabecera.columnas, vec![Columnas { min: 1, max: 1, ancho: Some(20.0), oculta: false, xf: 0 }]);
+        assert_eq!(
+            h.cabecera.columnas,
+            vec![Columnas {
+                min: 1,
+                max: 1,
+                ancho: Some(20.0),
+                oculta: false,
+                xf: 0
+            }]
+        );
         assert_eq!(h.cabecera.ancho_base, Some(8.0));
         assert!(!h.cabecera.vista.cuadricula && h.cabecera.vista.encabezados);
-        assert_eq!((h.cabecera.vista.filas_fijas, h.cabecera.vista.columnas_fijas), (1, 0));
+        assert_eq!(
+            (
+                h.cabecera.vista.filas_fijas,
+                h.cabecera.vista.columnas_fijas
+            ),
+            (1, 0)
+        );
         assert_eq!(h.cabecera.vista.zoom, 150);
-        assert_eq!(h.cola.combinadas, vec![Rango { fila0: 5, col0: 0, fila1: 5, col1: 2 }]);
+        assert_eq!(
+            h.cola.combinadas,
+            vec![Rango {
+                fila0: 5,
+                col0: 0,
+                fila1: 5,
+                col1: 2
+            }]
+        );
         // Los textos compartidos con CONTINUE y cambio de compresion.
         let sst = String::from_utf8(l.textos_xml.clone()).unwrap();
-        assert!(sst.contains(">Hi<") && sst.contains(">abçd<") && sst.contains(">fin<"), "{sst}");
+        assert!(
+            sst.contains(">Hi<") && sst.contains(">abçd<") && sst.contains(">fin<"),
+            "{sst}"
+        );
     }
 
     #[test]
@@ -1425,7 +1803,10 @@ pub(crate) mod pruebas {
         let b = e.borde(x);
         assert_eq!(b.izquierda.estilo, crate::estilos::EstiloLinea::Fino);
         assert_eq!(b.izquierda.color, Rgb::de_u32(crate::estilos::PALETA[8]));
-        assert_eq!(e.relleno(x), Relleno::Liso(Rgb::de_u32(crate::estilos::PALETA[13])));
+        assert_eq!(
+            e.relleno(x),
+            Relleno::Liso(Rgb::de_u32(crate::estilos::PALETA[13]))
+        );
         // XF 2: formato propio 0.00%; XF 3: fecha integrada.
         assert_eq!(e.xf(2).formato.numero(0.256, false, &r).texto, "25.60%");
         assert!(e.xf(3).formato.es_fecha);
@@ -1488,13 +1869,18 @@ pub(crate) mod pruebas {
     #[test]
     #[ignore]
     fn mostrar_un_xls_de_verdad() {
-        let Ok(ruta) = std::env::var("XLS_PRUEBA") else { return };
+        let Ok(ruta) = std::env::var("XLS_PRUEBA") else {
+            return;
+        };
         let b = std::fs::read(ruta).unwrap();
         let l = leer(&b).unwrap();
         for h in &l.hojas {
             println!("hoja {} ({} filas)", h.nombre, h.filas.len());
             for f in h.filas.iter().take(12) {
-                println!("  fila {} alto {} oculta {} -> {:?}", f.indice, f.alto, f.oculta, f.celdas);
+                println!(
+                    "  fila {} alto {} oculta {} -> {:?}",
+                    f.indice, f.alto, f.oculta, f.celdas
+                );
             }
         }
     }
@@ -1519,14 +1905,28 @@ pub(crate) mod pruebas {
         d.extend([0u8; 16]);
         d.extend(2u32.to_le_bytes());
         d.extend((0x01u32 | 0x02).to_le_bytes());
-        d.extend([0xE0, 0xC9, 0xEA, 0x79, 0xF9, 0xBA, 0xCE, 0x11, 0x8C, 0x82, 0x00, 0xAA, 0x00, 0x4B, 0xA9, 0x0B]);
-        let url: Vec<u8> = "https://a.pe/x\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        d.extend([
+            0xE0, 0xC9, 0xEA, 0x79, 0xF9, 0xBA, 0xCE, 0x11, 0x8C, 0x82, 0x00, 0xAA, 0x00, 0x4B,
+            0xA9, 0x0B,
+        ]);
+        let url: Vec<u8> = "https://a.pe/x\0"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
         d.extend((url.len() as u32).to_le_bytes());
         d.extend(url);
         let h = enlace(&d).unwrap();
         assert_eq!(h.destino, "https://a.pe/x");
         assert!(h.externo);
-        assert_eq!(h.rango, Rango { fila0: 2, col0: 1, fila1: 2, col1: 1 });
+        assert_eq!(
+            h.rango,
+            Rango {
+                fila0: 2,
+                col0: 1,
+                fila1: 2,
+                col1: 1
+            }
+        );
         // Solo lugar (dentro del libro).
         let mut d = Vec::new();
         for v in [0u16, 0, 0, 0] {
@@ -1535,7 +1935,10 @@ pub(crate) mod pruebas {
         d.extend([0u8; 16]);
         d.extend(2u32.to_le_bytes());
         d.extend(0x08u32.to_le_bytes());
-        let lug: Vec<u8> = "Hoja2!A1\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let lug: Vec<u8> = "Hoja2!A1\0"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
         d.extend(9u32.to_le_bytes());
         d.extend(lug);
         let h = enlace(&d).unwrap();

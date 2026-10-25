@@ -41,7 +41,9 @@ pub fn ahora_ms() -> i64 {
 /// `n` bytes del generador del sistema (BCrypt).
 #[cfg(windows)]
 pub fn aleatorio(n: usize) -> Vec<u8> {
-    use windows::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
+    use windows::Win32::Security::Cryptography::{
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
+    };
     let mut b = vec![0u8; n];
     // SAFETY: el bufer vive durante la llamada y se pasa entero; sin asa de
     // algoritmo, con el generador preferido del sistema.
@@ -85,11 +87,21 @@ pub fn reto_de(verificador: &str) -> String {
 pub fn pkce() -> Pkce {
     // 32 bytes → 43 letras, el minimo del RFC 7636 y de sobra.
     let verificador = base64_url(&aleatorio(32));
-    Pkce { reto: reto_de(&verificador), verificador }
+    Pkce {
+        reto: reto_de(&verificador),
+        verificador,
+    }
 }
 
 /// **La URL de la pagina de permiso.**
-pub fn url_de_autorizar(s: &Servicio, ex: &Extremos, cliente_id: &str, redireccion: &str, reto: &str, estado: &str) -> String {
+pub fn url_de_autorizar(
+    s: &Servicio,
+    ex: &Extremos,
+    cliente_id: &str,
+    redireccion: &str,
+    reto: &str,
+    estado: &str,
+) -> String {
     let alcances = s.alcances.join(" ");
     let mut pares = vec![
         ("client_id", cliente_id),
@@ -116,18 +128,32 @@ pub fn autorizar(
     parar: &AtomicBool,
     espera: Duration,
 ) -> Result<Tokens, String> {
-    let oyente = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("no se pudo abrir un puerto local: {e}"))?;
+    let oyente = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| format!("no se pudo abrir un puerto local: {e}"))?;
     let puerto = oyente.local_addr().map_err(|e| e.to_string())?.port();
     let redireccion = format!("http://127.0.0.1:{puerto}/");
     let p = pkce();
     let estado = base64_url(&aleatorio(16));
-    abrir(&url_de_autorizar(s, ex, &cliente.id, &redireccion, &p.reto, &estado))?;
+    abrir(&url_de_autorizar(
+        s,
+        ex,
+        &cliente.id,
+        &redireccion,
+        &p.reto,
+        &estado,
+    ))?;
     let codigo = esperar_codigo(&oyente, &estado, s, parar, espera)?;
     canjear(ex, cliente, &codigo, &p.verificador, &redireccion)
 }
 
 /// Espera la vuelta del navegador al puerto local y saca el `code`.
-fn esperar_codigo(oyente: &TcpListener, estado: &str, s: &Servicio, parar: &AtomicBool, espera: Duration) -> Result<String, String> {
+fn esperar_codigo(
+    oyente: &TcpListener,
+    estado: &str,
+    s: &Servicio,
+    parar: &AtomicBool,
+    espera: Duration,
+) -> Result<String, String> {
     oyente.set_nonblocking(true).map_err(|e| e.to_string())?;
     let limite = Instant::now() + espera;
     loop {
@@ -135,7 +161,10 @@ fn esperar_codigo(oyente: &TcpListener, estado: &str, s: &Servicio, parar: &Atom
             return Err("cancelado".into());
         }
         if Instant::now() > limite {
-            return Err(format!("no llego el permiso de {} a tiempo; pulsa Conectar otra vez", s.nombre));
+            return Err(format!(
+                "no llego el permiso de {} a tiempo; pulsa Conectar otra vez",
+                s.nombre
+            ));
         }
         match oyente.accept() {
             Ok((flujo, _)) => {
@@ -143,7 +172,9 @@ fn esperar_codigo(oyente: &TcpListener, estado: &str, s: &Servicio, parar: &Atom
                     return r;
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(50))
+            }
             Err(e) => return Err(format!("el puerto local fallo: {e}")),
         }
     }
@@ -174,7 +205,8 @@ fn atender(mut flujo: TcpStream, estado: &str, s: &Servicio) -> Option<Result<St
     let (camino, q) = ruta.split_once('?').unwrap_or((ruta, ""));
     let pares = consulta(q);
     if camino != "/" || (valor(&pares, "code").is_none() && valor(&pares, "error").is_none()) {
-        let _ = flujo.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        let _ = flujo
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         return None;
     }
     let r = if valor(&pares, "state") != Some(estado) {
@@ -189,8 +221,14 @@ fn atender(mut flujo: TcpStream, estado: &str, s: &Servicio) -> Option<Result<St
         Ok(valor(&pares, "code").unwrap_or_default().to_string())
     };
     let (titulo, texto) = match &r {
-        Ok(_) => (format!("{} conectado", s.nombre), "Listo. Ya puedes cerrar esta pestaña y volver a PixPin.".to_string()),
-        Err(e) => ("No se conecto".to_string(), format!("{e}. Vuelve a PixPin para intentarlo otra vez.")),
+        Ok(_) => (
+            format!("{} conectado", s.nombre),
+            "Listo. Ya puedes cerrar esta pestaña y volver a PixPin.".to_string(),
+        ),
+        Err(e) => (
+            "No se conecto".to_string(),
+            format!("{e}. Vuelve a PixPin para intentarlo otra vez."),
+        ),
     };
     let html = format!(
         "<!doctype html><meta charset=utf-8><title>PixPin</title>\
@@ -211,7 +249,10 @@ fn atender(mut flujo: TcpStream, estado: &str, s: &Servicio) -> Option<Result<St
 }
 
 fn html_escapar(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Por que no salio una peticion al servidor de tokens.
@@ -236,24 +277,35 @@ fn pedir_token(ex: &Extremos, pares: &[(&str, &str)]) -> Result<Value, FalloToke
     let r = http::pedir(
         "POST",
         &ex.token,
-        &[("Content-Type", "application/x-www-form-urlencoded".into()), ("Accept", "application/json".into())],
+        &[
+            ("Content-Type", "application/x-www-form-urlencoded".into()),
+            ("Accept", "application/json".into()),
+        ],
         cuerpo.as_bytes(),
         1024 * 1024,
     );
     match r {
-        Ok(r) => serde_json::from_slice(&r.cuerpo).map_err(|_| FalloToken::Otro("el servidor de permisos contesto algo raro".into())),
+        Ok(r) => serde_json::from_slice(&r.cuerpo)
+            .map_err(|_| FalloToken::Otro("el servidor de permisos contesto algo raro".into())),
         Err(Fallo::Http { codigo, cuerpo, .. }) => {
             let v: Value = serde_json::from_str(&cuerpo).unwrap_or(Value::Null);
             let error = v.get("error").and_then(Value::as_str).unwrap_or_default();
-            let detalle = v.get("error_description").and_then(Value::as_str).unwrap_or(error);
+            let detalle = v
+                .get("error_description")
+                .and_then(Value::as_str)
+                .unwrap_or(error);
             if error == "invalid_grant" {
-                Err(FalloToken::Revocado(format!("el permiso caduco o se retiro ({detalle}); hay que volver a conectar")))
+                Err(FalloToken::Revocado(format!(
+                    "el permiso caduco o se retiro ({detalle}); hay que volver a conectar"
+                )))
             } else if error == "invalid_client" || error == "unauthorized_client" {
                 Err(FalloToken::Otro(format!(
                     "el ID de cliente no vale ({detalle}); revisa el que pegaste en Ajustes → Asistente → Conexiones"
                 )))
             } else {
-                Err(FalloToken::Otro(format!("el servidor de permisos dijo {codigo}: {detalle}")))
+                Err(FalloToken::Otro(format!(
+                    "el servidor de permisos dijo {codigo}: {detalle}"
+                )))
             }
         }
         Err(Fallo::Red(e)) => Err(FalloToken::Otro(format!("sin conexion: {e}"))),
@@ -264,11 +316,20 @@ fn pedir_token(ex: &Extremos, pares: &[(&str, &str)]) -> Result<Value, FalloToke
 /// conserva si la respuesta no trae otro (al refrescar, Google no lo
 /// repite).
 pub fn tokens_de(v: &Value, refresco_anterior: &str, ahora: i64) -> Result<Tokens, FalloToken> {
-    let acceso = v.get("access_token").and_then(Value::as_str).unwrap_or_default();
+    let acceso = v
+        .get("access_token")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if acceso.is_empty() {
-        return Err(FalloToken::Otro("el servidor de permisos no dio el token".into()));
+        return Err(FalloToken::Otro(
+            "el servidor de permisos no dio el token".into(),
+        ));
     }
-    let dura = v.get("expires_in").and_then(Value::as_i64).unwrap_or(3600).clamp(30, 30 * 24 * 3600);
+    let dura = v
+        .get("expires_in")
+        .and_then(Value::as_i64)
+        .unwrap_or(3600)
+        .clamp(30, 30 * 24 * 3600);
     Ok(Tokens {
         acceso: acceso.to_string(),
         refresco: v
@@ -281,7 +342,10 @@ pub fn tokens_de(v: &Value, refresco_anterior: &str, ahora: i64) -> Result<Token
     })
 }
 
-fn con_cliente<'a>(cliente: &'a Cliente, mut pares: Vec<(&'a str, &'a str)>) -> Vec<(&'a str, &'a str)> {
+fn con_cliente<'a>(
+    cliente: &'a Cliente,
+    mut pares: Vec<(&'a str, &'a str)>,
+) -> Vec<(&'a str, &'a str)> {
     pares.push(("client_id", &cliente.id));
     if !cliente.secreto.is_empty() {
         pares.push(("client_secret", &cliente.secreto));
@@ -290,7 +354,13 @@ fn con_cliente<'a>(cliente: &'a Cliente, mut pares: Vec<(&'a str, &'a str)>) -> 
 }
 
 /// **Canjea** el codigo de la vuelta por los tokens (con el verificador).
-pub fn canjear(ex: &Extremos, cliente: &Cliente, codigo: &str, verificador: &str, redireccion: &str) -> Result<Tokens, String> {
+pub fn canjear(
+    ex: &Extremos,
+    cliente: &Cliente,
+    codigo: &str,
+    verificador: &str,
+    redireccion: &str,
+) -> Result<Tokens, String> {
     let pares = con_cliente(
         cliente,
         vec![
@@ -307,9 +377,14 @@ pub fn canjear(ex: &Extremos, cliente: &Cliente, codigo: &str, verificador: &str
 /// **Pide otro token de acceso** con el de refresco.
 pub fn refrescar(ex: &Extremos, cliente: &Cliente, refresco: &str) -> Result<Tokens, FalloToken> {
     if refresco.is_empty() {
-        return Err(FalloToken::Revocado("no hay permiso guardado para renovar; hay que volver a conectar".into()));
+        return Err(FalloToken::Revocado(
+            "no hay permiso guardado para renovar; hay que volver a conectar".into(),
+        ));
     }
-    let pares = con_cliente(cliente, vec![("grant_type", "refresh_token"), ("refresh_token", refresco)]);
+    let pares = con_cliente(
+        cliente,
+        vec![("grant_type", "refresh_token"), ("refresh_token", refresco)],
+    );
     let v = pedir_token(ex, &pares)?;
     tokens_de(&v, refresco, ahora_ms())
 }
@@ -343,10 +418,17 @@ mod pruebas {
     #[test]
     fn el_reto_es_el_del_rfc_7636() {
         // El ejemplo del apendice B del RFC 7636.
-        assert_eq!(reto_de("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+        assert_eq!(
+            reto_de("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
         let p = pkce();
         assert_eq!(p.verificador.len(), 43);
-        assert!(p.verificador.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(
+            p.verificador
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        );
         assert_eq!(p.reto, reto_de(&p.verificador));
         assert_ne!(pkce().verificador, p.verificador, "aleatorio de verdad");
     }
@@ -354,23 +436,41 @@ mod pruebas {
     #[test]
     fn la_url_de_permiso_lleva_lo_que_pide_google() {
         let ex = GOOGLE_DRIVE.extremos();
-        let u = url_de_autorizar(&GOOGLE_DRIVE, &ex, "id.apps", "http://127.0.0.1:5000/", "RETO", "EST");
-        assert!(u.starts_with("https://accounts.google.com/o/oauth2/v2/auth?"), "{u}");
+        let u = url_de_autorizar(
+            &GOOGLE_DRIVE,
+            &ex,
+            "id.apps",
+            "http://127.0.0.1:5000/",
+            "RETO",
+            "EST",
+        );
+        assert!(
+            u.starts_with("https://accounts.google.com/o/oauth2/v2/auth?"),
+            "{u}"
+        );
         let q = consulta(u.split_once('?').unwrap().1);
         assert_eq!(valor(&q, "redirect_uri"), Some("http://127.0.0.1:5000/"));
         assert_eq!(valor(&q, "code_challenge_method"), Some("S256"));
         assert_eq!(valor(&q, "code_challenge"), Some("RETO"));
         assert_eq!(valor(&q, "state"), Some("EST"));
         assert_eq!(valor(&q, "access_type"), Some("offline"));
-        assert!(valor(&q, "scope").unwrap().contains("https://www.googleapis.com/auth/drive.file"));
+        assert!(
+            valor(&q, "scope")
+                .unwrap()
+                .contains("https://www.googleapis.com/auth/drive.file")
+        );
     }
 
     #[test]
     fn el_refresco_se_conserva_si_no_viene_otro() {
         let v: Value = serde_json::from_str(r#"{"access_token":"a2","expires_in":3599}"#).unwrap();
         let t = tokens_de(&v, "r1", 1000).unwrap();
-        assert_eq!((t.acceso.as_str(), t.refresco.as_str(), t.caduca_ms), ("a2", "r1", 1000 + 3_599_000));
-        let v: Value = serde_json::from_str(r#"{"access_token":"a3","refresh_token":"r2"}"#).unwrap();
+        assert_eq!(
+            (t.acceso.as_str(), t.refresco.as_str(), t.caduca_ms),
+            ("a2", "r1", 1000 + 3_599_000)
+        );
+        let v: Value =
+            serde_json::from_str(r#"{"access_token":"a3","refresh_token":"r2"}"#).unwrap();
         assert_eq!(tokens_de(&v, "r1", 0).unwrap().refresco, "r2");
         assert!(tokens_de(&serde_json::json!({}), "r1", 0).is_err());
     }

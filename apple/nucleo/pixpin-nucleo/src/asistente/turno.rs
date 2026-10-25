@@ -62,9 +62,12 @@ pub const VENTANA_NUBE: u32 = 64_000;
 /// Cuantos mensajes de antes se mandan, y cuanto de cada uno (Windows).
 const ULTIMOS: usize = 12;
 const LARGO: usize = 1500;
-/// Con la nube, mas (Windows, 17-oct: 40 mensajes de hasta 4000 letras,
-/// medido: ~24 000 tokens con el catalogo).
-const ULTIMOS_NUBE: usize = 40;
+/// Con la nube, todo lo de despues de la ultima «Conversación nueva»
+/// (Windows, 22-oct-2026: «que cada conversacion no se limite a 2 o 3
+/// mensajes sino que todo lo de esa conversacion»), de hasta 4000 letras
+/// cada uno: lo unico que corta es la ventana (al 70 % se reinicia con la
+/// hoja de trabajo, que resume lo de antes).
+const ULTIMOS_NUBE: usize = usize::MAX;
 const LARGO_NUBE: usize = 4000;
 
 /// «(Ahora: vie 17-oct-2026 14:05, hora local del usuario.)» al final del
@@ -265,8 +268,8 @@ pub struct PalabraLeida {
     pub renglon: u32,
 }
 
-/// Lo que el Mac aun no hace (hoja→lienzo, anotar con la nube y las acciones
-/// del chat): no se le ofrece al modelo. Las de documentos (tabla de una
+/// Lo que el Mac aun no hace (anotar con la nube y las acciones del chat):
+/// no se le ofrece al modelo. Las de documentos (tabla de una
 /// foto, anotar, buscar en un documento, abrir por su nombre, exportar), si
 /// (`documentos_acciones`), pero solo con la app (Swift pinta y lee). Editar el
 /// lienzo y las figuras guardadas, solo `en_chat` (fuera de una conversacion
@@ -277,6 +280,11 @@ fn el_mac_lo_hace(nombre: &str, en_chat: bool) -> bool {
         return en_chat;
     }
     if nombre == pixpin_ia::hoja::NOMBRE {
+        return en_chat;
+    }
+    // Los lienzos del chat (listar, crear, pasar a otro) y sus carpetas de
+    // paginas, solo en una conversacion.
+    if acciones::es_de_lienzos(nombre) {
         return en_chat;
     }
     !(nombre == pixpin_ia::anotacion::NOMBRE
@@ -357,6 +365,7 @@ pub fn ia_turno(
         pensar,
         ventana: if nube { VENTANA_NUBE } else { pixpin_ia::servidor::CONTEXTO },
         cada: Duration::from_millis(super::CADA_TANDA_MS),
+        guardar_con: None,
     };
     let mut ejecutor = EjecutorDelMac::nuevo(peticion.adjuntos.clone(), peticion.desfase_ms)
         .con_app(app)
@@ -410,6 +419,9 @@ pub(crate) struct Entorno {
     pub pensar: bool,
     pub ventana: u32,
     pub cada: Duration,
+    /// El motor con el que se guarda en segundo plano lo que el reinicio
+    /// deja de mandar a la memoria de largo plazo (el del turno).
+    pub guardar_con: Option<Arc<dyn Motor>>,
 }
 
 /// Lo que se va juntando de los eventos (Windows, `turno::Recogido`).
@@ -480,6 +492,12 @@ pub(crate) struct Extra {
     pub fuentes: Option<Vec<Fuente>>,
     /// Ya se paro antes de empezar: ni se llama al motor.
     pub cortado: bool,
+    /// **La memoria de largo plazo** (Windows, 22-oct): con la nube, el
+    /// perfil y el indice en el sistema y la herramienta `memoria`.
+    pub largo_plazo: Option<pixpin_ia::memoria::Memoria>,
+    /// **Lo que el usuario escribe mientras trabaja** (Windows, 25-oct):
+    /// se mira antes de cada vuelta (`Opciones::entrantes`).
+    pub entrantes: Option<Arc<dyn Fn() -> Vec<String> + Send + Sync>>,
 }
 
 /// Lo que sale del turno ademas de la respuesta.
@@ -576,13 +594,26 @@ pub(crate) fn turno_nucleo(
         Some(f) => Mensaje::usuario_con_imagen(con_hora, f.bytes.clone(), &f.mime),
         None => Mensaje::usuario(con_hora),
     };
-    let sistema = contexto::sistema_con_hoja(&agente::instrucciones(), &hoja, None);
+    // La memoria de largo plazo, solo con la nube (el local no se toca):
+    // cuenta en la ventana como lo demas.
+    let largo_plazo = extra.largo_plazo.filter(|_| entorno.nube);
+    let bloque = super::memoria::bloque(largo_plazo.as_ref());
+    let base = pixpin_ia::memoria::con_memoria(&agente::instrucciones(), &bloque);
+    let sistema = contexto::sistema_con_hoja(&base, &hoja, None);
     let mut con_buscar = herramientas.clone();
     con_buscar.push(contexto::herramienta_buscar());
+    if largo_plazo.is_some() {
+        con_buscar.push(pixpin_ia::memoria::herramienta());
+    }
     let preparado = contexto::preparar(sistema, anteriores, nuevo, &con_buscar, entorno.ventana, contexto::RESERVA_RESPUESTA);
     let primero = preparado.reiniciado.then_some(desde + preparado.primero);
     if preparado.reiniciado {
         hoja.reinicios += 1;
+        // Lo que se deja de mandar, a la memoria sin esperar.
+        if let (Some(m), Some(motor)) = (&largo_plazo, &entorno.guardar_con) {
+            let olvidado = anteriores[..preparado.primero.min(anteriores.len())].to_vec();
+            super::memoria::guardar_en_segundo_plano(motor.clone(), m.clone(), olvidado);
+        }
     }
     let mut historial = preparado.historial;
     // El lienzo destino, resumido (tipos, #id, cajas, colores, textos) al
@@ -592,7 +623,8 @@ pub(crate) fn turno_nucleo(
     // ademas la vista.
     let ojos = en_chat && motor.ve_imagenes();
     let mirar = pixpin_ia::ojos::pide_mirar(&pedido);
-    if (pixpin_ia::edicion::viene_a_cuento(&pedido) || mirar)
+    let de_lienzo = pixpin_ia::edicion::viene_a_cuento(&pedido) || mirar;
+    if de_lienzo
         && let Some(r) = ejecutor.resumen_del_lienzo()
     {
         pixpin_ia::edicion::anadir_resumen(&mut historial, &r);
@@ -610,6 +642,14 @@ pub(crate) fn turno_nucleo(
         .filter(|h| el_mac_lo_hace(&h.nombre, en_chat) && (entorno.nube || !pixpin_ia::acciones::es_solo_nube(&h.nombre)))
         .collect();
     let ahora = Momento::de_ms_locales(crate::ahora_ms() + peticion.desfase_ms);
+    // El critico de respaldo (Sonnet), solo si hay revision; el jefe, con
+    // la nube, para lo complejo o de varias partes (lo decide
+    // `orquesta::conviene` en el turno).
+    let nucleo = ejecutor.nucleo.clone();
+    let critico = nucleo.as_deref().filter(|_| ojos && de_lienzo && entorno.nube).and_then(critico);
+    let jefe = nucleo.as_deref().filter(|_| entorno.nube).and_then(jefe);
+    let entrantes = extra.entrantes.clone();
+    let recoger = move || entrantes.as_ref().map(|f| f()).unwrap_or_default();
     let opciones = Opciones {
         planificar: entorno.pensar,
         pensar: entorno.pensar,
@@ -619,11 +659,30 @@ pub(crate) fn turno_nucleo(
         ampliar: Some(&todas[..]),
         rapido: Some(ahora),
         ojos,
-        revisar: if ojos && entorno.nube { 1 } else { 0 },
+        // Con la nube, las rondas de la revision con rubrica (Windows,
+        // `revisiones`); el local ni mira ni revisa.
+        revisar: if ojos && entorno.nube { agente::REVISIONES_DE_SERIE } else { 0 },
+        memoria: largo_plazo.as_ref(),
+        critico: critico.as_deref(),
+        // Comprobar antes de contestar (rendirse, varias partes, algo que
+        // fallo): con la nube; el local no se toca.
+        repasar: entorno.nube,
+        jefe: jefe.as_deref(),
+        entrantes: extra.entrantes.is_some().then_some(&recoger as &dyn Fn() -> Vec<String>),
     };
 
     let mut recogido = Recogido::default();
+    // El diario del asistente (Windows, fase 1: medir).
+    let empezo = std::time::Instant::now();
+    let mut apunte = pixpin_ia::diario::Entrada {
+        cuando: crate::ahora_ms(),
+        motor: nombre_corto(&entorno.nombre, entorno.nube).to_string(),
+        pedido: pixpin_ia::diario::recortar(&pedido),
+        ..Default::default()
+    };
+    let mut dicho = String::new();
     let resultado = agente::turno_con(motor, &mut historial, &herramientas, ejecutor, &opciones, &mut |e| {
+        apuntar_evento(&mut apunte, &mut dicho, &e);
         match &e {
             Evento::Pensando(t) => recogido.pensamiento.push_str(t),
             Evento::PensoListo { segundos } => *recogido.segundos.get_or_insert(0.0) += segundos,
@@ -643,6 +702,13 @@ pub(crate) fn turno_nucleo(
         }
         al_evento(&e)
     });
+    apunte.segundos = empezo.elapsed().as_secs_f32();
+    apunte.se_rindio = agente::parece_rendirse(&dicho);
+    apunte.fallo = resultado.is_err();
+    apunte.cortado = resultado.as_ref().is_ok_and(|f| f.cortado);
+    if let Some(n) = &nucleo {
+        let _ = pixpin_ia::diario::apuntar(&n.ruta().join(DIARIO), &apunte);
+    }
     let fin = match resultado {
         Ok(f) => f,
         Err(e) => {
@@ -719,6 +785,84 @@ pub(crate) fn turno_nucleo(
     Ok((respuesta, Detalle { primero, registro, fin: Ok(fin) }))
 }
 
+/// **El diario del asistente** en la carpeta de datos (`pixpin_ia::diario`,
+/// el mismo nombre que Windows): solo en este equipo, para medir.
+pub const DIARIO: &str = "diario-del-asistente.jsonl";
+
+/// El nombre corto del motor para el diario: «Claude Haiku», «DeepSeek»,
+/// «Local» (Windows, `nube::nombre_corto`).
+fn nombre_corto(nombre: &str, nube: bool) -> &'static str {
+    if !nube {
+        "Local"
+    } else if nombre.to_lowercase().contains("deepseek") {
+        "DeepSeek"
+    } else {
+        "Claude Haiku"
+    }
+}
+
+/// Lo que un evento cuenta para el diario (Windows, `turno::apuntar_evento`).
+fn apuntar_evento(a: &mut pixpin_ia::diario::Entrada, dicho: &mut String, e: &Evento) {
+    use pixpin_ia::orquesta::EstadoTarea;
+    match e {
+        Evento::Texto(t) => dicho.push_str(t),
+        Evento::Resultado { ok: true, .. } => a.herramientas_ok += 1,
+        Evento::Resultado { ok: false, .. } => a.herramientas_error += 1,
+        Evento::Llamando(n) if n == "repasar" => a.repasos += 1,
+        Evento::Llamando(n) if n == "jefe:planear" => a.jefe = true,
+        // La lista del jefe o la de pasos del turno: que hubo jefe lo dice
+        // «jefe:planear», no la lista.
+        Evento::Tareas(t) => {
+            a.tareas = t.len();
+            a.tareas_hechas = t.iter().filter(|x| x.estado == EstadoTarea::Hecha).count();
+            // Cada vuelta a corregir avisa una vez con su tarea «corrigiendo».
+            a.correcciones += usize::from(t.iter().any(|x| x.estado == EstadoTarea::Corrigiendo));
+        }
+        _ => {}
+    }
+}
+
+/// El proveedor de la nube elegido en los ajustes, con su clave.
+fn nube_elegida(nucleo: &Nucleo) -> Option<(Proveedor, String)> {
+    let a = pixpin_store::ajustes::cargar(&nucleo.ubicacion()).ok()?;
+    let p = Proveedor::por_id(&a.asistente.motor)?;
+    Some((p, claves::leer(p)?))
+}
+
+/// **El critico de respaldo** de la revision con rubrica (Windows,
+/// `nube::critico`): con Claude elegido y su clave, Sonnet con la misma
+/// clave, sin pensar (solo puntua una vista). Entra solo si Haiku no da una
+/// nota que se lea o ya suspendio dos veces. Con DeepSeek o el local,
+/// ninguno.
+fn critico(nucleo: &Nucleo) -> Option<Arc<dyn Motor>> {
+    // Las pruebas nunca salen a la red.
+    if cfg!(test) {
+        return None;
+    }
+    let (p, clave) = nube_elegida(nucleo).filter(|(p, _)| *p == Proveedor::Claude)?;
+    Some(Arc::new(
+        MotorNube::nuevo(p, clave)
+            .con_modelo(pixpin_ia::nube::claude::MODELO_CRITICO)
+            .pensando(false),
+    ))
+}
+
+/// **El jefe** (Windows, `nube::jefe`, `pixpin_ia::orquesta`): el modelo
+/// fuerte del mismo proveedor y con la misma clave: Sonnet con Claude,
+/// DeepSeek V4 Pro con DeepSeek. Piensa (planear y supervisar es donde mas
+/// rinde). Con el local, ninguno.
+fn jefe(nucleo: &Nucleo) -> Option<Arc<dyn Motor>> {
+    if cfg!(test) {
+        return None;
+    }
+    let (p, clave) = nube_elegida(nucleo)?;
+    let modelo = match p {
+        Proveedor::Claude => pixpin_ia::nube::claude::MODELO_CRITICO,
+        Proveedor::DeepSeek => pixpin_ia::nube::deepseek::MODELO_PRO,
+    };
+    Some(Arc::new(MotorNube::nuevo(p, clave).con_modelo(modelo)))
+}
+
 // ---------------------------------------------------------------------------
 // El ejecutor
 
@@ -737,7 +881,17 @@ pub(crate) struct EjecutorDelMac {
     /// En una conversacion: su lienzo (lo dibujado va alli, no a un
     /// `.excalidraw` suelto) y lo que hay que dejar en el chat.
     pub(crate) chat: Option<EnChat>,
+    /// Las copias del lienzo que guardo la revision con rubrica
+    /// (`guardar_version`), por su numero.
+    versiones: Vec<Vec<pixpin_motor2d::Elemento>>,
+    /// Por donde preguntar con opciones (`preguntar_usuario`): la burbuja
+    /// de la conversacion. Sin el (la ventana del asistente, el MCP) no se
+    /// ofrece.
+    preguntar: Option<Preguntar>,
 }
+
+/// Hace al usuario una pregunta con opciones (`preguntar_usuario`) y espera.
+pub(crate) type Preguntar = Arc<dyn Fn(&pixpin_ia::preguntar::Pregunta) -> pixpin_ia::preguntar::Contestada + Send + Sync>;
 
 /// **El turno en una conversacion**: adonde va lo dibujado y lo que el
 /// turno sabe del lienzo (`EjecutorDelChat` de Windows).
@@ -806,6 +960,171 @@ impl EjecutorDelMac {
             nube: false,
             citas: Default::default(),
             chat: None,
+            versiones: Vec::new(),
+            preguntar: None,
+        }
+    }
+
+    /// Las dudas con opciones, en la burbuja.
+    pub(crate) fn con_preguntar(mut self, preguntar: Preguntar) -> EjecutorDelMac {
+        self.preguntar = Some(preguntar);
+        self
+    }
+
+    /// **Un trabajo en el lienzo de la conversacion** que no dibuja (copia,
+    /// volver a una copia, comprobar).
+    fn trabajo_en_el_lienzo(&self, trabajo: super::al_lienzo::Trabajo) -> Result<super::al_lienzo::Respuesta, String> {
+        let c = self.chat.as_ref().ok_or("aqui no hay lienzo")?;
+        super::al_lienzo::en_el_chat(&c.nucleo, &c.chat, c.destino.as_deref(), &trabajo, None).map(|(r, _)| r)
+    }
+
+    /// **Los lienzos del chat** (Windows, 17-oct): listarlos, crear uno con
+    /// nombre y pasar a trabajar en uno existente. Crear y usar cambian el
+    /// destino del turno: lo que se dibuje, edite o mire despues va a ese
+    /// lienzo.
+    fn lienzos(&mut self, a: &AccionApp) -> Result<String, String> {
+        use pixpin_ia::acciones::{ANADIR_A_CARPETA, CREAR_LIENZO, LIENZOS_DEL_CHAT, PAGINA_DE_CARPETA, USAR_LIENZO};
+        use super::chat as ia_chat;
+        if !self.nube {
+            return Err("los lienzos del chat solo se manejan con el asistente de la nube".into());
+        }
+        let c = self.chat.as_ref().ok_or("aqui no hay lienzos")?;
+        let (nucleo, chat) = (c.nucleo.clone(), c.chat.clone());
+        let mensajes = nucleo.notas_de(&chat);
+        let nombre = a.pedido.get("nombre").and_then(Value::as_str).unwrap_or("").trim().to_string();
+        match a.herramienta {
+            LIENZOS_DEL_CHAT => {
+                let destino = c.destino.clone();
+                let filas: Vec<String> = mensajes
+                    .iter()
+                    .filter(|m| ia_chat::es_lienzo(m))
+                    .map(|m| {
+                        let r = m.referencia.clone().unwrap_or_default();
+                        let n = cuantas_cosas(&pixpin_proyecto::almacen::lienzo(nucleo.ruta(), &chat, &r));
+                        let ahora = if destino.as_deref() == Some(r.as_str()) { " (trabajas en este)" } else { "" };
+                        format!(
+                            "- «{}»: {}{ahora}",
+                            ia_chat::nombre_de_lienzo(m),
+                            n.map_or("no se pudo leer".to_string(), |n| format!("{n} elementos"))
+                        )
+                    })
+                    .collect();
+                if filas.is_empty() {
+                    return Ok("Este chat no tiene ningun lienzo todavia (crear_lienzo crea uno).".into());
+                }
+                Ok(format!("Lienzos de este chat:\n{}", filas.join("\n")))
+            }
+            CREAR_LIENZO => {
+                if nombre.is_empty() {
+                    return Err("falta el nombre del lienzo".into());
+                }
+                let m = nucleo
+                    .crear_lienzo_con(chat.clone(), Some(nombre.clone()), |m| {
+                        m.aparato = Some(ia_chat::APARATO.into());
+                    })
+                    .map_err(|e| format!("no se pudo crear el lienzo: {e}"))?;
+                self.cambiar_de_lienzo(m.referencia.clone());
+                Ok(format!(
+                    "Creado el lienzo «{}» en este chat (vacio). Lo que dibujes, edites o mires con ver_lienzo ahora va a el.",
+                    ia_chat::nombre_de_lienzo(&m)
+                ))
+            }
+            USAR_LIENZO => {
+                let i = ia_chat::lienzo_por_nombre(&mensajes, &nombre).ok_or_else(|| {
+                    let hay: Vec<String> = mensajes.iter().filter(|m| ia_chat::es_lienzo(m)).map(ia_chat::nombre_de_lienzo).collect();
+                    if hay.is_empty() {
+                        format!("no hay ningun lienzo «{nombre}» en este chat (no tiene ninguno; crear_lienzo crea uno)")
+                    } else {
+                        format!("no hay ningun lienzo «{nombre}» en este chat; los que hay: {}", hay.join(", "))
+                    }
+                })?;
+                let m = &mensajes[i];
+                self.cambiar_de_lienzo(m.referencia.clone());
+                let resumen = self.resumen_del_lienzo().unwrap_or_else(|| "Lienzo destino: vacio.".to_string());
+                Ok(format!(
+                    "Ahora trabajas en el lienzo «{}»: lo que dibujes, edites o mires con ver_lienzo va a el.\n{resumen}",
+                    ia_chat::nombre_de_lienzo(m)
+                ))
+            }
+            // Las carpetas de paginas: meter un lienzo y crear la pagina
+            // siguiente, que pasa a ser el destino del turno (Windows).
+            ANADIR_A_CARPETA => {
+                let texto = |k: &str| a.pedido.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string();
+                let carpeta = texto("carpeta");
+                if carpeta.is_empty() {
+                    return Err("falta el nombre de la carpeta".into());
+                }
+                let lienzo = texto("lienzo");
+                let i = if lienzo.is_empty() {
+                    c.destino.as_deref().and_then(|d| mensajes.iter().position(|m| m.referencia.as_deref() == Some(d)))
+                } else {
+                    ia_chat::lienzo_por_nombre(&mensajes, &lienzo)
+                }
+                .ok_or_else(|| {
+                    if lienzo.is_empty() {
+                        "no hay lienzo destino: di que lienzo (lienzos_del_chat los lista)".to_string()
+                    } else {
+                        format!("no hay ningun lienzo «{lienzo}» en este chat (lienzos_del_chat los lista)")
+                    }
+                })?;
+                let hecho = crate::carpetas::anadir_por_nombre(&nucleo, &chat, &carpeta, &mensajes[i].id)
+                    .map_err(|e| format!("no se pudo meter en la carpeta: {e}"))?;
+                let lienzo = ia_chat::nombre_de_lienzo(&mensajes[i]);
+                Ok(if hecho.ya_estaba {
+                    format!("«{lienzo}» ya estaba en la carpeta «{}» como «{}».", hecho.nombre, hecho.titulo)
+                } else {
+                    format!(
+                        "{}«{lienzo}» entra en la carpeta «{}» como «{}» ({} paginas).",
+                        if hecho.creada { "Carpeta creada. " } else { "" },
+                        hecho.nombre,
+                        hecho.titulo,
+                        hecho.paginas
+                    )
+                })
+            }
+            PAGINA_DE_CARPETA => {
+                let carpeta = a.pedido.get("carpeta").and_then(Value::as_str).unwrap_or("").trim().to_string();
+                let k = crate::carpetas::carpeta_por_nombre(&mensajes, &carpeta).ok_or_else(|| {
+                    let hay: Vec<&str> = pixpin_proyecto::carpeta_de_paginas::carpetas_de(&mensajes)
+                        .into_iter()
+                        .map(|i| mensajes[i].nombre.as_str())
+                        .collect();
+                    if hay.is_empty() {
+                        format!("no hay ninguna carpeta «{carpeta}» en este chat (anadir_a_carpeta crea una)")
+                    } else {
+                        format!("no hay ninguna carpeta «{carpeta}» en este chat; las que hay: {}", hay.join(", "))
+                    }
+                })?;
+                let n = crate::carpetas::pagina_siguiente(&nucleo, &chat, &mensajes[k].id)
+                    .map_err(|e| format!("no se pudo crear la pagina: {e}"))?;
+                self.cambiar_de_lienzo(n.lienzo.referencia.clone());
+                Ok(format!(
+                    "Creada la pagina «{}» en la carpeta «{}» ({}). Lo que dibujes, edites o mires con ver_lienzo ahora va a ella.",
+                    n.titulo,
+                    mensajes[k].nombre,
+                    if n.con_plantilla {
+                        "con la plantilla de la ultima pagina, vacia"
+                    } else {
+                        "en blanco: la ultima pagina no tenia plantilla"
+                    }
+                ))
+            }
+            otra => Err(format!("«{otra}» aun no se puede hacer en PixPin para Mac")),
+        }
+    }
+
+    /// El destino del turno pasa a ser otro lienzo: lo que se sabia del
+    /// anterior (su marco, lo elegido, lo ultimo tocado) ya no vale.
+    fn cambiar_de_lienzo(&mut self, referencia: Option<String>) {
+        let Some(c) = self.chat.as_mut() else { return };
+        if referencia != c.destino {
+            c.destino = referencia.clone();
+            c.ctx = Default::default();
+            c.con_marco = false;
+            c.del_turno.clear();
+            if referencia.is_some() {
+                c.lienzo = referencia;
+            }
         }
     }
 
@@ -911,6 +1230,26 @@ impl EjecutorDelMac {
         let todas = nucleo.biblioteca_cargar().map_err(|e| format!("no se pudo leer la biblioteca de figuras: {e}"))?;
         match p {
             PedidoFiguras::Lista => Ok(lista(&todas)),
+            // La rehace quien tiene el lienzo: el abierto (con lo elegido)
+            // o, cerrado, el del chat en su fichero.
+            PedidoFiguras::Alargar { nombre, intervalo } => {
+                let trabajo = super::al_lienzo::Trabajo::Plantilla {
+                    nombre: nombre.clone(),
+                    intervalo: intervalo.clone(),
+                };
+                let c = self.chat.as_mut().ok_or("aqui no hay lienzo")?;
+                let (r, referencia) = super::al_lienzo::en_el_chat(&c.nucleo, &c.chat, c.destino.as_deref(), &trabajo, None)?;
+                c.apuntar(&r.ids, referencia);
+                Ok(r.texto)
+            }
+            // Las secciones de la plantilla, para leerlas antes de cambiarlas:
+            // por su nombre sin mirar el lienzo; si no, la que hay en el.
+            PedidoFiguras::Secciones { nombre: Some(n) } => pixpin_ia::figuras::secciones_de_nombre(n),
+            PedidoFiguras::Secciones { nombre: None } => {
+                let c = self.chat.as_ref().ok_or("aqui no hay lienzo")?;
+                let trabajo = super::al_lienzo::Trabajo::Secciones;
+                super::al_lienzo::en_el_chat(&c.nucleo, &c.chat, c.destino.as_deref(), &trabajo, None).map(|(r, _)| r.texto)
+            }
             PedidoFiguras::Poner { nombre } => {
                 let f = buscar(&todas, nombre).ok_or_else(|| format!("no hay ninguna figura guardada como «{nombre}» ({})", lista(&todas)))?;
                 self.semilla += 1;
@@ -1145,6 +1484,7 @@ impl Ejecutor for EjecutorDelMac {
             Llamada::Ayuda(pregunta) => Ok(pixpin_ia::conocimiento::responder(pregunta)),
             Llamada::Buscar(p) => self.buscar(p),
             Llamada::App(a) if a.herramienta == pixpin_ia::hoja::NOMBRE && self.chat.is_some() => self.hoja_a_lienzo(&a.pedido),
+            Llamada::App(a) if pixpin_ia::acciones::es_de_lienzos(a.herramienta) && self.chat.is_some() => self.lienzos(a),
             Llamada::App(a) if el_mac_lo_hace(a.herramienta, self.chat.is_some()) => self.accion(a),
             otra => Err(format!("{} aun no se puede hacer en PixPin para Mac", otra.nombre())),
         }
@@ -1175,6 +1515,36 @@ impl Ejecutor for EjecutorDelMac {
         Ok(super::ojos::vista(&para, ctx.marco, m.marcas, png, t0.elapsed().as_millis()))
     }
 
+    fn puede_preguntar(&self) -> bool {
+        self.preguntar.is_some()
+    }
+
+    fn preguntar(&mut self, p: &pixpin_ia::preguntar::Pregunta) -> pixpin_ia::preguntar::Contestada {
+        match &self.preguntar {
+            Some(f) => f(p),
+            None => pixpin_ia::preguntar::Contestada::SinRespuesta,
+        }
+    }
+
+    /// Una copia del lienzo antes de cada ronda de correccion.
+    fn guardar_version(&mut self) -> Option<usize> {
+        let copia = self.trabajo_en_el_lienzo(super::al_lienzo::Trabajo::Copia).ok()?.copia?;
+        self.versiones.push(copia);
+        Some(self.versiones.len() - 1)
+    }
+
+    /// La correccion lo dejo peor: vuelve a la copia, como un paso mas.
+    fn volver_a_version(&mut self, version: usize) -> Result<(), String> {
+        let copia = self.versiones.get(version).cloned().ok_or("esa version no se guardo")?;
+        self.trabajo_en_el_lienzo(super::al_lienzo::Trabajo::VolverA { copia }).map(|_| ())
+    }
+
+    /// Lo que se mide sin modelo (`pixpin_ia::lint`) en todo el lienzo.
+    fn comprobar(&mut self) -> Option<Vec<String>> {
+        let r = self.trabajo_en_el_lienzo(super::al_lienzo::Trabajo::Comprobar).ok()?;
+        Some(r.texto.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
+    }
+
     /// Lo que dibuja antes que lo que edita (`edicion::en_orden`).
     fn ejecutar_varias(&mut self, llamadas: &[Llamada]) -> Vec<Result<String, String>> {
         pixpin_ia::edicion::en_orden(llamadas, |l| self.ejecutar(l))
@@ -1191,6 +1561,13 @@ fn poner_vista(historial: &mut [Mensaje], v: &pixpin_ia::ojos::Vista) {
         "\n\n(La imagen adjunta es la vista del lienzo ahora; {})",
         v.texto.trim_start_matches(pixpin_ia::ojos::MARCA).trim()
     )));
+}
+
+/// Cuantas cosas hay en un lienzo (su fichero), para `lienzos_del_chat`.
+fn cuantas_cosas(ruta: &Path) -> Option<usize> {
+    let texto = std::fs::read_to_string(ruta).ok()?;
+    let lienzo = pixpin_motor2d::excalidraw::leer(&texto).ok()?;
+    Some(pixpin_motor2d::excalidraw::a_escena(&lienzo).cuantos_visibles())
 }
 
 /// Recorta a `n` letras diciendolo.

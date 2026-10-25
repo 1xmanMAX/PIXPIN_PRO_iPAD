@@ -12,39 +12,34 @@
 //! afecta a todo el binario: no queremos uno en el programa de verdad.
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-// El contador es **de cada hilo**. `cargo test` corre las pruebas de un
-// mismo binario en paralelo, y un `#[global_allocator]` ve lo que pide
-// cualquier hilo: con un contador global, lo que asignaba la prueba de al
-// lado (montar su escena, el arnes de pruebas...) caia en la cuenta de esta.
-// Asi solo cuenta lo que pide el hilo que mide, haya los hilos que haya.
-//
-// `const` y sin `Drop`: leerlos no pide memoria (no se puede asignar desde
-// dentro del asignador).
+static VECES: AtomicUsize = AtomicUsize::new(0);
+
 thread_local! {
-    static CONTANDO: Cell<bool> = const { Cell::new(false) };
-    static VECES: Cell<usize> = const { Cell::new(0) };
+    /// **Solo cuenta el hilo que mide** (24-oct-2026): con un contador para
+    /// todo el proceso, lo que pedia a la vez otro hilo —otra prueba en
+    /// paralelo, o el propio arnes de pruebas escribiendo su salida— caia en
+    /// la cuenta y la prueba fallaba a veces sin que el camino caliente
+    /// asignara nada. Constante y sin destructor: leerlo no asigna.
+    static CONTANDO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// Apunta una peticion si este hilo esta midiendo. `try_with` porque el
-/// asignador tambien se usa al morir el hilo, cuando ya no hay locales.
-fn apuntar() {
-    let _ = CONTANDO.try_with(|c| {
-        if c.get() {
-            let _ = VECES.try_with(|v| v.set(v.get() + 1));
-        }
-    });
+/// Si este hilo esta midiendo. Fuera de un hilo vivo (al morir) no cuenta.
+fn contando_aqui() -> bool {
+    CONTANDO.try_with(std::cell::Cell::get).unwrap_or(false)
 }
 
 struct Contador;
 
 // SAFETY: se delega todo en `System`, que cumple el contrato de
-// `GlobalAlloc`. Lo unico anadido es un contador local del hilo, que no
-// toca la memoria devuelta ni cambia el puntero.
+// `GlobalAlloc`. Lo unico anadido es un contador atomico, que no toca la
+// memoria devuelta ni cambia el puntero.
 unsafe impl GlobalAlloc for Contador {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        apuntar();
+        if contando_aqui() {
+            VECES.fetch_add(1, Ordering::Relaxed);
+        }
         // SAFETY: mismo `Layout` que nos han dado.
         unsafe { System.alloc(l) }
     }
@@ -57,7 +52,9 @@ unsafe impl GlobalAlloc for Contador {
     unsafe fn realloc(&self, p: *mut u8, l: Layout, nuevo: usize) -> *mut u8 {
         // Reasignar tambien cuenta: es lo que hace un `Vec` al crecer, y es
         // justo lo que esta prueba viene a cazar.
-        apuntar();
+        if contando_aqui() {
+            VECES.fetch_add(1, Ordering::Relaxed);
+        }
         // SAFETY: el puntero y el layout vienen de nuestro `alloc`.
         unsafe { System.realloc(p, l, nuevo) }
     }
@@ -66,15 +63,19 @@ unsafe impl GlobalAlloc for Contador {
 #[global_allocator]
 static ASIGNADOR: Contador = Contador;
 
-/// Cuenta las asignaciones que hace `f` en este hilo (el camino caliente no
-/// abre hilos), sin importar cuantas pruebas corran a la vez.
+/// Cuenta las asignaciones que hace `f` en este hilo. Una medida a la vez
+/// (`VECES` es una), asi que las pruebas que miden van en fila: [`EN_FILA`].
 fn contando<T>(f: impl FnOnce() -> T) -> (T, usize) {
-    VECES.with(|v| v.set(0));
+    let _fila = EN_FILA.lock().unwrap_or_else(|e| e.into_inner());
+    VECES.store(0, Ordering::Relaxed);
     CONTANDO.with(|c| c.set(true));
     let r = f();
     CONTANDO.with(|c| c.set(false));
-    (r, VECES.with(Cell::get))
+    (r, VECES.load(Ordering::Relaxed))
 }
+
+/// Las medidas, de una en una aunque las pruebas corran en paralelo.
+static EN_FILA: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 use pixpin_motor2d::escena::Escena;
 use pixpin_motor2d::gesto::{EventoGesto, Gesto, Herramienta};

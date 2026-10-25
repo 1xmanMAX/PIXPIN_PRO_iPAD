@@ -30,7 +30,8 @@
 //!
 //! El PDF de un proyecto lleva su tinta en las hojas (ya viajan); sus
 //! marcadores y espacios van aqui con el codigo **del proyecto**. Y los
-//! marcadores de un lienzo van junto a su dibujo, `<dibujo>.marcas`.
+//! marcadores de un lienzo van junto a su dibujo, `<dibujo>.marcas`, con la
+//! vista de cada uno en `<dibujo>.vistas.json` ([`vistas_junto_a`]).
 //!
 //! Aqui solo va lo que es igual en los dos aparatos (los nombres y el texto
 //! de la maqueta); donde cae cada fichero en el disco lo dice cada `Disco`.
@@ -137,6 +138,16 @@ pub fn marcas_junto_a(rel: &str) -> Option<String> {
     let resto = rel.strip_prefix(CARPETA)?.strip_prefix('/')?;
     let base = resto.strip_suffix(".excalidraw.gz")?;
     (!resto.contains('/')).then(|| format!("{CARPETA}/{base}.marcas"))
+}
+
+/// **La vista de cada marcador de un lienzo** (25-oct-2026, como las vistas
+/// con nombre de AutoCAD): `pins/draw/X.excalidraw.gz` →
+/// `pins/draw/X.vistas.json`, el objeto id de la marca → `"x y ancho alto"`
+/// (`pixpin_motor2d::marcas::VistaDeMarca`). Va con su dibujo como
+/// `X.marcas`; `None` si no es un dibujo de esa carpeta.
+pub fn vistas_junto_a(rel: &str) -> Option<String> {
+    let marcas = marcas_junto_a(rel)?;
+    Some(format!("{}{VISTAS}", marcas.strip_suffix(".marcas")?))
 }
 
 /// El codigo de mensaje de un nombre de fichero (`anot-<uid>…`), si lo es:
@@ -502,6 +513,24 @@ mod pruebas {
         assert_eq!(marcas_junto_a("pins/draw/files/x.excalidraw.gz"), None);
         assert_eq!(marcas_junto_a("croquis3d/c.croquis.gz"), None);
         assert_eq!(marcas_junto_a("pins/drawx/d.excalidraw.gz"), None);
+    }
+
+    #[test]
+    fn las_vistas_de_las_marcas_de_un_lienzo_van_junto_a_su_dibujo() {
+        assert_eq!(
+            vistas_junto_a("pins/draw/d1.excalidraw.gz").as_deref(),
+            Some("pins/draw/d1.vistas.json")
+        );
+        assert_eq!(
+            vistas_junto_a("pins/draw/hoja-pr-1-0.excalidraw.gz").as_deref(),
+            Some("pins/draw/hoja-pr-1-0.vistas.json")
+        );
+        // Caso negativo: lo mismo que no tiene marcas tampoco tiene vistas.
+        assert_eq!(vistas_junto_a("pins/draw/files/x.excalidraw.gz"), None);
+        assert_eq!(vistas_junto_a("croquis3d/c.croquis.gz"), None);
+        assert_eq!(vistas_junto_a("pins/draw/d1.marcas"), None);
+        // Y no se confunde con lo de un adjunto: no lleva codigo de mensaje.
+        assert_eq!(uid_del_nombre("d1.vistas.json"), None);
     }
 
     #[test]

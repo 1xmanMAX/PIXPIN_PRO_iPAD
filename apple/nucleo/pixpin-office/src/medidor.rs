@@ -66,6 +66,10 @@ impl Medidor for MedidorFijo {
     }
 
     fn metricas(&self, letra: &Letra) -> Metricas {
-        Metricas { ascenso: 0.8 * letra.tam, descenso: 0.2 * letra.tam, hueco: 0.0 }
+        Metricas {
+            ascenso: 0.8 * letra.tam,
+            descenso: 0.2 * letra.tam,
+            hueco: 0.0,
+        }
     }
 }

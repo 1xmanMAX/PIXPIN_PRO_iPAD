@@ -437,6 +437,19 @@ pub fn poner_marcos(
 /// es `pins/draw/<d>.marcas` de ese chat. `None` si el lienzo no es de un
 /// chat del almacen.
 pub fn marcas_del_lienzo(lienzo: &Path) -> Option<PathBuf> {
+    junto_al_dibujo_del_movil(lienzo, ".marcas")
+}
+
+/// **La vista de cada marcador de ese lienzo** (25-oct-2026): al lado de
+/// sus marcas, `pins/draw/<d>.vistas.json` (ver
+/// `pixpin_sincro::anotado::vistas_junto_a`). `None` como
+/// [`marcas_del_lienzo`].
+pub fn vistas_del_lienzo(lienzo: &Path) -> Option<PathBuf> {
+    junto_al_dibujo_del_movil(lienzo, a::VISTAS)
+}
+
+/// `pins/draw/<d><terminacion>` del chat del lienzo `…/<ficha>/lienzos/<d>.excalidraw`.
+fn junto_al_dibujo_del_movil(lienzo: &Path, terminacion: &str) -> Option<PathBuf> {
     let d = lienzo.file_name()?.to_str()?.strip_suffix(".excalidraw")?;
     let carpeta = lienzo
         .parent()
@@ -446,7 +459,7 @@ pub fn marcas_del_lienzo(lienzo: &Path) -> Option<PathBuf> {
     let raiz = raiz_de(carpeta)?;
     Indice::leer(&raiz).buscar(ficha)?;
     let chat = vista::chat_de_ficha(&raiz, ficha)?;
-    Some(DiscoPc::nuevo(&raiz).ruta(&chat, &format!("{}/{d}.marcas", a::CARPETA)))
+    Some(DiscoPc::nuevo(&raiz).ruta(&chat, &format!("{}/{d}{terminacion}", a::CARPETA)))
 }
 
 /// `leer`: el texto de un fichero de lo anotado, si esta.
@@ -712,6 +725,15 @@ mod pruebas {
         assert_eq!(
             marcas_del_lienzo(&lienzo),
             Some(almacen::carpeta(&r, &ficha.id).join("android/pins/draw/d9.marcas"))
+        );
+        // Y sus vistas, al lado (25-oct-2026).
+        assert_eq!(
+            vistas_del_lienzo(&lienzo),
+            Some(almacen::carpeta(&r, &ficha.id).join("android/pins/draw/d9.vistas.json"))
+        );
+        assert_eq!(
+            vistas_del_lienzo(Path::new("C:/dibujos/d9.excalidraw")),
+            None
         );
         // Caso negativo: un dibujo fuera del almacen, o de una ficha que no esta.
         assert_eq!(

@@ -198,7 +198,8 @@ fn montar_max(g: &Gente) {
     );
     let c = cd(max);
     let yo = c.yo_de(max).unwrap();
-    c.poner(&compartidos::crear("p1", "Tesis", &yo, r.tic())).unwrap();
+    c.poner(&compartidos::crear("p1", "Tesis", &yo, r.tic()))
+        .unwrap();
 }
 
 /// Atiende una conexion como lo hace la escucha de siempre: mira la magia y
@@ -297,7 +298,10 @@ fn el_chat_compartido_viaja_a_la_otra_persona_y_nada_mas() {
     assert_eq!(r.chats, ["p1"]);
     // Lo del chat compartido: sus mensajes, su proyecto, su lienzo, el
     // adjunto y lo anotado.
-    assert_eq!(textos(&g.ana, "p1"), ["hola equipo", ""].map(String::from).into());
+    assert_eq!(
+        textos(&g.ana, "p1"),
+        ["hola equipo", ""].map(String::from).into()
+    );
     assert_eq!(ids_de_proyectos(&g.ana), ["p1"]);
     assert!(existe(&g.ana, "pins/draw/tesis.excalidraw.gz"));
     assert!(existe(&g.ana, "guardados/memoria.pdf"));
@@ -322,7 +326,15 @@ fn el_chat_compartido_viaja_a_la_otra_persona_y_nada_mas() {
             .collect::<HashSet<_>>(),
         ["id-max", "id-ana"].map(String::from).into()
     );
-    assert_eq!(cd(&g.max).de("p1").unwrap().persona("id-ana").unwrap().nombre, "Ana");
+    assert_eq!(
+        cd(&g.max)
+            .de("p1")
+            .unwrap()
+            .persona("id-ana")
+            .unwrap()
+            .nombre,
+        "Ana"
+    );
 }
 
 #[test]
@@ -395,7 +407,11 @@ fn un_chat_no_compartido_no_viaja_aunque_se_pida() {
             Err(ErrorSincro::Remoto(_))
         ));
         // Ni colarlo por el chat compartido, a mano.
-        assert!(s.info_de("p1", "pins/draw/privado.excalidraw.gz").unwrap().is_none());
+        assert!(
+            s.info_de("p1", "pins/draw/privado.excalidraw.gz")
+                .unwrap()
+                .is_none()
+        );
         // Ni las lapidas del aparato.
         assert!(s.lapidas().unwrap().is_empty());
         // Ni preparar aqui un chat que no compartimos.
@@ -405,7 +421,8 @@ fn un_chat_no_compartido_no_viaja_aunque_se_pida() {
 }
 
 fn pedir(c: &mut Canal<TcpStream>, p: &Peticion) -> Respuesta {
-    c.mandar(Tipo::Json, &serde_json::to_vec(p).unwrap()).unwrap();
+    c.mandar(Tipo::Json, &serde_json::to_vec(p).unwrap())
+        .unwrap();
     let (_, datos) = c.recibir().unwrap();
     serde_json::from_slice(&datos).unwrap()
 }
@@ -447,8 +464,13 @@ fn pedir_a_mano_un_archivo_de_otro_chat_se_rechaza() {
                 // El del chat compartido si: la puerta funciona y no esta
                 // cerrada a todo.
                 assert!(r.error.is_none(), "{:?}", r.error);
-                crate::protocolo::recibir_trozos(&mut c, r.bytes, &mut std::io::sink(), &mut |_| {})
-                    .unwrap();
+                crate::protocolo::recibir_trozos(
+                    &mut c,
+                    r.bytes,
+                    &mut std::io::sink(),
+                    &mut |_| {},
+                )
+                .unwrap();
             } else {
                 assert!(r.error.is_some(), "se dio {rel}");
             }
@@ -471,7 +493,8 @@ fn pedir_a_mano_un_archivo_de_otro_chat_se_rechaza() {
             bytes: sale.largo,
             ..Peticion::sobre("pon", "p1")
         };
-        c.mandar(Tipo::Json, &serde_json::to_vec(&pon).unwrap()).unwrap();
+        c.mandar(Tipo::Json, &serde_json::to_vec(&pon).unwrap())
+            .unwrap();
         sale.mandar(&mut c, &mut |_| {}).unwrap();
         let (_, datos) = c.recibir().unwrap();
         let r: Respuesta = serde_json::from_slice(&datos).unwrap();
@@ -601,7 +624,10 @@ fn una_invitacion_caducada_no_entra() {
     cd(&g.max).guardar(&[]).unwrap();
     let f = TcpStream::connect(("127.0.0.1", p.puerto)).unwrap();
     let r = invitacion::entrar(f, &g.ana, CODIGO, 1, [5u8; 32]);
-    assert!(matches!(&r, Err(ErrorSincro::Remoto(m)) if m.contains("ya no")), "{r:?}");
+    assert!(
+        matches!(&r, Err(ErrorSincro::Remoto(m)) if m.contains("ya no")),
+        "{r:?}"
+    );
     assert!(cd(&g.ana).leer().is_empty());
 }
 
@@ -613,7 +639,17 @@ fn un_mensaje_que_nombra_un_archivo_de_otro_chat_no_lo_saca() {
     // Ana mete en el chat compartido mensajes que senalan el lienzo y el
     // adjunto privados de Max.
     let r = &g.reloj;
-    mensaje(&g.ana, r, "trampa1", "mira", Some("p1"), "DIBUJO", None, Some("privado"), None);
+    mensaje(
+        &g.ana,
+        r,
+        "trampa1",
+        "mira",
+        Some("p1"),
+        "DIBUJO",
+        None,
+        Some("privado"),
+        None,
+    );
     mensaje(
         &g.ana,
         r,
@@ -633,7 +669,17 @@ fn un_mensaje_que_nombra_un_archivo_de_otro_chat_no_lo_saca() {
             .find(|m| kotlin::cadena(m, "id") == Some("m3"))
             .unwrap(),
     );
-    mensaje(&g.ana, r, "trampa3", "suplantado", Some("p1"), "NOTA", None, None, Some(&uid_privado));
+    mensaje(
+        &g.ana,
+        r,
+        "trampa3",
+        "suplantado",
+        Some("p1"),
+        "NOTA",
+        None,
+        None,
+        Some(&uid_privado),
+    );
     nota(&g.ana, r, "a1", "esto sí", Some("p1"));
     vuelta(&g.ana, &g.max, r).unwrap();
     vuelta(&g.max, &g.ana, r).unwrap();
@@ -718,14 +764,19 @@ fn quitar_a_una_persona_corta_la_sincronizacion_con_ella() {
     ana_entra(&g);
     let c = cd(&g.max);
     let yo = c.yo_de(&g.max).unwrap();
-    c.poner(&compartidos::quitar(&c.de("p1").unwrap(), &yo, "id-ana", g.reloj_de_quitar()).unwrap())
-        .unwrap();
+    c.poner(
+        &compartidos::quitar(&c.de("p1").unwrap(), &yo, "id-ana", g.reloj_de_quitar()).unwrap(),
+    )
+    .unwrap();
     nota(&g.max, &g.reloj, "m9", "ya no lo ves", Some("p1"));
     nota(&g.ana, &g.reloj, "a9", "ni tú esto", Some("p1"));
     let r = vuelta(&g.ana, &g.max, &g.reloj).unwrap();
     // Ana se entera de que ya no esta, y no pasa nada mas.
     assert!(r.chats.is_empty());
-    assert!(!compartidos::dentro(&cd(&g.ana).de("p1").unwrap(), "id-ana"));
+    assert!(!compartidos::dentro(
+        &cd(&g.ana).de("p1").unwrap(),
+        "id-ana"
+    ));
     assert!(!textos(&g.ana, "p1").contains("ya no lo ves"));
     assert!(!textos(&g.max, "p1").contains("ni tú esto"));
     // Lo que ya tenia se le queda.
@@ -746,11 +797,16 @@ fn quien_sale_deja_de_recibir_y_los_demas_se_enteran() {
     ana_entra(&g);
     let c = cd(&g.ana);
     let yo = c.yo_de(&g.ana).unwrap();
-    c.poner(&compartidos::quitar(&c.de("p1").unwrap(), &yo, "id-ana", g.reloj_de_quitar()).unwrap())
-        .unwrap();
+    c.poner(
+        &compartidos::quitar(&c.de("p1").unwrap(), &yo, "id-ana", g.reloj_de_quitar()).unwrap(),
+    )
+    .unwrap();
     nota(&g.max, &g.reloj, "m9", "después de irse", Some("p1"));
     vuelta(&g.ana, &g.max, &g.reloj).unwrap();
-    assert!(!compartidos::dentro(&cd(&g.max).de("p1").unwrap(), "id-ana"));
+    assert!(!compartidos::dentro(
+        &cd(&g.max).de("p1").unwrap(),
+        "id-ana"
+    ));
     assert!(!textos(&g.ana, "p1").contains("después de irse"));
 }
 
@@ -763,8 +819,16 @@ fn un_miembro_no_echa_a_otro_ni_por_la_red() {
     let c = cd(&g.max);
     let yo_max = c.yo_de(&g.max).unwrap();
     let yo_eva = cd(&g.eva).yo_de(&g.eva).unwrap();
-    c.poner(&compartidos::invitar(&c.de("p1").unwrap(), &yo_max, &yo_eva.ficha(0), reloj_de_la_puerta() + 1).unwrap())
-        .unwrap();
+    c.poner(
+        &compartidos::invitar(
+            &c.de("p1").unwrap(),
+            &yo_max,
+            &yo_eva.ficha(0),
+            reloj_de_la_puerta() + 1,
+        )
+        .unwrap(),
+    )
+    .unwrap();
     vuelta(&g.ana, &g.max, &g.reloj).unwrap();
     assert!(compartidos::dentro(&cd(&g.ana).de("p1").unwrap(), "id-eva"));
     // Ana (que no creo el chat) «quita» a Eva en su lista, firmandolo ella
@@ -780,7 +844,11 @@ fn un_miembro_no_echa_a_otro_ni_por_la_red() {
         ..eva
     };
     let yo_ana = ca.yo_de(&g.ana).unwrap();
-    falsa.firma_fuera = Some(yo_ana.llaves.firmar(&compartidos::texto_de_salida("p1", &falsa)));
+    falsa.firma_fuera = Some(
+        yo_ana
+            .llaves
+            .firmar(&compartidos::texto_de_salida("p1", &falsa)),
+    );
     for p in &mut l.personas {
         if p.id == "id-eva" {
             *p = falsa.clone();
@@ -814,11 +882,17 @@ fn el_grupo_de_max_lleva_el_chat_compartido_a_su_tableta_y_ana_la_acepta() {
     .unwrap();
     let en_tableta: ChatCompartido = cd(&tableta).de("p1").unwrap();
     assert!(compartidos::dentro(&en_tableta, "id-max-tab"));
-    assert!(compartidos::dentro(&cd(&g.max).de("p1").unwrap(), "id-max-tab"));
+    assert!(compartidos::dentro(
+        &cd(&g.max).de("p1").unwrap(),
+        "id-max-tab"
+    ));
     // El telefono le cuenta a Ana que la tableta esta; luego la tableta
     // habla con Ana directamente.
     vuelta(&g.max, &g.ana, &g.reloj).unwrap();
-    assert!(compartidos::dentro(&cd(&g.ana).de("p1").unwrap(), "id-max-tab"));
+    assert!(compartidos::dentro(
+        &cd(&g.ana).de("p1").unwrap(),
+        "id-max-tab"
+    ));
     nota(&tableta, &g.reloj, "t1", "desde la tableta", Some("p1"));
     vuelta(&tableta, &g.ana, &g.reloj).unwrap();
     assert!(textos(&g.ana, "p1").contains("desde la tableta"));

@@ -51,7 +51,11 @@ const MESES_CORTOS_EN: [&str; 12] = [
 /// «oct» / «Oct»: el mes en corto (bajo el numero del mes en «Estado»).
 pub fn mes_corto(mes: u8, ingles: bool) -> &'static str {
     let i = usize::from(mes.clamp(1, 12) - 1);
-    if ingles { MESES_CORTOS_EN[i] } else { MESES_CORTOS_ES[i] }
+    if ingles {
+        MESES_CORTOS_EN[i]
+    } else {
+        MESES_CORTOS_ES[i]
+    }
 }
 
 /// «5 oct 2026 · 17:11» / «Oct 5, 2026 · 17:11»: la fecha de arriba de una
@@ -85,8 +89,9 @@ mod pruebas {
     fn cada_momento_tiene_siempre_el_mismo_degradado() {
         assert_eq!(degradado_de("tl-1-1"), degradado_de("tl-1-1"));
         // Repartidos: con muchos ids salen todos los degradados.
-        let distintos: std::collections::BTreeSet<(u32, u32)> =
-            (0..200).map(|n| degradado_de(&format!("tl-{n}-1"))).collect();
+        let distintos: std::collections::BTreeSet<(u32, u32)> = (0..200)
+            .map(|n| degradado_de(&format!("tl-{n}-1")))
+            .collect();
         assert_eq!(distintos.len(), DEGRADADOS.len());
     }
 

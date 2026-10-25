@@ -26,9 +26,13 @@ pub enum ErrorOffice {
 impl std::fmt::Display for ErrorOffice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorOffice::NoEsZip => write!(f, "el archivo no es un documento de Office (.docx o .pptx)"),
+            ErrorOffice::NoEsZip => {
+                write!(f, "el archivo no es un documento de Office (.docx o .pptx)")
+            }
             ErrorOffice::SinParte(p) => write!(f, "al documento le falta {p}"),
-            ErrorOffice::Limite(m) => write!(f, "el documento supera los limites de seguridad: {m}"),
+            ErrorOffice::Limite(m) => {
+                write!(f, "el documento supera los limites de seguridad: {m}")
+            }
             ErrorOffice::Disco(e) => write!(f, "no se pudo leer el archivo: {e}"),
         }
     }
@@ -60,7 +64,11 @@ pub struct Limites {
 
 impl Default for Limites {
     fn default() -> Self {
-        Limites { entradas: 20_000, parte: TOPE_PARTE, total_declarado: 8 * 1024 * 1024 * 1024 }
+        Limites {
+            entradas: 20_000,
+            parte: TOPE_PARTE,
+            total_declarado: 8 * 1024 * 1024 * 1024,
+        }
     }
 }
 
@@ -96,7 +104,11 @@ impl Paquete {
     pub fn de_bytes_con(bytes: Arc<[u8]>, limites: Limites) -> Result<Paquete, ErrorOffice> {
         let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| ErrorOffice::NoEsZip)?;
         if zip.len() > limites.entradas {
-            return Err(ErrorOffice::Limite(format!("el ZIP tiene {} entradas (el maximo es {})", zip.len(), limites.entradas)));
+            return Err(ErrorOffice::Limite(format!(
+                "el ZIP tiene {} entradas (el maximo es {})",
+                zip.len(),
+                limites.entradas
+            )));
         }
         let mut total = 0u64;
         for i in 0..zip.len() {
@@ -105,10 +117,21 @@ impl Paquete {
             }
         }
         if total > limites.total_declarado {
-            return Err(ErrorOffice::Limite(format!("las partes declaran {total} bytes descomprimidos (el maximo es {})", limites.total_declarado)));
+            return Err(ErrorOffice::Limite(format!(
+                "las partes declaran {total} bytes descomprimidos (el maximo es {})",
+                limites.total_declarado
+            )));
         }
-        let nombres = zip.file_names().map(|n| (n.to_ascii_lowercase(), n.to_string())).collect();
-        Ok(Paquete { zip, nombres, limites, ultimo_limite: None })
+        let nombres = zip
+            .file_names()
+            .map(|n| (n.to_ascii_lowercase(), n.to_string()))
+            .collect();
+        Ok(Paquete {
+            zip,
+            nombres,
+            limites,
+            ultimo_limite: None,
+        })
     }
 
     pub fn abrir(ruta: &std::path::Path) -> Result<Paquete, ErrorOffice> {
@@ -117,12 +140,16 @@ impl Paquete {
     }
 
     pub fn existe(&self, parte: &str) -> bool {
-        self.nombres.contains_key(&parte.trim_start_matches('/').to_ascii_lowercase())
+        self.nombres
+            .contains_key(&parte.trim_start_matches('/').to_ascii_lowercase())
     }
 
     /// Los bytes de una parte, descomprimidos.
     pub fn bytes(&mut self, parte: &str) -> Option<Vec<u8>> {
-        let real = self.nombres.get(&parte.trim_start_matches('/').to_ascii_lowercase())?.clone();
+        let real = self
+            .nombres
+            .get(&parte.trim_start_matches('/').to_ascii_lowercase())?
+            .clone();
         let f = self.zip.by_name(&real).ok()?;
         let tam = f.size();
         if tam > self.limites.parte {
@@ -166,7 +193,11 @@ impl Paquete {
             Some(i) => (&parte[..i], &parte[i + 1..]),
             None => ("", parte),
         };
-        let ruta_rels = if carpeta.is_empty() { format!("_rels/{nombre}.rels") } else { format!("{carpeta}/_rels/{nombre}.rels") };
+        let ruta_rels = if carpeta.is_empty() {
+            format!("_rels/{nombre}.rels")
+        } else {
+            format!("{carpeta}/_rels/{nombre}.rels")
+        };
         let mut m = HashMap::new();
         let Some(rels) = self.xml(&ruta_rels) else {
             return m;
@@ -177,9 +208,25 @@ impl Paquete {
             }
             let externa = r.atributo("TargetMode").eq_ignore_ascii_case("External");
             let destino = r.atributo("Target");
-            let destino = if externa { destino.to_string() } else { resolver(carpeta, destino) };
-            let tipo = r.atributo("Type").rsplit('/').next().unwrap_or("").to_string();
-            m.insert(r.atributo("Id").to_string(), Relacion { destino, externa, tipo });
+            let destino = if externa {
+                destino.to_string()
+            } else {
+                resolver(carpeta, destino)
+            };
+            let tipo = r
+                .atributo("Type")
+                .rsplit('/')
+                .next()
+                .unwrap_or("")
+                .to_string();
+            m.insert(
+                r.atributo("Id").to_string(),
+                Relacion {
+                    destino,
+                    externa,
+                    tipo,
+                },
+            );
         }
         m
     }
@@ -187,7 +234,9 @@ impl Paquete {
     /// La parte principal segun `_rels/.rels` (la de tipo `officeDocument`).
     pub fn principal(&mut self) -> Option<String> {
         let r = self.relaciones("");
-        r.values().find(|r| r.tipo == "officeDocument" && !r.externa).map(|r| r.destino.clone())
+        r.values()
+            .find(|r| r.tipo == "officeDocument" && !r.externa)
+            .map(|r| r.destino.clone())
     }
 }
 
@@ -222,7 +271,8 @@ fn descodificar_url(s: &str) -> String {
     while i < b.len() {
         if b[i] == b'%'
             && i + 2 < b.len()
-            && let Ok(n) = u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16)
+            && let Ok(n) =
+                u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16)
         {
             v.push(n);
             i += 3;
@@ -238,8 +288,16 @@ fn descodificar_url(s: &str) -> String {
 pub fn texto_de(b: &[u8]) -> std::borrow::Cow<'_, str> {
     if b.len() >= 2 && (b[0] == 0xFF && b[1] == 0xFE || b[0] == 0xFE && b[1] == 0xFF) {
         let le = b[0] == 0xFF;
-        let u: Vec<u16> =
-            b[2..].chunks_exact(2).map(|c| if le { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) }).collect();
+        let u: Vec<u16> = b[2..]
+            .chunks_exact(2)
+            .map(|c| {
+                if le {
+                    u16::from_le_bytes([c[0], c[1]])
+                } else {
+                    u16::from_be_bytes([c[0], c[1]])
+                }
+            })
+            .collect();
         return std::borrow::Cow::Owned(String::from_utf16_lossy(&u));
     }
     let b = b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(b);
@@ -272,7 +330,10 @@ pub fn numero(s: &str, por_punto: f32) -> Option<f32> {
     if let Ok(v) = s.parse::<f32>() {
         return v.is_finite().then_some(v);
     }
-    let (num, unidad) = s.split_at(s.find(|c: char| c.is_ascii_alphabetic() || c == '%').unwrap_or(s.len()));
+    let (num, unidad) = s.split_at(
+        s.find(|c: char| c.is_ascii_alphabetic() || c == '%')
+            .unwrap_or(s.len()),
+    );
     let v: f32 = num.trim().parse().ok()?;
     let pt = match unidad {
         "pt" => v,
@@ -303,9 +364,18 @@ mod pruebas {
     #[test]
     fn las_rutas_relativas_se_resuelven() {
         assert_eq!(resolver("word", "media/a.png"), "word/media/a.png");
-        assert_eq!(resolver("ppt/slides", "../slideLayouts/slideLayout1.xml"), "ppt/slideLayouts/slideLayout1.xml");
-        assert_eq!(resolver("word", "/customXml/item1.xml"), "customXml/item1.xml");
-        assert_eq!(resolver("word", "media/una%20foto.png"), "word/media/una foto.png");
+        assert_eq!(
+            resolver("ppt/slides", "../slideLayouts/slideLayout1.xml"),
+            "ppt/slideLayouts/slideLayout1.xml"
+        );
+        assert_eq!(
+            resolver("word", "/customXml/item1.xml"),
+            "customXml/item1.xml"
+        );
+        assert_eq!(
+            resolver("word", "media/una%20foto.png"),
+            "word/media/una foto.png"
+        );
         assert_eq!(resolver("", "word/document.xml"), "word/document.xml");
     }
 
@@ -320,7 +390,10 @@ mod pruebas {
 
     #[test]
     fn un_zip_roto_no_abre() {
-        assert!(matches!(Paquete::de_bytes(Arc::from(&b"no soy un zip"[..])), Err(ErrorOffice::NoEsZip)));
+        assert!(matches!(
+            Paquete::de_bytes(Arc::from(&b"no soy un zip"[..])),
+            Err(ErrorOffice::NoEsZip)
+        ));
     }
 }
 
@@ -331,7 +404,8 @@ mod pruebas_limites {
 
     fn zip_de(partes: &[(String, Vec<u8>)]) -> Vec<u8> {
         let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        let op = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let op = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
         for (n, d) in partes {
             w.start_file(n.as_str(), op).unwrap();
             w.write_all(d).unwrap();
@@ -349,9 +423,16 @@ mod pruebas_limites {
 
     #[test]
     fn demasiadas_entradas_dan_un_error_claro() {
-        let partes: Vec<(String, Vec<u8>)> = (0..30).map(|i| (format!("p{i}.xml"), vec![1])).collect();
+        let partes: Vec<(String, Vec<u8>)> =
+            (0..30).map(|i| (format!("p{i}.xml"), vec![1])).collect();
         let z: Arc<[u8]> = Arc::from(zip_de(&partes));
-        let Err(ErrorOffice::Limite(m)) = Paquete::de_bytes_con(z.clone(), Limites { entradas: 10, ..Limites::default() }) else {
+        let Err(ErrorOffice::Limite(m)) = Paquete::de_bytes_con(
+            z.clone(),
+            Limites {
+                entradas: 10,
+                ..Limites::default()
+            },
+        ) else {
             panic!("debia rechazarse")
         };
         assert!(m.contains("30 entradas"), "{m}");
@@ -362,17 +443,29 @@ mod pruebas_limites {
     fn una_bomba_zip_pequena_no_se_descomprime() {
         let z = zip_de(&[("bomba.xml".into(), vec![0u8; 2 * 1024 * 1024])]);
         assert!(z.len() < 10_000);
-        let lim = Limites { parte: 100_000, ..Limites::default() };
+        let lim = Limites {
+            parte: 100_000,
+            ..Limites::default()
+        };
         let mut p = Paquete::de_bytes_con(Arc::from(z.clone()), lim).unwrap();
         assert!(p.bytes("bomba.xml").is_none());
-        let lim = Limites { total_declarado: 1000, ..Limites::default() };
-        assert!(matches!(Paquete::de_bytes_con(Arc::from(z), lim), Err(ErrorOffice::Limite(_))));
+        let lim = Limites {
+            total_declarado: 1000,
+            ..Limites::default()
+        };
+        assert!(matches!(
+            Paquete::de_bytes_con(Arc::from(z), lim),
+            Err(ErrorOffice::Limite(_))
+        ));
     }
 
     #[test]
     fn un_zip_que_miente_en_su_tamano_no_pasa() {
         let mut z = zip_de(&[("m.xml".into(), vec![0u8; 1_000_000])]);
-        let k = z.windows(4).position(|w| w == [0x50, 0x4b, 0x01, 0x02]).unwrap();
+        let k = z
+            .windows(4)
+            .position(|w| w == [0x50, 0x4b, 0x01, 0x02])
+            .unwrap();
         z[k + 24..k + 28].copy_from_slice(&10u32.to_le_bytes());
         let mut p = Paquete::de_bytes(Arc::from(z)).unwrap();
         assert!(p.bytes("m.xml").is_none());
@@ -383,6 +476,9 @@ mod pruebas_limites {
         let z = zip_de(&[("x.xml".into(), "<a>".repeat(100_000).into_bytes())]);
         let mut p = Paquete::de_bytes(Arc::from(z)).unwrap();
         assert!(p.xml("x.xml").is_none());
-        assert_eq!(p.ultimo_limite, Some(crate::xml::ErrorXml::DemasiadaProfundidad));
+        assert_eq!(
+            p.ultimo_limite,
+            Some(crate::xml::ErrorXml::DemasiadaProfundidad)
+        );
     }
 }

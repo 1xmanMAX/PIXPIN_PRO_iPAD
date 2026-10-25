@@ -28,8 +28,8 @@ public enum GrupoHerramientaLienzo: String, CaseIterable {
     /// Lo que tapa o senala: pixelar, la lupa, el foco y el laser.
     case tapar
     case medir
-    /// El marco y la imagen, como en el movil.
-    case marco
+    // El grupo del marco y la imagen ya no esta (Windows, 22-oct): el marco
+    // lo pone el boton del riel de la derecha (o la C) y la imagen va suelta.
     /// Sacar el dibujo: compartir e imprimir.
     case sacar
 
@@ -43,7 +43,6 @@ public enum GrupoHerramientaLienzo: String, CaseIterable {
         case .nombrar: return "Texto y nombres"
         case .tapar: return "Tapar y señalar"
         case .medir: return "Medir"
-        case .marco: return "Marco e imagen"
         case .sacar: return "Compartir e imprimir"
         }
     }
@@ -69,7 +68,7 @@ public struct HerramientaLienzo: Identifiable, Equatable {
     /// Windows y, donde Windows no tiene, la de Excalidraw si no choca.
     public let tecla: Character?
     /// Su grupo; `nil` es que va suelta (la mano, el lapiz y la goma: las de
-    /// uso constante).
+    /// uso constante; la imagen; y el marco, que va en el riel).
     public let grupo: GrupoHerramientaLienzo?
     /// Es una accion de un grupo (meter una imagen, compartir, imprimir) y
     /// no una herramienta: no queda puesta, se hace y ya (`BotonCaja::Imagen`
@@ -135,9 +134,11 @@ public struct HerramientaLienzo: Identifiable, Equatable {
         .init("cota", "Cota", .lineEditor, tecla: "a", grupo: .medir),
         .init("escalar", "Calibrar escala", .resize, tecla: "e", grupo: .medir),
         .init("escala_grafica", "Escala gráfica", .grid, tecla: "g", grupo: .medir),
-        // «C» de marCo: la «F» de «frame» ya la usa el foco.
-        .init("marco", "Marco", .marco, tecla: "c", grupo: .marco),
-        .init("imagen", "Imagen", .image, grupo: .marco, accion: true),
+        // «C» de marCo: la «F» de «frame» ya la usa el foco. Fuera de la
+        // barra (22-oct, «no duplicar herramientas»): lo pone el riel.
+        .init("marco", "Marco", .marco, tecla: "c"),
+        // La imagen, suelta junto a las figuras (iba en el grupo del marco).
+        .init("imagen", "Imagen", .image, accion: true),
         .init("borrador", "Goma", .eraser, tecla: "b"),
         .init("compartir", "Compartir…", .shareIos, grupo: .sacar, accion: true),
         .init("imprimir", "Imprimir… (⌘P)", .impresora, grupo: .sacar, accion: true),
@@ -180,14 +181,14 @@ public enum BotonBarraLienzo: Hashable {
 
     /// **La barra agrupada** (`BARRA_AGRUPADA` de Windows): elegir, lo que
     /// pinta, las formas, las flechas, lo que arregla, lo que nombra, lo que
-    /// tapa, lo que mide, las figuras, el marco y la goma; y al final lo que
+    /// tapa, lo que mide, las figuras, la imagen y la goma; y al final lo que
     /// saca el dibujo y las acciones. El `Atravesar` de Windows es solo del
     /// anotador de pantalla viva: aqui no sale.
     public static let barra: [BotonBarraLienzo] = [
         .herramienta("seleccion"), .grupo(.elegir),
         .herramienta("lapiz"), .grupo(.trazar), .grupo(.formas), .grupo(.flechas), .grupo(.arreglar),
         .grupo(.nombrar),
-        .grupo(.tapar), .grupo(.medir), .figuras, .grupo(.marco), .herramienta("borrador"),
+        .grupo(.tapar), .grupo(.medir), .figuras, .herramienta("imagen"), .herramienta("borrador"),
         .grupo(.sacar), .deshacer, .rehacer, .salir,
     ]
 
@@ -199,7 +200,7 @@ public enum BotonBarraLienzo: Hashable {
         case .herramienta("seleccion"), .grupo(.elegir): return 0
         case .herramienta("lapiz"), .grupo(.trazar), .grupo(.formas), .grupo(.flechas), .grupo(.arreglar),
              .grupo(.nombrar): return 1
-        case .grupo(.tapar), .grupo(.medir), .grupo(.marco), .figuras, .herramienta("borrador"): return 2
+        case .grupo(.tapar), .grupo(.medir), .figuras, .herramienta("imagen"), .herramienta("borrador"): return 2
         case .grupo(.sacar), .deshacer, .rehacer, .salir: return 3
         case .herramienta: return 1
         }

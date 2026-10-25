@@ -32,7 +32,10 @@ pub fn recta(p: &[P]) -> Option<Recta> {
         return None;
     }
     let n = p.len() as f64;
-    let (mx, my) = (p.iter().map(|q| q.0).sum::<f64>() / n, p.iter().map(|q| q.1).sum::<f64>() / n);
+    let (mx, my) = (
+        p.iter().map(|q| q.0).sum::<f64>() / n,
+        p.iter().map(|q| q.1).sum::<f64>() / n,
+    );
     let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
     for q in p {
         let (dx, dy) = (q.0 - mx, q.1 - my);
@@ -42,7 +45,11 @@ pub fn recta(p: &[P]) -> Option<Recta> {
     }
     let ang = 0.5 * (2.0 * sxy).atan2(sxx - syy);
     let d = (ang.cos(), ang.sin());
-    let mut r = Recta { c: (mx, my), d, error: 0.0 };
+    let mut r = Recta {
+        c: (mx, my),
+        d,
+        error: 0.0,
+    };
     r.error = p.iter().map(|&q| r.normal(q).abs()).fold(0.0, f64::max);
     Some(r)
 }
@@ -79,9 +86,13 @@ pub fn circunferencia(p: &[P]) -> Option<Circ> {
         return None;
     }
     let n = p.len() as f64;
-    let (mx, my) = (p.iter().map(|q| q.0).sum::<f64>() / n, p.iter().map(|q| q.1).sum::<f64>() / n);
+    let (mx, my) = (
+        p.iter().map(|q| q.0).sum::<f64>() / n,
+        p.iter().map(|q| q.1).sum::<f64>() / n,
+    );
     // Centrado para que no se pierda precision.
-    let (mut suu, mut svv, mut suv, mut suuu, mut svvv, mut suvv, mut svuu) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    let (mut suu, mut svv, mut suv, mut suuu, mut svvv, mut suvv, mut svuu) =
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     for q in p {
         let (u, v) = (q.0 - mx, q.1 - my);
         suu += u * u;
@@ -116,7 +127,9 @@ pub fn circunferencia(p: &[P]) -> Option<Circ> {
                 }
             }
         }
-        let Some(delta) = resolver3(jtj, jtr) else { break };
+        let Some(delta) = resolver3(jtj, jtr) else {
+            break;
+        };
         c = (c.0 - delta[0], c.1 - delta[1]);
         r -= delta[2];
         if delta.iter().map(|v| v.abs()).fold(0.0, f64::max) < 1e-4 {
@@ -133,7 +146,9 @@ pub fn circunferencia(p: &[P]) -> Option<Circ> {
 
 fn resolver3(a: [[f64; 3]; 3], b: [f64; 3]) -> Option<[f64; 3]> {
     let det = |m: [[f64; 3]; 3]| {
-        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
     };
     let d = det(a);
     if d.abs() < 1e-12 {
@@ -187,15 +202,24 @@ pub fn trocear(p: &[P], radio_max: f64, salida: &mut Vec<Tramo>) {
 fn trocear_hondo(p: &[P], radio_max: f64, salida: &mut Vec<Tramo>, hondo: usize) {
     if p.len() < 4 || largo(p) < 4.0 {
         // Lo muy corto no dice nada (el ruido de un cruce).
-        if p.len() >= 2 && largo(p) >= 3.0 && let Some(r) = recta(p) {
-            salida.push(Tramo::Recto { puntos: p.to_vec(), recta: r });
+        if p.len() >= 2
+            && largo(p) >= 3.0
+            && let Some(r) = recta(p)
+        {
+            salida.push(Tramo::Recto {
+                puntos: p.to_vec(),
+                recta: r,
+            });
         }
         return;
     }
     if let Some(r) = recta(p)
         && r.error <= TOL_RECTA
     {
-        salida.push(Tramo::Recto { puntos: p.to_vec(), recta: r });
+        salida.push(Tramo::Recto {
+            puntos: p.to_vec(),
+            recta: r,
+        });
         return;
     }
     let l = largo(p);
@@ -207,7 +231,10 @@ fn trocear_hondo(p: &[P], radio_max: f64, salida: &mut Vec<Tramo>, hondo: usize)
         // Que de verdad curve: barrido de al menos ~20 grados.
         && l / c.r >= 0.33
     {
-        salida.push(Tramo::Curvo { puntos: p.to_vec(), circ: c });
+        salida.push(Tramo::Curvo {
+            puntos: p.to_vec(),
+            circ: c,
+        });
         return;
     }
     if hondo > 24 {
@@ -220,7 +247,11 @@ fn trocear_hondo(p: &[P], radio_max: f64, salida: &mut Vec<Tramo>, hondo: usize)
     let mut k = 0;
     let mut dmax = -1.0;
     for (i, &q) in p.iter().enumerate().take(p.len() - 1).skip(1) {
-        let d = if cerrada { dist(q, a) } else { dist_a_segmento(q, a, b) };
+        let d = if cerrada {
+            dist(q, a)
+        } else {
+            dist_a_segmento(q, a, b)
+        };
         if d > dmax {
             dmax = d;
             k = i;

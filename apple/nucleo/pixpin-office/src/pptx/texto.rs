@@ -41,7 +41,10 @@ impl PropR {
         macro_rules! m {
             ($($c:ident),*) => { $( if o.$c.is_some() { self.$c = o.$c.clone(); } )* };
         }
-        m!(tam, negrita, cursiva, subrayado, tachado, mayusculas, color, letra, letra_ea, espaciado, subida, resaltado, efectos);
+        m!(
+            tam, negrita, cursiva, subrayado, tachado, mayusculas, color, letra, letra_ea,
+            espaciado, subida, resaltado, efectos
+        );
     }
 
     pub fn leer(n: &Nodo, ctx: Contexto) -> PropR {
@@ -64,7 +67,9 @@ impl PropR {
             "dbl" => p.subrayado = Some(Some(Subrayado::Doble)),
             "heavy" => p.subrayado = Some(Some(Subrayado::Grueso)),
             "dotted" | "dottedHeavy" => p.subrayado = Some(Some(Subrayado::Puntos)),
-            "dash" | "dashHeavy" | "dashLong" | "dashLongHeavy" => p.subrayado = Some(Some(Subrayado::Rayas)),
+            "dash" | "dashHeavy" | "dashLong" | "dashLongHeavy" => {
+                p.subrayado = Some(Some(Subrayado::Rayas))
+            }
             "wavy" | "wavyHeavy" | "wavyDbl" => p.subrayado = Some(Some(Subrayado::Ondulado)),
             _ => p.subrayado = Some(Some(Subrayado::Simple)),
         }
@@ -86,8 +91,12 @@ impl PropR {
                         p.color = Some(r.color_medio());
                     }
                 }
-                "latin" => p.letra = Some(e.atributo("typeface").to_string()).filter(|s| !s.is_empty()),
-                "ea" => p.letra_ea = Some(e.atributo("typeface").to_string()).filter(|s| !s.is_empty()),
+                "latin" => {
+                    p.letra = Some(e.atributo("typeface").to_string()).filter(|s| !s.is_empty())
+                }
+                "ea" => {
+                    p.letra_ea = Some(e.atributo("typeface").to_string()).filter(|s| !s.is_empty())
+                }
                 "highlight" => p.resaltado = tema::color_hijo(e, ctx.tema, ctx.mapa, None),
                 "effectLst" => p.efectos = Some(Arc::from(crate::dml::efectos(e, ctx, None, 0.0))),
                 _ => {}
@@ -146,7 +155,20 @@ impl PropP {
         macro_rules! m {
             ($($c:ident),*) => { $( if o.$c.is_some() { self.$c = o.$c.clone(); } )* };
         }
-        m!(marl, sangria, alineacion, interlineado, antes, despues, vineta, vineta_letra, vineta_color, vineta_tam, tope_defecto, topes);
+        m!(
+            marl,
+            sangria,
+            alineacion,
+            interlineado,
+            antes,
+            despues,
+            vineta,
+            vineta_letra,
+            vineta_color,
+            vineta_tam,
+            tope_defecto,
+            topes
+        );
         self.def.mezclar(&o.def);
     }
 
@@ -173,7 +195,10 @@ impl PropP {
                 "buNone" => p.vineta = Some(Vineta::Nada),
                 "buChar" => p.vineta = e.atributo("char").chars().next().map(Vineta::Caracter),
                 "buAutoNum" => {
-                    p.vineta = Some(Vineta::Numero { tipo: e.atributo("type").to_string(), inicio: e.atributo("startAt").parse().unwrap_or(1) })
+                    p.vineta = Some(Vineta::Numero {
+                        tipo: e.atributo("type").to_string(),
+                        inicio: e.atributo("startAt").parse().unwrap_or(1),
+                    })
                 }
                 "buFontTx" => p.vineta_letra = Some(None),
                 "buFont" => p.vineta_letra = Some(Some(e.atributo("typeface").to_string())),
@@ -217,7 +242,11 @@ pub fn niveles_vacios() -> Niveles {
 /// Mezcla en `base` los niveles de `lista` (un `a:lstStyle` o similar).
 pub fn mezclar_lista(base: &mut Niveles, lista: &Nodo, ctx: Contexto) {
     for e in lista.elementos() {
-        if let Some(n) = e.nombre.strip_prefix("lvl").and_then(|r| r.strip_suffix("pPr")).and_then(|n| n.parse::<usize>().ok())
+        if let Some(n) = e
+            .nombre
+            .strip_prefix("lvl")
+            .and_then(|r| r.strip_suffix("pPr"))
+            .and_then(|n| n.parse::<usize>().ok())
             && (1..=9).contains(&n)
         {
             base[n - 1].mezclar(&PropP::leer(e, ctx));
@@ -273,7 +302,11 @@ impl Cuerpo {
         if let Some(a) = n.hijo("normAutofit") {
             let escala = attr_num(a, "fontScale", 1.0).map(|v| v / 100000.0);
             c.escala = Some(escala.unwrap_or(1.0));
-            c.reduccion = Some(attr_num(a, "lnSpcReduction", 1.0).map(|v| v / 100000.0).unwrap_or(0.0));
+            c.reduccion = Some(
+                attr_num(a, "lnSpcReduction", 1.0)
+                    .map(|v| v / 100000.0)
+                    .unwrap_or(0.0),
+            );
             c.encoger = Some(escala.is_none());
         } else if n.hijo("noAutofit").is_some() || n.hijo("spAutoFit").is_some() {
             c.escala = Some(1.0);
@@ -287,7 +320,10 @@ impl Cuerpo {
         macro_rules! m {
             ($($c:ident),*) => { $( if o.$c.is_some() { self.$c = o.$c.clone(); } )* };
         }
-        m!(izq, arriba, der, abajo, anclaje, centrado, partir, escala, reduccion, encoger, vertical);
+        m!(
+            izq, arriba, der, abajo, anclaje, centrado, partir, escala, reduccion, encoger,
+            vertical
+        );
     }
 }
 
@@ -327,7 +363,14 @@ fn numero_auto(tipo: &str, n: u32) -> String {
 /// y devuelve sus elementos. `niveles` ya trae toda la herencia de fuera
 /// (estilo de la presentacion, patron, marcadores); aqui se suma el
 /// `a:lstStyle` del propio cuerpo.
-pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cuerpo, e: &Entorno) -> Vec<Elemento> {
+pub fn maquetar(
+    tx: &Nodo,
+    ancho: f32,
+    alto: f32,
+    niveles: &Niveles,
+    cuerpo: &Cuerpo,
+    e: &Entorno,
+) -> Vec<Elemento> {
     let mut niveles = niveles.clone();
     if let Some(l) = tx.hijo("lstStyle") {
         mezclar_lista(&mut niveles, l, e.ctx);
@@ -362,40 +405,52 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
         let mut nivel_previo: Option<usize> = None;
         for p in tx.elementos().filter(|p| p.nombre == "p") {
             let ppr_nodo = p.hijo("pPr");
-            let nivel = ppr_nodo.and_then(|x| x.atributo("lvl").parse::<usize>().ok()).unwrap_or(0).min(8);
+            let nivel = ppr_nodo
+                .and_then(|x| x.atributo("lvl").parse::<usize>().ok())
+                .unwrap_or(0)
+                .min(8);
             let mut pp = niveles[nivel].clone();
             if let Some(x) = ppr_nodo {
                 pp.mezclar(&PropP::leer(x, e.ctx));
             }
             let mut estilos: Vec<Estilo> = Vec::new();
-            let mut estilo_de = |r: &PropR, campo: Option<Campo>, enlace: Option<Arc<str>>| -> u32 {
-                let tam = r.tam.unwrap_or(18.0) * escala;
-                let letra = r.letra.as_deref().map(|l| e.ctx.tema.letra(l)).unwrap_or_else(|| e.ctx.tema.letra_texto.clone());
-                let subida = r.subida.unwrap_or(0.0) * tam;
-                let tam_real = if r.subida.is_some_and(|s| s.abs() > 0.01) { tam * 0.67 } else { tam };
-                let est = Estilo {
-                    letra: Letra {
-                        familia: Arc::from(letra.as_str()),
-                        tam: tam_real.max(1.0),
-                        negrita: r.negrita.unwrap_or(false),
-                        cursiva: r.cursiva.unwrap_or(false),
-                    },
-                    color: r.color.unwrap_or(e.color),
-                    subrayado: r.subrayado.flatten(),
-                    tachado: r.tachado.unwrap_or(false),
-                    espaciado: r.espaciado.unwrap_or(0.0) * escala,
-                    subida,
-                    fondo: r.resaltado,
-                    enlace,
-                    campo,
-                    efectos: r.efectos.clone().filter(|e| !e.is_empty()),
+            let mut estilo_de =
+                |r: &PropR, campo: Option<Campo>, enlace: Option<Arc<str>>| -> u32 {
+                    let tam = r.tam.unwrap_or(18.0) * escala;
+                    let letra = r
+                        .letra
+                        .as_deref()
+                        .map(|l| e.ctx.tema.letra(l))
+                        .unwrap_or_else(|| e.ctx.tema.letra_texto.clone());
+                    let subida = r.subida.unwrap_or(0.0) * tam;
+                    let tam_real = if r.subida.is_some_and(|s| s.abs() > 0.01) {
+                        tam * 0.67
+                    } else {
+                        tam
+                    };
+                    let est = Estilo {
+                        letra: Letra {
+                            familia: Arc::from(letra.as_str()),
+                            tam: tam_real.max(1.0),
+                            negrita: r.negrita.unwrap_or(false),
+                            cursiva: r.cursiva.unwrap_or(false),
+                        },
+                        color: r.color.unwrap_or(e.color),
+                        subrayado: r.subrayado.flatten(),
+                        tachado: r.tachado.unwrap_or(false),
+                        espaciado: r.espaciado.unwrap_or(0.0) * escala,
+                        subida,
+                        fondo: r.resaltado,
+                        enlace,
+                        campo,
+                        efectos: r.efectos.clone().filter(|e| !e.is_empty()),
+                    };
+                    if let Some(i) = estilos.iter().position(|x| *x == est) {
+                        return i as u32;
+                    }
+                    estilos.push(est);
+                    (estilos.len() - 1) as u32
                 };
-                if let Some(i) = estilos.iter().position(|x| *x == est) {
-                    return i as u32;
-                }
-                estilos.push(est);
-                (estilos.len() - 1) as u32
-            };
             let mut piezas = Vec::new();
             let mut primer_rpr: Option<PropR> = None;
             for r in p.elementos() {
@@ -434,7 +489,10 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
                         while let Some(t) = trozos.next() {
                             if !t.is_empty() {
                                 let est = estilo_de(&rp, campo, enlace.clone());
-                                piezas.push(Pieza::Texto { texto: t.replace(['\u{b}', '\r', '\n'], " "), estilo: est });
+                                piezas.push(Pieza::Texto {
+                                    texto: t.replace(['\u{b}', '\r', '\n'], " "),
+                                    estilo: est,
+                                });
                             }
                             if trozos.peek().is_some() {
                                 let est = estilo_de(&rp, None, None);
@@ -454,7 +512,9 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
             let marca = estilo_de(primer_rpr.as_ref().unwrap_or(&fin), None, None);
 
             // La vineta o el numero.
-            let hay_texto = piezas.iter().any(|x| matches!(x, Pieza::Texto { texto, .. } if !texto.trim().is_empty()));
+            let hay_texto = piezas
+                .iter()
+                .any(|x| matches!(x, Pieza::Texto { texto, .. } if !texto.trim().is_empty()));
             if nivel_previo.is_some_and(|n| n < nivel) {
                 contadores[nivel] = 0;
             }
@@ -494,12 +554,19 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
                     }
                     let est = estilo_de(&rb, None, None);
                     let est_tab = estilo_de(&base, None, None);
-                    let mut delante = vec![Pieza::Texto { texto: v, estilo: est }];
+                    let mut delante = vec![Pieza::Texto {
+                        texto: v,
+                        estilo: est,
+                    }];
                     // Con sangria francesa el texto empieza en el margen; sin
                     // ella va pegado a la vineta (como PowerPoint).
                     if sangria < 0.0 {
                         delante.push(Pieza::Tab { estilo: est_tab });
-                        topes.push(Tope { pos: marl, tipo: TipoTope::Izquierda, relleno: None });
+                        topes.push(Tope {
+                            pos: marl,
+                            tipo: TipoTope::Izquierda,
+                            relleno: None,
+                        });
                     }
                     delante.append(&mut piezas);
                     piezas = delante;
@@ -518,7 +585,10 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
                 encoger: 0.0,
             };
             let renglones = renglones::partir(&piezas, &estilos, marca, &cfg, e.medidor);
-            let tam_ref = estilos.get(marca as usize).map(|s| s.letra.tam).unwrap_or(18.0);
+            let tam_ref = estilos
+                .get(marca as usize)
+                .map(|s| s.letra.tam)
+                .unwrap_or(18.0);
             let alturas: Vec<(f32, f32)> = renglones
                 .iter()
                 .map(|r| {
@@ -544,7 +614,13 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
                 Some(Esp::Pct(p)) => p * tam_ref * 1.2,
                 None => 0.0,
             };
-            bloques.push(Bloque { renglones, estilos, antes: resolver(pp.antes), despues: resolver(pp.despues), alturas });
+            bloques.push(Bloque {
+                renglones,
+                estilos,
+                antes: resolver(pp.antes),
+                despues: resolver(pp.despues),
+                alturas,
+            });
         }
         bloques
     };
@@ -587,7 +663,10 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
     let mut y = arriba + dy;
     // Centrado horizontal del bloque entero (`anchorCtr`).
     let dx = if cuerpo.centrado == Some(true) && partir {
-        let mas_ancho = bloques.iter().flat_map(|b| b.renglones.iter().map(|r| r.fin)).fold(0.0f32, f32::max);
+        let mas_ancho = bloques
+            .iter()
+            .flat_map(|b| b.renglones.iter().map(|r| r.fin))
+            .fold(0.0f32, f32::max);
         ((ancho_util - mas_ancho) / 2.0).max(0.0)
     } else {
         0.0
@@ -598,7 +677,14 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
         }
         for (r, (h, base)) in b.renglones.iter().zip(b.alturas.iter()) {
             let mut els = Vec::new();
-            crate::docx::bloques::renglon_a_elementos(r, &b.estilos, &[], *base, e.medidor, &mut els);
+            crate::docx::bloques::renglon_a_elementos(
+                r,
+                &b.estilos,
+                &[],
+                *base,
+                e.medidor,
+                &mut els,
+            );
             for mut el in els {
                 el.trasladar(izq + dx, y);
                 salida.push(el);
@@ -613,8 +699,18 @@ pub fn maquetar(tx: &Nodo, ancho: f32, alto: f32, niveles: &Niveles, cuerpo: &Cu
 /// Los pasos del autoajuste cuando el archivo no trae `fontScale`: escala
 /// de la letra y reduccion del interlineado, como los que guarda
 /// PowerPoint (`fontScale="92500" lnSpcReduction="10000"`...).
-const PASOS_AUTOAJUSTE: [(f32, f32); 10] =
-    [(0.925, 0.1), (0.85, 0.2), (0.775, 0.2), (0.7, 0.2), (0.625, 0.2), (0.55, 0.2), (0.475, 0.2), (0.4, 0.2), (0.325, 0.2), (0.25, 0.2)];
+const PASOS_AUTOAJUSTE: [(f32, f32); 10] = [
+    (0.925, 0.1),
+    (0.85, 0.2),
+    (0.775, 0.2),
+    (0.7, 0.2),
+    (0.625, 0.2),
+    (0.55, 0.2),
+    (0.475, 0.2),
+    (0.4, 0.2),
+    (0.325, 0.2),
+    (0.25, 0.2),
+];
 
 /// La caja de texto de un rectangulo, para quien la necesite.
 pub fn caja_util(caja: Rect, c: &Cuerpo) -> Rect {

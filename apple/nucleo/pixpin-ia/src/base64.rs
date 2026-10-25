@@ -14,8 +14,16 @@ pub fn codificar(datos: &[u8]) -> String {
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         s.push(TABLA[(n >> 18) as usize & 63] as char);
         s.push(TABLA[(n >> 12) as usize & 63] as char);
-        s.push(if trozo.len() > 1 { TABLA[(n >> 6) as usize & 63] as char } else { '=' });
-        s.push(if trozo.len() > 2 { TABLA[n as usize & 63] as char } else { '=' });
+        s.push(if trozo.len() > 1 {
+            TABLA[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        s.push(if trozo.len() > 2 {
+            TABLA[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     s
 }

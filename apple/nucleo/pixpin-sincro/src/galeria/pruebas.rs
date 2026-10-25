@@ -311,17 +311,24 @@ fn una_entrada_se_escribe_como_en_android_sin_los_campos_por_omision() {
     assert_eq!(l[0].bytes, 48213);
     assert_eq!(l[0].se_va, Some(1_791_604_800_000));
     assert_eq!(l[0].de, "id-del-aparato");
-    let estado: Estado = serde_json::from_str(
-        r#"{"entradas":[{"nombre":"a.png","cuando":1}],"tenia":["a.png"]}"#,
-    )
-    .unwrap();
+    let estado: Estado =
+        serde_json::from_str(r#"{"entradas":[{"nombre":"a.png","cuando":1}],"tenia":["a.png"]}"#)
+            .unwrap();
     assert_eq!(estado.tenia, nombres(&["a.png"]));
     assert_eq!(serde_json::to_string(&Estado::default()).unwrap(), "{}");
 }
 
 #[test]
 fn un_nombre_con_ruta_no_se_acepta() {
-    for malo in ["../fuera.png", "a/b.png", "", "..", "x\\y.png", " ", "c:a.png"] {
+    for malo in [
+        "../fuera.png",
+        "a/b.png",
+        "",
+        "..",
+        "x\\y.png",
+        " ",
+        "c:a.png",
+    ] {
         assert!(nombre_valido(Some(malo)).is_err(), "{malo}");
     }
     assert!(nombre_valido(None).is_err());
@@ -343,7 +350,6 @@ struct EnCarpeta {
     dias: i64,
 }
 
-
 impl EnCarpeta {
     fn nueva(raiz: &Path) -> EnCarpeta {
         let carpeta = raiz.join("Pictures/PixPin");
@@ -360,9 +366,7 @@ impl EnCarpeta {
 
     fn hacer(&self, nombre: &str, cuando: i64, bytes: usize) {
         let ruta = self.carpeta.join(nombre);
-        let datos: Vec<u8> = (0..bytes)
-            .map(|i| (i * 7 + nombre.len()) as u8)
-            .collect();
+        let datos: Vec<u8> = (0..bytes).map(|i| (i * 7 + nombre.len()) as u8).collect();
         std::fs::write(&ruta, datos).unwrap();
         poner_hora(&ruta, cuando);
     }
@@ -508,11 +512,7 @@ impl CapturasDelAparato for EnCarpeta {
         r
     }
 
-    fn cambiar_caducidad(
-        &self,
-        ahora: i64,
-        f: &mut dyn FnMut(&mut Caducidad),
-    ) -> io::Result<()> {
+    fn cambiar_caducidad(&self, ahora: i64, f: &mut dyn FnMut(&mut Caducidad)) -> io::Result<()> {
         let mut r = self.caducidad(ahora);
         f(&mut r);
         std::fs::write(self.ruta_del_registro(), serde_json::to_vec(&r)?)
@@ -539,10 +539,8 @@ impl Drop for Par {
 }
 
 fn montar(etiqueta: &str) -> Par {
-    let dir = std::env::temp_dir().join(format!(
-        "pixpin-galeria-{etiqueta}-{}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("pixpin-galeria-{etiqueta}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let tel = DiscoAndroid::nuevo(dir.join("telefono/files"), "tel");
     let tab = DiscoAndroid::nuevo(dir.join("tableta/files"), "tab");
@@ -603,10 +601,7 @@ fn con_galeria<T>(
         let r = uso(&mut s);
         s.adios();
         drop(s);
-        respondio
-            .join()
-            .unwrap()
-            .expect("el que responde no falla");
+        respondio.join().unwrap().expect("el que responde no falla");
         r
     })
 }
@@ -654,7 +649,11 @@ fn las_capturas_de_cada_uno_pasan_al_otro_y_se_van_a_la_vez_en_los_dos() {
     // dias de hacerse.
     let ahora = p.reloj.ahora();
     for n in p.gal_tel.nombres() {
-        assert_eq!(p.gal_tel.se_va(&n, ahora), p.gal_tab.se_va(&n, ahora), "{n}");
+        assert_eq!(
+            p.gal_tel.se_va(&n, ahora),
+            p.gal_tab.se_va(&n, ahora),
+            "{n}"
+        );
     }
     assert_eq!(
         hora_de(&p.gal_tab.carpeta.join("captura-tel.png")),
@@ -694,7 +693,10 @@ fn siete_dias_mas_y_conservar_en_uno_se_ven_en_el_otro() {
         p.gal_tel.se_va("a.png", ahora),
         Some(T0 - DIA_MS + 14 * DIA_MS)
     );
-    assert_eq!(p.gal_tab.se_va("a.png", ahora), p.gal_tel.se_va("a.png", ahora));
+    assert_eq!(
+        p.gal_tab.se_va("a.png", ahora),
+        p.gal_tel.se_va("a.png", ahora)
+    );
     assert_eq!(p.gal_tab.se_va("b.png", ahora), None);
     assert!(p.gal_tab.caducidad(ahora).conservadas.contains("b.png"));
 }
@@ -760,9 +762,16 @@ fn la_vuelta_entera_pasa_la_galeria_detras_de_los_chats_y_lo_cuenta() {
     p.gal_tab.hacer("de-la-tableta.png", T0 - DIA_MS, 3000);
     p.poner_reloj(T0);
     let mut hecho = Hecho::default();
-    con_galeria(&p.tel, &p.gal_tel, &p.tab, Some(&p.gal_tab), &p.reloj, |s| {
-        crate::vuelta::una(s, None, &mut hecho, "", &|| p.reloj.ahora(), &mut |_| {}).unwrap();
-    });
+    con_galeria(
+        &p.tel,
+        &p.gal_tel,
+        &p.tab,
+        Some(&p.gal_tab),
+        &p.reloj,
+        |s| {
+            crate::vuelta::una(s, None, &mut hecho, "", &|| p.reloj.ahora(), &mut |_| {}).unwrap();
+        },
+    );
     assert_eq!(hecho.capturas, 1);
     assert_eq!(p.gal_tel.nombres(), ["de-la-tableta.png"]);
     assert!(
@@ -779,12 +788,20 @@ fn un_nombre_con_ruta_que_llega_se_rechaza_y_la_conversacion_sigue() {
     let p = montar("ruta");
     let fuera = p.dir.join("fuera.png");
     p.gal_tel.hacer("x.png", T0, 10);
-    con_galeria(&p.tel, &p.gal_tel, &p.tab, Some(&p.gal_tab), &p.reloj, |s| {
-        let mut h = Hecho::default();
-        let r = s.poncaptura_de_prueba("../../fuera.png", &p.gal_tel.carpeta.join("x.png"), &mut h);
-        assert!(r.is_err(), "se rechaza");
-        s.lapidas().unwrap();
-    });
+    con_galeria(
+        &p.tel,
+        &p.gal_tel,
+        &p.tab,
+        Some(&p.gal_tab),
+        &p.reloj,
+        |s| {
+            let mut h = Hecho::default();
+            let r =
+                s.poncaptura_de_prueba("../../fuera.png", &p.gal_tel.carpeta.join("x.png"), &mut h);
+            assert!(r.is_err(), "se rechaza");
+            s.lapidas().unwrap();
+        },
+    );
     assert!(!fuera.exists());
     assert!(p.gal_tab.nombres().is_empty());
 }
@@ -832,7 +849,14 @@ fn al_juntar_el_texto_no_se_pierde_aunque_gane_la_entrada_sin_el() {
 
 #[test]
 fn al_dia_apunta_el_texto_leido_despues_sin_contarlo_como_cambio() {
-    let antes = al_dia(&Estado::default(), Some(&[local("a.png", T, 10)]), &r0(), 7, T, "pc");
+    let antes = al_dia(
+        &Estado::default(),
+        Some(&[local("a.png", T, 10)]),
+        &r0(),
+        7,
+        T,
+        "pc",
+    );
     assert!(antes.entradas[0].texto.is_empty());
     let leida = Local {
         texto: "dentro".into(),
@@ -847,9 +871,11 @@ fn al_dia_apunta_el_texto_leido_despues_sin_contarlo_como_cambio() {
 fn una_captura_y_su_texto_van_y_vuelven_entre_dos_aparatos() {
     let p = montar("texto");
     p.gal_tel.hacer("captura-tel.png", T0 - DIA_MS, 3000);
-    p.gal_tel.leer_texto("captura-tel.png", "Reunion a las 10:30");
+    p.gal_tel
+        .leer_texto("captura-tel.png", "Reunion a las 10:30");
     p.gal_tab.hacer("captura-tab.png", T0 - DIA_MS, 2000);
-    p.gal_tab.leer_texto("captura-tab.png", "Lista de la compra");
+    p.gal_tab
+        .leer_texto("captura-tab.png", "Lista de la compra");
     p.poner_reloj(T0);
     assert_eq!(p.sincronizar(true).capturas, 2);
     // Cada captura llega con su texto, donde lo busca la galeria del otro.

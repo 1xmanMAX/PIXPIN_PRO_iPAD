@@ -111,11 +111,7 @@ pub(super) fn desde_serie(s: i64) -> Result<(i64, i64, i64), ErrorFormula> {
 pub(super) fn a_serie(a: i64, m: i64, d: i64) -> i64 {
     let dias = dias_civiles(a, m, d) - BASE;
     // Antes del 1 de marzo, Excel va uno por detras: cuenta el 29 de febrero.
-    if dias < 61 {
-        dias - 1
-    } else {
-        dias
-    }
+    if dias < 61 { dias - 1 } else { dias }
 }
 
 /// `FECHA(a; m; d)`: los meses y los dias que se pasan o faltan se reparten
@@ -205,6 +201,10 @@ mod pruebas {
         assert_eq!(serie_de_texto("1/1/2000"), Some(36526.0));
         assert_eq!(serie_de_texto("31/04/2026"), None, "abril no tiene 31");
         assert_eq!(serie_de_texto("hola"), None);
-        assert_eq!(serie_de_texto("1/2/26"), None, "el ano va con cuatro cifras");
+        assert_eq!(
+            serie_de_texto("1/2/26"),
+            None,
+            "el ano va con cuatro cifras"
+        );
     }
 }

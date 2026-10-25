@@ -17,9 +17,19 @@ fn hoja(renglones: &[&str]) -> Pagina {
             palabras.push(Palabra::nueva(w, [x, y, x + ancho, y + 26.0]));
             x += ancho + 8.0;
         }
-        v.push(Renglon { palabras, etiqueta: None });
+        v.push(Renglon {
+            palabras,
+            etiqueta: None,
+        });
     }
-    Pagina { numero: 0, caja: [0.0, 0.0, 1400.0, 1980.0], renglones: v, letra: 20.0, fuera: 0.0, solo_derecha: false }
+    Pagina {
+        numero: 0,
+        caja: [0.0, 0.0, 1400.0, 1980.0],
+        renglones: v,
+        letra: 20.0,
+        fuera: 0.0,
+        solo_derecha: false,
+    }
 }
 
 const TEXTO: &[&str] = &[
@@ -32,7 +42,15 @@ const TEXTO: &[&str] = &[
 ];
 
 fn pedida(clase: Clase, ancla: &str, nota: &str) -> Pedida {
-    Pedida { clase, pagina: Some(0), ancla: ancla.into(), linea: None, nota: nota.into(), correccion: None, numero: None }
+    Pedida {
+        clase,
+        pagina: Some(0),
+        ancla: ancla.into(),
+        linea: None,
+        nota: nota.into(),
+        correccion: None,
+        numero: None,
+    }
 }
 
 fn solapan(a: [f32; 4], b: [f32; 4]) -> bool {
@@ -65,7 +83,10 @@ fn una_palabra_corta_no_se_ancla_dentro_de_otra() {
     // «de» es su propia palabra, no el trozo de «cuaderno».
     let a = ancla::anclar(&p, "de", None).unwrap();
     assert_eq!(a.cajas[0][0], p.renglones[0].palabras[2].caja[0]);
-    assert!(ancla::anclar(&p, "uad", None).is_none(), "un trozo de palabra no es un ancla");
+    assert!(
+        ancla::anclar(&p, "uad", None).is_none(),
+        "un trozo de palabra no es un ancla"
+    );
 }
 
 #[test]
@@ -82,7 +103,12 @@ fn con_un_error_de_ocr_se_ancla_por_parecido_y_lo_inventado_no() {
 
 #[test]
 fn con_dos_sitios_iguales_manda_el_renglon_que_dijo_el_modelo() {
-    let p = hoja(&["el modelo uno", "otra cosa", "el modelo dos", "el modelo tres"]);
+    let p = hoja(&[
+        "el modelo uno",
+        "otra cosa",
+        "el modelo dos",
+        "el modelo tres",
+    ]);
     assert_eq!(ancla::anclar(&p, "el modelo", None).unwrap().renglon, 0);
     assert_eq!(ancla::anclar(&p, "el modelo", Some(3)).unwrap().renglon, 2);
     assert_eq!(ancla::anclar(&p, "el modelo", Some(4)).unwrap().renglon, 3);
@@ -91,10 +117,27 @@ fn con_dos_sitios_iguales_manda_el_renglon_que_dijo_el_modelo() {
 #[test]
 fn en_una_hoja_de_calculo_se_ancla_a_la_celda_o_al_rango() {
     let mut p = hoja(&[]);
-    for (k, (etq, t)) in [("A1", "Precio"), ("B1", "120"), ("A2", "Cantidad"), ("B2", "3"), ("B3", "360")].iter().enumerate() {
+    for (k, (etq, t)) in [
+        ("A1", "Precio"),
+        ("B1", "120"),
+        ("A2", "Cantidad"),
+        ("B2", "3"),
+        ("B3", "360"),
+    ]
+    .iter()
+    .enumerate()
+    {
         let (f, c) = ancla::celda(etq).unwrap();
-        let caja = [100.0 + c as f32 * 80.0, 100.0 + f as f32 * 20.0, 180.0 + c as f32 * 80.0, 120.0 + f as f32 * 20.0];
-        p.renglones.push(Renglon { palabras: vec![Palabra::nueva(t, caja)], etiqueta: Some(etq.to_string()) });
+        let caja = [
+            100.0 + c as f32 * 80.0,
+            100.0 + f as f32 * 20.0,
+            180.0 + c as f32 * 80.0,
+            120.0 + f as f32 * 20.0,
+        ];
+        p.renglones.push(Renglon {
+            palabras: vec![Palabra::nueva(t, caja)],
+            etiqueta: Some(etq.to_string()),
+        });
         assert_eq!(p.renglones.len(), k + 1);
     }
     assert_eq!(ancla::celda("B3"), Some((2, 1)));
@@ -115,8 +158,22 @@ fn en_una_hoja_de_calculo_se_ancla_a_la_celda_o_al_rango() {
 #[test]
 fn las_notas_no_se_solapan_y_cambian_de_lado_cuando_un_margen_se_llena() {
     let franjas = vec![
-        Franja { x0: 20.0, x1: 280.0, y0: 0.0, y1: 600.0, lado: Lado::Izquierda, fuera: false },
-        Franja { x0: 1120.0, x1: 1380.0, y0: 0.0, y1: 600.0, lado: Lado::Derecha, fuera: false },
+        Franja {
+            x0: 20.0,
+            x1: 280.0,
+            y0: 0.0,
+            y1: 600.0,
+            lado: Lado::Izquierda,
+            fuera: false,
+        },
+        Franja {
+            x0: 1120.0,
+            x1: 1380.0,
+            y0: 0.0,
+            y1: 600.0,
+            lado: Lado::Derecha,
+            fuera: false,
+        },
     ];
     let mut c = Colocador::nuevo(franjas, 10.0);
     let mut puestas = Vec::new();
@@ -131,7 +188,10 @@ fn las_notas_no_se_solapan_y_cambian_de_lado_cuando_un_margen_se_llena() {
         for b in &puestas[i + 1..] {
             assert!(!solapan(a.caja, b.caja), "{a:?} pisa {b:?}");
         }
-        assert!(a.caja[1] >= 0.0 && a.caja[3] <= 600.0, "fuera de la franja: {a:?}");
+        assert!(
+            a.caja[1] >= 0.0 && a.caja[3] <= 600.0,
+            "fuera de la franja: {a:?}"
+        );
     }
     // La primera, a la altura de lo senalado y en su lado.
     assert_eq!(puestas[0].franja.lado, Lado::Derecha);
@@ -141,7 +201,11 @@ fn las_notas_no_se_solapan_y_cambian_de_lado_cuando_un_margen_se_llena() {
     // Y caben las que caben: como mucho 5 por franja (5*110 + 4*10 = 590);
     // llegando de una en una, la primera parte la franja y quedan 4.
     assert!((8..=10).contains(&puestas.len()), "{}", puestas.len());
-    assert!(c.colocar([900.0, 300.0, 1000.0, 326.0], &|_| 110.0, 400.0).is_none(), "sin sitio no se pone encima");
+    assert!(
+        c.colocar([900.0, 300.0, 1000.0, 326.0], &|_| 110.0, 400.0)
+            .is_none(),
+        "sin sitio no se pone encima"
+    );
 }
 
 #[test]
@@ -151,7 +215,9 @@ fn salir_de_la_hoja_solo_si_dentro_no_hay_sitio() {
     let fs = p.franjas();
     assert_eq!(fs.iter().filter(|f| f.fuera).count(), 2);
     let mut c = Colocador::nuevo(fs, 10.0);
-    let primera = c.colocar([900.0, 300.0, 1000.0, 326.0], &|_| 100.0, 360.0).unwrap();
+    let primera = c
+        .colocar([900.0, 300.0, 1000.0, 326.0], &|_| 100.0, 360.0)
+        .unwrap();
     assert!(!primera.franja.fuera, "con margen dentro, dentro");
     // Una hoja sin margenes (texto de borde a borde): fuera, y si no se
     // puede salir, ningun sitio.
@@ -182,7 +248,10 @@ fn el_flujo_suelta_cada_objeto_al_cerrarse_aunque_llegue_a_trozos() {
         salen.extend(v);
     }
     assert_eq!(salen.len(), 2);
-    assert_eq!(salen[0]["ancla"], "la {viga}", "las llaves entre comillas no cuentan");
+    assert_eq!(
+        salen[0]["ancla"], "la {viga}",
+        "las llaves entre comillas no cuentan"
+    );
     assert_eq!(salen[0]["nota"], "dice \"hola\"");
     // El primero sale en cuanto se cierra, no al final.
     assert!(cuando[0] < texto.find("paso").unwrap());
@@ -193,14 +262,36 @@ fn el_flujo_suelta_cada_objeto_al_cerrarse_aunque_llegue_a_trozos() {
 
 #[test]
 fn se_leen_las_anotaciones_y_sus_sinonimos() {
-    let a = Leida::de(&json!({"tipo":"error","pag":2,"ancla":"12 kN/m","l":"L3","nota":"la unidad","corr":"12 kN/m²"}));
-    let Leida::Anotacion(p) = a else { panic!("{a:?}") };
-    assert_eq!((p.clase, p.pagina, p.linea), (Clase::Error, Some(1), Some(3)));
+    let a = Leida::de(
+        &json!({"tipo":"error","pag":2,"ancla":"12 kN/m","l":"L3","nota":"la unidad","corr":"12 kN/m²"}),
+    );
+    let Leida::Anotacion(p) = a else {
+        panic!("{a:?}")
+    };
+    assert_eq!(
+        (p.clase, p.pagina, p.linea),
+        (Clase::Error, Some(1), Some(3))
+    );
     assert_eq!(p.correccion.as_deref(), Some("12 kN/m²"));
-    assert!(matches!(Leida::de(&json!({"tipo":"glosario","ancla":"luz","nota":"luz: distancia"})), Leida::Anotacion(Pedida { clase: Clase::Definicion, .. })));
-    assert!(matches!(Leida::de(&json!({"tipo":"nada","nota":"pagina en blanco"})), Leida::Nada(_)));
-    assert!(matches!(Leida::de(&json!({"tipo":"importante","nota":"sin ancla"})), Leida::Mal(_)));
-    assert!(matches!(Leida::de(&json!({"tipo":"dibujo","ancla":"x","nota":"y"})), Leida::Mal(_)));
+    assert!(matches!(
+        Leida::de(&json!({"tipo":"glosario","ancla":"luz","nota":"luz: distancia"})),
+        Leida::Anotacion(Pedida {
+            clase: Clase::Definicion,
+            ..
+        })
+    ));
+    assert!(matches!(
+        Leida::de(&json!({"tipo":"nada","nota":"pagina en blanco"})),
+        Leida::Nada(_)
+    ));
+    assert!(matches!(
+        Leida::de(&json!({"tipo":"importante","nota":"sin ancla"})),
+        Leida::Mal(_)
+    ));
+    assert!(matches!(
+        Leida::de(&json!({"tipo":"dibujo","ancla":"x","nota":"y"})),
+        Leida::Mal(_)
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -211,29 +302,72 @@ fn el_anotador_pone_cada_nota_en_el_margen_sin_pisar_texto_ni_otra_nota() {
     let col = hoja(TEXTO).columna().unwrap();
     let mut a = Anotador::nuevo(vec![hoja(TEXTO)], "t1");
     let pedidas = [
-        pedida(Clase::Importante, "carga repartida de 12 kN/m", "Es la carga de diseño: entra en todas las fórmulas del capítulo."),
-        pedida(Clase::Explicacion, "M = q L^2 / 8", "M: momento máximo; q: carga por metro; L: luz entre apoyos."),
-        Pedida { numero: Some(1), ..pedida(Clase::Paso, "La viga se apoya en dos columnas", "Identifica los apoyos.") },
-        Pedida { correccion: Some("modelo elástico lineal".into()), ..pedida(Clase::Error, "modelo elastico lineal", "Falta la tilde.") },
+        pedida(
+            Clase::Importante,
+            "carga repartida de 12 kN/m",
+            "Es la carga de diseño: entra en todas las fórmulas del capítulo.",
+        ),
+        pedida(
+            Clase::Explicacion,
+            "M = q L^2 / 8",
+            "M: momento máximo; q: carga por metro; L: luz entre apoyos.",
+        ),
+        Pedida {
+            numero: Some(1),
+            ..pedida(
+                Clase::Paso,
+                "La viga se apoya en dos columnas",
+                "Identifica los apoyos.",
+            )
+        },
+        Pedida {
+            correccion: Some("modelo elástico lineal".into()),
+            ..pedida(Clase::Error, "modelo elastico lineal", "Falta la tilde.")
+        },
         pedida(Clase::Definicion, "vano", "vano: tramo entre dos apoyos."),
-        pedida(Clase::Pregunta, "donde la flecha es mayor", "¿Por qué la flecha máxima está en el centro?"),
-        pedida(Clase::Resumen, "", "Viga biapoyada con carga repartida: momento máximo en el centro."),
+        pedida(
+            Clase::Pregunta,
+            "donde la flecha es mayor",
+            "¿Por qué la flecha máxima está en el centro?",
+        ),
+        pedida(
+            Clase::Resumen,
+            "",
+            "Viga biapoyada con carga repartida: momento máximo en el centro.",
+        ),
     ];
     let mut notas = Vec::new();
     for p in &pedidas {
         let puesta = a.poner(p).unwrap_or_else(|e| panic!("{p:?}: {e}"));
         assert!(!puesta.fuera);
         // Todo en el grupo de su llamada y en el del turno.
-        assert!(puesta.elementos.iter().all(|e| e.grupos.contains(&"asistente-anotado:t1".to_string())));
+        assert!(
+            puesta
+                .elementos
+                .iter()
+                .all(|e| e.grupos.contains(&"asistente-anotado:t1".to_string()))
+        );
         // La nota: el ultimo rectangulo relleno de pastel, en un margen.
         let papel = puesta
             .elementos
             .iter()
             .rev()
-            .find(|e| matches!(e.figura, pixpin_motor2d::Figura::Rectangulo) && e.relleno.is_some() && e.opacidad > 0.9)
+            .find(|e| {
+                matches!(e.figura, pixpin_motor2d::Figura::Rectangulo)
+                    && e.relleno.is_some()
+                    && e.opacidad > 0.9
+            })
             .unwrap();
-        let caja = [papel.x, papel.y, papel.x + papel.ancho, papel.y + papel.alto];
-        assert!(caja[2] <= col[0] || caja[0] >= col[2], "la nota tapa la columna: {caja:?} {col:?}");
+        let caja = [
+            papel.x,
+            papel.y,
+            papel.x + papel.ancho,
+            papel.y + papel.alto,
+        ];
+        assert!(
+            caja[2] <= col[0] || caja[0] >= col[2],
+            "la nota tapa la columna: {caja:?} {col:?}"
+        );
         notas.push(caja);
     }
     for (i, x) in notas.iter().enumerate() {
@@ -244,28 +378,55 @@ fn el_anotador_pone_cada_nota_en_el_margen_sin_pisar_texto_ni_otra_nota() {
     assert_eq!(a.cuantas(), 7);
     // La misma otra vez no se repite; lo que no esta no se pone.
     assert!(a.poner(&pedidas[0]).is_err());
-    assert!(a.poner(&pedida(Clase::Importante, "hormigon pretensado", "x")).is_err());
+    assert!(
+        a.poner(&pedida(Clase::Importante, "hormigon pretensado", "x"))
+            .is_err()
+    );
     let r = a.resumen();
-    assert!(r.starts_with("7 anotaciones") && r.contains("hormigon pretensado"), "{r}");
+    assert!(
+        r.starts_with("7 anotaciones") && r.contains("hormigon pretensado"),
+        "{r}"
+    );
 }
 
 #[test]
 fn la_linea_guia_no_tapa_ninguna_palabra() {
     let p = hoja(TEXTO);
-    let palabras: Vec<[f32; 4]> = p.renglones.iter().flat_map(|r| r.palabras.iter().map(|w| w.caja)).collect();
+    let palabras: Vec<[f32; 4]> = p
+        .renglones
+        .iter()
+        .flat_map(|r| r.palabras.iter().map(|w| w.caja))
+        .collect();
     let mut a = Anotador::nuevo(vec![p], "t2");
     // Lo senalado esta en medio del renglon: la recta cruzaria el resto.
-    let puesta = a.poner(&pedida(Clase::Importante, "dos columnas", "Los apoyos.")).unwrap();
-    let marca = puesta.elementos.iter().find(|e| matches!(e.figura, pixpin_motor2d::Figura::Rectangulo)).unwrap();
-    let dentro_de_la_marca = |c: &[f32; 4]| c[0] >= marca.x && c[2] <= marca.x + marca.ancho && c[1] >= marca.y && c[3] <= marca.y + marca.alto;
+    let puesta = a
+        .poner(&pedida(Clase::Importante, "dos columnas", "Los apoyos."))
+        .unwrap();
+    let marca = puesta
+        .elementos
+        .iter()
+        .find(|e| matches!(e.figura, pixpin_motor2d::Figura::Rectangulo))
+        .unwrap();
+    let dentro_de_la_marca = |c: &[f32; 4]| {
+        c[0] >= marca.x
+            && c[2] <= marca.x + marca.ancho
+            && c[1] >= marca.y
+            && c[3] <= marca.y + marca.alto
+    };
     for e in &puesta.elementos {
         if let pixpin_motor2d::Figura::Linea { puntos } = &e.figura {
             for w in puntos.windows(2) {
                 for k in 0..=40 {
                     let t = k as f32 / 40.0;
-                    let (x, y) = (w[0].x + (w[1].x - w[0].x) * t, w[0].y + (w[1].y - w[0].y) * t);
+                    let (x, y) = (
+                        w[0].x + (w[1].x - w[0].x) * t,
+                        w[0].y + (w[1].y - w[0].y) * t,
+                    );
                     for c in palabras.iter().filter(|c| !dentro_de_la_marca(c)) {
-                        assert!(!(x > c[0] + 2.0 && x < c[2] - 2.0 && y > c[1] + 2.0 && y < c[3] - 2.0), "la guia pasa por {c:?} en ({x}, {y})");
+                        assert!(
+                            !(x > c[0] + 2.0 && x < c[2] - 2.0 && y > c[1] + 2.0 && y < c[3] - 2.0),
+                            "la guia pasa por {c:?} en ({x}, {y})"
+                        );
                     }
                 }
             }
@@ -275,13 +436,24 @@ fn la_linea_guia_no_tapa_ninguna_palabra() {
 
 #[test]
 fn una_pagina_vacia_no_da_nada_que_anclar() {
-    let vacia = Pagina { numero: 0, caja: [0.0, 0.0, 1400.0, 1980.0], renglones: Vec::new(), letra: 20.0, fuera: 0.0, solo_derecha: false };
+    let vacia = Pagina {
+        numero: 0,
+        caja: [0.0, 0.0, 1400.0, 1980.0],
+        renglones: Vec::new(),
+        letra: 20.0,
+        fuera: 0.0,
+        solo_derecha: false,
+    };
     assert!(vacia.vacia());
     assert!(vacia.columna().is_none());
     let mut a = Anotador::nuevo(vec![vacia], "t3");
     assert!(a.poner(&pedida(Clase::Importante, "algo", "nota")).is_err());
     assert!(a.poner(&pedida(Clase::Resumen, "", "nota")).is_err());
-    assert!(Anotador::nuevo(Vec::new(), "t4").poner(&pedida(Clase::Importante, "x", "y")).is_err());
+    assert!(
+        Anotador::nuevo(Vec::new(), "t4")
+            .poner(&pedida(Clase::Importante, "x", "y"))
+            .is_err()
+    );
 }
 
 #[test]

@@ -751,19 +751,28 @@ mod pruebas {
     #[test]
     fn las_palabras_de_urgencia_se_guardan_y_las_lee_flow() {
         let d = Ajustes::default();
-        assert_eq!(d.tareas.palabras(), pixpin_frase::tarea::Palabras::preestablecidas());
+        assert_eq!(
+            d.tareas.palabras(),
+            pixpin_frase::tarea::Palabras::preestablecidas()
+        );
         let u = temporal("tareas-urgencia");
         let mut a = Ajustes::default();
         a.tareas.urgente = vec!["pronto".into(), "con \"comillas\"".into()];
         a.tareas.muy_urgente = vec![];
         guardar(&u, &a).unwrap();
         let texto = fs::read_to_string(u.fichero_ajustes()).unwrap();
-        assert_eq!(pixpin_frase::tarea::Palabras::de_toml(&texto), a.tareas.palabras());
+        assert_eq!(
+            pixpin_frase::tarea::Palabras::de_toml(&texto),
+            a.tareas.palabras()
+        );
         assert_eq!(cargar(&u).unwrap().tareas, a.tareas);
         a.tareas.muy_urgente = vec!["ya".into()];
         guardar_conservando(&u, &a).unwrap();
         let texto = fs::read_to_string(u.fichero_ajustes()).unwrap();
-        assert_eq!(pixpin_frase::tarea::Palabras::de_toml(&texto), a.tareas.palabras());
+        assert_eq!(
+            pixpin_frase::tarea::Palabras::de_toml(&texto),
+            a.tareas.palabras()
+        );
         // Un TOML de antes, sin `[tareas]`: las de fabrica.
         let viejo: Ajustes = toml::from_str("idioma = \"es\"\n").unwrap();
         assert_eq!(viejo.tareas, Tareas::default());
@@ -856,7 +865,8 @@ leer_respuestas = true
             pinear: Pinear {
                 palabras_propias: true,
                 palabras: "reloj=TIMER
-sorteito=RULETA".into(),
+sorteito=RULETA"
+                    .into(),
             },
             ..Ajustes::default()
         }

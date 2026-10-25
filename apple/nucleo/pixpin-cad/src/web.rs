@@ -96,7 +96,12 @@ pub fn de_bytes(b: &[u8]) -> Option<PlanoPorCapas> {
         let encendida = l.tomar(1)?[0] != 0;
         let largo = l.u32()? as usize;
         let modelo = Modelo::de_bytes(l.tomar(largo)?)?;
-        grupos.push(Grupo { capa, grosor, encendida, modelo });
+        grupos.push(Grupo {
+            capa,
+            grosor,
+            encendida,
+            modelo,
+        });
     }
     let n = l.u32()? as usize;
     let mut imagenes = Vec::with_capacity(n.min(4096));
@@ -107,7 +112,13 @@ pub fn de_bytes(b: &[u8]) -> Option<PlanoPorCapas> {
         for x in &mut v {
             *x = l.f64()?;
         }
-        imagenes.push(ImagenDelPlano { capa, ruta, esquina: [v[0], v[1]], u: [v[2], v[3]], v: [v[4], v[5]] });
+        imagenes.push(ImagenDelPlano {
+            capa,
+            ruta,
+            esquina: [v[0], v[1]],
+            u: [v[2], v[3]],
+            v: [v[4], v[5]],
+        });
     }
     (l.i == b.len()).then_some(PlanoPorCapas { grupos, imagenes })
 }
@@ -224,7 +235,11 @@ type Apartado = (u32, u32);
 
 /// Escribe los tramos de un tipo: primero el contenido de cada tramo y al
 /// final sus fichas (7 palabras cada una).
-fn apartado(d: &mut Datos, tramos: &[Tramo], mut contenido: impl FnMut(&mut Datos, &Tramo) -> u32) -> Apartado {
+fn apartado(
+    d: &mut Datos,
+    tramos: &[Tramo],
+    mut contenido: impl FnMut(&mut Datos, &Tramo) -> u32,
+) -> Apartado {
     let mut fichas = Vec::with_capacity(tramos.len());
     for t in tramos {
         let desde = d.sitio();
@@ -248,7 +263,10 @@ fn rango(desde: u32, cuantos: u32, largo: usize) -> std::ops::Range<usize> {
 /// Un grupo (capa y grosor) en palabras; devuelve su ficha JSON.
 fn grupo(d: &mut Datos, g: &Grupo, origen: [f64; 2], indice_capa: usize) -> String {
     let m = &g.modelo;
-    let o = [(m.origen[0] - origen[0]) as f32, (m.origen[1] - origen[1]) as f32];
+    let o = [
+        (m.origen[0] - origen[0]) as f32,
+        (m.origen[1] - origen[1]) as f32,
+    ];
     // Rayas: cada tira partida donde cambia el color. [color, n, x, y...]
     let rayas = apartado(d, &m.tramos_lineas, |d, t| {
         let mut tiras = 0;
@@ -272,7 +290,9 @@ fn grupo(d: &mut Datos, g: &Grupo, origen: [f64; 2], indice_capa: usize) -> Stri
                 cerrar(d, &mut tira, color);
                 continue;
             }
-            let Some(q) = m.vertices.get(i as usize) else { continue };
+            let Some(q) = m.vertices.get(i as usize) else {
+                continue;
+            };
             if q.color != color && !tira.is_empty() {
                 let ultimo = *tira.last().unwrap_or(&(q.x, q.y));
                 cerrar(d, &mut tira, color);
@@ -288,7 +308,10 @@ fn grupo(d: &mut Datos, g: &Grupo, origen: [f64; 2], indice_capa: usize) -> Stri
     let rellenos = apartado(d, &m.tramos_triangulos, |d, t| {
         let mut por_color: Vec<(u32, Vec<f32>)> = Vec::new();
         for tri in m.triangulos[rango(t.desde, t.cuantos, m.triangulos.len())].chunks_exact(3) {
-            let v: Vec<_> = tri.iter().filter_map(|&i| m.vertices.get(i as usize)).collect();
+            let v: Vec<_> = tri
+                .iter()
+                .filter_map(|&i| m.vertices.get(i as usize))
+                .collect();
             if v.len() != 3 {
                 continue;
             }
@@ -316,7 +339,15 @@ fn grupo(d: &mut Datos, g: &Grupo, origen: [f64; 2], indice_capa: usize) -> Stri
     // sus familias de 16 palabras.
     let familias_en = d.sitio();
     for f in &m.familias {
-        for v in [f.base[0], f.base[1], f.dir[0], f.dir[1], f.paso, f.corrimiento, f.largo] {
+        for v in [
+            f.base[0],
+            f.base[1],
+            f.dir[0],
+            f.dir[1],
+            f.paso,
+            f.corrimiento,
+            f.largo,
+        ] {
             d.f(v);
         }
         d.u(f.n);
@@ -326,7 +357,15 @@ fn grupo(d: &mut Datos, g: &Grupo, origen: [f64; 2], indice_capa: usize) -> Stri
     }
     let tramas_en = d.sitio();
     for t in &m.tramas {
-        for v in [t.centro[0], t.centro[1], t.inversa[0], t.inversa[1], t.inversa[2], t.inversa[3], t.escala] {
+        for v in [
+            t.centro[0],
+            t.centro[1],
+            t.inversa[0],
+            t.inversa[1],
+            t.inversa[2],
+            t.inversa[3],
+            t.escala,
+        ] {
             d.f(v);
         }
         d.u(familias_en + t.desde * 16);
@@ -335,8 +374,13 @@ fn grupo(d: &mut Datos, g: &Grupo, origen: [f64; 2], indice_capa: usize) -> Stri
     // Sombreados: [color, trama, n, 6n]
     let sombreados = apartado(d, &m.tramos_trama, |d, t| {
         let mut por: Vec<((u32, u32), Vec<f32>)> = Vec::new();
-        for tri in m.triangulos_trama[rango(t.desde, t.cuantos, m.triangulos_trama.len())].chunks_exact(3) {
-            let v: Vec<_> = tri.iter().filter_map(|&i| m.vertices_trama.get(i as usize)).collect();
+        for tri in
+            m.triangulos_trama[rango(t.desde, t.cuantos, m.triangulos_trama.len())].chunks_exact(3)
+        {
+            let v: Vec<_> = tri
+                .iter()
+                .filter_map(|&i| m.vertices_trama.get(i as usize))
+                .collect();
             if v.len() != 3 || v[0].trama as usize >= m.tramas.len() {
                 continue;
             }
@@ -437,7 +481,11 @@ fn num(v: f64) -> String {
     }
     let s = format!("{v:.6}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s.is_empty() || s == "-" || s == "-0" { "0".into() } else { s.to_string() }
+    if s.is_empty() || s == "-" || s == "-0" {
+        "0".into()
+    } else {
+        s.to_string()
+    }
 }
 
 /// Un texto como cadena JSON (sirve tambien dentro de `<script>`: se
@@ -466,7 +514,10 @@ pub fn texto_json(s: &str) -> String {
 }
 
 fn html(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Base64 de siempre (RFC 4648).
@@ -474,11 +525,21 @@ pub fn base64(b: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut o = String::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
         o.push(A[(n >> 18) as usize & 63] as char);
         o.push(A[(n >> 12) as usize & 63] as char);
-        o.push(if c.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
-        o.push(if c.len() > 2 { A[n as usize & 63] as char } else { '=' });
+        o.push(if c.len() > 1 {
+            A[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        o.push(if c.len() > 2 {
+            A[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     o
 }
@@ -539,9 +600,21 @@ pub fn pagina(grupos: &[Grupo], o: &OpcionesWeb) -> String {
         .cotas
         .iter()
         .filter(|c| c.len() >= 2)
-        .map(|c| format!("[{}]", c.iter().map(|p| format!("{},{}", num(p[0]), num(p[1]))).collect::<Vec<_>>().join(",")))
+        .map(|c| {
+            format!(
+                "[{}]",
+                c.iter()
+                    .map(|p| format!("{},{}", num(p[0]), num(p[1])))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        })
         .collect();
-    let marcos: Vec<String> = o.marcos.iter().map(|m| format!("[{},{},{},{}]", num(m[0]), num(m[1]), num(m[2]), num(m[3]))).collect();
+    let marcos: Vec<String> = o
+        .marcos
+        .iter()
+        .map(|m| format!("[{},{},{},{}]", num(m[0]), num(m[1]), num(m[2]), num(m[3])))
+        .collect();
     let imagenes: Vec<String> = o
         .imagenes
         .iter()
@@ -598,7 +671,9 @@ pub fn pagina(grupos: &[Grupo], o: &OpcionesWeb) -> String {
     );
     let svg = o.anotado.as_ref().map(|a| a.svg.as_str()).unwrap_or("");
     let titulo = html(&o.titulo);
-    let mut s = String::with_capacity(comprimido.len() * 4 / 3 + datos.len() + svg.len() + GUION.len() + 4096);
+    let mut s = String::with_capacity(
+        comprimido.len() * 4 / 3 + datos.len() + svg.len() + GUION.len() + 4096,
+    );
     s.push_str("<!DOCTYPE html>\n<html lang=\"es\"><head><meta charset=\"utf-8\">\n");
     s.push_str("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n");
     s.push_str("<meta name=\"generator\" content=\"PixPin Max · plano\">\n");
@@ -607,14 +682,29 @@ pub fn pagina(grupos: &[Grupo], o: &OpcionesWeb) -> String {
     s.push_str("</head><body class=\"");
     s.push_str(if o.claro { "claro" } else { "oscuro" });
     s.push_str("\">\n<div id=\"barra\">");
-    s.push_str(&format!("<span id=\"nombre\" title=\"{titulo}\">{titulo}</span>"));
-    for (id, rotulo, tecla) in [("b-todo", &t.todo, "F"), ("b-tema", &t.tema, "B"), ("b-capas", &t.capas, "L"), ("b-grosor", &t.grosores, "W"), ("b-anot", &t.anotaciones, "A")] {
+    s.push_str(&format!(
+        "<span id=\"nombre\" title=\"{titulo}\">{titulo}</span>"
+    ));
+    for (id, rotulo, tecla) in [
+        ("b-todo", &t.todo, "F"),
+        ("b-tema", &t.tema, "B"),
+        ("b-capas", &t.capas, "L"),
+        ("b-grosor", &t.grosores, "W"),
+        ("b-anot", &t.anotaciones, "A"),
+    ] {
         if id == "b-anot" && o.anotado.is_none() && o.cotas.is_empty() && o.marcos.is_empty() {
             continue;
         }
-        s.push_str(&format!("<button id=\"{id}\" title=\"{} ({tecla})\">{}</button>", html(rotulo), html(rotulo)));
+        s.push_str(&format!(
+            "<button id=\"{id}\" title=\"{} ({tecla})\">{}</button>",
+            html(rotulo),
+            html(rotulo)
+        ));
     }
-    s.push_str(&format!("<span id=\"pista\">{}</span></div>\n", html(&t.pista)));
+    s.push_str(&format!(
+        "<span id=\"pista\">{}</span></div>\n",
+        html(&t.pista)
+    ));
     s.push_str("<div id=\"lienzo\"><canvas id=\"plano\"></canvas><div id=\"anot\">");
     s.push_str(svg);
     s.push_str("</div><canvas id=\"encima\"></canvas></div>\n<div id=\"panel\" hidden></div>\n<div id=\"aviso\" hidden></div>\n");
@@ -661,17 +751,45 @@ mod pruebas {
 
     fn grupo_de_prueba(capa: &str, grosor: i16, encendida: bool) -> Grupo {
         let mut c = Constructor::nuevo();
-        c.polilinea(&[[0.0, 0.0], [10.0, 0.0], [10.0, 5.0]], crate::convertir::rgba(255, 0, 0), None);
-        c.triangulos(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], crate::convertir::COLOR_7, None);
-        c.arco([5.0, 5.0], 2.0, 0.0, std::f64::consts::TAU, crate::convertir::rgba(0, 0, 255));
-        Grupo { capa: capa.into(), grosor, encendida, modelo: c.terminar() }
+        c.polilinea(
+            &[[0.0, 0.0], [10.0, 0.0], [10.0, 5.0]],
+            crate::convertir::rgba(255, 0, 0),
+            None,
+        );
+        c.triangulos(
+            &[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+            crate::convertir::COLOR_7,
+            None,
+        );
+        c.arco(
+            [5.0, 5.0],
+            2.0,
+            0.0,
+            std::f64::consts::TAU,
+            crate::convertir::rgba(0, 0, 255),
+        );
+        Grupo {
+            capa: capa.into(),
+            grosor,
+            encendida,
+            modelo: c.terminar(),
+        }
     }
 
     #[test]
     fn el_plano_por_capas_vuelve_igual_y_lo_roto_no_se_entiende() {
         let p = PlanoPorCapas {
-            grupos: vec![grupo_de_prueba("Muros", 50, true), grupo_de_prueba("Ejes <x>", GROSOR_NORMAL, false)],
-            imagenes: vec![ImagenDelPlano { capa: "Fotos".into(), ruta: "foto.png".into(), esquina: [1.0, 2.0], u: [3.0, 0.0], v: [0.0, 4.0] }],
+            grupos: vec![
+                grupo_de_prueba("Muros", 50, true),
+                grupo_de_prueba("Ejes <x>", GROSOR_NORMAL, false),
+            ],
+            imagenes: vec![ImagenDelPlano {
+                capa: "Fotos".into(),
+                ruta: "foto.png".into(),
+                esquina: [1.0, 2.0],
+                u: [3.0, 0.0],
+                v: [0.0, 4.0],
+            }],
         };
         let b = a_bytes(&p);
         assert_eq!(de_bytes(&b), Some(p));
@@ -686,15 +804,30 @@ mod pruebas {
 
     #[test]
     fn la_pagina_lleva_las_capas_los_datos_y_lo_anotado_sin_internet() {
-        let grupos = vec![grupo_de_prueba("Muros", 50, true), grupo_de_prueba("Ejes </script>", GROSOR_NORMAL, false)];
+        let grupos = vec![
+            grupo_de_prueba("Muros", 50, true),
+            grupo_de_prueba("Ejes </script>", GROSOR_NORMAL, false),
+        ];
         let o = OpcionesWeb {
             titulo: "Planta <baja>".into(),
             vista: [0.0, 0.0, 10.0, 10.0],
             unidades: 6,
             cotas: vec![vec![[0.0, 0.0], [10.0, 0.0]]],
             marcos: vec![[0.0, 0.0, 10.0, 5.0]],
-            anotado: Some(Anotado { svg: "<svg id=\"tinta\"></svg>".into(), caja: [0.0, 0.0, 5.0, 5.0], u: 0.5, cero: [0.0, 10.0] }),
-            imagenes: vec![ImagenWeb { capa: "Fotos".into(), mime: "image/png", bytes: vec![1, 2, 3], esquina: [0.0; 2], u: [1.0, 0.0], v: [0.0, 1.0] }],
+            anotado: Some(Anotado {
+                svg: "<svg id=\"tinta\"></svg>".into(),
+                caja: [0.0, 0.0, 5.0, 5.0],
+                u: 0.5,
+                cero: [0.0, 10.0],
+            }),
+            imagenes: vec![ImagenWeb {
+                capa: "Fotos".into(),
+                mime: "image/png",
+                bytes: vec![1, 2, 3],
+                esquina: [0.0; 2],
+                u: [1.0, 0.0],
+                v: [0.0, 1.0],
+            }],
             claro: true,
             ..Default::default()
         };
@@ -709,7 +842,12 @@ mod pruebas {
         assert!(h.contains("<svg id=\"tinta\"></svg>"));
         assert!(h.contains(r#""unidad":"m""#));
         // Nada de fuera: ni guiones ni hojas de estilo ni letras de internet.
-        assert!(!h.contains("src=\"http") && !h.contains("href=\"http") && !h.contains("url(http") && !h.contains("src=\"/"));
+        assert!(
+            !h.contains("src=\"http")
+                && !h.contains("href=\"http")
+                && !h.contains("url(http")
+                && !h.contains("src=\"/")
+        );
         // Un solo cierre de guion por guion: el nombre de la capa no lo cierra.
         assert_eq!(h.matches("</script>").count(), 3);
         // Los datos son base64 de un gzip.
@@ -720,7 +858,13 @@ mod pruebas {
 
     #[test]
     fn un_plano_vacio_da_una_pagina_sin_grupos_y_sin_anotar() {
-        let h = pagina(&[], &OpcionesWeb { titulo: "Vacio".into(), ..Default::default() });
+        let h = pagina(
+            &[],
+            &OpcionesWeb {
+                titulo: "Vacio".into(),
+                ..Default::default()
+            },
+        );
         assert!(h.contains(r#""grupos":[]"#) && h.contains(r#""anotado":null"#));
         // Sin nada anotado no sale el boton de las anotaciones.
         assert!(!h.contains("id=\"b-anot\""));
@@ -731,13 +875,22 @@ mod pruebas {
     #[test]
     #[ignore = "convierte los planos de PIXPIN_MUESTRAS a HTML en PIXPIN_SALIDA"]
     fn paginas_de_las_muestras() {
-        let (Ok(entrada), Ok(salida)) = (std::env::var("PIXPIN_MUESTRAS"), std::env::var("PIXPIN_SALIDA")) else {
+        let (Ok(entrada), Ok(salida)) = (
+            std::env::var("PIXPIN_MUESTRAS"),
+            std::env::var("PIXPIN_SALIDA"),
+        ) else {
             return;
         };
         std::fs::create_dir_all(&salida).unwrap();
         for e in std::fs::read_dir(&entrada).unwrap().flatten() {
             let ruta = e.path();
-            if !matches!(ruta.extension().and_then(|x| x.to_str()).map(|x| x.to_ascii_lowercase()).as_deref(), Some("dwg" | "dxf")) {
+            if !matches!(
+                ruta.extension()
+                    .and_then(|x| x.to_str())
+                    .map(|x| x.to_ascii_lowercase())
+                    .as_deref(),
+                Some("dwg" | "dxf")
+            ) {
                 continue;
             }
             let t = std::time::Instant::now();
@@ -759,7 +912,8 @@ mod pruebas {
                 ..Default::default()
             };
             let h = pagina(&p.grupos, &o);
-            let capas: std::collections::BTreeSet<_> = p.grupos.iter().map(|g| g.capa.clone()).collect();
+            let capas: std::collections::BTreeSet<_> =
+                p.grupos.iter().map(|g| g.capa.clone()).collect();
             println!(
                 "{:?}: {:?} dwg={} KB html={} KB grupos={} capas={} imagenes={} pxcad={} KB",
                 e.file_name(),

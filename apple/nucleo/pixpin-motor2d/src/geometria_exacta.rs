@@ -577,8 +577,9 @@ pub(crate) fn ordenes_de_arco(e: &Elemento, color: ColorRgba) -> Option<Vec<Orde
                 if rk <= 1.0 {
                     break;
                 }
-                let pasos =
-                    ((crate::pintado::pasos_del_arco(rk) as f32 * barrido.abs() / TAU) as usize).max(8);
+                let pasos = ((crate::pintado::pasos_del_arco(rk) as f32 * barrido.abs() / TAU)
+                    as usize)
+                    .max(8);
                 let puntos = (0..=pasos)
                     .map(|i| {
                         en_la_circunferencia(c, rk, inicio + barrido * i as f32 / pasos as f32)

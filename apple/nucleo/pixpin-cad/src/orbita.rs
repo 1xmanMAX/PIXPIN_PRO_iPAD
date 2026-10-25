@@ -5,8 +5,7 @@
 //! matriz por filas (`p * M`) que usa el sombreador de D3D11; el de Metal
 //! tiene que usar el mismo convenio (o trasponerla).
 
-#[allow(clippy::approx_constant)]
-pub(crate) const FOV: f64 = 0.785_398; // 45 grados
+pub(crate) const FOV: f64 = std::f64::consts::FRAC_PI_4; // 45 grados
 
 pub(crate) fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]

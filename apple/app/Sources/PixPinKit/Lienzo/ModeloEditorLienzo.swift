@@ -99,7 +99,12 @@ public final class ModeloEditorLienzo: ObservableObject {
     public var alSeguirEnlace: ((MensajeChat) -> Void)?
     /// **Los marcadores del lienzo** (`MarcasLienzo.swift`), en el orden del
     /// riel.
-    @Published public internal(set) var marcas: [MarcaDocumento] = []
+    @Published public internal(set) var marcas: [MarcaDelLienzo] = []
+    /// Las marcas y sus vistas en Rust (`MarcasDelLienzo`, las mismas
+    /// cuentas y ficheros que Windows y el Mac).
+    var marcasDelLienzo: MarcasDelLienzo?
+    /// La herramienta de antes de coger el marco con el boton del riel.
+    var antesDelMarco: String?
     /// El emoticono que se va a plantar con el siguiente toque, si se esta
     /// poniendo un marcador.
     @Published public var poniendoMarca: String?

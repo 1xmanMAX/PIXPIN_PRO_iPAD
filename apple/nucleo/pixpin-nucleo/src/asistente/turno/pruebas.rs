@@ -55,6 +55,7 @@ fn entorno(nube: bool, pensar: bool) -> Entorno {
         pensar,
         ventana: 8192,
         cada: Duration::ZERO,
+        guardar_con: None,
     }
 }
 

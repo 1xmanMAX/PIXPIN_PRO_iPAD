@@ -499,6 +499,12 @@ pub struct Extras {
     /// `geometria_exacta`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub degradado: Option<crate::geometria_exacta::Degradado>,
+    /// **El borde en nube de revision** (`nubeRadio`), solo en rectangulos y
+    /// elipses: el radio del feston, en pixeles del documento. No depende de
+    /// la caja: al estirarla caben mas festones del mismo tamano. Ver
+    /// `nube_revision`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nube: Option<f32>,
 }
 
 /// **El recorte de una imagen** (`crop` de Excalidraw).
@@ -586,6 +592,8 @@ impl Extras {
             cierre: None,
             marca_angulo: None,
             degradado: None,
+            // Ni la nube: viaja en las suyas (`nubeRadio`, `nubeBase`).
+            nube: None,
             ..self.clone()
         } == Extras::default()
     }

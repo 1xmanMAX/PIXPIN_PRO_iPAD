@@ -237,16 +237,22 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
 
     // MARK: Viajar a un marcador
 
-    /// El viaje de la camara en curso (`marcas::Vuelo`): el origen al que va.
-    private var destinoDelViaje: CGPoint?
+    /// El viaje de la camara en curso: lo lleva Rust (`MarcasDelLienzo`,
+    /// el `marcas::Vuelo` de Windows); aqui solo el reloj de pantalla.
     private var relojDelViaje: CADisplayLink?
 
-    /// **Lleva la vista al marcador**, arriba y centrado a lo ancho, por
-    /// debajo de las barras (`camara_con_la_marca_arriba`). El aumento no se
-    /// toca: se marca un sitio, no un encuadre.
-    func ir(a marca: MarcaDocumento) {
-        let aire = VistaEditorLienzoIPad.margenArriba + 48
-        destinoDelViaje = CGPoint(x: CGFloat(marca.x) - bounds.width / (2 * zoom), y: CGFloat(marca.y) - aire / zoom)
+    /// La camara de ahora, como la entienden las marcas.
+    var camaraDeMarcas: CamaraDelLienzo {
+        CamaraDelLienzo(x: Float(origen.x), y: Float(origen.y), zoom: Float(zoom))
+    }
+
+    /// **Lleva la vista al marcador `id`**: a su vista si la guarda
+    /// (encuadre y aumento) y, si no, a dejarlo arriba y centrado por debajo
+    /// de las barras con el aumento de ahora.
+    func ir(aMarca id: Int64) {
+        guard let m = modelo.marcasDelLienzo,
+              m.irA(id: id, camara: camaraDeMarcas, anchoPx: Float(bounds.width), altoPx: Float(bounds.height),
+                    bajoLaBarra: Float(VistaEditorLienzoIPad.margenArriba)) else { return }
         guard relojDelViaje == nil else { return }
         let enlace = CADisplayLink(target: self, selector: #selector(pasoDelViaje(_:)))
         enlace.add(to: .main, forMode: .common)
@@ -266,11 +272,9 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
             return true
         }
         guard modelo.herramienta != "seleccion" else { return false }
-        let r = VistaEditorLienzoIPad.radioMarca
-        if let marca = modelo.marcas.last(where: { m in
-            hypot((CGFloat(m.x) - origen.x) * zoom - p.x, (CGFloat(m.y) - origen.y) * zoom - p.y) <= r
-        }) {
-            ir(a: marca)
+        if let id = modelo.marcasDelLienzo?.marcaEn(camara: camaraDeMarcas, px: Float(p.x), py: Float(p.y),
+                                                    radio: Float(VistaEditorLienzoIPad.radioMarca)) {
+            ir(aMarca: id)
             return true
         }
         return false
@@ -295,20 +299,14 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     }
 
     @objc private func pasoDelViaje(_ enlace: CADisplayLink) {
-        guard let d = destinoDelViaje else {
+        let dt = Float(max(0, enlace.targetTimestamp - enlace.timestamp))
+        guard let m = modelo.marcasDelLienzo, let c = m.avanzar(camara: camaraDeMarcas, dt: dt) else {
             enlace.invalidate()
             relojDelViaje = nil
             return
         }
-        // Persigue el destino, cada vez mas despacio (`VELOCIDAD_VUELO`).
-        let k = min(1, CGFloat(enlace.targetTimestamp - enlace.timestamp) * 14)
-        origen = CGPoint(x: origen.x + (d.x - origen.x) * k, y: origen.y + (d.y - origen.y) * k)
-        if hypot(d.x - origen.x, d.y - origen.y) * zoom < 0.5 {
-            origen = d
-            destinoDelViaje = nil
-            enlace.invalidate()
-            relojDelViaje = nil
-        }
+        origen = CGPoint(x: CGFloat(c.x), y: CGFloat(c.y))
+        zoom = CGFloat(c.zoom)
         setNeedsDisplay()
     }
 
@@ -781,7 +779,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     // MARK: Mover y acercar la vista
 
     private func desplazar(dx: CGFloat, dy: CGFloat) {
-        destinoDelViaje = nil
+        modelo.marcasDelLienzo?.parar()
         origen.x -= dx / zoom
         origen.y -= dy / zoom
         setNeedsDisplay()
@@ -791,7 +789,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     private func acercar(_ factor: CGFloat, en foco: CGPoint) {
         let nuevo = max(VistaEditorLienzoIPad.zoomMinimo, min(VistaEditorLienzoIPad.zoomMaximo, zoom * factor))
         guard nuevo != zoom, nuevo.isFinite else { return }
-        destinoDelViaje = nil
+        modelo.marcasDelLienzo?.parar()
         let mundo = alMundo(foco)
         zoom = nuevo
         origen = CGPoint(x: mundo.x - foco.x / zoom, y: mundo.y - foco.y / zoom)

@@ -43,7 +43,7 @@ pub(super) fn llamar(c: &mut Ctx, canon: &str, args: &[Ev]) -> Option<Resultado>
             let f = c.texto(&args[1])?;
             formato::dar_formato(&v, &f).map(Valor::Texto)
         })(),
-        "VALOR" => (|| {
+        "VALOR" => {
             let v = c.valor_de(&args[0]);
             match v {
                 Valor::Numero(_) => Ok(v),
@@ -55,7 +55,7 @@ pub(super) fn llamar(c: &mut Ctx, canon: &str, args: &[Ev]) -> Option<Resultado>
                     .ok_or(ErrorFormula::Sintaxis),
                 Valor::Error(e) => Err(e),
             }
-        })(),
+        }
         _ => return None,
     })
 }
@@ -91,15 +91,20 @@ fn unir(c: &mut Ctx, args: &[Ev]) -> Resultado {
                 // separador. Se recorre hasta la ultima celda escrita; mas
                 // alla todo son huecos finales y sobran.
                 let dado = c.rala(*rg)?;
-                let mapa: std::collections::HashMap<(u32, u32), Valor> =
-                    dado.iter().map(|(r, v)| ((r.fila, r.columna), v.clone())).collect();
+                let mapa: std::collections::HashMap<(u32, u32), Valor> = dado
+                    .iter()
+                    .map(|(r, v)| ((r.fila, r.columna), v.clone()))
+                    .collect();
                 let (ec, ef) = c.extension();
                 let f2 = rg.f2.min(ef.saturating_sub(1));
                 let c2 = rg.c2.min(ec.saturating_sub(1));
                 if rg.f1 <= f2 && rg.c1 <= c2 {
                     for f in rg.f1..=f2 {
                         for k in rg.c1..=c2 {
-                            let v = mapa.get(&(f, k)).cloned().unwrap_or(Valor::Texto(String::new()));
+                            let v = mapa
+                                .get(&(f, k))
+                                .cloned()
+                                .unwrap_or(Valor::Texto(String::new()));
                             trozos.push(a_texto(&v)?);
                         }
                     }

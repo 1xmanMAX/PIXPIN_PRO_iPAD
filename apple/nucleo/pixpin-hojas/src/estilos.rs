@@ -18,16 +18,32 @@ pub struct Rgb {
 
 impl Rgb {
     pub const NEGRO: Rgb = Rgb { r: 0, g: 0, b: 0 };
-    pub const BLANCO: Rgb = Rgb { r: 255, g: 255, b: 255 };
+    pub const BLANCO: Rgb = Rgb {
+        r: 255,
+        g: 255,
+        b: 255,
+    };
 
     pub fn de_u32(c: u32) -> Rgb {
-        Rgb { r: (c >> 16) as u8, g: (c >> 8) as u8, b: c as u8 }
+        Rgb {
+            r: (c >> 16) as u8,
+            g: (c >> 8) as u8,
+            b: c as u8,
+        }
     }
 
     /// Mezcla `self` sobre `fondo` con `t` (0 = fondo, 1 = self).
     pub fn mezcla(self, fondo: Rgb, t: f32) -> Rgb {
-        let m = |a: u8, b: u8| (a as f32 * t + b as f32 * (1.0 - t)).round().clamp(0.0, 255.0) as u8;
-        Rgb { r: m(self.r, fondo.r), g: m(self.g, fondo.g), b: m(self.b, fondo.b) }
+        let m = |a: u8, b: u8| {
+            (a as f32 * t + b as f32 * (1.0 - t))
+                .round()
+                .clamp(0.0, 255.0) as u8
+        };
+        Rgb {
+            r: m(self.r, fondo.r),
+            g: m(self.g, fondo.g),
+            b: m(self.b, fondo.b),
+        }
     }
 }
 
@@ -60,8 +76,15 @@ pub struct Tema {
 impl Default for Tema {
     fn default() -> Self {
         // Office 2013-2022.
-        let c = [0xFFFFFF, 0x000000, 0xE7E6E6, 0x44546A, 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5, 0x70AD47, 0x0563C1, 0x954F72];
-        Tema { colores: c.map(Rgb::de_u32), fuente_cuerpo: "Calibri".into(), fuente_titulos: "Calibri Light".into() }
+        let c = [
+            0xFFFFFF, 0x000000, 0xE7E6E6, 0x44546A, 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000,
+            0x5B9BD5, 0x70AD47, 0x0563C1, 0x954F72,
+        ];
+        Tema {
+            colores: c.map(Rgb::de_u32),
+            fuente_cuerpo: "Calibri".into(),
+            fuente_titulos: "Calibri Light".into(),
+        }
     }
 }
 
@@ -76,23 +99,40 @@ impl Tema {
                     return hex(s.attr("val")?);
                 }
                 if let Some(s) = nodo.hijo("sysClr") {
-                    return hex(s.attr("lastClr").unwrap_or(if s.attr("val") == Some("window") { "FFFFFF" } else { "000000" }));
+                    return hex(s
+                        .attr("lastClr")
+                        .unwrap_or(if s.attr("val") == Some("window") {
+                            "FFFFFF"
+                        } else {
+                            "000000"
+                        }));
                 }
                 None
             };
-            let nombres = ["lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"];
+            let nombres = [
+                "lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5",
+                "accent6", "hlink", "folHlink",
+            ];
             for (i, n) in nombres.iter().enumerate() {
                 if let Some(c) = color(n) {
                     t.colores[i] = c;
                 }
             }
         }
-        if let Some(f) = raiz.buscar("minorFont").and_then(|n| n.hijo("latin")).and_then(|n| n.attr("typeface")) {
+        if let Some(f) = raiz
+            .buscar("minorFont")
+            .and_then(|n| n.hijo("latin"))
+            .and_then(|n| n.attr("typeface"))
+        {
             if !f.is_empty() {
                 t.fuente_cuerpo = f.to_string();
             }
         }
-        if let Some(f) = raiz.buscar("majorFont").and_then(|n| n.hijo("latin")).and_then(|n| n.attr("typeface")) {
+        if let Some(f) = raiz
+            .buscar("majorFont")
+            .and_then(|n| n.hijo("latin"))
+            .and_then(|n| n.attr("typeface"))
+        {
             if !f.is_empty() {
                 t.fuente_titulos = f.to_string();
             }
@@ -117,7 +157,11 @@ pub fn con_matiz(c: Rgb, tint: f64) -> Rgb {
         return c;
     }
     let (h, l, s) = a_hls(c);
-    let l = if tint < 0.0 { l * (1.0 + tint) } else { l * (1.0 - tint) + tint };
+    let l = if tint < 0.0 {
+        l * (1.0 + tint)
+    } else {
+        l * (1.0 - tint) + tint
+    };
     de_hls(h, l.clamp(0.0, 1.0), s)
 }
 
@@ -132,7 +176,11 @@ fn a_hls(c: Rgb) -> (f64, f64, f64) {
         return (0.0, l, 0.0);
     }
     let d = max - min;
-    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
     let h = if max == r {
         (g - b) / d + if g < b { 6.0 } else { 0.0 }
     } else if max == g {
@@ -148,7 +196,11 @@ fn de_hls(h: f64, l: f64, s: f64) -> Rgb {
         let v = (l * 255.0).round() as u8;
         return Rgb { r: v, g: v, b: v };
     }
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let f = |mut t: f64| {
         if t < 0.0 {
@@ -168,7 +220,11 @@ fn de_hls(h: f64, l: f64, s: f64) -> Rgb {
         };
         (v * 255.0).round().clamp(0.0, 255.0) as u8
     };
-    Rgb { r: f(h + 1.0 / 3.0), g: f(h), b: f(h - 1.0 / 3.0) }
+    Rgb {
+        r: f(h + 1.0 / 3.0),
+        g: f(h),
+        b: f(h - 1.0 / 3.0),
+    }
 }
 
 /// Resuelve un `<color>` (o `<fgColor>`, ...). `None` es automatico.
@@ -325,7 +381,11 @@ impl EstiloLinea {
     pub fn grosor(self) -> f32 {
         match self {
             Self::Ninguno => 0.0,
-            Self::Medio | Self::MedioDiscontinuo | Self::MedioRayaPunto | Self::MedioRayaPuntoPunto | Self::RayaPuntoInclinada => 2.0,
+            Self::Medio
+            | Self::MedioDiscontinuo
+            | Self::MedioRayaPunto
+            | Self::MedioRayaPuntoPunto
+            | Self::RayaPuntoInclinada => 2.0,
             Self::Grueso => 3.0,
             Self::Doble => 3.0,
             _ => 1.0,
@@ -351,7 +411,9 @@ impl Ord for Linea {
     fn cmp(&self, o: &Self) -> std::cmp::Ordering {
         // A igual estilo, la mas oscura (como Excel en la practica).
         let lum = |c: Rgb| -(c.r as i32 * 3 + c.g as i32 * 6 + c.b as i32);
-        self.estilo.cmp(&o.estilo).then(lum(self.color).cmp(&lum(o.color)))
+        self.estilo
+            .cmp(&o.estilo)
+            .then(lum(self.color).cmp(&lum(o.color)))
     }
 }
 
@@ -468,7 +530,20 @@ impl Dxf {
         macro_rules! pisa {
             ($($c:ident),*) => {$(if o.$c.is_some() { self.$c = o.$c; })*};
         }
-        pisa!(color_fuente, negrita, cursiva, tachado, subrayado, relleno, izquierda, derecha, arriba, abajo, horizontal, vertical);
+        pisa!(
+            color_fuente,
+            negrita,
+            cursiva,
+            tachado,
+            subrayado,
+            relleno,
+            izquierda,
+            derecha,
+            arriba,
+            abajo,
+            horizontal,
+            vertical
+        );
     }
 }
 
@@ -518,7 +593,13 @@ fn dxf_de(n: &Nodo, tema: &Tema, paleta: &[u32]) -> Dxf {
         let linea = |k: &str| -> Option<Linea> {
             let h = b.hijo(k)?;
             let estilo = EstiloLinea::de(h.attr("style")?);
-            Some(Linea { estilo, color: h.hijo("color").and_then(|c| color_de(c, tema, paleta)).unwrap_or(Rgb::NEGRO) })
+            Some(Linea {
+                estilo,
+                color: h
+                    .hijo("color")
+                    .and_then(|c| color_de(c, tema, paleta))
+                    .unwrap_or(Rgb::NEGRO),
+            })
         };
         d.izquierda = linea("left").or_else(|| linea("start"));
         d.derecha = linea("right").or_else(|| linea("end"));
@@ -551,20 +632,45 @@ impl Estilos {
         let mut codigos: HashMap<u32, String> = HashMap::new();
         if let Some(nf) = hoja.hijo("numFmts") {
             for n in nf.hijos_de("numFmt") {
-                if let (Some(id), Some(c)) = (n.attr("numFmtId").and_then(|v| v.parse().ok()), n.attr("formatCode")) {
+                if let (Some(id), Some(c)) = (
+                    n.attr("numFmtId").and_then(|v| v.parse().ok()),
+                    n.attr("formatCode"),
+                ) {
                     codigos.insert(id, c.to_string());
                 }
             }
         }
         let base = Fuente::default();
-        let mut fuentes: Vec<Fuente> =
-            hoja.hijo("fonts").map(|f| f.hijos_de("font").map(|n| fuente_de(n, tema, &paleta, &base)).collect()).unwrap_or_default();
+        let mut fuentes: Vec<Fuente> = hoja
+            .hijo("fonts")
+            .map(|f| {
+                f.hijos_de("font")
+                    .map(|n| fuente_de(n, tema, &paleta, &base))
+                    .collect()
+            })
+            .unwrap_or_default();
         if fuentes.is_empty() {
-            fuentes.push(Fuente { nombre: Arc::from(tema.fuente_cuerpo.as_str()), ..Fuente::default() });
+            fuentes.push(Fuente {
+                nombre: Arc::from(tema.fuente_cuerpo.as_str()),
+                ..Fuente::default()
+            });
         }
-        let rellenos: Vec<Relleno> =
-            hoja.hijo("fills").map(|f| f.hijos_de("fill").map(|n| relleno_de(n, tema, &paleta)).collect()).unwrap_or_default();
-        let bordes: Vec<Borde> = hoja.hijo("borders").map(|f| f.hijos_de("border").map(|n| borde_de(n, tema, &paleta)).collect()).unwrap_or_default();
+        let rellenos: Vec<Relleno> = hoja
+            .hijo("fills")
+            .map(|f| {
+                f.hijos_de("fill")
+                    .map(|n| relleno_de(n, tema, &paleta))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let bordes: Vec<Borde> = hoja
+            .hijo("borders")
+            .map(|f| {
+                f.hijos_de("border")
+                    .map(|n| borde_de(n, tema, &paleta))
+                    .collect()
+            })
+            .unwrap_or_default();
         let mut formatos = Formatos::default();
         let mut xfs = Vec::new();
         if let Some(cx) = hoja.hijo("cellXfs") {
@@ -582,9 +688,27 @@ impl Estilos {
             .and_then(|x| x.attr("fontId"))
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(0);
-        let fuente_normal = fuentes.get(normal).or(fuentes.first()).cloned().unwrap_or_default();
-        let tam_por_xf = xfs.iter().map(|x| fuentes.get(x.fuente as usize).map_or(fuente_normal.tam, |f| f.tam)).collect();
-        let dxfs: Vec<Dxf> = hoja.hijo("dxfs").map(|d| d.hijos_de("dxf").map(|n| dxf_de(n, tema, &paleta)).collect()).unwrap_or_default();
+        let fuente_normal = fuentes
+            .get(normal)
+            .or(fuentes.first())
+            .cloned()
+            .unwrap_or_default();
+        let tam_por_xf = xfs
+            .iter()
+            .map(|x| {
+                fuentes
+                    .get(x.fuente as usize)
+                    .map_or(fuente_normal.tam, |f| f.tam)
+            })
+            .collect();
+        let dxfs: Vec<Dxf> = hoja
+            .hijo("dxfs")
+            .map(|d| {
+                d.hijos_de("dxf")
+                    .map(|n| dxf_de(n, tema, &paleta))
+                    .collect()
+            })
+            .unwrap_or_default();
         // Estilos de tabla propios: cada elemento apunta a un dxf.
         let mut estilos_tabla = HashMap::new();
         if let Some(ts) = hoja.hijo("tableStyles") {
@@ -594,10 +718,18 @@ impl Estilos {
                 };
                 let mut e = EstiloTabla::default();
                 for el in t.hijos_de("tableStyleElement") {
-                    let Some(d) = el.attr("dxfId").and_then(|v| v.parse::<usize>().ok()).and_then(|i| dxfs.get(i)) else {
+                    let Some(d) = el
+                        .attr("dxfId")
+                        .and_then(|v| v.parse::<usize>().ok())
+                        .and_then(|i| dxfs.get(i))
+                    else {
                         continue;
                     };
-                    let tam = el.attr("size").and_then(|v| v.parse::<u32>().ok()).unwrap_or(1).max(1);
+                    let tam = el
+                        .attr("size")
+                        .and_then(|v| v.parse::<u32>().ok())
+                        .unwrap_or(1)
+                        .max(1);
                     match el.attr("type").unwrap_or("") {
                         "wholeTable" => e.todo = Some(d.clone()),
                         "headerRow" => e.encabezado = Some(d.clone()),
@@ -617,7 +749,18 @@ impl Estilos {
                 estilos_tabla.insert(nombre.to_string(), e);
             }
         }
-        Estilos { fuentes, rellenos, bordes, xfs, paleta, fuente_normal, tam_por_xf, formatos, dxfs, estilos_tabla }
+        Estilos {
+            fuentes,
+            rellenos,
+            bordes,
+            xfs,
+            paleta,
+            fuente_normal,
+            tam_por_xf,
+            formatos,
+            dxfs,
+            estilos_tabla,
+        }
     }
 
     pub fn xf(&self, i: u32) -> &Xf {
@@ -625,15 +768,23 @@ impl Estilos {
     }
 
     pub fn fuente(&self, xf: &Xf) -> &Fuente {
-        self.fuentes.get(xf.fuente as usize).unwrap_or(&self.fuente_normal)
+        self.fuentes
+            .get(xf.fuente as usize)
+            .unwrap_or(&self.fuente_normal)
     }
 
     pub fn relleno(&self, xf: &Xf) -> Relleno {
-        self.rellenos.get(xf.relleno as usize).copied().unwrap_or_default()
+        self.rellenos
+            .get(xf.relleno as usize)
+            .copied()
+            .unwrap_or_default()
     }
 
     pub fn borde(&self, xf: &Xf) -> Borde {
-        self.bordes.get(xf.borde as usize).copied().unwrap_or_default()
+        self.bordes
+            .get(xf.borde as usize)
+            .copied()
+            .unwrap_or_default()
     }
 }
 
@@ -663,13 +814,22 @@ fn relleno_de(n: &Nodo, tema: &Tema, paleta: &[u32]) -> Relleno {
     }
     if let Some(g) = n.hijo("gradientFill") {
         // Degradado: su color medio.
-        let cs: Vec<Rgb> = g.hijos_de("stop").filter_map(|s| s.hijo("color").and_then(|c| color_de(c, tema, paleta))).collect();
+        let cs: Vec<Rgb> = g
+            .hijos_de("stop")
+            .filter_map(|s| s.hijo("color").and_then(|c| color_de(c, tema, paleta)))
+            .collect();
         if cs.is_empty() {
             return Relleno::Nada;
         }
         let n = cs.len() as u32;
-        let s = cs.iter().fold((0u32, 0u32, 0u32), |a, c| (a.0 + c.r as u32, a.1 + c.g as u32, a.2 + c.b as u32));
-        return Relleno::Liso(Rgb { r: (s.0 / n) as u8, g: (s.1 / n) as u8, b: (s.2 / n) as u8 });
+        let s = cs.iter().fold((0u32, 0u32, 0u32), |a, c| {
+            (a.0 + c.r as u32, a.1 + c.g as u32, a.2 + c.b as u32)
+        });
+        return Relleno::Liso(Rgb {
+            r: (s.0 / n) as u8,
+            g: (s.1 / n) as u8,
+            b: (s.2 / n) as u8,
+        });
     }
     Relleno::Nada
 }
@@ -680,7 +840,10 @@ fn borde_de(n: &Nodo, tema: &Tema, paleta: &[u32]) -> Borde {
             if let Some(h) = n.hijo(nombre) {
                 let estilo = EstiloLinea::de(h.attr("style").unwrap_or(""));
                 if estilo != EstiloLinea::Ninguno {
-                    let color = h.hijo("color").and_then(|c| color_de(c, tema, paleta)).unwrap_or(Rgb::NEGRO);
+                    let color = h
+                        .hijo("color")
+                        .and_then(|c| color_de(c, tema, paleta))
+                        .unwrap_or(Rgb::NEGRO);
                     return Linea { estilo, color };
                 }
             }
@@ -699,10 +862,19 @@ fn borde_de(n: &Nodo, tema: &Tema, paleta: &[u32]) -> Borde {
     }
 }
 
-fn xf_de(n: &Nodo, codigos: &HashMap<u32, String>, formatos: &mut Formatos, regional: &Regional) -> Xf {
+fn xf_de(
+    n: &Nodo,
+    codigos: &HashMap<u32, String>,
+    formatos: &mut Formatos,
+    regional: &Regional,
+) -> Xf {
     let num = |a: &str| n.attr(a).and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
     let id = num("numFmtId");
-    let codigo = codigos.get(&id).map(String::as_str).or_else(|| formato::integrado(id)).unwrap_or("General");
+    let codigo = codigos
+        .get(&id)
+        .map(String::as_str)
+        .or_else(|| formato::integrado(id))
+        .unwrap_or("General");
     let formato = formatos.obtener(codigo, regional);
     let mut al = Alineacion::default();
     if let Some(a) = n.hijo("alignment") {
@@ -726,8 +898,16 @@ fn xf_de(n: &Nodo, codigos: &HashMap<u32, String>, formatos: &mut Formatos, regi
         let si = |k: &str| a.attr(k).is_some_and(|v| v == "1" || v == "true");
         al.ajustar = si("wrapText");
         al.encoger = si("shrinkToFit");
-        al.sangria = a.attr("indent").and_then(|v| v.parse::<u32>().ok()).unwrap_or(0).min(250) as u8;
-        al.giro = a.attr("textRotation").and_then(|v| v.parse::<u32>().ok()).unwrap_or(0).min(255) as u16;
+        al.sangria = a
+            .attr("indent")
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0)
+            .min(250) as u8;
+        al.giro = a
+            .attr("textRotation")
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0)
+            .min(255) as u16;
     }
     Xf {
         formato,
@@ -735,7 +915,9 @@ fn xf_de(n: &Nodo, codigos: &HashMap<u32, String>, formatos: &mut Formatos, regi
         relleno: num("fillId"),
         borde: num("borderId"),
         alineacion: al,
-        comilla: n.attr("quotePrefix").is_some_and(|v| v == "1" || v == "true"),
+        comilla: n
+            .attr("quotePrefix")
+            .is_some_and(|v| v == "1" || v == "true"),
     }
 }
 
@@ -748,9 +930,19 @@ mod pruebas {
         let azul = Rgb::de_u32(0x4472C4);
         // «Accent1, lighter 80%» de Excel es D9E1F2 (con margen de redondeo).
         let claro = con_matiz(azul, 0.7999816888943144);
-        assert!((claro.r as i32 - 0xD9).abs() <= 2 && (claro.g as i32 - 0xE1).abs() <= 2 && (claro.b as i32 - 0xF2).abs() <= 2, "{claro:?}");
+        assert!(
+            (claro.r as i32 - 0xD9).abs() <= 2
+                && (claro.g as i32 - 0xE1).abs() <= 2
+                && (claro.b as i32 - 0xF2).abs() <= 2,
+            "{claro:?}"
+        );
         let oscuro = con_matiz(azul, -0.249977111117893);
-        assert!((oscuro.r as i32 - 0x30).abs() <= 2 && (oscuro.g as i32 - 0x54).abs() <= 2 && (oscuro.b as i32 - 0x96).abs() <= 2, "{oscuro:?}");
+        assert!(
+            (oscuro.r as i32 - 0x30).abs() <= 2
+                && (oscuro.g as i32 - 0x54).abs() <= 2
+                && (oscuro.b as i32 - 0x96).abs() <= 2,
+            "{oscuro:?}"
+        );
     }
 
     #[test]
@@ -762,10 +954,20 @@ mod pruebas {
         <cellXfs><xf/><xf numFmtId="164" fontId="1" fillId="2" borderId="1"><alignment horizontal="center" wrapText="1" textRotation="135"/></xf></cellXfs></styleSheet>"#;
         let e = Estilos::leer(x, &Tema::default(), &Regional::en_us());
         let xf = e.xf(1);
-        assert_eq!(xf.formato.numero(1.0, false, &Regional::en_us()).texto, "1.000");
+        assert_eq!(
+            xf.formato.numero(1.0, false, &Regional::en_us()).texto,
+            "1.000"
+        );
         assert!(e.fuente(xf).negrita);
         assert_eq!(e.fuente(xf).color, Some(Rgb::de_u32(0x4472C4)));
-        assert_eq!(e.relleno(xf), Relleno::Liso(Rgb { r: 255, g: 255, b: 0 }));
+        assert_eq!(
+            e.relleno(xf),
+            Relleno::Liso(Rgb {
+                r: 255,
+                g: 255,
+                b: 0
+            })
+        );
         assert_eq!(e.borde(xf).abajo.estilo, EstiloLinea::Doble);
         assert_eq!(e.borde(xf).izquierda.color, Rgb::NEGRO);
         assert!(xf.alineacion.ajustar);

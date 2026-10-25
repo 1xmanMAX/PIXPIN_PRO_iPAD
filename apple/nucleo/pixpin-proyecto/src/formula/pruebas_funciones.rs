@@ -406,7 +406,10 @@ fn aleatorio_entre_queda_entre_los_limites() {
     // un calculo, cada celda se calcula una vez.
     let mut t = Tabla::default();
     for fila in 1..=60 {
-        t.poner(ref_de(&format!("A{fila}")).unwrap(), "=ALEATORIO.ENTRE(1;6)");
+        t.poner(
+            ref_de(&format!("A{fila}")).unwrap(),
+            "=ALEATORIO.ENTRE(1;6)",
+        );
         t.poner(ref_de(&format!("B{fila}")).unwrap(), "=ALEATORIO()");
     }
     let v = evaluar_todo(&t);
@@ -430,7 +433,11 @@ fn aleatorio_entre_queda_entre_los_limites() {
     assert_eq!(f("ALEATORIO.ENTRE(6;1)"), "#¡NUM!");
     assert_eq!(f("ALEATORIO.ENTRE(1)"), "#¡VALOR!");
     assert_eq!(f("ALEATORIO(1)"), "#¡VALOR!");
-    assert_eq!(f("RANDBETWEEN(2.2;2.8)"), "#¡NUM!", "no hay enteros entre 3 y 2");
+    assert_eq!(
+        f("RANDBETWEEN(2.2;2.8)"),
+        "#¡NUM!",
+        "no hay enteros entre 3 y 2"
+    );
 }
 
 // ---- Recuentos y criterios ---------------------------------------------
@@ -453,7 +460,10 @@ fn contara_y_contar_blanco() {
         d,
     );
     // Un texto vacio devuelto por una formula tambien es blanco.
-    assert_eq!(fc(&[("A1", "=\"\""), ("A2", "1")], "CONTAR.BLANCO(A1:A3)"), "2");
+    assert_eq!(
+        fc(&[("A1", "=\"\""), ("A2", "1")], "CONTAR.BLANCO(A1:A3)"),
+        "2"
+    );
     assert_eq!(fc(&[("A1", "=\"\""), ("A2", "1")], "CONTARA(A1:A3)"), "1");
     // Negativos.
     assert_eq!(f("CONTARA()"), "#¡VALOR!");
@@ -618,7 +628,14 @@ fn buscarv_exacta_y_aproximada() {
 
 #[test]
 fn buscarv_con_columna_desordenada_para_en_el_primero_que_se_pasa() {
-    let t = [("A1", "5"), ("A2", "50"), ("A3", "7"), ("B1", "a"), ("B2", "b"), ("B3", "c")];
+    let t = [
+        ("A1", "5"),
+        ("A2", "50"),
+        ("A3", "7"),
+        ("B1", "a"),
+        ("B2", "b"),
+        ("B3", "c"),
+    ];
     // Con 8: el 5 vale, el 50 se pasa y se para (el 7, detras, no cuenta).
     assert_eq!(fc(&t, "BUSCARV(8;A1:B3;2;1)"), "a");
 }
@@ -828,7 +845,13 @@ fn mayusculas_minusculas_nombre_propio_y_espacios() {
         ],
         f,
     );
-    for malo in ["MAYUSC()", "MINUSC(\"a\";\"b\")", "NOMPROPIO()", "ESPACIOS()", "MAYUSC(1/0)"] {
+    for malo in [
+        "MAYUSC()",
+        "MINUSC(\"a\";\"b\")",
+        "NOMPROPIO()",
+        "ESPACIOS()",
+        "MAYUSC(1/0)",
+    ] {
         assert!(f(malo).starts_with('#'), "{malo}");
     }
 }
@@ -921,7 +944,10 @@ fn texto_da_formato_a_fechas() {
             ("TEXTO(46306;\"mmmm\")", "octubre"),
             ("TEXTO(46306;\"mmm\")", "oct"),
             ("TEXTO(46306;\"dddd\")", "domingo"),
-            ("TEXTO(36526;\"dddd d \"\"de\"\" mmmm\")", "sábado 1 de enero"),
+            (
+                "TEXTO(36526;\"dddd d \"\"de\"\" mmmm\")",
+                "sábado 1 de enero",
+            ),
             ("TEXTO(0.75;\"hh:mm\")", "18:00"),
             ("TEXTO(0.5;\"h:mm AM/PM\")", "12:00 PM"),
             ("TEXTO(0.25;\"hh:mm:ss\")", "06:00:00"),
@@ -1034,7 +1060,11 @@ fn fechas_con_el_serial_de_excel() {
 fn hoy_y_ahora_usan_el_reloj_del_calculo() {
     // 11-oct-2026 15:30 en hora local.
     let ms = (46306 - 25569) as i64 * 86_400_000 + 15 * 3_600_000 + 30 * 60_000;
-    let t = tabla(&[("A1", "=HOY()"), ("A2", "=AHORA()"), ("A3", "=ENTERO(AHORA())=HOY()")]);
+    let t = tabla(&[
+        ("A1", "=HOY()"),
+        ("A2", "=AHORA()"),
+        ("A3", "=ENTERO(AHORA())=HOY()"),
+    ]);
     let mut m = Memoria {
         ahora_ms: Some(ms),
         ..Default::default()
@@ -1120,7 +1150,10 @@ fn el_nombre_en_ingles_da_lo_mismo_que_en_espanol() {
         ("SI(1>0;\"a\";\"b\")", "IF(1>0,\"a\",\"b\")"),
         ("SI.ERROR(1/0;7)", "IFERROR(1/0,7)"),
         ("CONTAR.SI(A1:A5;\">15\")", "COUNTIF(A1:A5,\">15\")"),
-        ("SUMAR.SI(A1:A5;\">15\";B1:B5)", "SUMIF(A1:A5,\">15\",B1:B5)"),
+        (
+            "SUMAR.SI(A1:A5;\">15\";B1:B5)",
+            "SUMIF(A1:A5,\">15\",B1:B5)",
+        ),
         ("BUSCARV(20;H1:J4;2;0)", "VLOOKUP(20,H1:J4,2,0)"),
         ("INDICE(H1:J4;2;2)", "INDEX(H1:J4,2,2)"),
         ("COINCIDIR(30;H1:H4;0)", "MATCH(30,H1:H4,0)"),
@@ -1166,7 +1199,10 @@ fn formulas_a_medias_y_basura_siguen_siendo_error() {
         "5%%%%%%%%%%%%%%%%%%%% 3",
     ] {
         let r = f(mala);
-        assert!(r.starts_with('#'), "«={mala}» tendria que ser un error y dio «{r}»");
+        assert!(
+            r.starts_with('#'),
+            "«={mala}» tendria que ser un error y dio «{r}»"
+        );
     }
     // Los anidamientos de diez mil parentesis no revientan la pila.
     let hondo = format!("{}1{}", "(".repeat(10_000), ")".repeat(10_000));
@@ -1333,7 +1369,10 @@ fn una_hoja_de_2000_formulas_se_recalcula_en_menos_de_50_ms() {
     let t = hoja_grande();
     let (mejor, v) = tiempo_de_recalcular(&t);
     // Que la hoja de verdad calcule: ni un error en las 2 000.
-    let errores: Vec<_> = v.iter().filter(|(_, v)| matches!(v, Valor::Error(_))).collect();
+    let errores: Vec<_> = v
+        .iter()
+        .filter(|(_, v)| matches!(v, Valor::Error(_)))
+        .collect();
     assert!(errores.is_empty(), "{errores:?}");
     assert_eq!(v["K10"], Valor::Numero(3.0), "A10=30 y su C es 10%7=3");
     assert_eq!(v["R1"].to_string(), "03/01/2026");

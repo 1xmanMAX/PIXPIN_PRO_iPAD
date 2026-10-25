@@ -36,7 +36,11 @@ impl Presentacion {
     pub fn notas(&mut self, n: usize) -> Option<String> {
         let ruta = self.diapositivas.get(n)?.clone();
         let rels = self.paquete.relaciones(&ruta);
-        let destino = rels.values().find(|r| r.tipo == "notesSlide" && !r.externa)?.destino.clone();
+        let destino = rels
+            .values()
+            .find(|r| r.tipo == "notesSlide" && !r.externa)?
+            .destino
+            .clone();
         notas_de(&self.paquete.xml(&destino)?)
     }
 
@@ -48,8 +52,12 @@ impl Presentacion {
 
     /// Los videos y audios de la diapositiva `n`, con su caja en puntos.
     pub fn medios(&mut self, n: usize) -> Vec<Medio> {
-        let Some(ruta) = self.diapositivas.get(n).cloned() else { return Vec::new() };
-        let Some(raiz) = self.paquete.xml(&ruta) else { return Vec::new() };
+        let Some(ruta) = self.diapositivas.get(n).cloned() else {
+            return Vec::new();
+        };
+        let Some(raiz) = self.paquete.xml(&ruta) else {
+            return Vec::new();
+        };
         let rels = self.paquete.relaciones(&ruta);
         let mut v = Vec::new();
         if let Some(arbol) = raiz.hijo("cSld").and_then(|c| c.hijo("spTree")) {
@@ -71,12 +79,17 @@ impl Presentacion {
 pub fn notas_de(raiz: &Nodo) -> Option<String> {
     let arbol = raiz.hijo("cSld").and_then(|c| c.hijo("spTree"))?;
     for sp in arbol.elementos().filter(|e| e.nombre == "sp") {
-        let ph = sp.hijo("nvSpPr").and_then(|n| n.hijo("nvPr")).and_then(|n| n.hijo("ph"));
+        let ph = sp
+            .hijo("nvSpPr")
+            .and_then(|n| n.hijo("nvPr"))
+            .and_then(|n| n.hijo("ph"));
         let Some(ph) = ph else { continue };
         if !matches!(ph.atributo("type"), "" | "body") {
             continue;
         }
-        let Some(tx) = sp.hijo("txBody") else { continue };
+        let Some(tx) = sp.hijo("txBody") else {
+            continue;
+        };
         let mut lineas: Vec<String> = Vec::new();
         for p in tx.elementos().filter(|e| e.nombre == "p") {
             let mut linea = String::new();
@@ -136,7 +149,11 @@ impl Sentido {
                 _ => return Sentido::IZQUIERDA,
             }
         }
-        if s.dx == 0 && s.dy == 0 { Sentido::IZQUIERDA } else { s }
+        if s.dx == 0 && s.dy == 0 {
+            Sentido::IZQUIERDA
+        } else {
+            s
+        }
     }
 }
 
@@ -144,8 +161,12 @@ impl Sentido {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Efecto {
     /// Sin efecto: la nueva de golpe (o tras un instante en negro).
-    Corte { por_negro: bool },
-    Fundido { por_negro: bool },
+    Corte {
+        por_negro: bool,
+    },
+    Fundido {
+        por_negro: bool,
+    },
     /// La vieja sale y la nueva entra empujandola.
     Empuje(Sentido),
     /// La nueva aparece en su sitio tras un borde que barre.
@@ -193,12 +214,15 @@ pub fn transicion_de(sld: &Nodo) -> Option<Transicion> {
         return None;
     }
     let tiene_efecto = candidatas.iter().any(|t| efecto_de(t).is_some());
-    let efecto = candidatas.iter().find_map(|t| efecto_de(t).and_then(conocido)).unwrap_or(if tiene_efecto {
-        // Una que no se sabe pintar (prisma, vortice...): como fundido.
-        Efecto::Fundido { por_negro: false }
-    } else {
-        Efecto::Corte { por_negro: false }
-    });
+    let efecto = candidatas
+        .iter()
+        .find_map(|t| efecto_de(t).and_then(conocido))
+        .unwrap_or(if tiene_efecto {
+            // Una que no se sabe pintar (prisma, vortice...): como fundido.
+            Efecto::Fundido { por_negro: false }
+        } else {
+            Efecto::Corte { por_negro: false }
+        });
     let ms = match efecto {
         Efecto::Corte { por_negro: false } => 0,
         _ => candidatas
@@ -207,15 +231,26 @@ pub fn transicion_de(sld: &Nodo) -> Option<Transicion> {
             .unwrap_or_else(|| ms_de_velocidad(candidatas[0].atributo("spd")))
             .min(MS_MAXIMO),
     };
-    let avance_ms = candidatas.iter().find_map(|t| ms_valido(t.atributo("advTm"))).map(|m| m.min(AVANCE_MAXIMO));
-    let avance_clic = !candidatas.iter().any(|t| matches!(t.atributo("advClick"), "0" | "false"));
-    Some(Transicion { efecto, ms, avance_ms, avance_clic })
+    let avance_ms = candidatas
+        .iter()
+        .find_map(|t| ms_valido(t.atributo("advTm")))
+        .map(|m| m.min(AVANCE_MAXIMO));
+    let avance_clic = !candidatas
+        .iter()
+        .any(|t| matches!(t.atributo("advClick"), "0" | "false"));
+    Some(Transicion {
+        efecto,
+        ms,
+        avance_ms,
+        avance_clic,
+    })
 }
 
 /// El elemento del efecto: el primer hijo que no es el sonido ni una
 /// extension.
 fn efecto_de(t: &Nodo) -> Option<&Nodo> {
-    t.elementos().find(|e| !matches!(e.nombre.as_str(), "sndAc" | "extLst"))
+    t.elementos()
+        .find(|e| !matches!(e.nombre.as_str(), "sndAc" | "extLst"))
 }
 
 /// El efecto, si es de los que se pintan tal cual.
@@ -298,15 +333,30 @@ const ENTERA: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
 impl Capa {
     fn entera(fuente: Fuente, alfa: f32) -> Capa {
-        Capa { fuente, origen: ENTERA, destino: ENTERA, alfa }
+        Capa {
+            fuente,
+            origen: ENTERA,
+            destino: ENTERA,
+            alfa,
+        }
     }
 
     fn movida(fuente: Fuente, dx: f32, dy: f32) -> Capa {
-        Capa { fuente, origen: ENTERA, destino: [dx, dy, 1.0 + dx, 1.0 + dy], alfa: 1.0 }
+        Capa {
+            fuente,
+            origen: ENTERA,
+            destino: [dx, dy, 1.0 + dx, 1.0 + dy],
+            alfa: 1.0,
+        }
     }
 
     fn en_su_sitio(fuente: Fuente, r: [f32; 4], alfa: f32) -> Capa {
-        Capa { fuente, origen: r, destino: r, alfa }
+        Capa {
+            fuente,
+            origen: r,
+            destino: r,
+            alfa,
+        }
     }
 }
 
@@ -329,25 +379,43 @@ pub fn capas(efecto: Efecto, t: f32) -> Vec<Capa> {
                 vec![Capa::entera(Fuente::Nueva, 1.0)]
             }
         }
-        Efecto::Fundido { por_negro: false } => vec![Capa::entera(Fuente::Vieja, 1.0), Capa::entera(Fuente::Nueva, t)],
+        Efecto::Fundido { por_negro: false } => vec![
+            Capa::entera(Fuente::Vieja, 1.0),
+            Capa::entera(Fuente::Nueva, t),
+        ],
         Efecto::Fundido { por_negro: true } => {
             if t < 0.5 {
-                vec![Capa::entera(Fuente::Negro, 1.0), Capa::entera(Fuente::Vieja, 1.0 - 2.0 * t)]
+                vec![
+                    Capa::entera(Fuente::Negro, 1.0),
+                    Capa::entera(Fuente::Vieja, 1.0 - 2.0 * t),
+                ]
             } else {
-                vec![Capa::entera(Fuente::Negro, 1.0), Capa::entera(Fuente::Nueva, 2.0 * t - 1.0)]
+                vec![
+                    Capa::entera(Fuente::Negro, 1.0),
+                    Capa::entera(Fuente::Nueva, 2.0 * t - 1.0),
+                ]
             }
         }
         Efecto::Empuje(d) => {
             let (dx, dy) = (d.dx as f32, d.dy as f32);
-            vec![Capa::movida(Fuente::Vieja, dx * s, dy * s), Capa::movida(Fuente::Nueva, dx * (s - 1.0), dy * (s - 1.0))]
+            vec![
+                Capa::movida(Fuente::Vieja, dx * s, dy * s),
+                Capa::movida(Fuente::Nueva, dx * (s - 1.0), dy * (s - 1.0)),
+            ]
         }
         Efecto::Cubrir(d) => {
             let (dx, dy) = (d.dx as f32, d.dy as f32);
-            vec![Capa::entera(Fuente::Vieja, 1.0), Capa::movida(Fuente::Nueva, dx * (s - 1.0), dy * (s - 1.0))]
+            vec![
+                Capa::entera(Fuente::Vieja, 1.0),
+                Capa::movida(Fuente::Nueva, dx * (s - 1.0), dy * (s - 1.0)),
+            ]
         }
         Efecto::Descubrir(d) => {
             let (dx, dy) = (d.dx as f32, d.dy as f32);
-            vec![Capa::entera(Fuente::Nueva, 1.0), Capa::movida(Fuente::Vieja, dx * s, dy * s)]
+            vec![
+                Capa::entera(Fuente::Nueva, 1.0),
+                Capa::movida(Fuente::Vieja, dx * s, dy * s),
+            ]
         }
         Efecto::Barrido(d) => barrido(d, t),
     };
@@ -382,7 +450,11 @@ fn barrido(d: Sentido, t: f32) -> Vec<Capa> {
         let a = (e - BORDE + BORDE * k as f32 / TIRAS as f32).clamp(0.0, 1.0);
         let b = (e - BORDE + BORDE * (k + 1) as f32 / TIRAS as f32).clamp(0.0, 1.0);
         if b > a {
-            v.push(Capa::en_su_sitio(Fuente::Nueva, tramo(a, b), 1.0 - (k as f32 + 0.5) / TIRAS as f32));
+            v.push(Capa::en_su_sitio(
+                Fuente::Nueva,
+                tramo(a, b),
+                1.0 - (k as f32 + 0.5) / TIRAS as f32,
+            ));
         }
     }
     v
@@ -405,7 +477,21 @@ pub struct Medio {
 /// Extensiones de audio (para un `p14:media` que no dice si es audio).
 fn es_audio(parte: &str) -> bool {
     let ext = parte.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    matches!(ext.as_str(), "mp3" | "m4a" | "wav" | "wma" | "aac" | "aif" | "aiff" | "mid" | "midi" | "flac" | "ogg" | "opus")
+    matches!(
+        ext.as_str(),
+        "mp3"
+            | "m4a"
+            | "wav"
+            | "wma"
+            | "aac"
+            | "aif"
+            | "aiff"
+            | "mid"
+            | "midi"
+            | "flac"
+            | "ogg"
+            | "opus"
+    )
 }
 
 /// Si un `p:pic` es un video o un audio (su `nvPr` lleva el fichero), y de
@@ -428,7 +514,11 @@ pub fn medio_de(pic: &Nodo) -> Option<(String, Option<bool>)> {
             "audioFile" | "wavAudioFile" => true,
             _ => continue,
         };
-        let id = [("r", "link"), ("r", "embed")].iter().map(|(p, n)| h.atributo_con_prefijo(p, n)).find(|s| !s.is_empty()).unwrap_or("");
+        let id = [("r", "link"), ("r", "embed")]
+            .iter()
+            .map(|(p, n)| h.atributo_con_prefijo(p, n))
+            .find(|s| !s.is_empty())
+            .unwrap_or("");
         return Some((id.to_string(), Some(audio)));
     }
     None
@@ -438,12 +528,20 @@ fn recoger_medios(arbol: &Nodo, rels: &crate::paquete::Relaciones, v: &mut Vec<M
     for n in arbol.elementos() {
         match n.nombre.as_str() {
             "pic" => {
-                let Some((id, audio)) = medio_de(n) else { continue };
-                let Some(x) = n.hijo("spPr").and_then(|s| s.hijo("xfrm")).map(dml::xfrm) else { continue };
+                let Some((id, audio)) = medio_de(n) else {
+                    continue;
+                };
+                let Some(x) = n.hijo("spPr").and_then(|s| s.hijo("xfrm")).map(dml::xfrm) else {
+                    continue;
+                };
                 let rel = rels.get(&id).filter(|r| !r.externa);
                 let parte = rel.map(|r| r.destino.clone());
                 let audio = audio.unwrap_or_else(|| parte.as_deref().is_some_and(es_audio));
-                v.push(Medio { rect: Rect::nuevo(x.x, x.y, x.ancho, x.alto), parte, audio });
+                v.push(Medio {
+                    rect: Rect::nuevo(x.x, x.y, x.ancho, x.alto),
+                    parte,
+                    audio,
+                });
             }
             "AlternateContent" => {
                 if let Some(r) = n.hijo("Choice").or_else(|| n.hijo("Fallback")) {
@@ -459,7 +557,9 @@ fn recoger_medios(arbol: &Nodo, rels: &crate::paquete::Relaciones, v: &mut Vec<M
 /// audio (`ancho` x `alto` en puntos, en el origen): un circulo oscuro
 /// translucido con el triangulo blanco.
 pub fn icono_reproducir(ancho: f32, alto: f32) -> Vec<Elemento> {
-    let d = (ancho.min(alto) * 0.3).clamp(14.0, 72.0).min(ancho.min(alto));
+    let d = (ancho.min(alto) * 0.3)
+        .clamp(14.0, 72.0)
+        .min(ancho.min(alto));
     if d <= 0.0 || !d.is_finite() {
         return Vec::new();
     }
@@ -482,14 +582,25 @@ pub fn icono_reproducir(ancho: f32, alto: f32) -> Vec<Elemento> {
     let l = r * 0.5;
     let triangulo = Figura {
         inicio: (cx - l * 0.7, cy - l),
-        tramos: vec![Tramo::Linea(cx + l * 1.1, cy), Tramo::Linea(cx - l * 0.7, cy + l)],
+        tramos: vec![
+            Tramo::Linea(cx + l * 1.1, cy),
+            Tramo::Linea(cx - l * 0.7, cy + l),
+        ],
         cerrada: true,
         rellenar: true,
         ..Default::default()
     };
     vec![
-        Elemento::Trayecto { figuras: vec![circulo], relleno: Some(Relleno::Solido(Color::NEGRO.con_alfa(0.55))), borde: None },
-        Elemento::Trayecto { figuras: vec![triangulo], relleno: Some(Relleno::Solido(Color::BLANCO)), borde: None },
+        Elemento::Trayecto {
+            figuras: vec![circulo],
+            relleno: Some(Relleno::Solido(Color::NEGRO.con_alfa(0.55))),
+            borde: None,
+        },
+        Elemento::Trayecto {
+            figuras: vec![triangulo],
+            relleno: Some(Relleno::Solido(Color::BLANCO)),
+            borde: None,
+        },
     ]
 }
 
@@ -504,7 +615,9 @@ mod pruebas {
     const NS: &str = r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main""#;
 
     fn sld(dentro: &str) -> Nodo {
-        xml(&format!(r#"<p:sld {NS}><p:cSld><p:spTree/></p:cSld>{dentro}</p:sld>"#))
+        xml(&format!(
+            r#"<p:sld {NS}><p:cSld><p:spTree/></p:cSld>{dentro}</p:sld>"#
+        ))
     }
 
     #[test]
@@ -517,7 +630,10 @@ mod pruebas {
             <p:sp><p:nvSpPr><p:cNvPr id="4" name="S"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" idx="5"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:fld type="slidenum"><a:t>3</a:t></a:fld></a:p></p:txBody></p:sp>
             </p:spTree></p:cSld></p:notes>"#
         ));
-        assert_eq!(notas_de(&n).as_deref(), Some("Saludar al publico\nLuego\nla cifra"));
+        assert_eq!(
+            notas_de(&n).as_deref(),
+            Some("Saludar al publico\nLuego\nla cifra")
+        );
     }
 
     #[test]
@@ -532,7 +648,10 @@ mod pruebas {
 
     #[test]
     fn una_transicion_sencilla_con_su_direccion_y_su_velocidad() {
-        let t = transicion_de(&sld(r#"<p:transition spd="slow"><p:push dir="u"/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition spd="slow"><p:push dir="u"/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.efecto, Efecto::Empuje(Sentido { dx: 0, dy: -1 }));
         assert_eq!(t.ms, 1000);
         assert_eq!(t.avance_ms, None);
@@ -541,12 +660,18 @@ mod pruebas {
         let t = transicion_de(&sld(r#"<p:transition><p:wipe/></p:transition>"#)).unwrap();
         assert_eq!(t.efecto, Efecto::Barrido(Sentido::IZQUIERDA));
         assert_eq!(t.ms, 500);
-        let t = transicion_de(&sld(r#"<p:transition spd="med"><p:cover dir="rd"/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition spd="med"><p:cover dir="rd"/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.efecto, Efecto::Cubrir(Sentido { dx: 1, dy: 1 }));
         assert_eq!(t.ms, 750);
         let t = transicion_de(&sld(r#"<p:transition><p:pull dir="r"/></p:transition>"#)).unwrap();
         assert_eq!(t.efecto, Efecto::Descubrir(Sentido { dx: 1, dy: 0 }));
-        let t = transicion_de(&sld(r#"<p:transition><p:fade thruBlk="1"/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition><p:fade thruBlk="1"/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.efecto, Efecto::Fundido { por_negro: true });
     }
 
@@ -562,7 +687,10 @@ mod pruebas {
         assert_eq!(t.ms, 2000);
         assert_eq!(t.avance_ms, Some(3000));
         // Una desconocida sin respaldo, tambien fundido.
-        let t = transicion_de(&sld(r#"<p:transition><p14:vortex dir="r"/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition><p14:vortex dir="r"/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.efecto, Efecto::Fundido { por_negro: false });
         // Un empuje en la rama nueva se respeta.
         let t = transicion_de(&sld(
@@ -575,17 +703,30 @@ mod pruebas {
 
     #[test]
     fn un_dur_absurdo_se_recorta_o_se_ignora() {
-        let t = transicion_de(&sld(r#"<p:transition p14:dur="99999999999"><p:fade/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition p14:dur="99999999999"><p:fade/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.ms, MS_MAXIMO);
-        let t = transicion_de(&sld(r#"<p:transition spd="med" p14:dur="-5"><p:fade/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition spd="med" p14:dur="-5"><p:fade/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.ms, 750, "negativo: cuenta la velocidad");
-        let t = transicion_de(&sld(r#"<p:transition p14:dur="NaN" advTm="mucho"><p:fade/></p:transition>"#)).unwrap();
+        let t = transicion_de(&sld(
+            r#"<p:transition p14:dur="NaN" advTm="mucho"><p:fade/></p:transition>"#,
+        ))
+        .unwrap();
         assert_eq!(t.ms, 500);
         assert_eq!(t.avance_ms, None);
         let t = transicion_de(&sld(r#"<p:transition advTm="1e30" advClick="0"/>"#)).unwrap();
         assert_eq!(t.avance_ms, Some(AVANCE_MAXIMO));
         assert!(!t.avance_clic);
-        assert_eq!(t.efecto, Efecto::Corte { por_negro: false }, "sin efecto, un corte");
+        assert_eq!(
+            t.efecto,
+            Efecto::Corte { por_negro: false },
+            "sin efecto, un corte"
+        );
         assert_eq!(t.ms, 0);
     }
 
@@ -618,16 +759,34 @@ mod pruebas {
             Efecto::Descubrir(Sentido::IZQUIERDA),
         ];
         for e in todas {
-            assert_eq!(capas(e, 0.0), vec![Capa::entera(Fuente::Vieja, 1.0)], "{e:?}");
-            assert_eq!(capas(e, 1.0), vec![Capa::entera(Fuente::Nueva, 1.0)], "{e:?}");
-            assert_eq!(capas(e, f32::NAN), vec![Capa::entera(Fuente::Vieja, 1.0)], "{e:?}");
+            assert_eq!(
+                capas(e, 0.0),
+                vec![Capa::entera(Fuente::Vieja, 1.0)],
+                "{e:?}"
+            );
+            assert_eq!(
+                capas(e, 1.0),
+                vec![Capa::entera(Fuente::Nueva, 1.0)],
+                "{e:?}"
+            );
+            assert_eq!(
+                capas(e, f32::NAN),
+                vec![Capa::entera(Fuente::Vieja, 1.0)],
+                "{e:?}"
+            );
             for c in capas(e, 0.4) {
                 assert!(c.alfa > 0.0 && c.alfa <= 1.0, "{e:?} {c:?}");
             }
         }
         // Un corte por negro: negro la primera mitad.
-        assert_eq!(capas(Efecto::Corte { por_negro: true }, 0.2)[0].fuente, Fuente::Negro);
-        assert_eq!(capas(Efecto::Corte { por_negro: false }, 0.0)[0].fuente, Fuente::Nueva);
+        assert_eq!(
+            capas(Efecto::Corte { por_negro: true }, 0.2)[0].fuente,
+            Fuente::Negro
+        );
+        assert_eq!(
+            capas(Efecto::Corte { por_negro: false }, 0.0)[0].fuente,
+            Fuente::Nueva
+        );
     }
 
     #[test]
@@ -636,8 +795,14 @@ mod pruebas {
         assert_eq!(c.len(), 2);
         let (vieja, nueva) = (c[0], c[1]);
         assert_eq!(vieja.fuente, Fuente::Vieja);
-        assert!((vieja.destino[0] + 0.5).abs() < 1e-6, "la vieja a media salida: {vieja:?}");
-        assert!((nueva.destino[0] - 0.5).abs() < 1e-6, "la nueva a media entrada: {nueva:?}");
+        assert!(
+            (vieja.destino[0] + 0.5).abs() < 1e-6,
+            "la vieja a media salida: {vieja:?}"
+        );
+        assert!(
+            (nueva.destino[0] - 0.5).abs() < 1e-6,
+            "la nueva a media entrada: {nueva:?}"
+        );
         // El fundido va lineal: a la mitad, la nueva a medias.
         let f = capas(Efecto::Fundido { por_negro: false }, 0.5);
         assert!((f[1].alfa - 0.5).abs() < 1e-6);
@@ -646,9 +811,18 @@ mod pruebas {
     #[test]
     fn el_barrido_hacia_la_izquierda_destapa_desde_la_derecha() {
         let c = capas(Efecto::Barrido(Sentido::IZQUIERDA), 0.5);
-        let llena = c.iter().find(|c| c.fuente == Fuente::Nueva && c.alfa == 1.0).unwrap();
-        assert!((llena.destino[2] - 1.0).abs() < 1e-6, "pegada a la derecha: {llena:?}");
-        assert!(llena.destino[0] > 0.4 && llena.destino[0] < 0.6, "{llena:?}");
+        let llena = c
+            .iter()
+            .find(|c| c.fuente == Fuente::Nueva && c.alfa == 1.0)
+            .unwrap();
+        assert!(
+            (llena.destino[2] - 1.0).abs() < 1e-6,
+            "pegada a la derecha: {llena:?}"
+        );
+        assert!(
+            llena.destino[0] > 0.4 && llena.destino[0] < 0.6,
+            "{llena:?}"
+        );
         assert_eq!(llena.origen, llena.destino, "en su sitio");
     }
 
@@ -658,9 +832,13 @@ mod pruebas {
             r#"<p:pic {NS}><p:nvPicPr><p:cNvPr id="4" name="V"/><p:cNvPicPr/><p:nvPr><a:videoFile r:link="rV"/><p:extLst><p:ext uri="x"><p14:media r:embed="rM"/></p:ext></p:extLst></p:nvPr></p:nvPicPr></p:pic>"#
         ));
         assert_eq!(medio_de(&video), Some(("rM".into(), None)));
-        let audio = xml(&format!(r#"<p:pic {NS}><p:nvPicPr><p:cNvPr id="4" name="A"/><p:cNvPicPr/><p:nvPr><a:audioFile r:link="rA"/></p:nvPr></p:nvPicPr></p:pic>"#));
+        let audio = xml(&format!(
+            r#"<p:pic {NS}><p:nvPicPr><p:cNvPr id="4" name="A"/><p:cNvPicPr/><p:nvPr><a:audioFile r:link="rA"/></p:nvPr></p:nvPicPr></p:pic>"#
+        ));
         assert_eq!(medio_de(&audio), Some(("rA".into(), Some(true))));
-        let foto = xml(&format!(r#"<p:pic {NS}><p:nvPicPr><p:cNvPr id="4" name="F"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr></p:pic>"#));
+        let foto = xml(&format!(
+            r#"<p:pic {NS}><p:nvPicPr><p:cNvPr id="4" name="F"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr></p:pic>"#
+        ));
         assert_eq!(medio_de(&foto), None);
         assert!(es_audio("ppt/media/media1.M4A") && !es_audio("ppt/media/media1.mp4"));
     }
@@ -670,11 +848,21 @@ mod pruebas {
         let els = icono_reproducir(200.0, 100.0);
         assert_eq!(els.len(), 2);
         for e in &els {
-            let Elemento::Trayecto { figuras, .. } = e else { panic!("{e:?}") };
+            let Elemento::Trayecto { figuras, .. } = e else {
+                panic!("{e:?}")
+            };
             for f in figuras {
-                assert!(f.inicio.0 >= 0.0 && f.inicio.0 <= 200.0 && f.inicio.1 >= 0.0 && f.inicio.1 <= 100.0);
+                assert!(
+                    f.inicio.0 >= 0.0
+                        && f.inicio.0 <= 200.0
+                        && f.inicio.1 >= 0.0
+                        && f.inicio.1 <= 100.0
+                );
             }
         }
-        assert!(icono_reproducir(0.0, 0.0).is_empty(), "un poster sin tamano no lleva icono");
+        assert!(
+            icono_reproducir(0.0, 0.0).is_empty(),
+            "un poster sin tamano no lleva icono"
+        );
     }
 }

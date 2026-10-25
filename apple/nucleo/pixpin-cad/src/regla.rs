@@ -9,8 +9,8 @@
 //! El orden, como AutoCAD: un punto (vertice, extremo, centro), la
 //! perpendicular, el punto mas cercano de una raya o un arco; si nada, libre.
 
-use crate::modelo::{CORTE, Modelo};
 use crate::enganche::Enganches;
+use crate::modelo::{CORTE, Modelo};
 
 const LADO: usize = 256;
 const TOPE_DE_CELDAS: usize = 64;
@@ -55,7 +55,9 @@ pub fn pie_de_perpendicular(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> Option<[f6
         return None;
     }
     let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
-    (-1e-9..=1.0 + 1e-9).contains(&t).then(|| [a[0] + t * dx, a[1] + t * dy])
+    (-1e-9..=1.0 + 1e-9)
+        .contains(&t)
+        .then(|| [a[0] + t * dx, a[1] + t * dy])
 }
 
 fn dist(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -73,7 +75,11 @@ impl Rayas {
             }
             antes = v;
         }
-        let arcos = m.arcos.iter().map(|a| [a.centro[0], a.centro[1], a.radio, a.inicio, a.barrido]).collect();
+        let arcos = m
+            .arcos
+            .iter()
+            .map(|a| [a.centro[0], a.centro[1], a.radio, a.inicio, a.barrido])
+            .collect();
         Rayas::de_segmentos(m.caja, segmentos, arcos)
     }
 
@@ -81,7 +87,9 @@ impl Rayas {
         let lado = ((caja[2] - caja[0]).max(caja[3] - caja[1]) as f64).max(1e-6);
         let celda = lado / LADO as f64 * 1.0001;
         let (x0, y0) = (caja[0] as f64, caja[1] as f64);
-        let c = |v: f32, o: f64| (((v as f64 - o) / celda).floor() as i64).clamp(0, LADO as i64 - 1) as usize;
+        let c = |v: f32, o: f64| {
+            (((v as f64 - o) / celda).floor() as i64).clamp(0, LADO as i64 - 1) as usize
+        };
         let celdas_de = |s: &[f32; 4]| {
             let (i0, i1) = (c(s[0].min(s[2]), x0), c(s[0].max(s[2]), x0));
             let (j0, j1) = (c(s[1].min(s[3]), y0), c(s[1].max(s[3]), y0));
@@ -117,7 +125,16 @@ impl Rayas {
                 }
             }
         }
-        Rayas { x0, y0, celda, inicio, en_celda, grandes, segmentos, arcos }
+        Rayas {
+            x0,
+            y0,
+            celda,
+            inicio,
+            en_celda,
+            grandes,
+            segmentos,
+            arcos,
+        }
     }
 
     fn candidatos(&self, p: [f64; 2], radio: f64, mut haz: impl FnMut(usize)) {
@@ -164,13 +181,19 @@ impl Rayas {
         let mut mejor = None;
         let mut dm = radio;
         for a in &self.arcos {
-            let (c, r, a0, b) = ([a[0] as f64, a[1] as f64], a[2] as f64, a[3] as f64, a[4] as f64);
+            let (c, r, a0, b) = (
+                [a[0] as f64, a[1] as f64],
+                a[2] as f64,
+                a[3] as f64,
+                a[4] as f64,
+            );
             let d0 = dist(p, c);
             if (d0 - r).abs() > dm || d0 < 1e-12 {
                 continue;
             }
             let ang = (p[1] - c[1]).atan2(p[0] - c[0]);
-            if b < 6.2831 {
+            // Menos que una vuelta entera (con su margen de redondeo).
+            if b < std::f64::consts::TAU - 1e-4 {
                 let mut rel = ang - a0;
                 rel -= (rel / std::f64::consts::TAU).floor() * std::f64::consts::TAU;
                 if rel > b {
@@ -188,7 +211,13 @@ impl Rayas {
     }
 
     /// El enganche para la mira en `p` con el punto anterior `desde`.
-    pub fn ajustar(&self, p: [f64; 2], radio: f64, desde: Option<[f64; 2]>, puntos: Option<&Enganches>) -> ([f64; 2], Tipo) {
+    pub fn ajustar(
+        &self,
+        p: [f64; 2],
+        radio: f64,
+        desde: Option<[f64; 2]>,
+        puntos: Option<&Enganches>,
+    ) -> ([f64; 2], Tipo) {
         if let Some(q) = puntos.and_then(|g| g.cerca(p, radio)) {
             return (q, Tipo::Punto);
         }
@@ -219,7 +248,11 @@ mod pruebas {
     #[test]
     fn la_regla_se_engancha_a_la_raya_y_a_la_perpendicular() {
         // Una raya horizontal de (0,0) a (10,0) y una vertical larga de (20,-50) a (20,50).
-        let r = Rayas::de_segmentos([-1.0, -50.0, 21.0, 50.0], vec![[0.0, 0.0, 10.0, 0.0], [20.0, -50.0, 20.0, 50.0]], vec![]);
+        let r = Rayas::de_segmentos(
+            [-1.0, -50.0, 21.0, 50.0],
+            vec![[0.0, 0.0, 10.0, 0.0], [20.0, -50.0, 20.0, 50.0]],
+            vec![],
+        );
         // En mitad de la raya, sin punto anterior: se pega a la raya.
         let (q, t) = r.ajustar([4.0, 0.3], 0.5, None, None);
         assert_eq!(t, Tipo::EnLaRaya);
@@ -237,7 +270,11 @@ mod pruebas {
     #[test]
     fn tambien_se_engancha_a_un_arco() {
         // Medio circulo de radio 5 alrededor de (0,0), de 0 a π.
-        let r = Rayas::de_segmentos([-6.0, -6.0, 6.0, 6.0], vec![], vec![[0.0, 0.0, 5.0, 0.0, std::f32::consts::PI]]);
+        let r = Rayas::de_segmentos(
+            [-6.0, -6.0, 6.0, 6.0],
+            vec![],
+            vec![[0.0, 0.0, 5.0, 0.0, std::f32::consts::PI]],
+        );
         let (q, t) = r.ajustar([0.2, 5.3], 0.5, None, None);
         assert_eq!(t, Tipo::EnLaRaya);
         assert!((q[0].hypot(q[1]) - 5.0).abs() < 1e-5);

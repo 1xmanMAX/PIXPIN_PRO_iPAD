@@ -23,7 +23,9 @@ pub fn leer(ruta: &Path) -> Result<CadDocument, String> {
             .map_err(|e| e.to_string())?
             .read_with_stats();
         match estricto {
-            Ok(r) if r.stats.skipped_source_records == 0 && r.stats.stream_completed => Ok(r.document),
+            Ok(r) if r.stats.skipped_source_records == 0 && r.stats.stream_completed => {
+                Ok(r.document)
+            }
             _ => DwgReader::from_file_with_options(ruta, DwgReadOptions::failsafe())
                 .map_err(|e| e.to_string())?
                 .read()
@@ -31,9 +33,13 @@ pub fn leer(ruta: &Path) -> Result<CadDocument, String> {
         }
     } else {
         use opencadcodec::{DxfReader, DxfReaderConfiguration};
-        let estricto = DxfReader::from_file(ruta).map_err(|e| e.to_string())?.read_with_stats();
+        let estricto = DxfReader::from_file(ruta)
+            .map_err(|e| e.to_string())?
+            .read_with_stats();
         match estricto {
-            Ok(r) if r.stats.skipped_source_records == 0 && r.stats.stream_completed => Ok(r.document),
+            Ok(r) if r.stats.skipped_source_records == 0 && r.stats.stream_completed => {
+                Ok(r.document)
+            }
             _ => DxfReader::from_file(ruta)
                 .map_err(|e| e.to_string())?
                 .with_configuration(DxfReaderConfiguration {
@@ -51,7 +57,9 @@ pub fn leer(ruta: &Path) -> Result<CadDocument, String> {
 /// aparte, como al abrir.
 pub fn a_dxf(entrada: &Path, salida: &Path) -> Result<(), String> {
     let doc = leer(entrada)?;
-    opencadcodec::DxfWriter::new(&doc).write_to_file(salida).map_err(|e| e.to_string())
+    opencadcodec::DxfWriter::new(&doc)
+        .write_to_file(salida)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -61,17 +69,30 @@ mod pruebas {
     #[test]
     #[ignore = "lee los planos de muestra de E:/pixpin-cad/muestras"]
     fn lee_las_muestras() {
-        for e in std::fs::read_dir("E:/pixpin-cad/muestras").unwrap().flatten() {
+        for e in std::fs::read_dir("E:/pixpin-cad/muestras")
+            .unwrap()
+            .flatten()
+        {
             let t = std::time::Instant::now();
             match leer(&e.path()) {
                 Ok(doc) => {
                     let mut tipos = std::collections::BTreeMap::<String, usize>::new();
                     let mut n = 0;
                     for ent in doc.model_space_entities() {
-                        *tipos.entry(ent.as_entity().entity_type().to_string()).or_default() += 1;
+                        *tipos
+                            .entry(ent.as_entity().entity_type().to_string())
+                            .or_default() += 1;
                         n += 1;
                     }
-                    println!("{:?}: {:?} {} entidades, {} bloques, {:?}\n  {:?}", e.file_name(), doc.version, n, doc.block_records.iter().count(), t.elapsed(), tipos);
+                    println!(
+                        "{:?}: {:?} {} entidades, {} bloques, {:?}\n  {:?}",
+                        e.file_name(),
+                        doc.version,
+                        n,
+                        doc.block_records.iter().count(),
+                        t.elapsed(),
+                        tipos
+                    );
                 }
                 Err(err) => println!("{:?}: ERROR {err}", e.file_name()),
             }
@@ -90,27 +111,60 @@ mod volcar {
         let buscar = std::env::var("PIXPIN_CAD_BUSCAR").unwrap_or_default();
         let doc = super::leer(std::path::Path::new(&ruta)).unwrap();
         let mut n = 0;
-        let coincide = |v: &str| match buscar.strip_prefix('=') { Some(e) => crate::texto::texto_plano(v).trim() == e, None => v.contains(&buscar) };
-        let mut ver = |e: &EntityType, donde: &str| {
-            match e {
-                EntityType::MText(t) if coincide(&t.value) && n < 12 => {
-                    n += 1;
-                    println!("MTEXT[{donde}] en={:?} {:?} h={} w={} ls={} est={:?} ap={:?} rot={} dir={:?}", t.insertion_point, t.value, t.height, t.rectangle_width, t.line_spacing_factor, t.style, t.attachment_point, t.rotation, t.dwg_x_direction);
-                }
-                EntityType::Text(t) if coincide(&t.value) && n < 12 => {
-                    n += 1;
-                    println!("TEXT[{donde}] {:?} h={} wf={} est={:?} h_al={:?} v_al={:?}", t.value, t.height, t.width_factor, t.style, t.horizontal_alignment, t.vertical_alignment);
-                }
-                EntityType::Insert(ins) => {
-                    for at in &ins.attributes {
-                        if coincide(&at.value) && n < 12 {
-                            n += 1;
-                            println!("ATTRIB[{donde}] bloque={:?} esc=({},{}) rot={} en={:?} {:?} h={} rot={} ali=({:?},{:?}) mt={}", ins.block_name, ins.x_scale(), ins.y_scale(), ins.rotation, at.insertion_point, at.value, at.height, at.rotation, at.horizontal_alignment, at.vertical_alignment, at.embedded_mtext.is_some());
-                        }
+        let coincide = |v: &str| match buscar.strip_prefix('=') {
+            Some(e) => crate::texto::texto_plano(v).trim() == e,
+            None => v.contains(&buscar),
+        };
+        let mut ver = |e: &EntityType, donde: &str| match e {
+            EntityType::MText(t) if coincide(&t.value) && n < 12 => {
+                n += 1;
+                println!(
+                    "MTEXT[{donde}] en={:?} {:?} h={} w={} ls={} est={:?} ap={:?} rot={} dir={:?}",
+                    t.insertion_point,
+                    t.value,
+                    t.height,
+                    t.rectangle_width,
+                    t.line_spacing_factor,
+                    t.style,
+                    t.attachment_point,
+                    t.rotation,
+                    t.dwg_x_direction
+                );
+            }
+            EntityType::Text(t) if coincide(&t.value) && n < 12 => {
+                n += 1;
+                println!(
+                    "TEXT[{donde}] {:?} h={} wf={} est={:?} h_al={:?} v_al={:?}",
+                    t.value,
+                    t.height,
+                    t.width_factor,
+                    t.style,
+                    t.horizontal_alignment,
+                    t.vertical_alignment
+                );
+            }
+            EntityType::Insert(ins) => {
+                for at in &ins.attributes {
+                    if coincide(&at.value) && n < 12 {
+                        n += 1;
+                        println!(
+                            "ATTRIB[{donde}] bloque={:?} esc=({},{}) rot={} en={:?} {:?} h={} rot={} ali=({:?},{:?}) mt={}",
+                            ins.block_name,
+                            ins.x_scale(),
+                            ins.y_scale(),
+                            ins.rotation,
+                            at.insertion_point,
+                            at.value,
+                            at.height,
+                            at.rotation,
+                            at.horizontal_alignment,
+                            at.vertical_alignment,
+                            at.embedded_mtext.is_some()
+                        );
                     }
                 }
-                _ => {}
             }
+            _ => {}
         };
         for e in doc.model_space_entities() {
             ver(e, "modelo");
@@ -121,7 +175,10 @@ mod volcar {
             }
         }
         for s in doc.text_styles.iter() {
-            println!("ESTILO {:?} fuente={:?} big={:?} ttf={:?} alto={} ancho={}", s.name, s.font_file, s.big_font_file, s.true_type_font, s.height, s.width_factor);
+            println!(
+                "ESTILO {:?} fuente={:?} big={:?} ttf={:?} alto={} ancho={}",
+                s.name, s.font_file, s.big_font_file, s.true_type_font, s.height, s.width_factor
+            );
         }
     }
 }
@@ -175,7 +232,9 @@ mod civil_registros {
             if !vistos.insert(u.dxf_name.clone()) {
                 continue;
             }
-            let Some(g) = &u.common.graphic_data else { continue };
+            let Some(g) = &u.common.graphic_data else {
+                continue;
+            };
             let rd = |o: usize| u32::from_le_bytes(g[o..o + 4].try_into().unwrap());
             let (total, n) = (rd(0), rd(4));
             let mut o = 8;
@@ -188,7 +247,20 @@ mod civil_registros {
                 v.push(format!("{tipo}:{tam}"));
                 o += tam.max(8);
             }
-            println!("{} total={total} n={n} [{}] {:?}", u.dxf_name, v.join(" "), u.common.proxy_graphics().map(|p| p.records.iter().filter_map(|r| match r { opencadcodec::entities::ProxyGraphicRecord::UnicodeText(t) => Some(t.text.clone()), _ => None }).collect::<Vec<_>>()));
+            println!(
+                "{} total={total} n={n} [{}] {:?}",
+                u.dxf_name,
+                v.join(" "),
+                u.common.proxy_graphics().map(|p| p
+                    .records
+                    .iter()
+                    .filter_map(|r| match r {
+                        opencadcodec::entities::ProxyGraphicRecord::UnicodeText(t) =>
+                            Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>())
+            );
         }
     }
 }

@@ -441,9 +441,10 @@ pub fn instrucciones_del_plan(herramientas: &[Herramienta]) -> String {
          Lee la hoja de trabajo y el mensaje nuevo, y escribe SOLO estas cinco lineas:\n\
          ENTIENDO: que quiere el usuario, en una frase completa; si dice «eso», «otra vez» o «ahora», \
          di a que se refiere usando la hoja de trabajo.\n\
-         HARE: los pasos, en una frase.\n\
+         HARE: los pasos, en una frase. Si es cambiar algo que ya existe (agrandar, reorganizar), se edita eso, no se hace otro.\n\
          HERRAMIENTAS: las que usaras de esta lista, separadas por comas, o ninguna: {}.\n\
-         DATOS: cifras, nombres o colores concretos que haya que recordar, separados por punto y coma, o nada.\n\
+         DATOS: cifras, nombres o colores concretos que DIJO el usuario (no los inventes: nada de actividades, \
+         temas ni ejemplos que no dio), separados por punto y coma, o nada.\n\
          DECIDIDO: lo que el usuario eligio o prefiere, o nada.",
         if nombres.is_empty() {
             "ninguna".to_string()

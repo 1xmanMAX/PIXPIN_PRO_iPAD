@@ -134,13 +134,14 @@ pub fn anclajes(
 /// Un color `#rrggbb` del fichero; uno roto se pinta del primero de la lista
 /// (`parseColor` con su reserva).
 pub fn color_de(texto: &str) -> ColorRgba {
-    crate::excalidraw::color_desde(Some(&serde_json::Value::String(texto.to_string())))
-        .unwrap_or(ColorRgba {
+    crate::excalidraw::color_desde(Some(&serde_json::Value::String(texto.to_string()))).unwrap_or(
+        ColorRgba {
             r: 0xe0 as f32 / 255.0,
             g: 0x31 as f32 / 255.0,
             b: 0x31 as f32 / 255.0,
             a: 1.0,
-        })
+        },
+    )
 }
 
 /// **Lo que se pinta de las tablas.** `zoom` es el aumento de la pantalla
@@ -441,7 +442,10 @@ mod pruebas {
             id: "t".into(),
             nombre: String::new(),
             color: "#2f9e44".into(),
-            puntos: vec![PuntoDeTabla { x: 1.0, y: 2.0 }, PuntoDeTabla { x: 3.0, y: 4.0 }],
+            puntos: vec![
+                PuntoDeTabla { x: 1.0, y: 2.0 },
+                PuntoDeTabla { x: 3.0, y: 4.0 },
+            ],
             visible: true,
         };
         let o = Some(Punto2::nuevo(0.0, 0.0));
@@ -489,7 +493,10 @@ mod pruebas {
     fn pegar_csv_ingles_y_europeo_y_columnas_de_pdf() {
         assert_eq!(
             leer_tabla_pegada("1.5,2.5\n3.0,4"),
-            vec![PuntoDeTabla { x: 1.5, y: 2.5 }, PuntoDeTabla { x: 3.0, y: 4.0 }]
+            vec![
+                PuntoDeTabla { x: 1.5, y: 2.5 },
+                PuntoDeTabla { x: 3.0, y: 4.0 }
+            ]
         );
         assert_eq!(
             leer_tabla_pegada("1,5;2\n"),

@@ -27,7 +27,8 @@ impl Enganches {
         let mut puntos: Vec<[f32; 2]> = m.vertices.iter().map(|v| [v.x, v.y]).collect();
         for a in &m.arcos {
             puntos.push(a.centro);
-            if a.barrido < 6.28 {
+            // Menos que una vuelta entera (con su margen de redondeo).
+            if a.barrido < std::f32::consts::TAU - 0.003 {
                 for ang in [a.inicio, a.inicio + a.barrido] {
                     puntos.push([a.centro[0] + a.radio * ang.cos(), a.centro[1] + a.radio * ang.sin()]);
                 }

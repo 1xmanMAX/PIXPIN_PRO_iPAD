@@ -14,8 +14,20 @@
 // - Lo que borra o envia pregunta en la burbuja con «Sí» y «No»
 //   (`preguntas`); «Parar» en la barra de encima de la caja
 //   (`BarraDelAsistente`).
-// - Lo dibujado va a un lienzo del chat y, si el turno lo pide, se abre en
-//   el visor del lienzo. Con Apple Intelligence, que no pasa por Rust, la
+// - Las dudas con opciones (`preguntar_usuario`, Windows 22-oct): la
+//   tarjeta con un boton por opcion y «Otro…» (`VivoIa.eleccion`; contesta
+//   `iaElegir`, o lo siguiente que se escriba).
+// - **Escribirle mientras trabaja** (Windows, 25-oct, «como en Claude
+//   Code»): la caja sigue suelta y lo enviado con un turno en marcha va a
+//   ese turno (`iaEscribirMientrasTrabaja`), que lo lee antes de su
+//   siguiente paso; «para» a secas lo corta. La lista de pasos (o el plan
+//   del jefe) va encima del texto en vivo.
+// - **Lo cortado al cerrar PixPin** se retoma al arrancar
+//   (`iaRetomarAlArrancar`): cerrar la ventana no para el turno, que vive
+//   aqui y no en ella.
+// - Lo dibujado va a un lienzo del chat (el propio del asistente, el
+//   nombrado con `@lienzo:` o el que esta abierto al frente) y la respuesta
+//   lleva su «Abrir lienzo». Con Apple Intelligence, que no pasa por Rust, la
 //   respuesta se escribe al acabar (`iaResponder`).
 // - Las recetas: los pedidos que se repiten, como botones encima de la caja
 //   del chat «Asistente».
@@ -103,6 +115,18 @@ public final class AsistenteEnElChat: ObservableObject {
         p.responder(si)
     }
 
+    /// **Un boton de la tarjeta de opciones**: la opcion `opcion` (desde 0)
+    /// o, con `nil`, «Otro…» (lo siguiente que se escriba es la respuesta).
+    /// La burbuja cambia sola (el turno avisa por su oyente).
+    func elegir(nota: String, opcion: UInt32?, chat: String, nucleo: Nucleo) {
+        Task {
+            let hecho = await Task.detached(priority: .userInitiated) {
+                nucleo.iaElegir(chat: chat, nota: nota, opcion: opcion)
+            }.value
+            if hecho, opcion == nil { avisar("Escribe tu respuesta abajo y envíala", en: chat) }
+        }
+    }
+
     public func quitarAviso() {
         aviso = nil
         avisoDeClave = false
@@ -177,11 +201,15 @@ public final class AsistenteEnElChat: ObservableObject {
         let suyo = almacen.chats.first { $0.id == chat }?.esAsistente ?? false
         var lanzados: [Task<Void, Never>] = []
         for m in nuevos where !m.esDelAsistente && (m.clase == "NOTA" || m.clase == "IMAGEN") {
-            guard suyo || iaMencionaAlAsistente(texto: m.texto) else { continue }
+            let paraEl = suyo || iaMencionaAlAsistente(texto: m.texto)
             if ocupado(chat) {
-                avisar("El asistente aún está contestando: espera o pulsa Parar.", en: chat)
+                // Lo escrito con un turno en marcha va a ese turno (o contesta
+                // su duda con opciones); si no hay quien lo recoja, ocupado.
+                if m.clase == "NOTA", almacen.nucleo.iaEscribirMientrasTrabaja(chat: chat, mensaje: m.id) { continue }
+                if paraEl { avisar("El asistente aún está contestando: espera o pulsa Parar.", en: chat) }
                 continue
             }
+            guard paraEl else { continue }
             // Ocupado desde ya: dos preguntas seguidas no lanzan dos turnos.
             let corte = CorteIa.nuevo()
             contestando[chat] = corte
@@ -221,12 +249,20 @@ public final class AsistenteEnElChat: ObservableObject {
             return
         }
         guard let inicio else { return }
-        let nota = inicio.respuesta.id
         almacen.anadir([inicio.respuesta], en: chat)
         if case .apple = motor {
             await conApple(inicio, pregunta: m, chat: chat, almacen: almacen)
             return
         }
+        await contestar(inicio, chat: chat, almacen: almacen, corte: corte)
+    }
+
+    /// **El turno de Rust** en la respuesta `inicio`, ya nacida y en lo
+    /// cargado: en vivo a su burbuja y, al acabar, la respuesta guardada.
+    private func contestar(_ inicio: InicioIa, chat: String, almacen: Almacen, corte: CorteIa) async {
+        let nucleo = almacen.nucleo
+        let modelo = self.modelo(almacen)
+        let nota = inicio.respuesta.id
         let manos = ManosDelAsistente(nucleo: nucleo, corte: corte) { [weak self] texto, responder in
             guard let self else { return responder(false) }
             self.preguntas[nota] = ModeloAsistente.Pregunta(texto: texto, responder: responder)
@@ -270,6 +306,33 @@ public final class AsistenteEnElChat: ObservableObject {
         case let .failure(e):
             avisar("El asistente no pudo contestar: \(ModeloAsistente.texto(de: e))", en: chat)
             await almacen.abrir(chat: chat)
+        }
+    }
+
+    // MARK: Al arrancar
+
+    /// Los almacenes ya retomados (una vez por arranque).
+    private var retomados: Set<ObjectIdentifier> = []
+
+    /// **Lo que quedo a medias** la ultima vez que se cerro PixPin con el
+    /// asistente trabajando (Windows, 24-oct): cada burbuja cortada dice que
+    /// paso y lo que aun no habia hecho nada se vuelve a lanzar, uno tras
+    /// otro, en una respuesta nueva debajo.
+    func retomarAlArrancar(_ almacen: Almacen) async {
+        guard AsistenteEnElChat.turnoDePrueba == nil, retomados.insert(ObjectIdentifier(almacen)).inserted else { return }
+        let nucleo = almacen.nucleo
+        let ajustes = modelo(almacen).ajustes()
+        let cortados = await Task.detached(priority: .utility) { nucleo.iaRetomarAlArrancar(ajustes: ajustes) }.value
+        for r in cortados where almacen.mensajes[r.chat] != nil {
+            almacen.sustituir(r.cortada, en: r.chat)
+        }
+        for r in cortados {
+            guard let inicio = r.otraVez, !ocupado(r.chat) else { continue }
+            if almacen.mensajes[r.chat] != nil { almacen.anadir([inicio.respuesta], en: r.chat) }
+            let corte = CorteIa.nuevo()
+            contestando[r.chat] = corte
+            await contestar(inicio, chat: r.chat, almacen: almacen, corte: corte)
+            if contestando[r.chat] === corte { contestando[r.chat] = nil }
         }
     }
 
@@ -374,6 +437,11 @@ public struct NotaDelAsistente: View {
             if let p = ia.preguntas[mensaje.id] {
                 TarjetaConfirmar(pregunta: p.texto) { si in ia.responder(nota: mensaje.id, si: si) }
             }
+            if let e = vivo?.eleccion {
+                TarjetaElegir(eleccion: e) { opcion in
+                    ia.elegir(nota: mensaje.id, opcion: opcion, chat: chat, nucleo: almacen.nucleo)
+                }
+            }
         }
         .task(id: mensaje.texto) {
             guard vivo == nil else { return }
@@ -464,6 +532,55 @@ struct TarjetaConfirmar: View {
         .padding(10 * escala)
         .frame(minWidth: 260 * escala)
         .background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 10 * escala))
+    }
+}
+
+/// **La tarjeta de una duda con opciones** (`preguntar_usuario`, Windows
+/// 22-oct): la pregunta, un boton por opcion con lo que pasa debajo (la
+/// primera, la recomendada, rellena) y «Otro…» para escribir lo suyo.
+struct TarjetaElegir: View {
+    let eleccion: EleccionIa
+    /// La opcion (desde 0) o `nil`: «Otro…».
+    let elegir: (UInt32?) -> Void
+    @Environment(\.escalaChat) private var escala
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6 * escala) {
+            Text("❓ " + eleccion.pregunta)
+                .font(.system(size: 13 * escala))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(eleccion.opciones.enumerated()), id: \.offset) { i, o in
+                Button {
+                    elegir(UInt32(i))
+                } label: {
+                    VStack(alignment: .leading, spacing: 2 * escala) {
+                        Text(i == 0 ? o.etiqueta + " · recomendada" : o.etiqueta)
+                            .font(.system(size: 13 * escala, weight: .medium))
+                        if !o.descripcion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(o.descripcion)
+                                .font(.system(size: 11.5 * escala))
+                                .opacity(0.85)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8 * escala)
+                    .foregroundStyle(i == 0 ? Color.white : Color.accentColor)
+                    .background(i == 0 ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 8 * escala))
+                    .overlay(RoundedRectangle(cornerRadius: 8 * escala).strokeBorder(Color.accentColor, lineWidth: 1.5))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Button(eleccion.otro ? "Escribe tu respuesta abajo y envíala" : "Otro…") { elegir(nil) }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .font(.system(size: 13 * escala))
+                .padding(.leading, 4 * escala)
+                .disabled(eleccion.otro)
+        }
+        .padding(10 * escala)
+        .frame(minWidth: 260 * escala)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10 * escala))
     }
 }
 

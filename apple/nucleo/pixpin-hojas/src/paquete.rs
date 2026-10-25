@@ -28,7 +28,12 @@ pub struct Limites {
 
 impl Default for Limites {
     fn default() -> Self {
-        Limites { entradas: 20_000, parte: TOPE_PARTE, parte_en_flujo: 4 * 1024 * 1024 * 1024, total_declarado: 16 * 1024 * 1024 * 1024 }
+        Limites {
+            entradas: 20_000,
+            parte: TOPE_PARTE,
+            parte_en_flujo: 4 * 1024 * 1024 * 1024,
+            total_declarado: 16 * 1024 * 1024 * 1024,
+        }
     }
 }
 
@@ -43,7 +48,10 @@ impl<R: Read> Read for Tope<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let n = self.dentro.read(buf)?;
         if n as u64 > self.resta {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "la parte descomprimida supera el limite de seguridad"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "la parte descomprimida supera el limite de seguridad",
+            ));
         }
         self.resta -= n as u64;
         Ok(n)
@@ -117,9 +125,14 @@ impl Paquete {
     }
 
     pub fn con_limites(datos: Arc<[u8]>, limites: Limites) -> Result<Self, ErrorHojas> {
-        let mut zip = ZipArchive::new(Cursor::new(datos.clone())).map_err(|_| ErrorHojas::NoEsZip)?;
+        let mut zip =
+            ZipArchive::new(Cursor::new(datos.clone())).map_err(|_| ErrorHojas::NoEsZip)?;
         if zip.len() > limites.entradas {
-            return Err(ErrorHojas::Limite(format!("el ZIP tiene {} entradas (el maximo es {})", zip.len(), limites.entradas)));
+            return Err(ErrorHojas::Limite(format!(
+                "el ZIP tiene {} entradas (el maximo es {})",
+                zip.len(),
+                limites.entradas
+            )));
         }
         let mut total = 0u64;
         for i in 0..zip.len() {
@@ -128,9 +141,16 @@ impl Paquete {
             }
         }
         if total > limites.total_declarado {
-            return Err(ErrorHojas::Limite(format!("las partes declaran {total} bytes descomprimidos (el maximo es {})", limites.total_declarado)));
+            return Err(ErrorHojas::Limite(format!(
+                "las partes declaran {total} bytes descomprimidos (el maximo es {})",
+                limites.total_declarado
+            )));
         }
-        Ok(Self { zip, datos, limites })
+        Ok(Self {
+            zip,
+            datos,
+            limites,
+        })
     }
 
     fn indice(&self, ruta: &str) -> Option<usize> {
@@ -140,7 +160,10 @@ impl Paquete {
         }
         // Hay generadores que cambian mayusculas o usan barras invertidas.
         let buscada = ruta.replace('\\', "/").to_ascii_lowercase();
-        let nombre = self.zip.file_names().find(|n| n.replace('\\', "/").to_ascii_lowercase() == buscada)?;
+        let nombre = self
+            .zip
+            .file_names()
+            .find(|n| n.replace('\\', "/").to_ascii_lowercase() == buscada)?;
         self.zip.index_for_name(nombre)
     }
 
@@ -179,10 +202,17 @@ impl Paquete {
         }
         let metodo = f.compression();
         drop(f);
-        let trozo = Trozo { datos: self.datos.clone(), pos: inicio, fin };
+        let trozo = Trozo {
+            datos: self.datos.clone(),
+            pos: inicio,
+            fin,
+        };
         match metodo {
             CompressionMethod::Stored => Some(Box::new(trozo)),
-            CompressionMethod::Deflated => Some(Box::new(Tope { dentro: flate2::read::DeflateDecoder::new(trozo), resta: self.limites.parte_en_flujo })),
+            CompressionMethod::Deflated => Some(Box::new(Tope {
+                dentro: flate2::read::DeflateDecoder::new(trozo),
+                resta: self.limites.parte_en_flujo,
+            })),
             _ => None,
         }
     }
@@ -227,7 +257,11 @@ impl Paquete {
                 }
             })
             .ok()?;
-        Some(Box::new(EnHilo { rx, actual: Vec::new(), pos: 0 }))
+        Some(Box::new(EnHilo {
+            rx,
+            actual: Vec::new(),
+            pos: 0,
+        }))
     }
 
     /// Las relaciones de una parte (`xl/workbook.xml` -> `xl/_rels/workbook.xml.rels`).
@@ -246,12 +280,24 @@ impl Paquete {
         let mut rels = Vec::new();
         raiz.todos("Relationship", &mut rels);
         for r in rels {
-            let externa = r.attr("TargetMode").is_some_and(|m| m.eq_ignore_ascii_case("External"));
+            let externa = r
+                .attr("TargetMode")
+                .is_some_and(|m| m.eq_ignore_ascii_case("External"));
             let destino = r.attr("Target").unwrap_or_default();
             v.push(Relacion {
                 id: r.attr("Id").unwrap_or_default().to_string(),
-                tipo: r.attr("Type").unwrap_or_default().rsplit('/').next().unwrap_or_default().to_string(),
-                destino: if externa { destino.to_string() } else { resolver(parte, destino) },
+                tipo: r
+                    .attr("Type")
+                    .unwrap_or_default()
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or_default()
+                    .to_string(),
+                destino: if externa {
+                    destino.to_string()
+                } else {
+                    resolver(parte, destino)
+                },
                 externa,
             });
         }
@@ -286,16 +332,26 @@ mod pruebas {
 
     #[test]
     fn resuelve_rutas_relativas_y_absolutas() {
-        assert_eq!(resolver("xl/workbook.xml", "worksheets/sheet1.xml"), "xl/worksheets/sheet1.xml");
-        assert_eq!(resolver("xl/workbook.xml", "/xl/worksheets/sheet1.xml"), "xl/worksheets/sheet1.xml");
-        assert_eq!(resolver("xl/drawings/drawing1.xml", "../media/image1.png"), "xl/media/image1.png");
+        assert_eq!(
+            resolver("xl/workbook.xml", "worksheets/sheet1.xml"),
+            "xl/worksheets/sheet1.xml"
+        );
+        assert_eq!(
+            resolver("xl/workbook.xml", "/xl/worksheets/sheet1.xml"),
+            "xl/worksheets/sheet1.xml"
+        );
+        assert_eq!(
+            resolver("xl/drawings/drawing1.xml", "../media/image1.png"),
+            "xl/media/image1.png"
+        );
         assert_eq!(resolver("xl/a.xml", "../../../../x"), "x");
     }
 
     fn zip_de(partes: &[(&str, Vec<u8>)]) -> Vec<u8> {
         use std::io::Write;
         let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        let op = zip::write::SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let op = zip::write::SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated);
         for (n, d) in partes {
             w.start_file(*n, op).unwrap();
             w.write_all(d).unwrap();
@@ -315,11 +371,20 @@ mod pruebas {
 
     #[test]
     fn demasiadas_entradas_se_rechazan_con_un_error_claro() {
-        let partes: Vec<(String, Vec<u8>)> = (0..30).map(|i| (format!("p{i}.xml"), vec![1])).collect();
-        let refs: Vec<(&str, Vec<u8>)> = partes.iter().map(|(n, d)| (n.as_str(), d.clone())).collect();
+        let partes: Vec<(String, Vec<u8>)> =
+            (0..30).map(|i| (format!("p{i}.xml"), vec![1])).collect();
+        let refs: Vec<(&str, Vec<u8>)> = partes
+            .iter()
+            .map(|(n, d)| (n.as_str(), d.clone()))
+            .collect();
         let z: Arc<[u8]> = Arc::from(zip_de(&refs));
-        let lim = Limites { entradas: 10, ..Limites::default() };
-        let Err(ErrorHojas::Limite(m)) = Paquete::con_limites(z.clone(), lim) else { panic!("debia rechazarse") };
+        let lim = Limites {
+            entradas: 10,
+            ..Limites::default()
+        };
+        let Err(ErrorHojas::Limite(m)) = Paquete::con_limites(z.clone(), lim) else {
+            panic!("debia rechazarse")
+        };
         assert!(m.contains("30 entradas"), "{m}");
         assert!(Paquete::nuevo(z).is_ok());
     }
@@ -329,16 +394,30 @@ mod pruebas {
         // 2 MB de ceros ocupan ~2 KB comprimidos.
         let z = zip_de(&[("bomba.xml", vec![0u8; 2 * 1024 * 1024])]);
         assert!(z.len() < 10_000);
-        let lim = Limites { parte: 100_000, parte_en_flujo: 100_000, ..Limites::default() };
+        let lim = Limites {
+            parte: 100_000,
+            parte_en_flujo: 100_000,
+            ..Limites::default()
+        };
         let p = Paquete::con_limites(Arc::from(z.clone()), lim).unwrap();
         assert!(p.leer("bomba.xml").is_none());
         let mut v = Vec::new();
-        let e = p.lector("bomba.xml").unwrap().read_to_end(&mut v).unwrap_err();
+        let e = p
+            .lector("bomba.xml")
+            .unwrap()
+            .read_to_end(&mut v)
+            .unwrap_err();
         assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
         assert!(v.len() <= 100_000);
         // El total declarado tambien se vigila al abrir.
-        let lim = Limites { total_declarado: 1000, ..Limites::default() };
-        assert!(matches!(Paquete::con_limites(Arc::from(z), lim), Err(ErrorHojas::Limite(_))));
+        let lim = Limites {
+            total_declarado: 1000,
+            ..Limites::default()
+        };
+        assert!(matches!(
+            Paquete::con_limites(Arc::from(z), lim),
+            Err(ErrorHojas::Limite(_))
+        ));
     }
 
     #[test]

@@ -63,7 +63,9 @@ pub fn validar(args: &Map<String, Value>) -> Result<PeticionBusqueda, ErrorHerra
     let consulta = texto("consulta")
         .or_else(|| texto("query"))
         .or_else(|| texto("pregunta"))
-        .ok_or_else(|| ErrorHerramienta::Parametro("falta «consulta» (las palabras que buscar)".into()))?;
+        .ok_or_else(|| {
+            ErrorHerramienta::Parametro("falta «consulta» (las palabras que buscar)".into())
+        })?;
     if super::texto::de_la_consulta(&consulta).is_empty() {
         return Err(ErrorHerramienta::Parametro(
             "«consulta» no tiene palabras que buscar; pon las palabras clave del tema".into(),
@@ -72,7 +74,12 @@ pub fn validar(args: &Map<String, Value>) -> Result<PeticionBusqueda, ErrorHerra
     let consulta: String = consulta.chars().take(MAX_CONSULTA).collect();
     let proyecto = texto("proyecto").or_else(|| texto("chat"));
     // «todos», «todo», «*»: es no filtrar.
-    let proyecto = proyecto.filter(|p| !matches!(super::texto::plano(p).as_str(), "todos" | "todo" | "*" | "all" | "ninguno"));
+    let proyecto = proyecto.filter(|p| {
+        !matches!(
+            super::texto::plano(p).as_str(),
+            "todos" | "todo" | "*" | "all" | "ninguno"
+        )
+    });
     Ok(PeticionBusqueda { consulta, proyecto })
 }
 
@@ -89,7 +96,13 @@ impl Cita {
         let h = &self.hallazgo;
         // Un mensaje: lo que dice (o el archivo que se mando), no «Chat de…».
         if h.tipo == Tipo::Chat {
-            let mut s: String = h.fragmento.trim().trim_start_matches('…').chars().take(60).collect();
+            let mut s: String = h
+                .fragmento
+                .trim()
+                .trim_start_matches('…')
+                .chars()
+                .take(60)
+                .collect();
             if h.fragmento.chars().count() > 60 {
                 s.push('…');
             }
@@ -126,7 +139,12 @@ pub struct Citas {
 impl Citas {
     /// Numera lo encontrado (lo que ya estaba citado conserva su numero) y
     /// devuelve el texto para el modelo.
-    pub fn anadir(&mut self, consulta: &str, hallazgos: Vec<Hallazgo>, aviso: Option<&str>) -> String {
+    pub fn anadir(
+        &mut self,
+        consulta: &str,
+        hallazgos: Vec<Hallazgo>,
+        aviso: Option<&str>,
+    ) -> String {
         if hallazgos.is_empty() {
             let mut s = format!(
                 "No encontre nada sobre «{consulta}» en los documentos y chats del usuario. Diselo asi; no inventes."
@@ -156,14 +174,21 @@ impl Citas {
             if h.tipo == Tipo::Chat && h.seccion.as_deref() == Some("adjunto") {
                 // Una frase entera: con «origen + nombre» el 2B contestaba
                 // «no has mandado ningun plano» (medido el 14-oct).
-                let cuando = self.cuando(&h).map(|f| format!(" el {f}")).unwrap_or_default();
+                let cuando = self
+                    .cuando(&h)
+                    .map(|f| format!(" el {f}"))
+                    .unwrap_or_default();
                 s.push_str(&format!(
                     "\n[{numero}] El usuario SI mando el archivo «{}» al chat «{}»{cuando}.\n",
                     h.fragmento.trim(),
                     h.proyecto_nombre
                 ));
             } else {
-                s.push_str(&format!("\n[{numero}] {}\n«{}»\n", origen(&h, self.cuando(&h)), h.fragmento.replace('\n', " ")));
+                s.push_str(&format!(
+                    "\n[{numero}] {}\n«{}»\n",
+                    origen(&h, self.cuando(&h)),
+                    h.fragmento.replace('\n', " ")
+                ));
             }
         }
         if let Some(a) = aviso {
@@ -206,7 +231,10 @@ fn origen(h: &Hallazgo, cuando: Option<String>) -> String {
             // Dicho para que un modelo pequeno entienda que SI lo mando (con
             // «adjunto en el chat» el 2B contesto «no has mandado ningun
             // plano», medido el 14-oct).
-            Some("adjunto") => format!("archivo que el usuario mando al chat «{}»", h.proyecto_nombre),
+            Some("adjunto") => format!(
+                "archivo que el usuario mando al chat «{}»",
+                h.proyecto_nombre
+            ),
             Some(s) if !s.is_empty() => format!("{s} en el chat «{}»", h.proyecto_nombre),
             _ => format!("mensaje del chat «{}»", h.proyecto_nombre),
         },
@@ -245,7 +273,9 @@ pub fn fecha_corta(ms: i64) -> Option<String> {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
-    const MESES: [&str; 12] = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    const MESES: [&str; 12] = [
+        "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+    ];
     Some(format!("{d}-{}-{y}", MESES[(m - 1) as usize]))
 }
 
@@ -265,7 +295,10 @@ mod pruebas {
 
     #[test]
     fn valida_la_consulta() {
-        let p = validar(&args(json!({"consulta": " cunetas pendiente ", "proyecto": "Obra"}))).unwrap();
+        let p = validar(&args(
+            json!({"consulta": " cunetas pendiente ", "proyecto": "Obra"}),
+        ))
+        .unwrap();
         assert_eq!(p.consulta, "cunetas pendiente");
         assert_eq!(p.proyecto.as_deref(), Some("Obra"));
         let p = validar(&args(json!({"query": "plano", "proyecto": "todos"}))).unwrap();
@@ -289,10 +322,16 @@ mod pruebas {
             // 3-oct-2026 19:42 UTC
             cuando: Some(1_790_985_600_000 + (19 * 60 + 42) * 60_000),
             fragmento: "Plano.pdf".into(),
-            abrir: Abrir::Mensaje { proyecto: Some("p".into()), codigo: "c".into() },
+            abrir: Abrir::Mensaje {
+                proyecto: Some("p".into()),
+                codigo: "c".into(),
+            },
             puntos: 1.0,
         };
-        let mut nube = Citas { lista: Vec::new(), desfase_ms: Some(-5 * 3_600_000) };
+        let mut nube = Citas {
+            lista: Vec::new(),
+            desfase_ms: Some(-5 * 3_600_000),
+        };
         let t = nube.anadir("plano", vec![h.clone()], None);
         assert!(t.contains("el sáb 3-oct-2026 14:42"), "{t}");
         // Caso negativo: el local (congelado) sigue con la fecha corta.
@@ -305,7 +344,13 @@ mod pruebas {
     fn la_fecha_corta() {
         assert_eq!(fecha_corta(0), None);
         // 2026-10-03 00:00 UTC
-        assert_eq!(fecha_corta(1_790_985_600_000).as_deref(), Some("3-oct-2026"));
-        assert_eq!(fecha_corta(1_790_985_600_000 + 86_399_999).as_deref(), Some("3-oct-2026"));
+        assert_eq!(
+            fecha_corta(1_790_985_600_000).as_deref(),
+            Some("3-oct-2026")
+        );
+        assert_eq!(
+            fecha_corta(1_790_985_600_000 + 86_399_999).as_deref(),
+            Some("3-oct-2026")
+        );
     }
 }

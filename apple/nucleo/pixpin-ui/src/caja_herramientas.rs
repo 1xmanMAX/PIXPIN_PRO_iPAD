@@ -123,7 +123,7 @@ pub const BOTONES: [BotonCaja; 14] = [
 /// cada anfitrion se queda con lo suyo (`dibujo::permitidas`) y
 /// `barra_superior` lo agrupa con [`BARRA_AGRUPADA`]. Con cuarenta botones
 /// sueltos no cabia en una fila ni a 120 % en 1080 p.
-pub const BOTONES_EDITOR: [BotonCaja; 40] = [
+pub const BOTONES_EDITOR: [BotonCaja; 39] = [
     BotonCaja::Elegir(Herramienta::Mano),
     BotonCaja::Elegir(Herramienta::Lazo),
     // La bolita, junto al lazo: las dos eligen sin marquesina (`Tool.BOLITA`).
@@ -156,7 +156,6 @@ pub const BOTONES_EDITOR: [BotonCaja; 40] = [
     BotonCaja::Elegir(Herramienta::Cota),
     BotonCaja::Elegir(Herramienta::Escalar),
     BotonCaja::Elegir(Herramienta::EscalaGrafica),
-    BotonCaja::Elegir(Herramienta::Marco),
     BotonCaja::Elegir(Herramienta::Zona),
     // Las cinco que no dibujan nada: miran lo que ya hay y lo cambian.
     BotonCaja::Elegir(Herramienta::Relleno),
@@ -215,14 +214,12 @@ pub enum GrupoBarra {
     /// Lo que tapa o senala: pixelar, la lupa, el foco y el laser.
     Tapar,
     Medir,
-    /// El marco y la imagen, como en el movil.
-    Marco,
     /// Sacar el dibujo: compartir e imprimir.
     Sacar,
 }
 
 impl GrupoBarra {
-    pub const TODOS: [GrupoBarra; 10] = [
+    pub const TODOS: [GrupoBarra; 9] = [
         GrupoBarra::Elegir,
         GrupoBarra::Trazar,
         GrupoBarra::Formas,
@@ -231,7 +228,6 @@ impl GrupoBarra {
         GrupoBarra::Nombrar,
         GrupoBarra::Tapar,
         GrupoBarra::Medir,
-        GrupoBarra::Marco,
         GrupoBarra::Sacar,
     ];
 
@@ -259,7 +255,6 @@ impl GrupoBarra {
             GrupoBarra::Nombrar => &[E(H::Texto), E(H::Serie), E(H::Punto), E(H::Angulo)],
             GrupoBarra::Tapar => &[E(H::Mosaico), E(H::Lupa), E(H::Foco), E(H::Laser)],
             GrupoBarra::Medir => &[E(H::Cota), E(H::Escalar), E(H::EscalaGrafica)],
-            GrupoBarra::Marco => &[E(H::Marco), BotonCaja::Imagen],
             GrupoBarra::Sacar => &[BotonCaja::Compartir, BotonCaja::Imprimir],
         }
     }
@@ -276,7 +271,6 @@ impl GrupoBarra {
             GrupoBarra::Nombrar => "nombrar",
             GrupoBarra::Tapar => "tapar",
             GrupoBarra::Medir => "medir",
-            GrupoBarra::Marco => "marco",
             GrupoBarra::Sacar => "sacar",
         }
     }
@@ -313,7 +307,10 @@ pub const BARRA_AGRUPADA: [BotonCaja; 18] = [
     // La tabla y la grafica, sueltas: eran un grupo con el cronograma, y sin
     // el serian un grupo de uno.
     BotonCaja::Figuras,
-    BotonCaja::Grupo(GrupoBarra::Marco),
+    // La imagen, suelta: iba en un grupo con el marco, y el marco ya no va
+    // en la barra (22-oct, el usuario: no duplicar herramientas): lo pone el
+    // boton del riel de la derecha, o la C.
+    BotonCaja::Imagen,
     // La goma al final de las herramientas, como en el movil.
     BotonCaja::Elegir(Herramienta::Borrador),
     // Suelto y a la vista: es lo primero que se busca en la pantalla.
@@ -431,7 +428,7 @@ pub fn grupo(b: BotonCaja) -> u8 {
             | GrupoBarra::Flechas
             | GrupoBarra::Arreglar
             | GrupoBarra::Nombrar => 1,
-            GrupoBarra::Tapar | GrupoBarra::Medir | GrupoBarra::Marco => 2,
+            GrupoBarra::Tapar | GrupoBarra::Medir => 2,
             GrupoBarra::Sacar => 3,
         }
     }
@@ -442,6 +439,8 @@ pub fn grupo(b: BotonCaja) -> u8 {
         BotonCaja::Elegir(Herramienta::Borrador) => 2,
         // La tabla y la grafica, con lo que tapa, mide y enmarca.
         BotonCaja::Figuras => 2,
+        // La imagen, suelta junto a las figuras (iba en el grupo del marco).
+        BotonCaja::Imagen => 2,
         BotonCaja::Deshacer | BotonCaja::Rehacer | BotonCaja::Color | BotonCaja::Salir => 3,
         otro => grupo_de_boton(otro).map_or(1, seccion),
     }
@@ -979,8 +978,8 @@ mod pruebas {
         // 28 desde que entro el grafito, junto al lapiz; 31 con la zona, el
         // laser y el cronograma (F8, F14, F12); 32 con soldar vertices, 33 con
         // la bolita y 32 otra vez al quitar el cronograma; 33 con la marca de
-        // angulo (laminas de geometria).
-        assert_eq!(herramientas, 33, "faltan o sobran herramientas en la caja");
+        // angulo (laminas de geometria); 32 sin el marco, que pone el riel (22-oct).
+        assert_eq!(herramientas, 32, "faltan o sobran herramientas en la caja");
         assert!(BOTONES_EDITOR.contains(&BotonCaja::Imagen));
         assert!(BOTONES_EDITOR.contains(&BotonCaja::Figuras));
         assert!(BOTONES_EDITOR.contains(&BotonCaja::Elegir(Herramienta::Grafito)));

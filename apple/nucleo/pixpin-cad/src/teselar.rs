@@ -14,7 +14,11 @@ thread_local! {
 /// que se pueda ver: un circulo de medio metro en un plano de cinco
 /// kilometros no necesita cien lados.
 pub fn poner_tamano_del_plano(lado: f64) {
-    let t = if lado.is_finite() && lado > 0.0 { lado * 5e-7 } else { 0.0 };
+    let t = if lado.is_finite() && lado > 0.0 {
+        lado * 5e-7
+    } else {
+        0.0
+    };
     TOLERANCIA.with(|c| c.set(t));
 }
 
@@ -104,7 +108,10 @@ pub fn elipse(c: [f64; 2], mayor: [f64; 2], razon: f64, t0: f64, t1: f64) -> Vec
         .map(|i| {
             let t = t0 + barrido * i as f64 / n as f64;
             let (s, k) = t.sin_cos();
-            [c[0] + mayor[0] * k + menor[0] * s, c[1] + mayor[1] * k + menor[1] * s]
+            [
+                c[0] + mayor[0] * k + menor[0] * s,
+                c[1] + mayor[1] * k + menor[1] * s,
+            ]
         })
         .collect()
 }
@@ -157,9 +164,14 @@ pub fn spline(grado: usize, nudos: &[f64], control: &[[f64; 3]], pesos: &[f64]) 
             for j in (r..=p).rev() {
                 let i = j + k - p;
                 let den = nudos[i + p + 1 - r] - nudos[i];
-                let a = if den.abs() < 1e-300 { 0.0 } else { (u - nudos[i]) / den };
-                for e in 0..3 {
-                    d[j][e] = (1.0 - a) * d[j - 1][e] + a * d[j][e];
+                let a = if den.abs() < 1e-300 {
+                    0.0
+                } else {
+                    (u - nudos[i]) / den
+                };
+                let antes = d[j - 1];
+                for (e, v) in d[j].iter_mut().enumerate() {
+                    *v = (1.0 - a) * antes[e] + a * *v;
                 }
             }
         }
@@ -183,7 +195,10 @@ pub fn por_puntos(pts: &[[f64; 2]]) -> Vec<[f64; 2]> {
             let t = s as f64 / 8.0;
             let (t2, t3) = (t * t, t * t * t);
             let f = |a: f64, b: f64, c: f64, d: f64| {
-                0.5 * (2.0 * b + (-a + c) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2 + (-a + 3.0 * b - 3.0 * c + d) * t3)
+                0.5 * (2.0 * b
+                    + (-a + c) * t
+                    + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
+                    + (-a + 3.0 * b - 3.0 * c + d) * t3)
             };
             out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
         }
@@ -220,14 +235,22 @@ mod pruebas {
     #[test]
     fn el_arco_va_contra_reloj_y_cruza_el_cero() {
         let a = arco([0.0, 0.0], 1.0, 350f64.to_radians(), 10f64.to_radians());
-        assert!(cerca(a[0], [350f64.to_radians().cos(), 350f64.to_radians().sin()]));
+        assert!(cerca(
+            a[0],
+            [350f64.to_radians().cos(), 350f64.to_radians().sin()]
+        ));
         assert!(a.iter().all(|p| p[0] > 0.9));
         assert!(circulo([0.0, 0.0], 5.0).len() > 50);
     }
 
     #[test]
     fn la_spline_pasa_por_sus_extremos() {
-        let s = spline(3, &[0., 0., 0., 0., 1., 1., 1., 1.], &[[0., 0., 0.], [1., 2., 0.], [3., 2., 0.], [4., 0., 0.]], &[]);
+        let s = spline(
+            3,
+            &[0., 0., 0., 0., 1., 1., 1., 1.],
+            &[[0., 0., 0.], [1., 2., 0.], [3., 2., 0.], [4., 0., 0.]],
+            &[],
+        );
         assert!(cerca(s[0], [0.0, 0.0]) && cerca(*s.last().unwrap(), [4.0, 0.0]));
         // Nudos que no cuadran: se inventan y sigue saliendo algo.
         assert!(!spline(3, &[1.0], &[[0., 0., 0.], [1., 1., 0.], [2., 0., 0.]], &[]).is_empty());

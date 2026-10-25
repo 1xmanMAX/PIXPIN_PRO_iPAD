@@ -24,8 +24,12 @@ pub(super) fn llamar(c: &mut Ctx, canon: &str, args: &[Ev]) -> Option<Resultado>
         // tiene su maximo en el menos pequeno, no en un cero que no escribio
         // nadie. Sin numeros si valen cero, como en cualquier hoja: es el
         // hueco de una columna aun sin rellenar, no un error.
-        "MIN" => c.numeros(args).map(|n| Valor::Numero(extremo(&n, f64::min))),
-        "MAX" => c.numeros(args).map(|n| Valor::Numero(extremo(&n, f64::max))),
+        "MIN" => c
+            .numeros(args)
+            .map(|n| Valor::Numero(extremo(&n, f64::min))),
+        "MAX" => c
+            .numeros(args)
+            .map(|n| Valor::Numero(extremo(&n, f64::max))),
         "PRODUCTO" => c.numeros(args).map(|n| {
             if n.is_empty() {
                 Valor::Numero(0.0)
@@ -77,7 +81,9 @@ pub(super) fn llamar(c: &mut Ctx, canon: &str, args: &[Ev]) -> Option<Resultado>
             if a > b || !a.is_finite() || !b.is_finite() {
                 return Err(ErrorFormula::Numero);
             }
-            Ok(Valor::Numero((a + (c.azar() * (b - a + 1.0)).floor()).min(b)))
+            Ok(Valor::Numero(
+                (a + (c.azar() * (b - a + 1.0)).floor()).min(b),
+            ))
         })(),
 
         "CONTARA" => contara(c, args),

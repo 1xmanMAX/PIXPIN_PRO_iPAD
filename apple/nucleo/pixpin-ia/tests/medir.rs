@@ -17,7 +17,9 @@ use pixpin_ia::agente::{self, Ejecutor, Evento};
 use pixpin_ia::herramientas::{Llamada, catalogo};
 use pixpin_ia::lienzo;
 use pixpin_ia::motor::{Mensaje, Motor, Peticion, Seguir, Trozo};
-use pixpin_ia::servidor::{Config, Dispositivo, MotorLlama, elegir_dispositivo, listar_dispositivos};
+use pixpin_ia::servidor::{
+    Config, Dispositivo, MotorLlama, elegir_dispositivo, listar_dispositivos,
+};
 
 struct AlLienzo {
     documentos: Vec<String>,
@@ -37,11 +39,20 @@ impl Ejecutor for AlLienzo {
 
 fn pico_mb(pid: u32) -> u64 {
     let salida = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", &format!("(Get-Process -Id {pid}).PeakWorkingSet64")])
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!("(Get-Process -Id {pid}).PeakWorkingSet64"),
+        ])
         .output()
         .ok();
     salida
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok())
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .trim()
+                .parse::<u64>()
+                .ok()
+        })
         .unwrap_or(0)
         / (1024 * 1024)
 }
@@ -67,7 +78,10 @@ fn medir_en_este_pc() {
 
     // 1. Carga.
     motor.precargar().unwrap();
-    println!("carga: {:.2} s", motor.tiempo_de_carga().unwrap().as_secs_f32());
+    println!(
+        "carga: {:.2} s",
+        motor.tiempo_de_carga().unwrap().as_secs_f32()
+    );
 
     // 2. Texto en vivo: tiempo al primer trozo y velocidad.
     let t0 = Instant::now();
@@ -76,7 +90,9 @@ fn medir_en_este_pc() {
         .completar(
             &Peticion::nueva(vec![
                 Mensaje::sistema(agente::instrucciones()),
-                Mensaje::usuario("Explica en dos frases para que sirve fijar una captura en pantalla."),
+                Mensaje::usuario(
+                    "Explica en dos frases para que sirve fijar una captura en pantalla.",
+                ),
             ]),
             &mut |t| {
                 if primero.is_none() && matches!(t, Trozo::Texto(_)) {
@@ -98,13 +114,18 @@ fn medir_en_este_pc() {
     assert!(!r.texto.trim().is_empty());
 
     // 3. Un turno con herramientas por el bucle del agente.
-    let mut ej = AlLienzo { documentos: Vec::new() };
+    let mut ej = AlLienzo {
+        documentos: Vec::new(),
+    };
     for pedido in [
         "Dibuja en el lienzo un circulo rojo a la izquierda y un cuadrado azul a la derecha, con el titulo CASA arriba.",
         "Hazme una grafica de barras de ventas: enero 120, febrero 95, marzo 140.",
     ] {
         let t0 = Instant::now();
-        let mut h = vec![Mensaje::sistema(agente::instrucciones()), Mensaje::usuario(pedido)];
+        let mut h = vec![
+            Mensaje::sistema(agente::instrucciones()),
+            Mensaje::usuario(pedido),
+        ];
         let mut eventos = Vec::new();
         let f = agente::turno(&motor, &mut h, &catalogo(), &mut ej, &mut |e| {
             if !matches!(e, Evento::Texto(_)) {
@@ -129,7 +150,11 @@ fn medir_en_este_pc() {
         let t0 = Instant::now();
         let mut h = vec![
             Mensaje::sistema(agente::instrucciones()),
-            Mensaje::usuario_con_imagen("Quiero esta imagen: dibujala dentro del lienzo.", bytes, "image/png"),
+            Mensaje::usuario_con_imagen(
+                "Quiero esta imagen: dibujala dentro del lienzo.",
+                bytes,
+                "image/png",
+            ),
         ];
         let mut eventos = Vec::new();
         let f = agente::turno(&motor, &mut h, &catalogo(), &mut ej, &mut |e| {
@@ -154,7 +179,11 @@ fn medir_en_este_pc() {
     }
     if let Ok(d) = std::env::var("PIXPIN_IA_SALIDA") {
         for (i, doc) in ej.documentos.iter().enumerate() {
-            std::fs::write(PathBuf::from(&d).join(format!("dibujo-{i}.excalidraw")), doc).unwrap();
+            std::fs::write(
+                PathBuf::from(&d).join(format!("dibujo-{i}.excalidraw")),
+                doc,
+            )
+            .unwrap();
         }
     }
     // 5. Soltar devuelve la memoria.
@@ -182,7 +211,12 @@ fn bajar_y_arrancar_el_ligero() {
             let f = p.fraccion();
             if f - ultimo >= 0.1 || p.verificando {
                 ultimo = f;
-                println!("{:>5.1}% {}{}", f * 100.0, p.fichero, if p.verificando { " (huella)" } else { "" });
+                println!(
+                    "{:>5.1}% {}{}",
+                    f * 100.0,
+                    p.fichero,
+                    if p.verificando { " (huella)" } else { "" }
+                );
             }
         },
         &AtomicBool::new(false),
@@ -198,9 +232,17 @@ fn bajar_y_arrancar_el_ligero() {
         QWEN35_08B.vision.map(|v| carpeta.join(v.nombre)),
     ));
     let r = motor
-        .completar(&Peticion::nueva(vec![Mensaje::usuario("Di hola en una palabra.")]), &mut |_| Seguir::Si)
+        .completar(
+            &Peticion::nueva(vec![Mensaje::usuario("Di hola en una palabra.")]),
+            &mut |_| Seguir::Si,
+        )
         .unwrap();
-    println!("«{}» en {:.1} s (carga {:.1} s)", r.texto.trim(), t0.elapsed().as_secs_f32(), motor.tiempo_de_carga().unwrap().as_secs_f32());
+    println!(
+        "«{}» en {:.1} s (carga {:.1} s)",
+        r.texto.trim(),
+        t0.elapsed().as_secs_f32(),
+        motor.tiempo_de_carga().unwrap().as_secs_f32()
+    );
     assert!(!r.texto.trim().is_empty());
     motor.soltar();
 }
@@ -239,19 +281,31 @@ fn gemma_de_verdad_lee_la_foto_y_se_releva_con_qwen() {
             let f = p.fraccion();
             if f - ultimo >= 0.1 || p.verificando {
                 ultimo = f;
-                println!("{:>5.1}% {}{}", f * 100.0, p.fichero, if p.verificando { " (huella)" } else { "" });
+                println!(
+                    "{:>5.1}% {}{}",
+                    f * 100.0,
+                    p.fichero,
+                    if p.verificando { " (huella)" } else { "" }
+                );
             }
         },
         &AtomicBool::new(false),
     )
     .unwrap();
-    println!("Gemma asegurado (huellas comprobadas) en {:.1} s", t0.elapsed().as_secs_f32());
+    println!(
+        "Gemma asegurado (huellas comprobadas) en {:.1} s",
+        t0.elapsed().as_secs_f32()
+    );
     assert!(descarga::modelo_listo(&raiz, &GEMMA4_E2B));
 
     let llama = |m: &Modelo| {
         let c = descarga::carpeta_modelo(&raiz, m);
         let servidor = descarga::ruta_servidor(&raiz, &LLAMA_CPP);
-        let mut config = Config::nueva(servidor.clone(), c.join(m.pesos.nombre), m.vision.map(|v| c.join(v.nombre)));
+        let mut config = Config::nueva(
+            servidor.clone(),
+            c.join(m.pesos.nombre),
+            m.vision.map(|v| c.join(v.nombre)),
+        );
         config.dispositivo = elegir_dispositivo(&listar_dispositivos(&servidor), m.pesos.bytes);
         println!("{}: {:?}", m.nombre, config.dispositivo);
         Arc::new(MotorLlama::nuevo(config))
@@ -265,13 +319,17 @@ fn gemma_de_verdad_lee_la_foto_y_se_releva_con_qwen() {
 
     if let Some(mq) = &m_qwen {
         let r = mq
-            .completar(&Peticion::nueva(vec![Mensaje::usuario("Di hola en una palabra.")]), &mut |_| Seguir::Si)
+            .completar(
+                &Peticion::nueva(vec![Mensaje::usuario("Di hola en una palabra.")]),
+                &mut |_| Seguir::Si,
+            )
             .unwrap();
         println!("Qwen: «{}»", r.texto.trim());
         assert!(qwen.as_ref().unwrap().cargado());
     }
 
-    let png = std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("medir/prueba.png")).unwrap();
+    let png =
+        std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("medir/prueba.png")).unwrap();
     let mut p = Peticion::nueva(vec![Mensaje::usuario_con_imagen(
         "¿Qué texto pone en la imagen? Contesta solo con el texto.",
         png,
@@ -288,7 +346,10 @@ fn gemma_de_verdad_lee_la_foto_y_se_releva_con_qwen() {
         gemma.pid().map_or(0, pico_mb)
     );
     if let Some(q) = &qwen {
-        assert!(!q.cargado(), "Qwen tenia que soltarse antes de cargar Gemma");
+        assert!(
+            !q.cargado(),
+            "Qwen tenia que soltarse antes de cargar Gemma"
+        );
     }
     let leido = r.texto.to_uppercase();
     assert!(leido.contains("PIXPIN"), "no leyo el texto: «{}»", r.texto);

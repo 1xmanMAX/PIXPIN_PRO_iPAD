@@ -20,7 +20,10 @@ fn rejilla(rgba: &[u8], w: u32, h: u32, cw: usize, ch: usize) -> Vec<f64> {
     }
     let gris = |i: usize| {
         let a = rgba[i * 4 + 3] as u32;
-        let g = (rgba[i * 4] as u32 * 299 + rgba[i * 4 + 1] as u32 * 587 + rgba[i * 4 + 2] as u32 * 114) / 1000;
+        let g = (rgba[i * 4] as u32 * 299
+            + rgba[i * 4 + 1] as u32 * 587
+            + rgba[i * 4 + 2] as u32 * 114)
+            / 1000;
         ((g * a + 255 * (255 - a)) / 255) as u8
     };
     let mut hist = [0usize; 256];
@@ -75,9 +78,15 @@ fn correlacion(a: &[f64], b: &[f64]) -> f64 {
 pub fn parecido(a: (&[u8], u32, u32), b: (&[u8], u32, u32)) -> f64 {
     let (aw, ah) = (a.1.max(1) as f64, a.2.max(1) as f64);
     let (cw, ch) = if aw >= ah {
-        (REJILLA, ((REJILLA as f64 * ah / aw).round() as usize).clamp(6, REJILLA))
+        (
+            REJILLA,
+            ((REJILLA as f64 * ah / aw).round() as usize).clamp(6, REJILLA),
+        )
     } else {
-        (((REJILLA as f64 * aw / ah).round() as usize).clamp(6, REJILLA), REJILLA)
+        (
+            ((REJILLA as f64 * aw / ah).round() as usize).clamp(6, REJILLA),
+            REJILLA,
+        )
     };
     let ra = rejilla(a.0, a.1, a.2, cw, ch);
     let rb = rejilla(b.0, b.1, b.2, cw, ch);
@@ -89,8 +98,16 @@ pub fn parecido(a: (&[u8], u32, u32), b: (&[u8], u32, u32)) -> f64 {
     if total_a < 1e-6 || total_b < 1e-6 {
         return 0.0;
     }
-    let filas = |r: &[f64]| (0..ch).map(|y| r[y * cw..(y + 1) * cw].iter().sum::<f64>()).collect::<Vec<_>>();
-    let cols = |r: &[f64]| (0..cw).map(|x| (0..ch).map(|y| r[y * cw + x]).sum::<f64>()).collect::<Vec<_>>();
+    let filas = |r: &[f64]| {
+        (0..ch)
+            .map(|y| r[y * cw..(y + 1) * cw].iter().sum::<f64>())
+            .collect::<Vec<_>>()
+    };
+    let cols = |r: &[f64]| {
+        (0..cw)
+            .map(|x| (0..ch).map(|y| r[y * cw + x]).sum::<f64>())
+            .collect::<Vec<_>>()
+    };
     let pf = correlacion(&filas(&ra), &filas(&rb)).max(0.0);
     let pc = correlacion(&cols(&ra), &cols(&rb)).max(0.0);
     // La rejilla, normalizada por la tinta de cada una (una letra mas gruesa

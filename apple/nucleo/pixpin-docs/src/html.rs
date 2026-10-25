@@ -630,7 +630,10 @@ mod pruebas {
              <h1>Título</h1><p class=\"otra\">Texto</p><p class=\"nota\">Sin texto</p>",
         );
         let clases: Vec<Clase> = b.iter().map(|x| x.clase).collect();
-        assert_eq!(clases, [Clase::Nota, Clase::Titulo(1), Clase::Parrafo, Clase::Nota]);
+        assert_eq!(
+            clases,
+            [Clase::Nota, Clase::Titulo(1), Clase::Parrafo, Clase::Nota]
+        );
     }
 
     #[test]

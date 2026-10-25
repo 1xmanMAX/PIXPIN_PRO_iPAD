@@ -103,12 +103,19 @@ fn textos(args: &Map<String, Value>, k: &str, max: usize) -> Result<Vec<String>,
             .collect(),
         Some(_) => return Err(mal(format!("«{k}» es una lista de textos"))),
     };
-    let v: Vec<String> = v.into_iter().map(|s| s.trim().trim_matches('$').trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let v: Vec<String> = v
+        .into_iter()
+        .map(|s| s.trim().trim_matches('$').trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
     if v.len() > max {
         return Err(mal(format!("como mucho {max} en «{k}»")));
     }
     if let Some(s) = v.iter().find(|s| s.chars().count() > 300) {
-        return Err(mal(format!("«{}...» de «{k}» es demasiado largo", s.chars().take(30).collect::<String>())));
+        return Err(mal(format!(
+            "«{}...» de «{k}» es demasiado largo",
+            s.chars().take(30).collect::<String>()
+        )));
     }
     Ok(v)
 }
@@ -116,14 +123,24 @@ fn textos(args: &Map<String, Value>, k: &str, max: usize) -> Result<Vec<String>,
 /// La cuenta de un paso, hecha por la app: solo numeros, constantes (pi, e)
 /// y funciones; los grados de `sin(30°)` se pasan a radianes.
 pub fn calcular(c: &str) -> Result<f64, String> {
-    let limpio = grados_a_radianes(&c.replace('×', "*").replace('·', "*").replace("\\cdot", "*").replace("\\times", "*"));
-    let f = formula::compilar(&limpio).ok_or_else(|| format!("la cuenta «{c}» no se entiende: escribela solo con numeros, como 5*9.8*sin(30°)"))?;
+    let limpio = grados_a_radianes(
+        &c.replace(['×', '·'], "*")
+            .replace("\\cdot", "*")
+            .replace("\\times", "*"),
+    );
+    let f = formula::compilar(&limpio).ok_or_else(|| {
+        format!("la cuenta «{c}» no se entiende: escribela solo con numeros, como 5*9.8*sin(30°)")
+    })?;
     if let Some(v) = f.variables().into_iter().next() {
-        return Err(format!("la cuenta «{c}» tiene la letra «{v}»: pon los numeros de los datos, no las letras"));
+        return Err(format!(
+            "la cuenta «{c}» tiene la letra «{v}»: pon los numeros de los datos, no las letras"
+        ));
     }
     let v = f.en(0.0);
     if !v.is_finite() {
-        return Err(format!("la cuenta «{c}» no da un numero (division por cero o raiz de un negativo)"));
+        return Err(format!(
+            "la cuenta «{c}» no da un numero (division por cero o raiz de un negativo)"
+        ));
     }
     Ok(v)
 }
@@ -154,7 +171,10 @@ fn grados_a_radianes(s: &str) -> String {
     salida
 }
 
-pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Problema, ErrorHerramienta> {
+pub fn validar(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Problema, ErrorHerramienta> {
     let enunciado = ["enunciado", "texto", "problema"]
         .iter()
         .find_map(|k| args.get(*k).and_then(Value::as_str))
@@ -168,7 +188,9 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Pr
         ));
     }
     if enunciado.chars().count() > MAX_ENUNCIADO {
-        return Err(mal(format!("el enunciado pasa de {MAX_ENUNCIADO} caracteres: resumelo")));
+        return Err(mal(format!(
+            "el enunciado pasa de {MAX_ENUNCIADO} caracteres: resumelo"
+        )));
     }
     let ecuaciones = textos(args, "ecuaciones", MAX_ECUACIONES)?;
     for e in &ecuaciones {
@@ -184,7 +206,8 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Pr
         Some(v) => {
             let mut m = Map::new();
             m.insert("elementos".into(), v.clone());
-            crate::herramientas::validar_dibujo(&m, avisos).map_err(|e| mal(format!("en la «figura»: {e}")))?
+            crate::herramientas::validar_dibujo(&m, avisos)
+                .map_err(|e| mal(format!("en la «figura»: {e}")))?
         }
     };
     let mut pasos = Vec::new();
@@ -199,10 +222,31 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Pr
                 let (texto, calculo, dicho, unidad) = match p {
                     Value::String(s) => (s.trim().to_string(), None, None, String::new()),
                     Value::Object(o) => (
-                        o.get("texto").or(o.get("paso")).and_then(Value::as_str).unwrap_or("").trim().to_string(),
-                        o.get("calculo").or(o.get("cuenta")).and_then(Value::as_str).map(str::trim).filter(|c| !c.is_empty()).map(str::to_string),
-                        o.get("resultado").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().replace(',', ".").parse().ok()))),
-                        o.get("unidad").and_then(Value::as_str).unwrap_or("").trim().chars().take(16).collect(),
+                        o.get("texto")
+                            .or(o.get("paso"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .trim()
+                            .to_string(),
+                        o.get("calculo")
+                            .or(o.get("cuenta"))
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|c| !c.is_empty())
+                            .map(str::to_string),
+                        o.get("resultado").and_then(|v| {
+                            v.as_f64().or_else(|| {
+                                v.as_str()
+                                    .and_then(|s| s.trim().replace(',', ".").parse().ok())
+                            })
+                        }),
+                        o.get("unidad")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .trim()
+                            .chars()
+                            .take(16)
+                            .collect(),
                     ),
                     _ => return Err(mal("cada paso es {\"texto\":...,\"calculo\":...}")),
                 };
@@ -214,7 +258,12 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Pr
                         let v = calcular(c).map_err(|e| mal(format!("paso {}: {e}", k + 1)))?;
                         match dicho {
                             Some(d) if (d - v).abs() > 1e-3 * v.abs().max(1.0) => {
-                                cuentas.push(format!("paso {}: {c} da {}, no {} (corregido)", k + 1, numero(v), numero(d)));
+                                cuentas.push(format!(
+                                    "paso {}: {c} da {}, no {} (corregido)",
+                                    k + 1,
+                                    numero(v),
+                                    numero(d)
+                                ));
                             }
                             _ => cuentas.push(format!("paso {}: {c} = {}", k + 1, numero(v))),
                         }
@@ -222,7 +271,12 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Pr
                     }
                     None => dicho,
                 };
-                pasos.push(Paso { texto, calculo, resultado, unidad });
+                pasos.push(Paso {
+                    texto,
+                    calculo,
+                    resultado,
+                    unidad,
+                });
             }
         }
         Some(_) => return Err(mal("«pasos» es una lista")),
@@ -231,14 +285,28 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Pr
         avisos.push(format!("calculado por la app: {}", cuentas.join("; ")));
     }
     Ok(Problema {
-        titulo: args.get("titulo").and_then(Value::as_str).unwrap_or("").trim().chars().take(80).collect(),
+        titulo: args
+            .get("titulo")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(80)
+            .collect(),
         enunciado,
         ecuaciones,
         datos,
         incognitas,
         figura,
         pasos,
-        respuesta: args.get("respuesta").and_then(Value::as_str).unwrap_or("").trim().chars().take(300).collect(),
+        respuesta: args
+            .get("respuesta")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(300)
+            .collect(),
     })
 }
 
@@ -247,16 +315,31 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
     let mut pz = Pizarra::nueva();
     let (x0, ancho) = (40.0, 720.0);
     let mut y = 20.0;
-    let titulo = if p.titulo.is_empty() { "Problema" } else { p.titulo.as_str() };
+    let titulo = if p.titulo.is_empty() {
+        "Problema"
+    } else {
+        p.titulo.as_str()
+    };
     let (_, h) = pz.texto(titulo, x0, y, 26.0, pizarra::TINTA, Alinear::Izquierda);
     y += h as f64 + 4.0;
     pz.linea(&[(x0, y), (x0 + ancho, y)], pizarra::AZUL, 2.0);
     y += 14.0;
     let con_figura = !p.figura.is_empty();
-    let ancho_texto = if con_figura { ancho - FIGURA.0 - 24.0 } else { ancho };
+    let ancho_texto = if con_figura {
+        ancho - FIGURA.0 - 24.0
+    } else {
+        ancho
+    };
     let y_figura = y;
     // Una ecuacion que va compuesta debajo no se repite cruda en el texto.
-    y += pz.parrafo(&sin_las_ecuaciones(&p.enunciado, &p.ecuaciones), x0, y, ancho_texto, 17.0, pizarra::TINTA) + 12.0;
+    y += pz.parrafo(
+        &sin_las_ecuaciones(&p.enunciado, &p.ecuaciones),
+        x0,
+        y,
+        ancho_texto,
+        17.0,
+        pizarra::TINTA,
+    ) + 12.0;
     for e in &p.ecuaciones {
         let (_, h) = pz.ecuacion(e, x0 + 24.0, y, 24.0, pizarra::TINTA);
         y += h as f64 + 12.0;
@@ -271,19 +354,43 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
             // unidad como texto: «20 m/s» no es una fraccion. Salvo que el
             // valor sea formula de verdad (una matriz, una raiz...).
             let h = match d.split_once('=') {
-                Some((simbolo, valor)) if !simbolo.trim().is_empty() && simbolo.trim().chars().count() <= 12 => {
+                Some((simbolo, valor))
+                    if !simbolo.trim().is_empty() && simbolo.trim().chars().count() <= 12 =>
+                {
                     let (w, h) = pz.ecuacion(simbolo.trim(), x0 + 24.0, y, 18.0, pizarra::TINTA);
                     let x = x0 + 30.0 + w as f64;
                     let h2 = match valor_como_formula(valor) {
                         Some(f) => {
-                            let (we, _) = pz.texto("=", x, y + 1.0, 17.0, pizarra::TINTA, Alinear::Izquierda);
-                            pz.ecuacion(&f, x + we as f64 + 6.0, y, 18.0, pizarra::TINTA).1
+                            let (we, _) =
+                                pz.texto("=", x, y + 1.0, 17.0, pizarra::TINTA, Alinear::Izquierda);
+                            pz.ecuacion(&f, x + we as f64 + 6.0, y, 18.0, pizarra::TINTA)
+                                .1
                         }
-                        None => pz.texto(&format!("= {}", a_texto(valor)), x, y + 1.0, 17.0, pizarra::TINTA, Alinear::Izquierda).1,
+                        None => {
+                            pz.texto(
+                                &format!("= {}", a_texto(valor)),
+                                x,
+                                y + 1.0,
+                                17.0,
+                                pizarra::TINTA,
+                                Alinear::Izquierda,
+                            )
+                            .1
+                        }
                     };
                     h.max(h2)
                 }
-                _ => pz.texto(&a_texto(d), x0 + 24.0, y, 17.0, pizarra::TINTA, Alinear::Izquierda).1,
+                _ => {
+                    pz.texto(
+                        &a_texto(d),
+                        x0 + 24.0,
+                        y,
+                        17.0,
+                        pizarra::TINTA,
+                        Alinear::Izquierda,
+                    )
+                    .1
+                }
             };
             y += (h as f64).max(20.0) + 6.0;
         }
@@ -291,7 +398,14 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
             // Solo palabras: un parrafo, que puede ser largo.
             let (w, _) = pz.texto("Incógnita:", x0, y, 16.0, pizarra::AZUL, Alinear::Izquierda);
             let texto: Vec<String> = p.incognitas.iter().map(|i| a_texto(i)).collect();
-            let alto = pz.parrafo(&texto.join(", "), x0 + w as f64 + 10.0, y, ancho - w as f64 - 10.0, 17.0, pizarra::TINTA);
+            let alto = pz.parrafo(
+                &texto.join(", "),
+                x0 + w as f64 + 10.0,
+                y,
+                ancho - w as f64 - 10.0,
+                17.0,
+                pizarra::TINTA,
+            );
             y += alto.max(20.0) + 6.0;
         } else if !p.incognitas.is_empty() {
             // Compuestas (A⁻¹ con su exponente), no el LaTeX crudo.
@@ -300,13 +414,21 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
             let mut alto: f64 = 20.0;
             for (k, inc) in p.incognitas.iter().enumerate() {
                 if k > 0 {
-                    let (wc, _) = pz.texto(",", x, y + 1.0, 17.0, pizarra::TINTA, Alinear::Izquierda);
+                    let (wc, _) =
+                        pz.texto(",", x, y + 1.0, 17.0, pizarra::TINTA, Alinear::Izquierda);
                     x += wc as f64 + 8.0;
                 }
                 let (wi, hi) = if es_formula(inc) {
                     pz.ecuacion(inc, x, y, 18.0, pizarra::TINTA)
                 } else {
-                    pz.texto(&a_texto(inc), x, y + 1.0, 17.0, pizarra::TINTA, Alinear::Izquierda)
+                    pz.texto(
+                        &a_texto(inc),
+                        x,
+                        y + 1.0,
+                        17.0,
+                        pizarra::TINTA,
+                        Alinear::Izquierda,
+                    )
                 };
                 x += wi as f64;
                 alto = alto.max(hi as f64);
@@ -316,7 +438,12 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
     }
     let caja_figura = con_figura.then(|| {
         let x = x0 + ancho - FIGURA.0;
-        pz.rectangulo([x - 8.0, y_figura - 8.0, FIGURA.0 + 16.0, FIGURA.1 + 16.0], pizarra::GRIS, None, 1.0);
+        pz.rectangulo(
+            [x - 8.0, y_figura - 8.0, FIGURA.0 + 16.0, FIGURA.1 + 16.0],
+            pizarra::GRIS,
+            None,
+            1.0,
+        );
         if let Some(e) = pz.el.last_mut() {
             e.estilo = pixpin_motor2d::EstiloTrazo::Discontinuo;
         }
@@ -328,7 +455,14 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
     // El recuadro de la solucion.
     y += 14.0;
     let y_caja = y;
-    let (_, h) = pz.texto("Solución", x0 + 14.0, y + 10.0, 20.0, pizarra::AZUL, Alinear::Izquierda);
+    let (_, h) = pz.texto(
+        "Solución",
+        x0 + 14.0,
+        y + 10.0,
+        20.0,
+        pizarra::AZUL,
+        Alinear::Izquierda,
+    );
     y += 10.0 + h as f64 + 10.0;
     if p.pasos.is_empty() {
         y += 150.0;
@@ -336,8 +470,16 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
         for (k, paso) in p.pasos.iter().enumerate() {
             let mut linea = format!("{}. {}", k + 1, paso.texto);
             if let Some(r) = paso.resultado {
-                let cuenta = paso.calculo.as_deref().map(|c| format!("{c} = ")).unwrap_or_default();
-                let unidad = if paso.unidad.is_empty() { String::new() } else { format!(" {}", paso.unidad) };
+                let cuenta = paso
+                    .calculo
+                    .as_deref()
+                    .map(|c| format!("{c} = "))
+                    .unwrap_or_default();
+                let unidad = if paso.unidad.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", paso.unidad)
+                };
                 linea.push_str(&format!(": {cuenta}{}{unidad}", numero(r)));
             }
             y += pz.parrafo(&linea, x0 + 14.0, y, ancho - 28.0, 16.0, pizarra::TINTA) + 6.0;
@@ -345,7 +487,14 @@ pub fn piezas(p: &Problema) -> (Vec<pixpin_motor2d::Elemento>, Option<[f64; 4]>)
     }
     if !p.respuesta.is_empty() {
         y += 4.0;
-        y += pz.parrafo(&format!("Respuesta: {}", p.respuesta), x0 + 14.0, y, ancho - 28.0, 17.0, pizarra::ROJO) + 6.0;
+        y += pz.parrafo(
+            &format!("Respuesta: {}", p.respuesta),
+            x0 + 14.0,
+            y,
+            ancho - 28.0,
+            17.0,
+            pizarra::ROJO,
+        ) + 6.0;
     }
     y += 10.0;
     pz.rectangulo([x0, y_caja, ancho, y - y_caja], pizarra::AZUL, None, 2.0);
@@ -366,7 +515,12 @@ pub fn valor_como_formula(valor: &str) -> Option<String> {
     if let Some(m) = matriz_de_lista(v) {
         return Some(m);
     }
-    ["\\frac", "\\sqrt", "\\begin", "\\int", "\\sum", "\\lim", "\\vec"].iter().any(|k| v.contains(k)).then(|| v.to_string())
+    [
+        "\\frac", "\\sqrt", "\\begin", "\\int", "\\sum", "\\lim", "\\vec",
+    ]
+    .iter()
+    .any(|k| v.contains(k))
+    .then(|| v.to_string())
 }
 
 /// `[[2,-1,0],[1,3,2]]` → `\begin{bmatrix} 2 & -1 & 0 \\ 1 & 3 & 2 \end{bmatrix}`.
@@ -411,13 +565,22 @@ pub fn matriz_de_lista(s: &str) -> Option<String> {
         return None;
     }
     let cuerpo: Vec<String> = filas.iter().map(|f| f.join(" & ")).collect();
-    Some(format!("\\begin{{bmatrix}} {} \\end{{bmatrix}}", cuerpo.join(" \\\\ ")))
+    Some(format!(
+        "\\begin{{bmatrix}} {} \\end{{bmatrix}}",
+        cuerpo.join(" \\\\ ")
+    ))
 }
 
 /// Una formula «normalizada» para comparar: sin espacios, `$` ni marcas que
 /// no cambian lo que dice.
 fn normal(s: &str) -> String {
-    s.replace("\\left", "").replace("\\right", "").replace("\\,", "").replace("\\displaystyle", "").chars().filter(|c| !c.is_whitespace() && *c != '$').collect()
+    s.replace("\\left", "")
+        .replace("\\right", "")
+        .replace("\\,", "")
+        .replace("\\displaystyle", "")
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '$')
+        .collect()
 }
 
 /// Si un dato es una de las ecuaciones (el modelo a veces la repite).
@@ -434,16 +597,22 @@ pub fn sin_las_ecuaciones(enunciado: &str, ecuaciones: &[String]) -> String {
     if ecuaciones.is_empty() {
         return enunciado.to_string();
     }
-    let normales: Vec<String> = ecuaciones.iter().map(|e| normal(e)).filter(|e| e.chars().count() >= 3).collect();
+    let normales: Vec<String> = ecuaciones
+        .iter()
+        .map(|e| normal(e))
+        .filter(|e| e.chars().count() >= 3)
+        .collect();
     // Los trozos entre `$...$`.
     let mut t = String::new();
     let mut resto = enunciado;
     while let Some(a) = resto.find('$') {
-        let Some(b) = resto[a + 1..].find('$').map(|b| a + 1 + b) else { break };
+        let Some(b) = resto[a + 1..].find('$').map(|b| a + 1 + b) else {
+            break;
+        };
         let dentro = &resto[a + 1..b];
         t.push_str(&resto[..a]);
         let n = normal(dentro);
-        if !normales.iter().any(|e| *e == n) {
+        if !normales.contains(&n) {
             t.push_str(&resto[a..=b]);
         }
         resto = &resto[b + 1..];
@@ -459,11 +628,21 @@ pub fn sin_las_ecuaciones(enunciado: &str, ecuaciones: &[String]) -> String {
     // Los huecos que quedan: espacios dobles, renglones vacios, « :» suelto.
     let renglones: Vec<String> = t
         .lines()
-        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ").replace(" .", ".").replace(" ,", ","))
+        .map(|l| {
+            l.split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .replace(" .", ".")
+                .replace(" ,", ",")
+        })
         .filter(|l| !l.is_empty())
         .collect();
     let limpio = renglones.join("\n");
-    if limpio.chars().filter(|c| c.is_alphabetic()).count() < 4 { enunciado.to_string() } else { limpio }
+    if limpio.chars().filter(|c| c.is_alphabetic()).count() < 4 {
+        enunciado.to_string()
+    } else {
+        limpio
+    }
 }
 
 /// Un trozo de LaTeX de bolsillo como texto llano: `20\ m/s^2` → `20 m/s²`,
@@ -471,10 +650,30 @@ pub fn sin_las_ecuaciones(enunciado: &str, ecuaciones: &[String]) -> String {
 pub fn a_texto(s: &str) -> String {
     let mut t = s.trim().to_string();
     for (de, a) in [
-        ("\\text{", ""), ("\\mathrm{", ""), ("\\,", " "), ("\\ ", " "), ("\\;", " "), ("^{\\circ}", "°"), ("^\\circ", "°"),
-        ("\\circ", "°"), ("\\cdot", "·"), ("\\times", "×"), ("\\theta", "θ"), ("\\alpha", "α"), ("\\mu", "μ"),
-        ("\\Omega", "Ω"), ("\\pi", "π"), ("\\Delta", "Δ"), ("^2", "²"), ("^3", "³"), ("_0", "₀"), ("_1", "₁"), ("_2", "₂"),
-        ("{", ""), ("}", ""), ("$", ""),
+        ("\\text{", ""),
+        ("\\mathrm{", ""),
+        ("\\,", " "),
+        ("\\ ", " "),
+        ("\\;", " "),
+        ("^{\\circ}", "°"),
+        ("^\\circ", "°"),
+        ("\\circ", "°"),
+        ("\\cdot", "·"),
+        ("\\times", "×"),
+        ("\\theta", "θ"),
+        ("\\alpha", "α"),
+        ("\\mu", "μ"),
+        ("\\Omega", "Ω"),
+        ("\\pi", "π"),
+        ("\\Delta", "Δ"),
+        ("^2", "²"),
+        ("^3", "³"),
+        ("_0", "₀"),
+        ("_1", "₁"),
+        ("_2", "₂"),
+        ("{", ""),
+        ("}", ""),
+        ("$", ""),
     ] {
         t = t.replace(de, a);
     }
@@ -485,12 +684,21 @@ pub fn a_texto(s: &str) -> String {
 fn encajar(els: &mut [Value], [bx, by, bw, bh]: [f64; 4]) {
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for e in els.iter() {
-        let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
-        let (w, h) = (e["width"].as_f64().unwrap_or(0.0), e["height"].as_f64().unwrap_or(0.0));
+        let (x, y) = (
+            e["x"].as_f64().unwrap_or(0.0),
+            e["y"].as_f64().unwrap_or(0.0),
+        );
+        let (w, h) = (
+            e["width"].as_f64().unwrap_or(0.0),
+            e["height"].as_f64().unwrap_or(0.0),
+        );
         let (mut ex0, mut ey0, mut ex1, mut ey1) = (x, y, x + w, y + h);
         if let Some(pts) = e["points"].as_array() {
             for p in pts {
-                let (px, py) = (x + p[0].as_f64().unwrap_or(0.0), y + p[1].as_f64().unwrap_or(0.0));
+                let (px, py) = (
+                    x + p[0].as_f64().unwrap_or(0.0),
+                    y + p[1].as_f64().unwrap_or(0.0),
+                );
                 ex0 = ex0.min(px);
                 ey0 = ey0.min(py);
                 ex1 = ex1.max(px);
@@ -505,8 +713,13 @@ fn encajar(els: &mut [Value], [bx, by, bw, bh]: [f64; 4]) {
     if x0 > x1 {
         return;
     }
-    let s = (bw / (x1 - x0).max(1.0)).min(bh / (y1 - y0).max(1.0)).min(1.0);
-    let (dx, dy) = (bx + (bw - (x1 - x0) * s) / 2.0, by + (bh - (y1 - y0) * s) / 2.0);
+    let s = (bw / (x1 - x0).max(1.0))
+        .min(bh / (y1 - y0).max(1.0))
+        .min(1.0);
+    let (dx, dy) = (
+        bx + (bw - (x1 - x0) * s) / 2.0,
+        by + (bh - (y1 - y0) * s) / 2.0,
+    );
     for e in els.iter_mut() {
         let x = e["x"].as_f64().unwrap_or(0.0);
         let y = e["y"].as_f64().unwrap_or(0.0);
@@ -555,8 +768,18 @@ pub(crate) fn elementos(f: &mut Fabrica, p: &Problema) {
 pub fn pide_problema(pedido: &str) -> bool {
     let q = crate::acciones::normalizar(pedido);
     [
-        "problema", "ejercicio", "enunciado", "en limpio", "a limpio", "reescrib", "transcrib", "resuelve", "resolver", "resuelvelo",
-        "tarea de mate", "examen",
+        "problema",
+        "ejercicio",
+        "enunciado",
+        "en limpio",
+        "a limpio",
+        "reescrib",
+        "transcrib",
+        "resuelve",
+        "resolver",
+        "resuelvelo",
+        "tarea de mate",
+        "examen",
     ]
     .iter()
     .any(|c| q.contains(c))
@@ -567,8 +790,15 @@ pub fn pide_problema(pedido: &str) -> bool {
 /// formulas, y juntos aciertan mas. Sin texto, se le dice: asi no inventa
 /// un enunciado que la foto no tiene.
 pub fn pista_de_ocr(lineas: &[String]) -> String {
-    let texto: Vec<&str> = lineas.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
-    let letras: usize = texto.iter().map(|l| l.chars().filter(|c| c.is_alphanumeric()).count()).sum();
+    let texto: Vec<&str> = lineas
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    let letras: usize = texto
+        .iter()
+        .map(|l| l.chars().filter(|c| c.is_alphanumeric()).count())
+        .sum();
     if letras < 8 {
         return "\n\n[OCR de la foto: no se encontro texto legible. Si no ves un problema en la imagen, dilo; no lo inventes.]".into();
     }
@@ -576,7 +806,9 @@ pub fn pista_de_ocr(lineas: &[String]) -> String {
     if t.chars().count() > 2000 {
         t = t.chars().take(2000).collect();
     }
-    format!("\n\n[Texto de la foto leido por OCR (puede tener errores; las formulas, mejor leelas de la imagen):]\n{t}")
+    format!(
+        "\n\n[Texto de la foto leido por OCR (puede tener errores; las formulas, mejor leelas de la imagen):]\n{t}"
+    )
 }
 
 #[cfg(test)]
@@ -625,19 +857,37 @@ mod pruebas {
             })
             .collect();
         assert!(textos.iter().any(|t| t == "Solución"), "{textos:?}");
-        assert!(textos.iter().any(|t| t.contains("Un bloque de 5 kg")), "{textos:?}");
+        assert!(
+            textos.iter().any(|t| t.contains("Un bloque de 5 kg")),
+            "{textos:?}"
+        );
         assert!(textos.iter().any(|t| t.contains("4.9")), "{textos:?}");
         // La fraccion de la segunda ecuacion lleva su raya.
-        assert!(els.iter().filter(|e| matches!(e.figura, F::Linea { .. })).count() >= 2);
+        assert!(
+            els.iter()
+                .filter(|e| matches!(e.figura, F::Linea { .. }))
+                .count()
+                >= 2
+        );
         let mut f = Fabrica::nueva((0.0, 0.0), 3);
         elementos(&mut f, &p);
-        let l = pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
+        let l =
+            pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
         assert_eq!(l.cuantos_ajenos(), 0);
         // La figura cae dentro de su recuadro.
         let [bx, by, bw, bh] = caja.unwrap();
-        let rect = f.salida.iter().rev().find(|e| e["type"] == "rectangle").unwrap();
+        let rect = f
+            .salida
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "rectangle")
+            .unwrap();
         let (x, y) = (rect["x"].as_f64().unwrap(), rect["y"].as_f64().unwrap());
-        assert!(x >= bx - 1.0 && x <= bx + bw && y >= by - 1.0 && y <= by + bh, "({x}, {y}) fuera de {:?}", caja);
+        assert!(
+            x >= bx - 1.0 && x <= bx + bw && y >= by - 1.0 && y <= by + bh,
+            "({x}, {y}) fuera de {:?}",
+            caja
+        );
     }
 
     #[test]
@@ -647,7 +897,11 @@ mod pruebas {
         let (els, caja) = piezas(&p);
         assert!(caja.is_none());
         // El recuadro de la solucion es alto aunque este vacio.
-        let alto = els.iter().filter(|e| matches!(e.figura, F::Rectangulo)).map(|e| e.alto).fold(0.0, f32::max);
+        let alto = els
+            .iter()
+            .filter(|e| matches!(e.figura, F::Rectangulo))
+            .map(|e| e.alto)
+            .fold(0.0, f32::max);
         assert!(alto >= 150.0, "{alto}");
     }
 
@@ -666,7 +920,11 @@ mod pruebas {
     #[test]
     fn una_foto_sin_texto_no_se_inventa() {
         // Sin enunciado (el modelo no leyo nada): no se dibuja.
-        for v in [json!({}), json!({"enunciado": "   "}), json!({"enunciado": "?? 3 ..."})] {
+        for v in [
+            json!({}),
+            json!({"enunciado": "   "}),
+            json!({"enunciado": "?? 3 ..."}),
+        ] {
             let e = validar_(v).unwrap_err().to_string();
             assert!(e.contains("no lo inventes"), "{e}");
         }
@@ -679,11 +937,26 @@ mod pruebas {
     #[test]
     fn lo_roto_se_rechaza() {
         for (v, motivo) in [
-            (json!({"enunciado": "Un problema de verdad", "ecuaciones": ["\\frac{1}{2"]}), "llaves"),
-            (json!({"enunciado": "Un problema de verdad", "pasos": [{"texto": "x", "calculo": "m*g"}]}), "paso 1"),
-            (json!({"enunciado": "Un problema de verdad", "pasos": "uno"}), "lista"),
-            (json!({"enunciado": "Un problema de verdad", "figura": [{"tipo": "dragon"}]}), "figura"),
-            (json!({"enunciado": "x".repeat(MAX_ENUNCIADO + 1)}), "pasa de"),
+            (
+                json!({"enunciado": "Un problema de verdad", "ecuaciones": ["\\frac{1}{2"]}),
+                "llaves",
+            ),
+            (
+                json!({"enunciado": "Un problema de verdad", "pasos": [{"texto": "x", "calculo": "m*g"}]}),
+                "paso 1",
+            ),
+            (
+                json!({"enunciado": "Un problema de verdad", "pasos": "uno"}),
+                "lista",
+            ),
+            (
+                json!({"enunciado": "Un problema de verdad", "figura": [{"tipo": "dragon"}]}),
+                "figura",
+            ),
+            (
+                json!({"enunciado": "x".repeat(MAX_ENUNCIADO + 1)}),
+                "pasa de",
+            ),
         ] {
             let e = validar_(v.clone()).unwrap_err().to_string();
             assert!(e.contains(motivo), "{v}: {e}");
@@ -694,7 +967,10 @@ mod pruebas {
     fn los_datos_con_unidad_no_son_fracciones() {
         assert_eq!(a_texto("20\\ m/s"), "20 m/s");
         assert_eq!(a_texto("9.8\\,m/s^2"), "9.8 m/s²");
-        assert_eq!(a_texto("\\text{Lanzamiento desde el suelo}"), "Lanzamiento desde el suelo");
+        assert_eq!(
+            a_texto("\\text{Lanzamiento desde el suelo}"),
+            "Lanzamiento desde el suelo"
+        );
         assert_eq!(a_texto("45^\\circ"), "45°");
         let (p, _) = validar_(json!({"enunciado": "Un proyectil se lanza a 20 m/s", "datos": ["v_0 = 20 m/s", "desde el suelo"]})).unwrap();
         let (els, _) = piezas(&p);
@@ -726,7 +1002,11 @@ mod pruebas {
             matriz_de_lista("[[2, -1, 0], [1, 3, 2]]").unwrap(),
             r"\begin{bmatrix} 2 & -1 & 0 \\ 1 & 3 & 2 \end{bmatrix}"
         );
-        assert!(matriz_de_lista("[[a, b], [c, d]]").unwrap().contains("a & b"));
+        assert!(
+            matriz_de_lista("[[a, b], [c, d]]")
+                .unwrap()
+                .contains("a & b")
+        );
         assert!(matriz_de_lista("[1, 2]").is_none());
         assert!(valor_como_formula("20 m/s").is_none());
         let (p, _) = validar_(json!({
@@ -737,9 +1017,21 @@ mod pruebas {
         .unwrap();
         let (els, _) = piezas(&p);
         let t = textos_de(&els);
-        assert!(t.iter().all(|x| !x.contains('[') && !x.contains('\\') && !x.contains('^') && !x.contains('{')), "{t:?}");
+        assert!(
+            t.iter().all(|x| !x.contains('[')
+                && !x.contains('\\')
+                && !x.contains('^')
+                && !x.contains('{')),
+            "{t:?}"
+        );
         // Las nueve cifras, sueltas en su celda.
-        assert!(t.iter().filter(|x| ["2", "-1", "0", "1", "3", "4"].contains(&x.trim())).count() >= 9, "{t:?}");
+        assert!(
+            t.iter()
+                .filter(|x| ["2", "-1", "0", "1", "3", "4"].contains(&x.trim()))
+                .count()
+                >= 9,
+            "{t:?}"
+        );
     }
 
     /// Banco del 15-oct: la integral se quedaba en «a» (lo de detras del
@@ -754,12 +1046,30 @@ mod pruebas {
         .unwrap();
         let (els, _) = piezas(&p);
         let t = textos_de(&els);
-        assert!(t.iter().any(|x| x.contains('∫')), "la integral entera: {t:?}");
-        assert!(t.iter().all(|x| !x.contains('$') && !x.contains("\\int")), "{t:?}");
-        assert!(t.iter().any(|x| x.contains("Calcula las integrales")), "{t:?}");
-        assert_eq!(sin_las_ecuaciones("Resuelve x^2 - 5x + 6 = 0 por factorizacion.", &["x^2 - 5x + 6 = 0".into()]), "Resuelve por factorizacion.");
+        assert!(
+            t.iter().any(|x| x.contains('∫')),
+            "la integral entera: {t:?}"
+        );
+        assert!(
+            t.iter().all(|x| !x.contains('$') && !x.contains("\\int")),
+            "{t:?}"
+        );
+        assert!(
+            t.iter().any(|x| x.contains("Calcula las integrales")),
+            "{t:?}"
+        );
+        assert_eq!(
+            sin_las_ecuaciones(
+                "Resuelve x^2 - 5x + 6 = 0 por factorizacion.",
+                &["x^2 - 5x + 6 = 0".into()]
+            ),
+            "Resuelve por factorizacion."
+        );
         // Un enunciado que es SOLO la ecuacion se queda como estaba.
-        assert_eq!(sin_las_ecuaciones("x^2 = 4", &["x^2 = 4".into()]), "x^2 = 4");
+        assert_eq!(
+            sin_las_ecuaciones("x^2 = 4", &["x^2 = 4".into()]),
+            "x^2 = 4"
+        );
     }
 
     #[test]

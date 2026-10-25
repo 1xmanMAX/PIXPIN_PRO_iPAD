@@ -86,11 +86,18 @@ impl Encaje {
     /// El de una unidad con el cero en el origen del plano (el de un plano
     /// sin `.hoja`).
     pub fn de_unidad(u: f64) -> Encaje {
-        Encaje { u, cero_x: 0.0, cero_y: 0.0 }
+        Encaje {
+            u,
+            cero_x: 0.0,
+            cero_y: 0.0,
+        }
     }
 
     pub fn a_capa(&self, p: [f64; 2]) -> [f64; 2] {
-        [(p[0] - self.cero_x) / self.u, -(p[1] - self.cero_y) / self.u]
+        [
+            (p[0] - self.cero_x) / self.u,
+            -(p[1] - self.cero_y) / self.u,
+        ]
     }
 
     pub fn a_plano(&self, q: [f64; 2]) -> [f64; 2] {
@@ -126,7 +133,11 @@ impl Encaje {
         if !(u > 0.0 && u.is_finite()) {
             return None;
         }
-        Some(Encaje { u, cero_x: caja[0] as f64 - x0 * u, cero_y: caja[3] as f64 + y0 * u })
+        Some(Encaje {
+            u,
+            cero_x: caja[0] as f64 - x0 * u,
+            cero_y: caja[3] as f64 + y0 * u,
+        })
     }
 }
 
@@ -208,7 +219,12 @@ pub enum EventoPlano {
     BajarCentral(i32, i32),
     SubirCentral(i32, i32),
     Rueda(i32),
-    Tecla { vk: u32, shift: bool, ctrl: bool, alt: bool },
+    Tecla {
+        vk: u32,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+    },
     TeclaSoltada(u32),
     Caracter(char),
 }
@@ -233,7 +249,13 @@ pub trait Anotador {
     /// ventana) y antes de presentarlo. Solo en Windows (D3D11): en Mac,
     /// iPad e iPhone la tinta la pinta Swift encima de la capa de Metal.
     #[cfg(windows)]
-    fn pintar(&mut self, dispositivo: &ID3D11Device, destino: &ID3D11Texture2D, vista: &VistaPlano, anotando: bool);
+    fn pintar(
+        &mut self,
+        dispositivo: &ID3D11Device,
+        destino: &ID3D11Texture2D,
+        vista: &VistaPlano,
+        anotando: bool,
+    );
     /// Si lo ultimo pintado no quedo nitido (lo anotado iba en su foto
     /// estirada mientras se movia la camara, o con trazos aun sin rehacer a
     /// la escala nueva): el visor pinta otro fotograma aunque no cambie nada.
@@ -272,12 +294,21 @@ mod pruebas {
     }
 
     fn tramo(tamano: f32, cuantos: u32) -> crate::modelo::Tramo {
-        crate::modelo::Tramo { desde: 0, cuantos, caja: [0.0; 4], tamano, clase: 0 }
+        crate::modelo::Tramo {
+            desde: 0,
+            cuantos,
+            caja: [0.0; 4],
+            tamano,
+            clase: 0,
+        }
     }
 
     #[test]
     fn la_unidad_antigua_es_la_milesima_del_lado_mayor() {
-        let m = Modelo { caja: [0.0, 0.0, 500.0, 2000.0], ..Default::default() };
+        let m = Modelo {
+            caja: [0.0, 0.0, 500.0, 2000.0],
+            ..Default::default()
+        };
         assert!((unidad_antigua(&m) - 2.0).abs() < 1e-9);
         // Caso negativo: un plano sin caja no da una unidad absurda.
         assert_eq!(unidad_antigua(&Modelo::default()), 1.0);
@@ -293,17 +324,27 @@ mod pruebas {
         };
         assert!((unidad_de_la_capa(&m) - 2.0 * 1.4 / 20.0).abs() < 1e-9);
         // Mitad y mitad: la mediana es la del tramo pequeno (como `cuenta * 2 >= total`).
-        let m2 = Modelo { tramos_letras: vec![tramo(64.0, 10), tramo(2.0, 10)], ..m.clone() };
+        let m2 = Modelo {
+            tramos_letras: vec![tramo(64.0, 10), tramo(2.0, 10)],
+            ..m.clone()
+        };
         assert!((unidad_de_la_capa(&m2) - 2.0 * 1.4 / 20.0).abs() < 1e-9);
         // Caso negativo: sin letras (o con tamanos imposibles), la quinta parte de la antigua.
-        let sin = Modelo { tramos_letras: vec![tramo(f32::NAN, 5), tramo(0.0, 3)], ..m };
+        let sin = Modelo {
+            tramos_letras: vec![tramo(f32::NAN, 5), tramo(0.0, 3)],
+            ..m
+        };
         assert!((unidad_de_la_capa(&sin) - 100.0 / 5.0).abs() < 1e-9);
     }
 
     #[test]
     fn la_hoja_lleva_la_capa_a_la_caja_del_plano_aunque_cambie_la_unidad() {
         let caja = [-300.0, -120.0, 500.0, 80.0];
-        let e = Encaje { u: 0.35, cero_x: 12.0, cero_y: -7.0 };
+        let e = Encaje {
+            u: 0.35,
+            cero_x: 12.0,
+            cero_y: -7.0,
+        };
         let hoja = e.hoja(caja);
         // y0 es la de arriba del plano: en la capa, la menor.
         assert!(hoja[1] < hoja[3]);
@@ -311,7 +352,10 @@ mod pruebas {
         let p = [123.0, -45.0];
         let q = e.a_capa(p);
         let r = de_vuelta.a_plano(q);
-        assert!((r[0] - p[0]).abs() < 1e-9 && (r[1] - p[1]).abs() < 1e-9, "{r:?}");
+        assert!(
+            (r[0] - p[0]).abs() < 1e-9 && (r[1] - p[1]).abs() < 1e-9,
+            "{r:?}"
+        );
         // Sin hoja, el cero en el origen.
         assert_eq!(Encaje::de_unidad(2.0).a_plano([1.0, 1.0]), [2.0, -2.0]);
         // Casos negativos: hojas sin area, al reves o con numeros imposibles.
@@ -335,18 +379,35 @@ mod pruebas {
         assert_eq!(cuatro_decimales(-1.03125), "-1.0313");
         assert_eq!(cuatro_decimales(0.1), "0.1000");
         // Caso negativo: otra forma, otro id.
-        assert_ne!(huella(GRUPO_COTA, &[1.0, 2.5]), huella(GRUPO_COTA, &[1.0, 2.6]));
+        assert_ne!(
+            huella(GRUPO_COTA, &[1.0, 2.5]),
+            huella(GRUPO_COTA, &[1.0, 2.6])
+        );
     }
 
     #[test]
     fn la_camara_del_motor_pone_el_mismo_punto_en_el_mismo_pixel() {
-        let v = VistaPlano { centro: [100.0, 50.0], px: 0.5, ancho: 800, alto: 600, origen_pantalla: (0, 0), escala_por_cien: 100, unidad: 2.0, claro: false };
+        let v = VistaPlano {
+            centro: [100.0, 50.0],
+            px: 0.5,
+            ancho: 800,
+            alto: 600,
+            origen_pantalla: (0, 0),
+            escala_por_cien: 100,
+            unidad: 2.0,
+            claro: false,
+        };
         let (x, y, zoom) = v.camara();
         // Un punto del plano: su pixel por la camara del plano y por la del motor.
         let p = [130.0, 20.0];
-        let px_plano = [(p[0] - v.centro[0]) / v.px + 400.0, 300.0 - (p[1] - v.centro[1]) / v.px];
+        let px_plano = [
+            (p[0] - v.centro[0]) / v.px + 400.0,
+            300.0 - (p[1] - v.centro[1]) / v.px,
+        ];
         let q = a_la_capa(p, v.unidad);
         let px_motor = [(q[0] - x) * zoom, (q[1] - y) * zoom];
-        assert!((px_plano[0] - px_motor[0]).abs() < 1e-9 && (px_plano[1] - px_motor[1]).abs() < 1e-9);
+        assert!(
+            (px_plano[0] - px_motor[0]).abs() < 1e-9 && (px_plano[1] - px_motor[1]).abs() < 1e-9
+        );
     }
 }

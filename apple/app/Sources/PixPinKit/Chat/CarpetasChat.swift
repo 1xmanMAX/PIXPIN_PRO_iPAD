@@ -13,9 +13,11 @@
 //   renombran y se quitan de la carpeta (la pagina sigue en el chat).
 // - En el menu de un mensaje, «Añadir a carpeta…» (`MenuEstudio.swift`).
 //
-// Todo lo que cambia se escribe en el cuaderno por el nucleo
-// (`crearCarpeta`, `cambiarCarpeta`, `paginaSiguienteDeCarpeta`), con el
-// formato de Windows: viaja igual al PC y al movil.
+// Todo lo que cambia se escribe en el cuaderno por el nucleo, con las
+// mismas llamadas que el Mac (`carpetas.rs`: `crearCarpetaDePaginas`,
+// `carpetaDePaginas`, `anadirACarpeta`, `cambiarCarpeta`,
+// `paginaSiguienteDeCarpeta`), con el formato de Windows: viaja igual al
+// PC, al Mac y al movil.
 
 import PixPinCore
 import SwiftUI
@@ -29,18 +31,19 @@ enum CarpetasChat {
     static let nombreDeSerie = "Cuaderno"
     static let pagina = "Página"
 
-    /// La palabra de `miniapp` de una carpeta (`"carpeta"`, la del nucleo).
-    static let palabra = carpetaMiniapp()
+    /// La palabra de `miniapp` de una carpeta (`carpeta_de_paginas::MINIAPP`).
+    static let palabra = "carpeta"
 
     /// Si un mensaje es una carpeta (`es_carpeta`).
     static func esCarpeta(_ m: MensajeChat) -> Bool {
         m.clase == "MINIAPP" && m.miniapp == palabra
     }
 
-    /// Sus paginas, en orden (vacio si el documento no se entiende).
-    static func paginas(_ m: MensajeChat) -> [PaginaDeCarpeta] {
+    /// Los `id` de sus paginas, en orden (vacio si el documento no se
+    /// entiende): lo de la tarjeta, sin leer el chat.
+    static func paginas(_ m: MensajeChat) -> [String] {
         guard esCarpeta(m) else { return [] }
-        return carpetaPaginas(documento: m.texto) ?? []
+        return paginasDeCarpeta(texto: m.texto)
     }
 
     /// «1 página», «3 páginas» o «Vacía» (`carpeta-paginas`).
@@ -64,28 +67,12 @@ enum CarpetasChat {
         ["DIBUJO", "PAGINA", "IMAGEN"].contains(m.clase)
     }
 
-    /// **El nombre con el que entra una hoja** (`nombre_de_hoja`): el suyo
-    /// si se lo pusieron, sin extension; «Lienzo» o `<id>.excalidraw` no
-    /// dicen nada (entonces cuenta la serie o «Página N»).
-    static func nombreDeHoja(_ m: MensajeChat) -> String {
-        let n = m.nombre.trimmingCharacters(in: .whitespacesAndNewlines)
-        if m.clase == "NOTA" {
-            let primera = m.texto.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-            let t = primera.trimmingCharacters(in: CharacterSet(charactersIn: "# ").union(.whitespaces))
-            return String(t.prefix(80))
-        }
-        if n.isEmpty || n == "Lienzo" || n.hasSuffix(".excalidraw") { return "" }
-        let sin = (n as NSString).deletingPathExtension
-        return sin.isEmpty ? n : sin
-    }
-
-    /// El titulo de una pagina: el suyo en la carpeta o, sin el, el nombre
-    /// del mensaje.
-    static func titulo(_ p: PaginaDeCarpeta, _ m: MensajeChat?) -> String {
+    /// El titulo de una pagina: el suyo en la carpeta (el nucleo ya pone el
+    /// nombre del mensaje si no lleva) o, sin ninguno, el de su fila.
+    static func titulo(_ p: PaginaDeCarpeta) -> String {
         let t = p.titulo.trimmingCharacters(in: .whitespaces)
         if !t.isEmpty { return t }
-        guard let m else { return pagina }
-        return TextosCompartir.nombreDeFila(nombre: m.nombre, resumen: m.resumen)
+        return TextosCompartir.nombreDeFila(nombre: p.mensaje.nombre, resumen: p.mensaje.resumen)
     }
 
     /// Las carpetas de lo cargado del chat, la mas nueva abajo.
@@ -111,15 +98,13 @@ enum CarpetasChat {
 @MainActor
 enum AccionesCarpeta {
     /// **Una carpeta nueva al final del chat**, con `primera` dentro si se
-    /// da. El nombre, sin repetir («Cuaderno», «Cuaderno 2»…).
+    /// da. El nombre lo pone el nucleo, sin repetir («Cuaderno», «Cuaderno
+    /// 2»…).
     static func crear(en chat: String, con primera: MensajeChat?, almacen: Almacen) async -> MensajeChat? {
         let nucleo = almacen.nucleo
-        let (id, hoja) = (primera?.id, primera.map(CarpetasChat.nombreDeHoja) ?? "")
+        let id = primera?.id
         let r = await Task.detached(priority: .userInitiated) { () -> Result<MensajeChat, Error> in
-            Result {
-                try nucleo.crearCarpeta(chat: chat, nombre: nil, base: CarpetasChat.nombreDeSerie,
-                                        primera: id, nombreDeLaHoja: hoja, porDefecto: CarpetasChat.pagina)
-            }
+            Result { try nucleo.crearCarpetaDePaginas(chat: chat, primera: id) }
         }.value
         switch r {
         case let .success(m):
@@ -131,34 +116,38 @@ enum AccionesCarpeta {
         }
     }
 
-    /// **Cambia una carpeta** y pone su tarjeta al dia en el chat.
+    /// **Cambia una carpeta** y pone su tarjeta al dia en el chat. `nil` si
+    /// ya no esta.
     static func cambiar(_ carpeta: String, en chat: String, _ cambio: CambioCarpeta,
-                        almacen: Almacen) async -> CarpetaCambiada? {
+                        almacen: Almacen) async -> MensajeChat? {
         let nucleo = almacen.nucleo
-        let r = await Task.detached(priority: .userInitiated) { () -> Result<CarpetaCambiada, Error> in
-            Result { try nucleo.cambiarCarpeta(chat: chat, carpeta: carpeta, cambio: cambio) }
+        let r = await Task.detached(priority: .userInitiated) { () -> MensajeChat? in
+            (try? nucleo.cambiarCarpeta(chat: chat, carpeta: carpeta, cambio: cambio)) ?? nil
         }.value
-        guard case let .success(c) = r else { return nil }
-        almacen.sustituir(c.mensaje, en: chat)
-        return c
+        if let r { almacen.sustituir(r, en: chat) }
+        return r
     }
 
-    /// **«Añadir a carpeta»**: mete `m` en `carpeta` y dice como entro.
+    /// **«Añadir a carpeta»**: mete `m` en `carpeta`, al final y con el
+    /// titulo que le toca, y dice como entro (o que ya estaba).
     static func anadir(_ m: MensajeChat, a carpeta: MensajeChat, en chat: String,
                        almacen: Almacen, avisar: @escaping (String) -> Void) {
-        let nombre = carpeta.nombre.isEmpty ? nombreDeSerie : carpeta.nombre
-        let cambio = CambioCarpeta.anadir(pagina: m.id, nombreDeLaHoja: CarpetasChat.nombreDeHoja(m),
-                                          porDefecto: CarpetasChat.pagina)
+        let (nucleo, id, cid) = (almacen.nucleo, m.id, carpeta.id)
         _ = Task<Void, Never> {
-            guard let c = await cambiar(carpeta.id, en: chat, cambio, almacen: almacen) else {
+            let r = await Task.detached(priority: .userInitiated) { () -> Result<AnadidaACarpeta?, Error> in
+                Result { try nucleo.anadirACarpeta(chat: chat, carpeta: cid, pagina: id) }
+            }.value
+            switch r {
+            case let .success(a?):
+                almacen.sustituir(a.carpeta, en: chat)
+                avisar(a.yaEstaba ? "Ya está en «\(a.nombre)»" : "Añadida a «\(a.nombre)» como «\(a.titulo)»")
+            case .success(nil):
                 avisar("Esa carpeta ya no está en el chat")
-                return
+            case .failure:
+                avisar("No se pudo: mira el registro de PixPin")
             }
-            avisar(c.yaEstaba ? "Ya está en «\(nombre)»" : "Añadida a «\(nombre)» como «\(c.titulo)»")
         }
     }
-
-    private static var nombreDeSerie: String { CarpetasChat.nombreDeSerie }
 }
 
 // MARK: - La tarjeta del chat
@@ -172,6 +161,9 @@ struct BurbujaCarpeta: View {
     @Environment(\.escalaChat) private var escala
 
     static func esCarpeta(_ m: MensajeChat) -> Bool { CarpetasChat.esCarpeta(m) }
+    /// Cuantas paginas se ven en la tarjeta, una al lado de otra (Windows y
+    /// el Mac: tres, y «+N»).
+    static let enLaTarjeta = 3
 
     var body: some View {
         let paginas = CarpetasChat.paginas(mensaje)
@@ -191,8 +183,8 @@ struct BurbujaCarpeta: View {
             }
             if !paginas.isEmpty {
                 HStack(spacing: 6 * escala) {
-                    ForEach(Array(paginas.prefix(4).enumerated()), id: \.element.id) { i, p in
-                        MiniaturaDePagina(pagina: mensajeDe(p.id), chat: chat, almacen: almacen,
+                    ForEach(Array(paginas.prefix(Self.enLaTarjeta).enumerated()), id: \.element) { i, p in
+                        MiniaturaDePagina(pagina: mensajeDe(p), chat: chat, almacen: almacen,
                                           lado: 64 * escala)
                             .overlay(alignment: .bottomLeading) {
                                 Text("\(i + 1)")
@@ -203,8 +195,8 @@ struct BurbujaCarpeta: View {
                                     .padding(3)
                             }
                     }
-                    if paginas.count > 4 {
-                        Text("+\(paginas.count - 4)").font(.caption.weight(.semibold)).opacity(0.7)
+                    if paginas.count > Self.enLaTarjeta {
+                        Text("+\(paginas.count - Self.enLaTarjeta)").font(.caption.weight(.semibold)).opacity(0.7)
                     }
                 }
             }
@@ -272,7 +264,8 @@ struct MiniaturaDePagina: View {
 
 // MARK: - La ventana de la carpeta
 
-/// Lo que se ve de una carpeta abierta, leido del disco.
+/// Lo que se ve de una carpeta abierta, leido del disco por el nucleo
+/// (`carpetaDePaginas`: sus paginas vivas, en orden, con su mensaje).
 @MainActor
 final class ModeloCarpeta: ObservableObject {
     let chat: String
@@ -280,8 +273,6 @@ final class ModeloCarpeta: ObservableObject {
     let almacen: Almacen
     @Published private(set) var nombre = ""
     @Published private(set) var paginas: [PaginaDeCarpeta] = []
-    /// Los mensajes del chat por su id (las paginas apuntan aqui).
-    @Published private(set) var mensajes: [String: MensajeChat] = [:]
     @Published private(set) var cargada = false
     @Published private(set) var noEsta = false
     @Published var aviso: String?
@@ -294,23 +285,23 @@ final class ModeloCarpeta: ObservableObject {
         self.almacen = almacen
     }
 
-    /// Las paginas que siguen en el chat (`vivas`): lo borrado se salta.
-    var vivas: [PaginaDeCarpeta] { paginas.filter { mensajes[$0.id] != nil } }
+    /// Las paginas que siguen en el chat (el nucleo ya salta lo borrado).
+    var vivas: [PaginaDeCarpeta] { paginas }
 
     func recargar() async {
-        let todos = await PrepararCompartir.todos(chat, almacen: almacen)
-        var porId: [String: MensajeChat] = [:]
-        for m in todos { porId[m.id] = m }
-        mensajes = porId
+        let (nucleo, chat, id) = (almacen.nucleo, chat, id)
+        let c = await Task.detached(priority: .userInitiated) {
+            (try? nucleo.carpetaDePaginas(chat: chat, id: id)) ?? nil
+        }.value
         cargada = true
-        guard let c = porId[id], CarpetasChat.esCarpeta(c) else {
+        guard let c else {
             noEsta = true
             paginas = []
             return
         }
         noEsta = false
         nombre = c.nombre.isEmpty ? CarpetasChat.nombreDeSerie : c.nombre
-        paginas = CarpetasChat.paginas(c)
+        paginas = c.paginas
     }
 
     func avisar(_ texto: String) {
@@ -324,22 +315,23 @@ final class ModeloCarpeta: ObservableObject {
     }
 
     private func aplicar(_ cambio: CambioCarpeta) async {
-        guard let c = await AccionesCarpeta.cambiar(id, en: chat, cambio, almacen: almacen) else {
+        if await AccionesCarpeta.cambiar(id, en: chat, cambio, almacen: almacen) == nil {
             avisar("No se pudo")
-            await recargar()
-            return
         }
-        paginas = c.paginas
-        mensajes[id] = c.mensaje
+        await recargar()
     }
 
+    /// Lleva la pagina `pagina` al puesto `puesto` (entre las vivas).
     func mover(_ pagina: String, a puesto: Int) async {
-        await aplicar(.mover(pagina: pagina, hasta: UInt32(max(0, puesto))))
+        guard let i = paginas.firstIndex(where: { $0.mensaje.id == pagina }) else { return }
+        let hasta = min(max(0, puesto), max(0, paginas.count - 1))
+        guard hasta != i else { return }
+        await aplicar(.mover(desde: UInt32(i), hasta: UInt32(hasta)))
     }
 
     /// Un puesto antes (`paso` -1) o despues (+1), entre las vivas.
     func correr(_ pagina: String, _ paso: Int) async {
-        guard let i = paginas.firstIndex(where: { $0.id == pagina }) else { return }
+        guard let i = paginas.firstIndex(where: { $0.mensaje.id == pagina }) else { return }
         let destino = i + paso
         guard destino >= 0, destino < paginas.count else { return }
         await mover(pagina, a: destino)
@@ -357,7 +349,7 @@ final class ModeloCarpeta: ObservableObject {
         defer { trabajando = false }
         let (nucleo, chat, id) = (almacen.nucleo, chat, id)
         let r = await Task.detached(priority: .userInitiated) { () -> Result<PaginaNuevaDeCarpeta, Error> in
-            Result { try nucleo.paginaSiguienteDeCarpeta(chat: chat, carpeta: id, porDefecto: CarpetasChat.pagina) }
+            Result { try nucleo.paginaSiguienteDeCarpeta(chat: chat, carpeta: id) }
         }.value
         guard case let .success(n) = r else {
             avisar("No se pudo")
@@ -365,14 +357,12 @@ final class ModeloCarpeta: ObservableObject {
         }
         await almacen.alFinal(n.lienzo, en: chat)
         almacen.sustituir(n.carpeta, en: chat)
-        mensajes[n.lienzo.id] = n.lienzo
-        mensajes[id] = n.carpeta
-        paginas = CarpetasChat.paginas(n.carpeta)
+        await recargar()
         return n.lienzo
     }
 
     /// Las paginas, en orden, para la hoja de compartir.
-    var mensajesEnOrden: [MensajeChat] { vivas.compactMap { mensajes[$0.id] } }
+    var mensajesEnOrden: [MensajeChat] { paginas.map(\.mensaje) }
 }
 
 /// **La ventana de una carpeta** (`carpetas::abrir` de Windows).
@@ -429,7 +419,7 @@ struct VistaCarpeta: View {
             Button("Guardar") {
                 if let p = renombrando {
                     let t = titulo
-                    _ = Task<Void, Never> { await modelo.renombrar(p.id, t) }
+                    _ = Task<Void, Never> { await modelo.renombrar(p.mensaje.id, t) }
                 }
                 renombrando = nil
             }
@@ -473,7 +463,7 @@ struct VistaCarpeta: View {
         let vivas = modelo.vivas
         return ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 18)], spacing: 18) {
-                ForEach(Array(vivas.enumerated()), id: \.element.id) { i, p in
+                ForEach(Array(vivas.enumerated()), id: \.element.mensaje.id) { i, p in
                     celda(p, numero: i + 1, total: vivas.count)
                 }
             }
@@ -482,7 +472,8 @@ struct VistaCarpeta: View {
     }
 
     private func celda(_ p: PaginaDeCarpeta, numero: Int, total: Int) -> some View {
-        let m = modelo.mensajes[p.id]
+        let m: MensajeChat? = p.mensaje
+        let pid = p.mensaje.id
         return VStack(alignment: .leading, spacing: 6) {
             MiniaturaDePagina(pagina: m, chat: modelo.chat, almacen: modelo.almacen, lado: 170)
                 .overlay(alignment: .topLeading) {
@@ -493,8 +484,8 @@ struct VistaCarpeta: View {
                         .foregroundStyle(.white)
                         .padding(6)
                 }
-                .opacity(arrastrada == p.id ? 0.4 : 1)
-            Text(CarpetasChat.titulo(p, m))
+                .opacity(arrastrada == pid ? 0.4 : 1)
+            Text(CarpetasChat.titulo(p))
                 .font(.system(size: 13, weight: .medium)).lineLimit(1)
         }
         .contentShape(Rectangle())
@@ -502,29 +493,29 @@ struct VistaCarpeta: View {
         .contextMenu {
             Button { abrir(m) } label: { Label("Abrir", systemImage: "arrow.up.right.square") }
             Button {
-                titulo = p.titulo.isEmpty ? CarpetasChat.titulo(p, m) : p.titulo
+                titulo = CarpetasChat.titulo(p)
                 renombrando = p
             } label: { Label("Renombrar", systemImage: "pencil") }
             if numero > 1 {
-                Button { _ = Task<Void, Never> { await modelo.correr(p.id, -1) } } label: {
+                Button { _ = Task<Void, Never> { await modelo.correr(pid, -1) } } label: {
                     Label("Antes", systemImage: "arrow.left")
                 }
             }
             if numero < total {
-                Button { _ = Task<Void, Never> { await modelo.correr(p.id, 1) } } label: {
+                Button { _ = Task<Void, Never> { await modelo.correr(pid, 1) } } label: {
                     Label("Después", systemImage: "arrow.right")
                 }
             }
-            Button(role: .destructive) { _ = Task<Void, Never> { await modelo.quitar(p.id) } } label: {
+            Button(role: .destructive) { _ = Task<Void, Never> { await modelo.quitar(pid) } } label: {
                 Label("Quitar de la carpeta", systemImage: "minus.circle")
             }
         }
         // Arrastrar una pagina encima de otra la lleva a su sitio.
         .onDrag {
-            arrastrada = p.id
-            return NSItemProvider(object: p.id as NSString)
+            arrastrada = pid
+            return NSItemProvider(object: pid as NSString)
         }
-        .onDrop(of: [UTType.plainText], delegate: SoltarPagina(destino: p.id, modelo: modelo,
+        .onDrop(of: [UTType.plainText], delegate: SoltarPagina(destino: pid, modelo: modelo,
                                                                 arrastrada: $arrastrada))
     }
 
@@ -582,7 +573,7 @@ private struct SoltarPagina: DropDelegate {
         let modelo = self.modelo
         let destino = self.destino
         _ = Task<Void, Never> { @MainActor in
-            guard let j = modelo.paginas.firstIndex(where: { $0.id == destino }) else { return }
+            guard let j = modelo.paginas.firstIndex(where: { $0.mensaje.id == destino }) else { return }
             await modelo.mover(movida, a: j)
         }
         return true

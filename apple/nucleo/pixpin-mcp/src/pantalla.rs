@@ -18,8 +18,13 @@ pub fn ver_pantalla(_args: &Map<String, Value>) -> Resultado {
     let datos = std::fs::read(&ruta).ok().filter(|d| ok && !d.is_empty());
     let _ = std::fs::remove_file(&ruta);
     match datos {
-        Some(datos) => Ok(vec![Contenido::Imagen { datos, mime: "image/png" }]),
-        None => Err("no se pudo capturar la pantalla (¿falta el permiso de grabar la pantalla?)".into()),
+        Some(datos) => Ok(vec![Contenido::Imagen {
+            datos,
+            mime: "image/png",
+        }]),
+        None => {
+            Err("no se pudo capturar la pantalla (¿falta el permiso de grabar la pantalla?)".into())
+        }
     }
 }
 

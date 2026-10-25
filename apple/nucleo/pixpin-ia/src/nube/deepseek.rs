@@ -36,12 +36,21 @@ use super::{Proveedor, instrucciones};
 
 pub const URL: &str = "https://api.deepseek.com/chat/completions";
 pub const MODELO: &str = "deepseek-flash";
+/// **El jefe con DeepSeek** (23-oct, `orquesta.rs`): DeepSeek-V4-Pro, mas
+/// fuerte para planear y supervisar. Segun su pagina de modelos (mirada el
+/// 23-oct) llama herramientas pero **no ve imagenes**.
+pub const MODELO_PRO: &str = "deepseek-v4-pro";
 pub const ESFUERZO: &str = "high";
 /// Tope de salida de cada vuelta (el razonamiento cuenta dentro).
 pub const MAX_TOKENS: u32 = 16_000;
 
 /// **El cuerpo de la peticion.** `pensar`: el modo con razonamiento.
-pub fn cuerpo(p: &Peticion, memoria: &HashMap<String, Value>, pensar: bool, max_tokens: u32) -> Value {
+pub fn cuerpo(
+    p: &Peticion,
+    memoria: &HashMap<String, Value>,
+    pensar: bool,
+    max_tokens: u32,
+) -> Value {
     let base = p
         .mensajes
         .first()
@@ -59,9 +68,7 @@ pub fn cuerpo(p: &Peticion, memoria: &HashMap<String, Value>, pensar: bool, max_
             if !m.llamadas.is_empty() && j["content"].as_str().is_some_and(str::is_empty) {
                 j["content"] = Value::Null;
             }
-            if pensar
-                && let Some(r) = m.llamadas.first().and_then(|l| memoria.get(&l.id))
-            {
+            if pensar && let Some(r) = m.llamadas.first().and_then(|l| memoria.get(&l.id)) {
                 j["reasoning_content"] = r.clone();
             }
         }
@@ -107,7 +114,10 @@ mod pruebas {
 
     #[test]
     fn el_cuerpo_lleva_modelo_pensar_y_herramientas() {
-        let mut p = Peticion::nueva(vec![Mensaje::sistema("Base."), Mensaje::usuario_con_imagen("que es", vec![1], "image/jpeg")]);
+        let mut p = Peticion::nueva(vec![
+            Mensaje::sistema("Base."),
+            Mensaje::usuario_con_imagen("que es", vec![1], "image/jpeg"),
+        ]);
         p.herramientas = catalogo();
         let c = cuerpo(&p, &HashMap::new(), true, MAX_TOKENS);
         assert_eq!(c["model"], "deepseek-flash");
@@ -128,8 +138,17 @@ mod pruebas {
     #[test]
     fn el_razonamiento_vuelve_con_su_llamada() {
         let mut a = Mensaje::texto(Rol::Asistente, "");
-        a.llamadas = vec![LlamadaCruda { id: "call_1".into(), nombre: "ocr".into(), argumentos: "{}".into() }];
-        let p = Peticion::nueva(vec![Mensaje::sistema("s"), Mensaje::usuario("lee"), a, Mensaje::resultado("call_1", "hecho")]);
+        a.llamadas = vec![LlamadaCruda {
+            id: "call_1".into(),
+            nombre: "ocr".into(),
+            argumentos: "{}".into(),
+        }];
+        let p = Peticion::nueva(vec![
+            Mensaje::sistema("s"),
+            Mensaje::usuario("lee"),
+            a,
+            Mensaje::resultado("call_1", "hecho"),
+        ]);
         let memoria = HashMap::from([("call_1".to_string(), json!("pense en leer"))]);
         let c = cuerpo(&p, &memoria, true, 100);
         let asis = &c["messages"][2];
@@ -138,6 +157,10 @@ mod pruebas {
         assert_eq!(asis["tool_calls"][0]["id"], "call_1");
         assert_eq!(c["messages"][3]["role"], "tool");
         // Sin pensar no se manda.
-        assert!(cuerpo(&p, &memoria, false, 100)["messages"][2].get("reasoning_content").is_none());
+        assert!(
+            cuerpo(&p, &memoria, false, 100)["messages"][2]
+                .get("reasoning_content")
+                .is_none()
+        );
     }
 }

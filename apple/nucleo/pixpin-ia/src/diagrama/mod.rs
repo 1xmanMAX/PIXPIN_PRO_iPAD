@@ -52,8 +52,8 @@ use std::time::Instant;
 use crate::hoja::{Caja, PalabraHoja};
 use mascara::{Img, P};
 
-pub(crate) use salida::elementos;
 pub use salida::a_elementos;
+pub(crate) use salida::elementos;
 
 /// Como va un trazo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -101,9 +101,15 @@ impl Arco {
         self.barrido >= std::f64::consts::TAU - 1e-6
     }
     pub fn extremos(&self) -> (P, P) {
-        let a = (self.c.0 + self.r * self.inicio.cos(), self.c.1 + self.r * self.inicio.sin());
+        let a = (
+            self.c.0 + self.r * self.inicio.cos(),
+            self.c.1 + self.r * self.inicio.sin(),
+        );
         let f = self.inicio + self.barrido;
-        (a, (self.c.0 + self.r * f.cos(), self.c.1 + self.r * f.sin()))
+        (
+            a,
+            (self.c.0 + self.r * f.cos(), self.c.1 + self.r * f.sin()),
+        )
     }
 }
 
@@ -221,7 +227,13 @@ pub struct Diagrama {
 impl Diagrama {
     /// Cuantas figuras salieron (sin los rotulos).
     pub fn figuras(&self) -> usize {
-        self.segmentos.len() + self.arcos.len() + self.puntos.len() + self.regiones.len() + self.recuadros.len() + self.marcas.len() + self.ovalos.len()
+        self.segmentos.len()
+            + self.arcos.len()
+            + self.puntos.len()
+            + self.regiones.len()
+            + self.recuadros.len()
+            + self.marcas.len()
+            + self.ovalos.len()
     }
     /// **Si esto es de verdad un diagrama** (y no una ilustracion o una
     /// foto): la geometria explica casi toda la tinta, y hay geometria.
@@ -230,7 +242,12 @@ impl Diagrama {
         // Una foto tambien «se explica» con sus manchas de color y mil
         // rayitas de ruido: un diagrama tiene trazos largos y no es todo relleno.
         let largo_min = 12f64.max(0.02 * self.ancho.max(self.alto) as f64);
-        lineas >= 2 && self.explica >= UMBRAL_DIAGRAMA && self.largo_mediano >= largo_min && self.de_relleno <= 0.9 && self.papel >= 0.3 && self.grano <= 10.0
+        lineas >= 2
+            && self.explica >= UMBRAL_DIAGRAMA
+            && self.largo_mediano >= largo_min
+            && self.de_relleno <= 0.9
+            && self.papel >= 0.3
+            && self.grano <= 10.0
     }
     /// Lo que salio, en corto.
     pub fn resumen(&self) -> String {
@@ -279,7 +296,13 @@ pub struct Opciones {
 
 impl Default for Opciones {
     fn default() -> Self {
-        Opciones { alto_letra: 14.0, umbral_tinta: 34.0, tapar: Vec::new(), pistas: Vec::new(), exacta: true }
+        Opciones {
+            alto_letra: 14.0,
+            umbral_tinta: 34.0,
+            tapar: Vec::new(),
+            pistas: Vec::new(),
+            exacta: true,
+        }
     }
 }
 
@@ -288,11 +311,22 @@ impl Default for Opciones {
 /// `lector`: para las letras sueltas que el OCR no vio (sin el, van como
 /// trazos). Con `o.exacta`, la geometria sale exacta figura a figura, con
 /// los hechos de `o.pistas` y de sus propios rotulos.
-pub fn vectorizar(rgba: &[u8], ancho: u32, alto: u32, palabras: &[PalabraHoja], o: &Opciones, lector: Option<&Lector>) -> Diagrama {
+pub fn vectorizar(
+    rgba: &[u8],
+    ancho: u32,
+    alto: u32,
+    palabras: &[PalabraHoja],
+    o: &Opciones,
+    lector: Option<&Lector>,
+) -> Diagrama {
     let t0 = Instant::now();
     let (w, h) = (ancho as usize, alto as usize);
     if w < 4 || h < 4 || rgba.len() < w * h * 4 {
-        return Diagrama { ancho: w, alto: h, ..Default::default() };
+        return Diagrama {
+            ancho: w,
+            alto: h,
+            ..Default::default()
+        };
     }
     let img = Img::de_rgba(rgba, w, h);
     let mut d = geometria::medir(&img, palabras, o);
@@ -323,8 +357,15 @@ pub fn exacta(d: &mut Diagrama, pistas: &[String], alto_letra: f64) {
 /// recorte) puestos en el diagrama: corrigen al OCR o a la letra suelta
 /// que caen cerca, y lo que no cae cerca de nada se anade (si no pisa), con
 /// el color de la tinta de alli si se pasa el recorte (`rgba`, ancho, alto).
-pub fn corregir_rotulos(d: &mut Diagrama, de_la_nube: &[(String, f64, f64)], alto_letra: f64, recorte: Option<(&[u8], u32, u32)>) {
-    let img = recorte.filter(|r| r.0.len() >= (r.1 * r.2 * 4) as usize).map(|r| Img::de_rgba(r.0, r.1 as usize, r.2 as usize));
+pub fn corregir_rotulos(
+    d: &mut Diagrama,
+    de_la_nube: &[(String, f64, f64)],
+    alto_letra: f64,
+    recorte: Option<(&[u8], u32, u32)>,
+) {
+    let img = recorte
+        .filter(|r| r.0.len() >= (r.1 * r.2 * 4) as usize)
+        .map(|r| Img::de_rgba(r.0, r.1 as usize, r.2 as usize));
     geometria::corregir_rotulos(d, de_la_nube, alto_letra, img.as_ref());
 }
 
@@ -333,7 +374,8 @@ pub fn corregir_rotulos(d: &mut Diagrama, de_la_nube: &[(String, f64, f64)], alt
 /// cortito mas pequeno que los demas («45°», la O del centro, que el OCR
 /// leyo en minuscula) se pone del alto de las otras letras.
 fn pulir_rotulos(d: &mut Diagrama) {
-    d.rotulos.retain(|r| r.texto.chars().any(|c| c.is_alphanumeric()));
+    d.rotulos
+        .retain(|r| r.texto.chars().any(|c| c.is_alphanumeric()));
     // «θ=<45°»: el signo de angulo que el OCR ve en el trazo del 4 sobra.
     for r in d.rotulos.iter_mut() {
         for (de, a) in [("=∢", "="), ("=<", "="), ("= ∢", "= "), ("= <", "= ")] {
@@ -341,19 +383,39 @@ fn pulir_rotulos(d: &mut Diagrama) {
         }
     }
     // El alto de mayuscula de cada rotulo corto.
-    let mayuscula = |r: &Rotulo| if r.letra_suelta { r.caja.h } else { r.caja.h * 0.72 };
-    let mut altos: Vec<f64> = d.rotulos.iter().filter(|r| r.texto.chars().count() <= 4).map(mayuscula).collect();
+    let mayuscula = |r: &Rotulo| {
+        if r.letra_suelta {
+            r.caja.h
+        } else {
+            r.caja.h * 0.72
+        }
+    };
+    let mut altos: Vec<f64> = d
+        .rotulos
+        .iter()
+        .filter(|r| r.texto.chars().count() <= 4)
+        .map(mayuscula)
+        .collect();
     if altos.len() < 3 {
         return;
     }
     altos.sort_by(f64::total_cmp);
     let m = altos[altos.len() / 2];
-    for r in d.rotulos.iter_mut().filter(|r| r.texto.chars().count() <= 4) {
+    for r in d
+        .rotulos
+        .iter_mut()
+        .filter(|r| r.texto.chars().count() <= 4)
+    {
         let c = mayuscula(r);
         if c > 0.0 && c < 0.75 * m {
             let k = m / c;
             let (cx, cy) = (r.caja.cx(), r.caja.cy());
-            r.caja = Caja::nueva(cx - r.caja.w * k / 2.0, cy - r.caja.h * k / 2.0, r.caja.w * k, r.caja.h * k);
+            r.caja = Caja::nueva(
+                cx - r.caja.w * k / 2.0,
+                cy - r.caja.h * k / 2.0,
+                r.caja.w * k,
+                r.caja.h * k,
+            );
         }
     }
 }
@@ -364,14 +426,24 @@ fn pulir_rotulos(d: &mut Diagrama) {
 fn texto_de_recuadros(d: &mut Diagrama) {
     for q in &d.recuadros {
         let caja = Caja::de_esquinas(q.x0, q.y0, q.x1, q.y1);
-        let dentro: Vec<usize> = (0..d.rotulos.len()).filter(|&k| caja.crecer(2.0).contiene(d.rotulos[k].caja.cx(), d.rotulos[k].caja.cy())).collect();
+        let dentro: Vec<usize> = (0..d.rotulos.len())
+            .filter(|&k| {
+                caja.crecer(2.0)
+                    .contiene(d.rotulos[k].caja.cx(), d.rotulos[k].caja.cy())
+            })
+            .collect();
         // (Un recuadro que lleva letras sueltas de una figura, como el de «a» y
         // «b» en O, no: el texto tiene que llenarlo.)
         let lleno: f64 = dentro.iter().map(|&k| d.rotulos[k].caja.area()).sum();
         if dentro.is_empty() || lleno < 0.2 * caja.area() {
             continue;
         }
-        let Some(&mejor) = dentro.iter().max_by_key(|&&k| d.rotulos[k].texto.chars().count()) else { continue };
+        let Some(&mejor) = dentro
+            .iter()
+            .max_by_key(|&&k| d.rotulos[k].texto.chars().count())
+        else {
+            continue;
+        };
         let mut r = d.rotulos[mejor].clone();
         let h = (caja.h * 0.55).max(r.caja.h);
         let w = (h * 0.6 * r.texto.chars().count() as f64).min(caja.w * 0.9);
@@ -385,10 +457,12 @@ fn texto_de_recuadros(d: &mut Diagrama) {
         d.rotulos.push(r);
         // Y las rayitas de dentro (trozos de las letras del recuadro).
         let interior = caja.crecer(-2.0);
-        d.segmentos.retain(|s| !(interior.contiene(s.a.0, s.a.1) && interior.contiene(s.b.0, s.b.1)));
+        d.segmentos
+            .retain(|s| !(interior.contiene(s.a.0, s.a.1) && interior.contiene(s.b.0, s.b.1)));
         d.arcos.retain(|a| {
             let (p, q) = a.extremos();
-            a.entera() || !(interior.contiene(p.0, p.1) && interior.contiene(q.0, q.1) && a.r < caja.h)
+            a.entera()
+                || !(interior.contiene(p.0, p.1) && interior.contiene(q.0, q.1) && a.r < caja.h)
         });
     }
 }
@@ -398,9 +472,14 @@ fn texto_de_recuadros(d: &mut Diagrama) {
 /// rojas junto a O salian como dos parentesis), no geometria.
 fn quitar_arquitos_sueltos(d: &mut Diagrama, hm: f64) {
     let toca = |p: P, d: &Diagrama, yo: usize| {
-        d.segmentos.iter().any(|s| ajuste::dist_a_segmento(p, s.a, s.b) <= 3.0 + s.grosor / 2.0)
+        d.segmentos
+            .iter()
+            .any(|s| ajuste::dist_a_segmento(p, s.a, s.b) <= 3.0 + s.grosor / 2.0)
             || d.puntos.iter().any(|q| ajuste::dist(p, q.c) <= q.r + 3.0)
-            || d.arcos.iter().enumerate().any(|(j, a)| j != yo && (ajuste::dist(p, a.c) - a.r).abs() <= 3.0 + a.grosor / 2.0)
+            || d.arcos
+                .iter()
+                .enumerate()
+                .any(|(j, a)| j != yo && (ajuste::dist(p, a.c) - a.r).abs() <= 3.0 + a.grosor / 2.0)
     };
     let mut quitar = Vec::new();
     for (i, a) in d.arcos.iter().enumerate() {

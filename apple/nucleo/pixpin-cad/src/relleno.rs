@@ -3,7 +3,9 @@
 
 use lyon_tessellation::geom::point;
 use lyon_tessellation::path::Path;
-use lyon_tessellation::{BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers};
+use lyon_tessellation::{
+    BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers,
+};
 
 /// Los triangulos que rellenan los anillos con la regla par-impar (un
 /// anillo dentro de otro es un hueco): puntos e indices, compartidos.
@@ -39,7 +41,11 @@ pub fn rellenar(anillos: &[Vec<[f64; 2]>]) -> (Vec<[f64; 2]>, Vec<u32>) {
     if r.is_err() {
         return (Vec::new(), Vec::new());
     }
-    let puntos = bufs.vertices.iter().map(|v| [v[0] as f64 + o[0], v[1] as f64 + o[1]]).collect();
+    let puntos = bufs
+        .vertices
+        .iter()
+        .map(|v| [v[0] as f64 + o[0], v[1] as f64 + o[1]])
+        .collect();
     (puntos, bufs.indices)
 }
 
@@ -67,5 +73,4 @@ mod pruebas {
         assert!((area(&con_hueco) - 96.0).abs() < 1e-3);
         assert!(rellenar(&[]).0.is_empty());
     }
-
 }

@@ -19,15 +19,17 @@ pub mod historial;
 pub mod hoja_compartir;
 pub mod hojita;
 pub mod info;
+/// El interruptor Chat · Figuras de la barra del chat.
+pub mod interruptor;
 pub mod lupa;
 pub mod menu;
 pub mod mini;
+/// La nota del chat como un Markdown pequeno: bloques y album de fotos.
+pub mod nota_rica;
 pub mod overlay;
 pub mod panel;
 pub mod panel_lateral;
 pub mod propiedades;
-/// La pantalla de Proyectos del chat (`ui/Proyectos.kt` del movil).
-pub mod proyectos;
 pub mod reproductor;
 pub mod resaltado;
 pub mod riel_marcas;

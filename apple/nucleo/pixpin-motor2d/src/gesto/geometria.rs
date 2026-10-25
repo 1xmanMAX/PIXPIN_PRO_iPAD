@@ -390,9 +390,9 @@ impl Gesto {
     /// ninguna viva o es un recto (el cuadradito no lleva letra).
     pub fn marca_para_letra(&self, escena: &Escena) -> Option<u64> {
         let es_marca = |id: u64| {
-            escena
-                .buscar(id)
-                .is_some_and(|e| !e.borrado && e.extras.marca_angulo.as_ref().is_some_and(|m| !m.recto))
+            escena.buscar(id).is_some_and(|e| {
+                !e.borrado && e.extras.marca_angulo.as_ref().is_some_and(|m| !m.recto)
+            })
         };
         let ids = self.seleccion.ids();
         if ids.len() == 1 && es_marca(ids[0]) {

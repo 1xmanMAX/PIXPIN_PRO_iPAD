@@ -18,11 +18,16 @@ use pixpin_motor2d::{estilo, organizar, portapapeles, recorte, recorte_imagen, t
 
 use super::referencia::{self, uno, varios};
 use super::{
-    Anfitrion, CORTAR, Contexto, ESTILO, EXTENDER, Edicion, GEOMETRIA, Hecho, IMAGEN, SELECCIONAR, TRANSFORMAR, TRAZAR,
-    listar,
+    Anfitrion, CORTAR, Contexto, EDITAR_TEXTO, ESTILO, EXTENDER, Edicion, GEOMETRIA, Hecho, IMAGEN,
+    REORGANIZAR, SELECCIONAR, TRANSFORMAR, TRAZAR, listar,
 };
 
-pub(super) fn hacer(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut dyn Anfitrion) -> Result<Hecho, String> {
+pub(super) fn hacer(
+    escena: &mut Escena,
+    e: &Edicion,
+    ctx: &Contexto,
+    an: &mut dyn Anfitrion,
+) -> Result<Hecho, String> {
     match e.herramienta {
         SELECCIONAR => seleccionar(escena, e, ctx),
         TRANSFORMAR => transformar_(escena, e, ctx),
@@ -32,6 +37,8 @@ pub(super) fn hacer(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut d
         CORTAR => cortar(escena, e, ctx),
         EXTENDER => extender(escena, e, ctx),
         IMAGEN => imagen(escena, e, ctx, an),
+        EDITAR_TEXTO => super::textos::editar_texto(escena, e, ctx),
+        REORGANIZAR => reorganizar(escena, e, ctx),
         otro => Err(format!("la herramienta «{otro}» no es de editar")),
     }
 }
@@ -40,7 +47,11 @@ pub(super) fn hacer(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut d
 fn hecho(escena: &Escena, que: &str, ids: Vec<u64>, ctx: &Contexto) -> Hecho {
     let lista = listar(escena, &ids, ctx.marco);
     Hecho {
-        texto: if lista.is_empty() { format!("hecho: {que}") } else { format!("hecho: {que}\n{lista}") },
+        texto: if lista.is_empty() {
+            format!("hecho: {que}")
+        } else {
+            format!("hecho: {que}\n{lista}")
+        },
         ids,
     }
 }
@@ -52,8 +63,10 @@ fn seleccion_de(ids: &[u64]) -> Seleccion {
 }
 
 fn color_rgba(texto: &str) -> Result<ColorRgba, String> {
-    let c = crate::herramientas::color(texto).ok_or_else(|| format!("no conozco el color «{texto}»"))?;
-    let v = u32::from_str_radix(c.0.trim_start_matches('#'), 16).map_err(|_| format!("color raro «{texto}»"))?;
+    let c = crate::herramientas::color(texto)
+        .ok_or_else(|| format!("no conozco el color «{texto}»"))?;
+    let v = u32::from_str_radix(c.0.trim_start_matches('#'), 16)
+        .map_err(|_| format!("color raro «{texto}»"))?;
     Ok(ColorRgba::opaco(
         ((v >> 16) & 0xff) as f32 / 255.0,
         ((v >> 8) & 0xff) as f32 / 255.0,
@@ -62,11 +75,15 @@ fn color_rgba(texto: &str) -> Result<ColorRgba, String> {
 }
 
 fn puntos_de(v: &[f64], ctx: &Contexto) -> Vec<Punto2> {
-    v.chunks_exact(2).map(|p| ctx.a_escena(p[0], p[1])).collect()
+    v.chunks_exact(2)
+        .map(|p| ctx.a_escena(p[0], p[1]))
+        .collect()
 }
 
 fn punto(e: &Edicion, campo: &str, ctx: &Contexto) -> Option<Punto2> {
-    e.numeros(campo).filter(|v| v.len() >= 2).map(|v| ctx.a_escena(v[0], v[1]))
+    e.numeros(campo)
+        .filter(|v| v.len() >= 2)
+        .map(|v| ctx.a_escena(v[0], v[1]))
 }
 
 fn trazo_de(t: &str) -> EstiloTrazo {
@@ -83,16 +100,25 @@ fn trazo_de(t: &str) -> EstiloTrazo {
 
 fn seleccionar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, String> {
     let que = e.texto("que").unwrap_or("todo");
-    let zona = e
-        .numeros("zona")
-        .filter(|z| z.len() >= 4)
-        .map(|z| (z[0] as f32 + ctx.marco.0, z[1] as f32 + ctx.marco.1, z[2] as f32, z[3] as f32));
+    let zona = e.numeros("zona").filter(|z| z.len() >= 4).map(|z| {
+        (
+            z[0] as f32 + ctx.marco.0,
+            z[1] as f32 + ctx.marco.1,
+            z[2] as f32,
+            z[3] as f32,
+        )
+    });
     let r = referencia::resolver(escena, que, ctx, zona)?;
     if r.ids.is_empty() {
         return Err(format!("no hay nada que encaje con «{que}» ahi"));
     }
     let n = r.ids.len();
-    Ok(hecho(escena, &format!("{n} encontrado{}", if n == 1 { "" } else { "s" }), r.ids, ctx))
+    Ok(hecho(
+        escena,
+        &format!("{n} encontrado{}", if n == 1 { "" } else { "s" }),
+        r.ids,
+        ctx,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +135,10 @@ fn transformar_(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hech
     let que = e.texto("que").unwrap_or_default();
     let ids = varios(escena, que, ctx)?;
     // Lo bloqueado se ve pero no se toca (como con el raton).
-    let ids: Vec<u64> = ids.into_iter().filter(|id| escena.buscar(*id).is_some_and(|x| !x.bloqueado)).collect();
+    let ids: Vec<u64> = ids
+        .into_iter()
+        .filter(|id| escena.buscar(*id).is_some_and(|x| !x.bloqueado))
+        .collect();
     if ids.is_empty() {
         return Err("esta bloqueado: el usuario lo dejo quieto a proposito".into());
     }
@@ -132,7 +161,10 @@ fn transformar_(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hech
         "mover" => {
             let (dx, dy) = match punto(e, "a", ctx) {
                 Some(p) => (p.x - x0, p.y - y0),
-                None => (e.numero("dx").unwrap_or(0.0) as f32, e.numero("dy").unwrap_or(0.0) as f32),
+                None => (
+                    e.numero("dx").unwrap_or(0.0) as f32,
+                    e.numero("dy").unwrap_or(0.0) as f32,
+                ),
             };
             if dx == 0.0 && dy == 0.0 {
                 return Err("para mover hace falta «dx»/«dy» o «a»".into());
@@ -141,7 +173,9 @@ fn transformar_(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hech
             Ok(hecho(escena, "movido", ids, ctx))
         }
         "escalar" => {
-            let f = e.numero("factor").ok_or("para escalar hace falta «factor»")? as f32;
+            let f = e
+                .numero("factor")
+                .ok_or("para escalar hace falta «factor»")? as f32;
             if !(0.05..=20.0).contains(&f) {
                 return Err("«factor» tiene que ir de 0.05 a 20".into());
             }
@@ -149,15 +183,33 @@ fn transformar_(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hech
             // el centro): lo mismo que estirar con el raton.
             editar(escena, &mut |x| {
                 let (a0, b0, a1, b1) = x.caja();
-                let c = if ids.len() == 1 { Punto2::nuevo((a0 + a1) / 2.0, (b0 + b1) / 2.0) } else { centro };
+                let c = if ids.len() == 1 {
+                    Punto2::nuevo((a0 + a1) / 2.0, (b0 + b1) / 2.0)
+                } else {
+                    centro
+                };
                 if ids.len() == 1 {
-                    let destino = Punto2::nuevo(c.x + (a1 - a0) / 2.0 * f, c.y + (b1 - b0) / 2.0 * f);
-                    transformar::escalar(x, pixpin_geom::Tirador::SuresteEsquina, destino, true, true);
+                    let destino =
+                        Punto2::nuevo(c.x + (a1 - a0) / 2.0 * f, c.y + (b1 - b0) / 2.0 * f);
+                    transformar::escalar(
+                        x,
+                        pixpin_geom::Tirador::SuresteEsquina,
+                        destino,
+                        true,
+                        true,
+                    );
                 } else {
                     // Varios: cada uno escala y se aleja del centro comun.
                     let mio = Punto2::nuevo((a0 + a1) / 2.0, (b0 + b1) / 2.0);
-                    let destino = Punto2::nuevo(mio.x + (a1 - a0) / 2.0 * f, mio.y + (b1 - b0) / 2.0 * f);
-                    transformar::escalar(x, pixpin_geom::Tirador::SuresteEsquina, destino, true, true);
+                    let destino =
+                        Punto2::nuevo(mio.x + (a1 - a0) / 2.0 * f, mio.y + (b1 - b0) / 2.0 * f);
+                    transformar::escalar(
+                        x,
+                        pixpin_geom::Tirador::SuresteEsquina,
+                        destino,
+                        true,
+                        true,
+                    );
                     x.mover((mio.x - c.x) * (f - 1.0), (mio.y - c.y) * (f - 1.0));
                 }
             });
@@ -175,21 +227,32 @@ fn transformar_(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hech
             let (dx, dy) = match punto(e, "a", ctx) {
                 Some(p) => (p.x - x0, p.y - y0),
                 None => (
-                    e.numero("dx").map(|v| v as f32).unwrap_or(portapapeles::DESPLAZAMIENTO * 2.0),
-                    e.numero("dy").map(|v| v as f32).unwrap_or(portapapeles::DESPLAZAMIENTO * 2.0),
+                    e.numero("dx")
+                        .map(|v| v as f32)
+                        .unwrap_or(portapapeles::DESPLAZAMIENTO * 2.0),
+                    e.numero("dy")
+                        .map(|v| v as f32)
+                        .unwrap_or(portapapeles::DESPLAZAMIENTO * 2.0),
                 ),
             };
             let nuevos = portapapeles::pegar(escena, &copias, dx, dy);
             Ok(hecho(escena, "duplicado", nuevos, ctx))
         }
         "borrar" => {
-            let texto = format!("borrados {}: {}", ids.len(), listar(escena, &ids, ctx.marco).replace('\n', "; "));
+            let texto = format!(
+                "borrados {}: {}",
+                ids.len(),
+                listar(escena, &ids, ctx.marco).replace('\n', "; ")
+            );
             escena.abrir_paso();
             for id in &ids {
                 escena.borrar_apuntando(*id);
             }
             escena.cerrar_paso();
-            Ok(Hecho { texto: format!("hecho: {texto}"), ids: Vec::new() })
+            Ok(Hecho {
+                texto: format!("hecho: {texto}"),
+                ids: Vec::new(),
+            })
         }
         "agrupar" => {
             if ids.len() < 2 {
@@ -216,7 +279,10 @@ fn transformar_(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hech
             } else {
                 transformar::EjeVolteo::Vertical
             };
-            let mut copias: Vec<Elemento> = ids.iter().filter_map(|id| escena.buscar(*id).cloned()).collect();
+            let mut copias: Vec<Elemento> = ids
+                .iter()
+                .filter_map(|id| escena.buscar(*id).cloned())
+                .collect();
             transformar::voltear(&mut copias, eje);
             escena.abrir_paso();
             for c in copias {
@@ -257,11 +323,13 @@ fn cambiar_estilo(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<He
     }
     if let Some(r) = e.texto("relleno") {
         let n = crate::acciones::normalizar(r);
-        cambios.push(C::Relleno(if ["ninguno", "nada", "sin relleno", "transparente", "quitar"].contains(&n.as_str()) {
-            None
-        } else {
-            Some(color_rgba(r)?)
-        }));
+        cambios.push(C::Relleno(
+            if ["ninguno", "nada", "sin relleno", "transparente", "quitar"].contains(&n.as_str()) {
+                None
+            } else {
+                Some(color_rgba(r)?)
+            },
+        ));
     }
     if let Some(t) = e.texto("trazo") {
         cambios.push(C::Estilo(trazo_de(t)));
@@ -270,7 +338,11 @@ fn cambiar_estilo(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<He
         cambios.push(C::Opacidad((o as f32 / 100.0).clamp(0.05, 1.0)));
     }
     if let Some(m) = e.texto("material") {
-        let m = if m == "grafito" { MaterialTinta::Cuadritos } else { MaterialTinta::desde_palabra(m).unwrap_or_default() };
+        let m = if m == "grafito" {
+            MaterialTinta::Cuadritos
+        } else {
+            MaterialTinta::desde_palabra(m).unwrap_or_default()
+        };
         cambios.push(C::Material(m));
     }
     if let Some(d) = e.texto("dureza").and_then(Dureza::desde_rotulo) {
@@ -282,7 +354,15 @@ fn cambiar_estilo(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<He
         return Err("no se pidio ningun cambio: di «color», «relleno», «grosor», «trazo», «opacidad», «material» o «dureza»".into());
     }
     if let Some(t) = tam {
-        let textos: Vec<u64> = ids.iter().copied().filter(|id| escena.buscar(*id).is_some_and(|x| matches!(x.figura, Figura::Texto { .. }))).collect();
+        let textos: Vec<u64> = ids
+            .iter()
+            .copied()
+            .filter(|id| {
+                escena
+                    .buscar(*id)
+                    .is_some_and(|x| matches!(x.figura, Figura::Texto { .. }))
+            })
+            .collect();
         if textos.is_empty() && cambios.is_empty() && grosor.is_none() {
             return Err("«tam_letra» solo cambia textos y en lo elegido no hay ninguno".into());
         }
@@ -340,7 +420,12 @@ fn cambiar_estilo(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<He
 
 /// **Traza con el gesto del editor**: pulsar en el primero, mover por los
 /// demas y soltar en el ultimo. Devuelve el id de lo que nacio.
-pub(crate) fn con_gesto(escena: &mut Escena, mano: Mano, puntos: &[Punto2], ajustar: impl FnOnce(&mut Gesto)) -> Option<u64> {
+pub(crate) fn con_gesto(
+    escena: &mut Escena,
+    mano: Mano,
+    puntos: &[Punto2],
+    ajustar: impl FnOnce(&mut Gesto),
+) -> Option<u64> {
     let (primero, ultimo) = (*puntos.first()?, *puntos.last()?);
     let mut g = Gesto::default();
     // El iman no: el modelo da coordenadas exactas y no un cursor a pulso.
@@ -407,7 +492,11 @@ pub(crate) fn a_mano(puntos: &[Punto2], semilla: u32) -> Vec<Punto2> {
         let mut p = *puntos.last().unwrap();
         for (k, l) in largos.iter().enumerate() {
             if s <= recorrido + l || k == largos.len() - 1 {
-                let t = if *l > 0.0 { ((s - recorrido) / l).clamp(0.0, 1.0) } else { 0.0 };
+                let t = if *l > 0.0 {
+                    ((s - recorrido) / l).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 p = puntos[k].hacia(puntos[k + 1], t);
                 break;
             }
@@ -428,16 +517,25 @@ fn trazar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, Str
         "resaltador" => Mano::Resaltador,
         _ => Mano::Lapiz,
     };
-    let (camino, alto_de_lo_tapado): (Vec<Punto2>, Option<f32>) = match (e.texto("sobre"), e.numeros("puntos")) {
-        (Some(sobre), _) => {
-            let id = uno(escena, sobre, ctx, None)?;
-            let objetivo = escena.buscar(id).cloned().ok_or("no esta")?;
-            let como = e.texto("como").unwrap_or(if mano == Mano::Resaltador { "resaltar" } else { "subrayar" });
-            camino_sobre(&objetivo, como)?
-        }
-        (None, Some(v)) if v.len() >= 4 => (puntos_de(&v, ctx), None),
-        _ => return Err("hace falta «puntos» (al menos dos) o «sobre» (algo del lienzo)".into()),
-    };
+    let (camino, alto_de_lo_tapado): (Vec<Punto2>, Option<f32>) =
+        match (e.texto("sobre"), e.numeros("puntos")) {
+            (Some(sobre), _) => {
+                let id = uno(escena, sobre, ctx, None)?;
+                let objetivo = escena.buscar(id).cloned().ok_or("no esta")?;
+                let como = e.texto("como").unwrap_or(if mano == Mano::Resaltador {
+                    "resaltar"
+                } else {
+                    "subrayar"
+                });
+                camino_sobre(&objetivo, como)?
+            }
+            (None, Some(v)) if v.len() >= 4 => (puntos_de(&v, ctx), None),
+            _ => {
+                return Err(
+                    "hace falta «puntos» (al menos dos) o «sobre» (algo del lienzo)".into(),
+                );
+            }
+        };
     let color = match e.texto("color") {
         Some(c) => color_rgba(c)?,
         None if mano == Mano::Resaltador => ColorRgba::opaco(1.0, 0.83, 0.23),
@@ -445,7 +543,12 @@ fn trazar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, Str
     };
     let grosor = e.numero("grosor").map(|g| (g as f32).clamp(0.5, 40.0));
     let dureza = e.texto("dureza").and_then(Dureza::desde_rotulo);
-    let recorrido = a_mano(&camino, (escena.siguiente_id as u32).wrapping_mul(2_654_435_761).wrapping_add(7));
+    let recorrido = a_mano(
+        &camino,
+        (escena.siguiente_id as u32)
+            .wrapping_mul(2_654_435_761)
+            .wrapping_add(7),
+    );
     let id = con_gesto(escena, mano, &recorrido, |g| {
         g.estilo.trazo = color;
         if let Some(d) = dureza {
@@ -471,7 +574,12 @@ fn trazar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, Str
             escena.cerrar_paso();
         }
     }
-    Ok(hecho(escena, &format!("trazo con {herramienta}"), vec![id], ctx))
+    Ok(hecho(
+        escena,
+        &format!("trazo con {herramienta}"),
+        vec![id],
+        ctx,
+    ))
 }
 
 /// Por donde pasa la mano para subrayar, resaltar, rodear, tachar o repasar
@@ -482,7 +590,10 @@ fn camino_sobre(o: &Elemento, como: &str) -> Result<(Vec<Punto2>, Option<f32>), 
     let p = Punto2::nuevo;
     Ok(match como {
         "subrayar" => (vec![p(x0, y1 + 3.0), p(x1, y1 + 3.0)], None),
-        "tachar" => (vec![p(x0 - 2.0, (y0 + y1) / 2.0), p(x1 + 2.0, (y0 + y1) / 2.0)], None),
+        "tachar" => (
+            vec![p(x0 - 2.0, (y0 + y1) / 2.0), p(x1 + 2.0, (y0 + y1) / 2.0)],
+            None,
+        ),
         "resaltar" => (
             vec![p(x0 - 2.0, (y0 + y1) / 2.0), p(x1 + 2.0, (y0 + y1) / 2.0)],
             Some((h * 0.9).max(8.0)),
@@ -551,7 +662,8 @@ fn recta(escena: &mut Escena, a: Punto2, b: Punto2) -> Result<u64, String> {
     if a.distancia(b) < 0.5 {
         return Err("los dos puntos de la recta son el mismo".into());
     }
-    let id = con_gesto(escena, Mano::Linea, &[a, a.hacia(b, 0.5), b], |_| {}).ok_or("la recta no salio")?;
+    let id = con_gesto(escena, Mano::Linea, &[a, a.hacia(b, 0.5), b], |_| {})
+        .ok_or("la recta no salio")?;
     // El gesto ya la deja ahi; se fijan los extremos exactos por si algo
     // (una restriccion de angulo) los movio.
     escena.abrir_paso();
@@ -578,7 +690,8 @@ fn circulo(escena: &mut Escena, mano: Mano, centro: Punto2, radio: f32) -> Resul
     }
     let a = Punto2::nuevo(centro.x - radio, centro.y - radio);
     let b = Punto2::nuevo(centro.x + radio, centro.y + radio);
-    let id = con_gesto(escena, mano, &[a, a.hacia(b, 0.5), b], |_| {}).ok_or("el circulo no salio")?;
+    let id =
+        con_gesto(escena, mano, &[a, a.hacia(b, 0.5), b], |_| {}).ok_or("el circulo no salio")?;
     escena.abrir_paso();
     escena.apuntar_edicion(id);
     if let Some(x) = escena.buscar_mut(id) {
@@ -599,7 +712,11 @@ pub(crate) fn circuncentro(a: Punto2, b: Punto2, c: Punto2) -> Option<Punto2> {
     if d.abs() < 1e-3 {
         return None;
     }
-    let (a2, b2, c2) = (a.x * a.x + a.y * a.y, b.x * b.x + b.y * b.y, c.x * c.x + c.y * c.y);
+    let (a2, b2, c2) = (
+        a.x * a.x + a.y * a.y,
+        b.x * b.x + b.y * b.y,
+        c.x * c.x + c.y * c.y,
+    );
     Some(Punto2::nuevo(
         (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d,
         (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d,
@@ -609,12 +726,18 @@ pub(crate) fn circuncentro(a: Punto2, b: Punto2, c: Punto2) -> Option<Punto2> {
 /// Los extremos de una recta que ya esta (su primer y ultimo punto).
 fn extremos(escena: &Escena, id: u64) -> Result<(Punto2, Punto2), String> {
     let x = escena.buscar(id).ok_or("no esta")?;
-    let p = x.puntos().filter(|p| p.len() >= 2).ok_or("eso no es una recta")?;
+    let p = x
+        .puntos()
+        .filter(|p| p.len() >= 2)
+        .ok_or("eso no es una recta")?;
     Ok((p[0], p[p.len() - 1]))
 }
 
 fn es_recta(e: &Elemento) -> bool {
-    matches!(e.figura, Figura::Linea { .. } | Figura::Flecha { .. } | Figura::Cota { .. })
+    matches!(
+        e.figura,
+        Figura::Linea { .. } | Figura::Flecha { .. } | Figura::Cota { .. }
+    )
 }
 
 fn geometria(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, String> {
@@ -622,25 +745,39 @@ fn geometria(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, 
     let id = match figura {
         "recta" => {
             let (a, b) = match (e.numeros("puntos"), punto(e, "desde", ctx)) {
-                (Some(v), _) if v.len() >= 4 => (ctx.a_escena(v[0], v[1]), ctx.a_escena(v[2], v[3])),
+                (Some(v), _) if v.len() >= 4 => {
+                    (ctx.a_escena(v[0], v[1]), ctx.a_escena(v[2], v[3]))
+                }
                 (_, Some(a)) => {
                     // Sin angulo, horizontal hacia la derecha.
                     let ang = e.numero("angulo").unwrap_or(0.0) as f32;
-                    let l = e.numero("longitud").ok_or("con «desde» hace falta «longitud»")? as f32;
+                    let l = e
+                        .numero("longitud")
+                        .ok_or("con «desde» hace falta «longitud»")?
+                        as f32;
                     let t = ang.to_radians();
                     // 90 grados es hacia arriba: en pantalla, y negativa.
                     (a, Punto2::nuevo(a.x + l * t.cos(), a.y - l * t.sin()))
                 }
-                _ => return Err("la recta necesita «puntos» [x1,y1,x2,y2] o «desde» con «angulo» y «longitud»".into()),
+                _ => return Err(
+                    "la recta necesita «puntos» [x1,y1,x2,y2] o «desde» con «angulo» y «longitud»"
+                        .into(),
+                ),
             };
             recta(escena, a, b)?
         }
         "circulo" => {
-            let (c, r) = match (punto(e, "centro", ctx), e.numero("radio"), e.numeros("puntos")) {
+            let (c, r) = match (
+                punto(e, "centro", ctx),
+                e.numero("radio"),
+                e.numeros("puntos"),
+            ) {
                 (Some(c), Some(r), _) => (c, r as f32),
                 (_, _, Some(v)) if v.len() >= 6 => {
                     let p = puntos_de(&v, ctx);
-                    let c = circuncentro(p[0], p[1], p[2]).ok_or("los tres puntos estan en linea: no hay circulo que pase por ellos")?;
+                    let c = circuncentro(p[0], p[1], p[2]).ok_or(
+                        "los tres puntos estan en linea: no hay circulo que pase por ellos",
+                    )?;
                     (c, c.distancia(p[0]))
                 }
                 _ => return Err("el circulo necesita «centro» y «radio», o tres «puntos»".into()),
@@ -680,7 +817,12 @@ fn geometria(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, 
             id
         }
         "perpendicular" | "paralela" => {
-            let base = uno(escena, e.texto("a").ok_or("hace falta «a»: la recta que ya esta")?, ctx, Some(("una recta", es_recta)))?;
+            let base = uno(
+                escena,
+                e.texto("a").ok_or("hace falta «a»: la recta que ya esta")?,
+                ctx,
+                Some(("una recta", es_recta)),
+            )?;
             let (a, b) = extremos(escena, base)?;
             let d = b.restar(a).unitario();
             // La normal «a la izquierda» de la recta, mirando de a a b.
@@ -694,7 +836,11 @@ fn geometria(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, 
                     recta(escena, por, pie)?
                 } else {
                     let l = l.unwrap_or(a.distancia(b) / 2.0).max(1.0);
-                    recta(escena, pie.sumar(n.escalar(l / 2.0)), pie.restar(n.escalar(l / 2.0)))?
+                    recta(
+                        escena,
+                        pie.sumar(n.escalar(l / 2.0)),
+                        pie.restar(n.escalar(l / 2.0)),
+                    )?
                 }
             } else {
                 let desplazar = match (punto(e, "por", ctx), e.numero("distancia")) {
@@ -705,7 +851,8 @@ fn geometria(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, 
                 recta(escena, a.sumar(desplazar), b.sumar(desplazar))?
             }
         }
-        "semicircunferencia" | "cuadrante" | "sector" | "segmento" | "marca_angulo" | "angulo_recto" | "punto" => {
+        "semicircunferencia" | "cuadrante" | "sector" | "segmento" | "marca_angulo"
+        | "angulo_recto" | "punto" => {
             let nuevo = de_lamina(escena, figura, e, ctx)?;
             escena.abrir_paso();
             let id = escena.anadir(nuevo);
@@ -734,30 +881,53 @@ fn barrido_de(e: &Edicion, inicio: f64, fin: f64) -> f32 {
         Some(_) => (fin - inicio).rem_euclid(360.0),
         None => fin - inicio,
     };
-    let d = if d == 0.0 && e.texto("sentido").is_some() { 360.0 } else { d };
+    let d = if d == 0.0 && e.texto("sentido").is_some() {
+        360.0
+    } else {
+        d
+    };
     -(d as f32).to_radians()
 }
 
 /// **Las figuras de lamina** con las piezas del motor
 /// (`pixpin_motor2d::geometria_exacta`), las mismas que la herramienta Arco y
 /// la marca de angulo del lienzo.
-fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Result<Elemento, String> {
+fn de_lamina(
+    escena: &Escena,
+    figura: &str,
+    e: &Edicion,
+    ctx: &Contexto,
+) -> Result<Elemento, String> {
     use pixpin_motor2d::geometria_exacta as ge;
-    let puntos = e.numeros("puntos").map(|v| puntos_de(&v, ctx)).unwrap_or_default();
+    let puntos = e
+        .numeros("puntos")
+        .map(|v| puntos_de(&v, ctx))
+        .unwrap_or_default();
     Ok(match figura {
         "semicircunferencia" => {
             let (Some(&a), Some(&b)) = (puntos.first(), puntos.get(1)) else {
-                return Err("la semicircunferencia necesita «puntos» [x1, y1, x2, y2] del diametro".into());
+                return Err(
+                    "la semicircunferencia necesita «puntos» [x1, y1, x2, y2] del diametro".into(),
+                );
             };
             if a.distancia(b) < 1.0 {
                 return Err("el diametro no puede medir 0".into());
             }
             let medio = |s: &Elemento| {
                 let (c, r) = ge::centro_y_radio(s).unwrap_or((a, 0.0));
-                let Figura::Arco { inicio, barrido: Some(b) } = s.figura else { return c };
+                let Figura::Arco {
+                    inicio,
+                    barrido: Some(b),
+                } = s.figura
+                else {
+                    return c;
+                };
                 ge::en_la_circunferencia(c, r, inicio + b / 2.0)
             };
-            let (h, ah) = (ge::semicircunferencia(a, b, true), ge::semicircunferencia(a, b, false));
+            let (h, ah) = (
+                ge::semicircunferencia(a, b, true),
+                ge::semicircunferencia(a, b, false),
+            );
             match punto(e, "lado", ctx) {
                 Some(l) if medio(&ah).distancia(l) < medio(&h).distancia(l) => ah,
                 Some(_) => h,
@@ -767,23 +937,37 @@ fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Resu
             }
         }
         "cuadrante" | "sector" | "segmento" => {
-            let c = punto(e, "centro", ctx).ok_or_else(|| format!("el {figura} necesita «centro»"))?;
-            let cierre = if figura == "segmento" { ge::CierreArco::Segmento } else { ge::CierreArco::Sector };
+            let c =
+                punto(e, "centro", ctx).ok_or_else(|| format!("el {figura} necesita «centro»"))?;
+            let cierre = if figura == "segmento" {
+                ge::CierreArco::Segmento
+            } else {
+                ge::CierreArco::Sector
+            };
             if puntos.len() >= 2 {
                 // Por las puntas de sus dos radios: el angulo menor entre ellos.
                 let (inicio, barrido) = ge::angulo_menor(c, puntos[0], puntos[1]);
                 ge::arco_cerrado(c, c.distancia(puntos[0]), inicio, barrido, cierre)
             } else {
-                let r = e.numero("radio").ok_or_else(|| format!("el {figura} necesita «radio» (o «puntos»)"))? as f32;
+                let r = e
+                    .numero("radio")
+                    .ok_or_else(|| format!("el {figura} necesita «radio» (o «puntos»)"))?
+                    as f32;
                 if r <= 0.5 {
                     return Err("el radio tiene que ser mayor que 0".into());
                 }
                 let inicio = e.numero("inicio").unwrap_or(0.0);
                 let barrido = if figura == "cuadrante" {
-                    let s: f32 = if e.texto("sentido") == Some("horario") { -1.0 } else { 1.0 };
+                    let s: f32 = if e.texto("sentido") == Some("horario") {
+                        -1.0
+                    } else {
+                        1.0
+                    };
                     -s * std::f32::consts::FRAC_PI_2
                 } else {
-                    let fin = e.numero("fin").ok_or_else(|| format!("el {figura} necesita «fin»"))?;
+                    let fin = e
+                        .numero("fin")
+                        .ok_or_else(|| format!("el {figura} necesita «fin»"))?;
                     barrido_de(e, inicio, fin)
                 };
                 ge::arco_cerrado(c, r, a_pantalla(inicio), barrido, cierre)
@@ -795,9 +979,14 @@ fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Resu
             let (v, p1, p2) = match e.texto("entre").filter(|t| !t.trim().is_empty()) {
                 Some(entre) => cruce(escena, entre, ctx, punto(e, "cerca", ctx))?,
                 None => {
-                    let v = punto(e, "vertice", ctx).ok_or("la marca necesita «entre» (dos rectas: «#3 #5») o «vertice» [x, y]")?;
+                    let v = punto(e, "vertice", ctx).ok_or(
+                        "la marca necesita «entre» (dos rectas: «#3 #5») o «vertice» [x, y]",
+                    )?;
                     if puntos.len() < 2 {
-                        return Err("la marca necesita «puntos» [x1, y1, x2, y2]: un punto de cada lado".into());
+                        return Err(
+                            "la marca necesita «puntos» [x1, y1, x2, y2]: un punto de cada lado"
+                                .into(),
+                        );
                     }
                     (v, puntos[0], puntos[1])
                 }
@@ -807,13 +996,21 @@ fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Resu
             }
             let medido = {
                 let (a, b) = (p1.restar(v), p2.restar(v));
-                ((a.x * b.x + a.y * b.y) / (a.longitud() * b.longitud()).max(1e-6)).clamp(-1.0, 1.0).acos().to_degrees()
+                ((a.x * b.x + a.y * b.y) / (a.longitud() * b.longitud()).max(1e-6))
+                    .clamp(-1.0, 1.0)
+                    .acos()
+                    .to_degrees()
             };
             let valor_pedido = e.texto("valor").map(str::trim).filter(|s| !s.is_empty());
             // Un angulo de 90° entre rectas, sin valor propio: su cuadradito.
-            let recto = figura == "angulo_recto" || (e.texto("entre").is_some() && (medido - 90.0).abs() < 1.5 && matches!(valor_pedido, None | Some("griega")));
+            let recto = figura == "angulo_recto"
+                || (e.texto("entre").is_some()
+                    && (medido - 90.0).abs() < 1.5
+                    && matches!(valor_pedido, None | Some("griega")));
             let valor = match valor_pedido {
-                Some("griega") => Some(ge::siguiente_letra_de_angulo(&ge::letras_de_angulo_usadas(&escena.elementos, None))),
+                Some("griega") => Some(ge::siguiente_letra_de_angulo(
+                    &ge::letras_de_angulo_usadas(&escena.elementos, None),
+                )),
                 Some("medida") => Some(format!("{}°", medido.round())),
                 Some(v) => Some(v.to_string()),
                 None => None,
@@ -822,7 +1019,13 @@ fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Resu
                 ge::marca_de_angulo_recto(v, p1, p2, e.numero("radio").unwrap_or(14.0) as f32)
             } else {
                 let arcos = e.numero("arcos").unwrap_or(1.0).clamp(1.0, 3.0) as u8;
-                ge::marca_de_angulo(v, p1, p2, e.numero("radio").unwrap_or(ge::RADIO_MARCA as f64) as f32, arcos)
+                ge::marca_de_angulo(
+                    v,
+                    p1,
+                    p2,
+                    e.numero("radio").unwrap_or(ge::RADIO_MARCA as f64) as f32,
+                    arcos,
+                )
             };
             if let Some(marca) = m.extras.marca_angulo.as_mut()
                 && !recto
@@ -852,12 +1055,22 @@ fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Resu
                     };
                     g.to_radians()
                 }
-                None => pixpin_motor2d::puntos_etiquetados::angulo_libre(p, &escena.elementos, 40.0),
+                None => {
+                    pixpin_motor2d::puntos_etiquetados::angulo_libre(p, &escena.elementos, 40.0)
+                }
             };
             // «siguiente» (o sin letra con «entre»): la siguiente libre, A, B, C...
             let letra = match e.texto("letra").map(str::trim) {
-                Some("siguiente") => pixpin_motor2d::puntos_etiquetados::siguiente_etiqueta(&pixpin_motor2d::puntos_etiquetados::etiquetas_usadas(&escena.elementos), Default::default()),
-                None | Some("") if e.texto("entre").is_some() => pixpin_motor2d::puntos_etiquetados::siguiente_etiqueta(&pixpin_motor2d::puntos_etiquetados::etiquetas_usadas(&escena.elementos), Default::default()),
+                Some("siguiente") => pixpin_motor2d::puntos_etiquetados::siguiente_etiqueta(
+                    &pixpin_motor2d::puntos_etiquetados::etiquetas_usadas(&escena.elementos),
+                    Default::default(),
+                ),
+                None | Some("") if e.texto("entre").is_some() => {
+                    pixpin_motor2d::puntos_etiquetados::siguiente_etiqueta(
+                        &pixpin_motor2d::puntos_etiquetados::etiquetas_usadas(&escena.elementos),
+                        Default::default(),
+                    )
+                }
                 Some(l) => l.to_string(),
                 None => String::new(),
             };
@@ -874,19 +1087,35 @@ fn de_lamina(escena: &Escena, figura: &str, e: &Edicion, ctx: &Contexto) -> Resu
 /// lado: el extremo de cada recta que queda del lado de `cerca` (un punto
 /// dentro del angulo que se quiere; sin el, el extremo mas lejano). Si los
 /// trazos no llegan a tocarse, sus prolongaciones.
-fn cruce(escena: &Escena, entre: &str, ctx: &Contexto, cerca: Option<Punto2>) -> Result<(Punto2, Punto2, Punto2), String> {
+fn cruce(
+    escena: &Escena,
+    entre: &str,
+    ctx: &Contexto,
+    cerca: Option<Punto2>,
+) -> Result<(Punto2, Punto2, Punto2), String> {
     use pixpin_motor2d::perimetros::{interseccion, segmentos_de};
     let r = referencia::resolver(escena, entre, ctx, None)?;
     if r.ids.len() != 2 {
-        return Err(format!("«entre» tiene que nombrar dos rectas, como «#3 #5» (encaja con {})", r.ids.len()));
+        return Err(format!(
+            "«entre» tiene que nombrar dos rectas, como «#3 #5» (encaja con {})",
+            r.ids.len()
+        ));
     }
     let tramos = |id: u64| -> Result<Vec<(Punto2, Punto2)>, String> {
-        let el = escena.buscar(id).ok_or_else(|| format!("no esta el #{id}"))?;
+        let el = escena
+            .buscar(id)
+            .ok_or_else(|| format!("no esta el #{id}"))?;
         let s = segmentos_de(el, 2.0);
-        if s.is_empty() { Err(format!("el #{id} no tiene lados")) } else { Ok(s) }
+        if s.is_empty() {
+            Err(format!("el #{id} no tiene lados"))
+        } else {
+            Ok(s)
+        }
     };
     let (sa, sb) = (tramos(r.ids[0])?, tramos(r.ids[1])?);
-    let mut encontrado: Option<(Punto2, (Punto2, Punto2), (Punto2, Punto2))> = None;
+    // El punto de corte y los dos tramos que se cortan.
+    type Corte = (Punto2, (Punto2, Punto2), (Punto2, Punto2));
+    let mut encontrado: Option<Corte> = None;
     'fuera: for a in &sa {
         for b in &sb {
             if let Some(p) = interseccion(a.0, a.1, b.0, b.1) {
@@ -908,7 +1137,11 @@ fn cruce(escena: &Escena, entre: &str, ctx: &Contexto, cerca: Option<Punto2>) ->
                 return Err("esas dos rectas son paralelas: no se cruzan".into());
             }
             let t = ((b1.x - a1.x) * d2.y - (b1.y - a1.y) * d2.x) / den;
-            (Punto2::nuevo(a1.x + d1.x * t, a1.y + d1.y * t), (a1, a2), (b1, b2))
+            (
+                Punto2::nuevo(a1.x + d1.x * t, a1.y + d1.y * t),
+                (a1, a2),
+                (b1, b2),
+            )
         }
     };
     let lado = |(q1, q2): (Punto2, Punto2)| -> Punto2 {
@@ -923,7 +1156,11 @@ fn cruce(escena: &Escena, entre: &str, ctx: &Contexto, cerca: Option<Punto2>) ->
         };
         let d = if elegir { d1 } else { d2 };
         // (Un extremo que es el propio vertice: el otro sentido.)
-        if d.longitud() < 1.0 { v.restar(if elegir { d2 } else { d1 }) } else { v.sumar(d) }
+        if d.longitud() < 1.0 {
+            v.restar(if elegir { d2 } else { d1 })
+        } else {
+            v.sumar(d)
+        }
     };
     Ok((v, lado(la), lado(lb)))
 }
@@ -937,10 +1174,14 @@ fn rematar_lamina(escena: &mut Escena, id: u64, e: &Edicion) -> Result<(), Strin
         .map(color_rgba)
         .transpose()?;
     let hasta = e.texto("relleno_hasta").map(color_rgba).transpose()?;
-    let degradado = e.texto("degradado").and_then(pixpin_motor2d::geometria_exacta::TipoDegradado::desde_palabra);
+    let degradado = e
+        .texto("degradado")
+        .and_then(pixpin_motor2d::geometria_exacta::TipoDegradado::desde_palabra);
     let flecha = e.texto("flecha").filter(|f| *f != "ninguna");
     let tam = e.numero("tam_letra").map(|t| (t as f32).clamp(6.0, 120.0));
-    let es_marca = escena.buscar(id).is_some_and(|x| x.extras.marca_angulo.is_some());
+    let es_marca = escena
+        .buscar(id)
+        .is_some_and(|x| x.extras.marca_angulo.is_some());
     if relleno.is_none() && degradado.is_none() && flecha.is_none() && tam.is_none() && !es_marca {
         return Ok(());
     }
@@ -951,7 +1192,10 @@ fn rematar_lamina(escena: &mut Escena, id: u64, e: &Edicion) -> Result<(), Strin
             // La marca lleva su relleno translucido, del color pedido o del
             // de su trazo.
             let base = relleno.unwrap_or(x.trazo);
-            x.relleno = Some(ColorRgba { a: base.a.min(0.35), ..base });
+            x.relleno = Some(ColorRgba {
+                a: base.a.min(0.35),
+                ..base
+            });
         } else if let Some(r) = relleno {
             x.relleno = Some(r);
             x.estilo_relleno = pixpin_motor2d::relleno::EstiloRelleno::Solido;
@@ -974,8 +1218,16 @@ fn rematar_lamina(escena: &mut Escena, id: u64, e: &Edicion) -> Result<(), Strin
                 let puntos = puntos.clone();
                 x.figura = Figura::Flecha {
                     puntos,
-                    punta_inicio: if matches!(f, "inicio" | "ambas") { tipo } else { Default::default() },
-                    punta_fin: if matches!(f, "fin" | "ambas") { tipo } else { Default::default() },
+                    punta_inicio: if matches!(f, "inicio" | "ambas") {
+                        tipo
+                    } else {
+                        Default::default()
+                    },
+                    punta_fin: if matches!(f, "fin" | "ambas") {
+                        tipo
+                    } else {
+                        Default::default()
+                    },
                     codos: false,
                 };
             }
@@ -992,7 +1244,12 @@ fn rematar_lamina(escena: &mut Escena, id: u64, e: &Edicion) -> Result<(), Strin
 // ---------------------------------------------------------------------------
 // Cortar y extender (trim / extend de CAD): `recorte` del motor
 
-fn ids_de(escena: &Escena, que: Option<&str>, ctx: &Contexto, menos: u64) -> Result<Option<Vec<u64>>, String> {
+fn ids_de(
+    escena: &Escena,
+    que: Option<&str>,
+    ctx: &Contexto,
+    menos: u64,
+) -> Result<Option<Vec<u64>>, String> {
     let Some(q) = que else { return Ok(None) };
     let r = referencia::resolver(escena, q, ctx, None)?;
     let ids: Vec<u64> = r.ids.into_iter().filter(|id| *id != menos).collect();
@@ -1004,7 +1261,15 @@ fn ids_de(escena: &Escena, que: Option<&str>, ctx: &Contexto, menos: u64) -> Res
 
 fn cortar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, String> {
     let que = e.texto("que").unwrap_or_default();
-    let id = uno(escena, que, ctx, Some(("una linea, flecha, trazo, circulo o rectangulo", recorte::se_recorta)))?;
+    let id = uno(
+        escena,
+        que,
+        ctx,
+        Some((
+            "una linea, flecha, trazo, circulo o rectangulo",
+            recorte::se_recorta,
+        )),
+    )?;
     let contra = ids_de(escena, e.texto("con"), ctx, id)?;
     let victima = escena.buscar(id).cloned().ok_or("no esta")?;
     let otros: Vec<Elemento> = escena
@@ -1016,14 +1281,21 @@ fn cortar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, Str
         Some(p) => p,
         None => {
             if !recorte::es_lineal(&victima) {
-                return Err("para cortar un circulo o un rectangulo di el «punto» del trozo que se quita".into());
+                return Err(
+                    "para cortar un circulo o un rectangulo di el «punto» del trozo que se quita"
+                        .into(),
+                );
             }
             let cortes = recorte::cortes_de(&victima, &otros);
             if cortes.is_empty() {
                 return Err(format!(
                     "#{id} no se cruza con {}: no hay donde cortarla (usa extender_linea si se queda corta)",
                     match &contra {
-                        Some(c) => c.iter().map(|i| format!("#{i}")).collect::<Vec<_>>().join(", "),
+                        Some(c) => c
+                            .iter()
+                            .map(|i| format!("#{i}"))
+                            .collect::<Vec<_>>()
+                            .join(", "),
                         None => "nada".into(),
                     }
                 ));
@@ -1051,22 +1323,42 @@ fn cortar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, Str
     }
     let mut ids = vec![id];
     // La mitad que nace al partir una raya en dos.
-    ids.extend(escena.elementos.iter().filter(|x| x.id >= antes).map(|x| x.id));
+    ids.extend(
+        escena
+            .elementos
+            .iter()
+            .filter(|x| x.id >= antes)
+            .map(|x| x.id),
+    );
     ids.retain(|i| escena.buscar(*i).is_some_and(|x| !x.borrado));
     Ok(hecho(escena, "cortada", ids, ctx))
 }
 
 fn extender(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, String> {
     let que = e.texto("que").unwrap_or_default();
-    let id = uno(escena, que, ctx, Some(("una linea o flecha", recorte::es_lineal)))?;
+    let id = uno(
+        escena,
+        que,
+        ctx,
+        Some(("una linea o flecha", recorte::es_lineal)),
+    )?;
     let hasta = ids_de(escena, e.texto("hasta"), ctx, id)?;
     let (a, b) = {
         let x = escena.buscar(id).ok_or("no esta")?;
-        let p = x.puntos().filter(|p| p.len() >= 2).ok_or("no tiene puntas")?;
+        let p = x
+            .puntos()
+            .filter(|p| p.len() >= 2)
+            .ok_or("no tiene puntas")?;
         (p[0], p[p.len() - 1])
     };
     let intentar = |escena: &mut Escena, punta: Punto2| {
-        recorte::extender_en_escena(escena, id, punta, hasta.as_deref(), recorte::ALCANCE_EXTENDER)
+        recorte::extender_en_escena(
+            escena,
+            id,
+            punta,
+            hasta.as_deref(),
+            recorte::ALCANCE_EXTENDER,
+        )
     };
     let hecho_ = match e.texto("extremo") {
         Some("inicio") => intentar(escena, a),
@@ -1078,7 +1370,11 @@ fn extender(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, S
         return Err(format!(
             "#{id} no topa con {} en esa direccion: no hay hasta donde extenderla",
             match &hasta {
-                Some(h) => h.iter().map(|i| format!("#{i}")).collect::<Vec<_>>().join(", "),
+                Some(h) => h
+                    .iter()
+                    .map(|i| format!("#{i}"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 None => "nada".into(),
             }
         ));
@@ -1089,7 +1385,12 @@ fn extender(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, S
 // ---------------------------------------------------------------------------
 // Imagenes: pegar (del anfitrion) y recortar (`recorte_imagen` del motor)
 
-fn imagen(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut dyn Anfitrion) -> Result<Hecho, String> {
+fn imagen(
+    escena: &mut Escena,
+    e: &Edicion,
+    ctx: &Contexto,
+    an: &mut dyn Anfitrion,
+) -> Result<Hecho, String> {
     match e.texto("accion").unwrap_or("pegar") {
         "pegar" => {
             let mut el = an.imagen_nueva(e.texto("imagen").unwrap_or_default())?;
@@ -1131,7 +1432,11 @@ fn imagen(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut dyn Anfitri
                         .ultimos
                         .iter()
                         .copied()
-                        .filter(|i| escena.buscar(*i).is_some_and(|x| es_imagen(x) && !x.borrado))
+                        .filter(|i| {
+                            escena
+                                .buscar(*i)
+                                .is_some_and(|x| es_imagen(x) && !x.borrado)
+                        })
                         .collect();
                     match ultimas.last() {
                         Some(i) => *i,
@@ -1161,7 +1466,9 @@ fn imagen(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut dyn Anfitri
                 _ => return Err("para recortar di «conservar» [x, y, ancho, alto] en fracciones, o «quitar» un lado".into()),
             };
             let natural = match escena.buscar(id).map(|x| &x.figura) {
-                Some(Figura::Imagen { id_objeto }) => an.tamano_de(*id_objeto).map(|(w, h)| (w as f32, h as f32)),
+                Some(Figura::Imagen { id_objeto }) => {
+                    an.tamano_de(*id_objeto).map(|(w, h)| (w as f32, h as f32))
+                }
                 _ => None,
             };
             if !recorte_imagen::recortar_imagen_en_escena(escena, id, conservar, natural) {
@@ -1171,4 +1478,138 @@ fn imagen(escena: &mut Escena, e: &Edicion, ctx: &Contexto, an: &mut dyn Anfitri
         }
         otra => Err(format!("accion desconocida «{otra}»")),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Reorganizar una hoja por bloques (`pixpin_motor2d::bloques`)
+
+/// Las piezas de la hoja: lo nombrado (o lo elegido) con todo su grupo de
+/// fuera; si no, el unico grupo grande del lienzo; si no, todo.
+fn piezas_de_la_hoja(
+    escena: &Escena,
+    e: &Edicion,
+    ctx: &Contexto,
+) -> Result<Vec<Elemento>, String> {
+    let semilla: Vec<u64> = match e.texto("que").filter(|q| !q.trim().is_empty()) {
+        Some(q) => varios(escena, q, ctx)?,
+        None => ctx.elegidos.clone(),
+    };
+    let visibles: Vec<&Elemento> = escena.visibles().collect();
+    let grupo_de = |id: u64| {
+        visibles
+            .iter()
+            .find(|x| x.id == id)
+            .and_then(|x| x.grupos.last().cloned())
+    };
+    let grupos: Vec<String> = semilla.iter().filter_map(|id| grupo_de(*id)).collect();
+    if !semilla.is_empty() {
+        return Ok(visibles
+            .iter()
+            .filter(|x| {
+                semilla.contains(&x.id) || x.grupos.last().is_some_and(|g| grupos.contains(g))
+            })
+            .map(|x| (*x).clone())
+            .collect());
+    }
+    let mut cuentas: Vec<(String, usize)> = Vec::new();
+    for x in &visibles {
+        if let Some(g) = x.grupos.last() {
+            match cuentas.iter_mut().find(|(n, _)| n == g) {
+                Some((_, k)) => *k += 1,
+                None => cuentas.push((g.clone(), 1)),
+            }
+        }
+    }
+    let grandes: Vec<&String> = cuentas
+        .iter()
+        .filter(|(_, k)| *k >= 8)
+        .map(|(g, _)| g)
+        .collect();
+    if grandes.len() == 1 {
+        let g = grandes[0];
+        return Ok(visibles
+            .iter()
+            .filter(|x| x.grupos.last() == Some(g))
+            .map(|x| (*x).clone())
+            .collect());
+    }
+    if grandes.len() > 1 {
+        return Err(format!(
+            "hay {} hojas en el lienzo: di cual con «que» (o pide al usuario que la elija)",
+            grandes.len()
+        ));
+    }
+    Ok(visibles.into_iter().cloned().collect())
+}
+
+fn reorganizar(escena: &mut Escena, e: &Edicion, ctx: &Contexto) -> Result<Hecho, String> {
+    use pixpin_motor2d::bloques::{self, Donde};
+    let piezas = piezas_de_la_hoja(escena, e, ctx)?;
+    if piezas.iter().any(|x| x.bloqueado) {
+        return Err("la hoja esta bloqueada: el usuario la dejo quieta a proposito".into());
+    }
+    let h = bloques::leer(&piezas);
+    let accion = e.texto("accion").unwrap_or("ver");
+    if accion == "ver" {
+        return Ok(Hecho {
+            texto: format!("bloques de la hoja:\n{}", bloques::describir(&h)),
+            ids: Vec::new(),
+        });
+    }
+    let bloque = |campo: &str| -> Result<usize, String> {
+        let q = e
+            .texto(campo)
+            .ok_or_else(|| format!("falta «{campo}»: el bloque (B# o su titulo)"))?;
+        bloques::buscar(&h, q).ok_or_else(|| {
+            format!(
+                "no hay ningun bloque «{q}». Los bloques son:\n{}",
+                bloques::describir(&h)
+            )
+        })
+    };
+    let a = bloque("bloque")?;
+    let plan = match accion {
+        "mover" => {
+            let donde = match e.texto("donde").unwrap_or("abajo") {
+                "arriba" => Donde::Arriba,
+                "antes" => Donde::Antes(bloque("con")?),
+                "despues" => Donde::Despues(bloque("con")?),
+                _ => Donde::Abajo,
+            };
+            bloques::mover(&h, a, donde)?
+        }
+        "intercambiar" => bloques::intercambiar(&h, a, bloque("con")?)?,
+        "duplicar" => bloques::duplicar(&h, a)?,
+        "borrar" => bloques::borrar(&h, a)?,
+        "estirar" => bloques::estirar(
+            &h,
+            &piezas,
+            a,
+            e.numero("cuanto")
+                .ok_or("para estirar hace falta «cuanto»")? as f32,
+        )?,
+        "anadir_filas" => bloques::anadir_filas(
+            &h,
+            &piezas,
+            a,
+            e.numero("filas")
+                .ok_or("hace falta «filas»: cuantas")?
+                .round() as u32,
+        )?,
+        otra => return Err(format!("«accion» = «{otra}» no existe")),
+    };
+    let ids = bloques::aplicar(escena, &plan);
+    let despues: Vec<Elemento> = piezas
+        .iter()
+        .filter_map(|x| escena.buscar(x.id).filter(|y| !y.borrado).cloned())
+        .chain(ids.iter().filter_map(|id| escena.buscar(*id).cloned()))
+        .collect();
+    let ahora = bloques::describir(&bloques::leer(&despues));
+    Ok(Hecho {
+        texto: format!(
+            "hecho: {} (con sus propias piezas; Ctrl+Z lo deshace).\nAhora:\n{ahora}",
+            plan.que
+        ),
+        ids,
+    })
 }

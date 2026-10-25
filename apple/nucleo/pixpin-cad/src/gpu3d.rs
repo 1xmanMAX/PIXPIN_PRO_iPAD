@@ -10,12 +10,14 @@
 
 use std::ffi::c_void;
 
-use windows::Win32::Graphics::Direct3D::{D3D_PRIMITIVE_TOPOLOGY_LINELIST, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST};
+use windows::Win32::Graphics::Direct3D::{
+    D3D_PRIMITIVE_TOPOLOGY_LINELIST, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+};
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::core::s;
 
-use crate::gpu::{Gpu, PlanoGpu, Vista, compilar_de, elemento};
+use crate::gpu::{Gpu, PintarEncima, PlanoGpu, Vista, compilar_de, elemento};
 use crate::modelo3d::Modelo3d;
 
 const SOMBREADORES_3D: &str = r#"
@@ -307,7 +309,8 @@ impl Gpu {
         let pt = compilar_de(SOMBREADORES_3D, s!("ps_tapa"), s!("ps_5_0"))?;
         // SAFETY: llamadas sobre el dispositivo propio; descripciones locales.
         unsafe {
-            let (mut v, mut p, mut p2, mut p3, mut il, mut cb) = (None, None, None, None, None, None);
+            let (mut v, mut p, mut p2, mut p3, mut il, mut cb) =
+                (None, None, None, None, None, None);
             d.CreateVertexShader(&vs, None, Some(&mut v))?;
             d.CreatePixelShader(&ps, None, Some(&mut p))?;
             d.CreatePixelShader(&pa, None, Some(&mut p2))?;
@@ -341,7 +344,11 @@ impl Gpu {
             )?;
             let prof_desc = |escribe: bool| D3D11_DEPTH_STENCIL_DESC {
                 DepthEnable: true.into(),
-                DepthWriteMask: if escribe { D3D11_DEPTH_WRITE_MASK_ALL } else { D3D11_DEPTH_WRITE_MASK_ZERO },
+                DepthWriteMask: if escribe {
+                    D3D11_DEPTH_WRITE_MASK_ALL
+                } else {
+                    D3D11_DEPTH_WRITE_MASK_ZERO
+                },
                 DepthFunc: D3D11_COMPARISON_LESS_EQUAL,
                 ..Default::default()
             };
@@ -387,36 +394,66 @@ impl Gpu {
         Ok(())
     }
 
-    fn textura(&self, formato: DXGI_FORMAT, muestras: u32, bind: D3D11_BIND_FLAG, ancho: u32, alto: u32) -> windows::core::Result<ID3D11Texture2D> {
+    fn textura(
+        &self,
+        formato: DXGI_FORMAT,
+        muestras: u32,
+        bind: D3D11_BIND_FLAG,
+        ancho: u32,
+        alto: u32,
+    ) -> windows::core::Result<ID3D11Texture2D> {
         let desc = D3D11_TEXTURE2D_DESC {
             Width: ancho,
             Height: alto,
             MipLevels: 1,
             ArraySize: 1,
             Format: formato,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: muestras, Quality: 0 },
-            Usage: if bind.0 == 0 { D3D11_USAGE_STAGING } else { D3D11_USAGE_DEFAULT },
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: muestras,
+                Quality: 0,
+            },
+            Usage: if bind.0 == 0 {
+                D3D11_USAGE_STAGING
+            } else {
+                D3D11_USAGE_DEFAULT
+            },
             BindFlags: bind.0 as u32,
-            CPUAccessFlags: if bind.0 == 0 { D3D11_CPU_ACCESS_READ.0 as u32 } else { 0 },
+            CPUAccessFlags: if bind.0 == 0 {
+                D3D11_CPU_ACCESS_READ.0 as u32
+            } else {
+                0
+            },
             ..Default::default()
         };
         let mut t = None;
         // SAFETY: descripcion local; dispositivo propio.
-        unsafe { self.dispositivo.CreateTexture2D(&desc, None, Some(&mut t))? };
+        unsafe {
+            self.dispositivo
+                .CreateTexture2D(&desc, None, Some(&mut t))?
+        };
         t.ok_or_else(falta)
     }
 
-    fn vista_profundidad(&self, t: &ID3D11Texture2D) -> windows::core::Result<ID3D11DepthStencilView> {
+    fn vista_profundidad(
+        &self,
+        t: &ID3D11Texture2D,
+    ) -> windows::core::Result<ID3D11DepthStencilView> {
         let mut v = None;
         // SAFETY: textura propia con BIND_DEPTH_STENCIL.
-        unsafe { self.dispositivo.CreateDepthStencilView(t, None, Some(&mut v))? };
+        unsafe {
+            self.dispositivo
+                .CreateDepthStencilView(t, None, Some(&mut v))?
+        };
         v.ok_or_else(falta)
     }
 
     fn vista_destino(&self, t: &ID3D11Texture2D) -> windows::core::Result<ID3D11RenderTargetView> {
         let mut v = None;
         // SAFETY: textura propia con BIND_RENDER_TARGET.
-        unsafe { self.dispositivo.CreateRenderTargetView(t, None, Some(&mut v))? };
+        unsafe {
+            self.dispositivo
+                .CreateRenderTargetView(t, None, Some(&mut v))?
+        };
         v.ok_or_else(falta)
     }
 
@@ -425,7 +462,16 @@ impl Gpu {
         let vb: Vec<u32> = m
             .vertices
             .iter()
-            .flat_map(|v| [v.pos[0].to_bits(), v.pos[1].to_bits(), v.pos[2].to_bits(), v.normal, v.color, v.elemento])
+            .flat_map(|v| {
+                [
+                    v.pos[0].to_bits(),
+                    v.pos[1].to_bits(),
+                    v.pos[2].to_bits(),
+                    v.normal,
+                    v.color,
+                    v.elemento,
+                ]
+            })
             .collect();
         Ok(ModeloGpu {
             vertices: self.buffer(bytes_de(&vb), D3D11_BIND_VERTEX_BUFFER, 0)?,
@@ -444,14 +490,37 @@ impl Gpu {
 
     /// Lo que se ve, de nuevo: solo los elementos para los que `ver` dice
     /// que si (los indices se rehacen; los vertices se quedan).
-    pub fn filtrar_3d(&self, g: &mut ModeloGpu, m: &Modelo3d, ver: &dyn Fn(u32) -> bool) -> windows::core::Result<()> {
-        let crate::modelo3d::Visibles { opacos: o, transparentes: t, aristas: a, lineas: l, puntos: p } = m.visibles(ver);
+    pub fn filtrar_3d(
+        &self,
+        g: &mut ModeloGpu,
+        m: &Modelo3d,
+        ver: &dyn Fn(u32) -> bool,
+    ) -> windows::core::Result<()> {
+        let crate::modelo3d::Visibles {
+            opacos: o,
+            transparentes: t,
+            aristas: a,
+            lineas: l,
+            puntos: p,
+        } = m.visibles(ver);
         g.opacos = self.buffer(bytes_de(&o), D3D11_BIND_INDEX_BUFFER, 0)?;
         g.transparentes = self.buffer(bytes_de(&t), D3D11_BIND_INDEX_BUFFER, 0)?;
         g.aristas = self.buffer(bytes_de(&a), D3D11_BIND_INDEX_BUFFER, 0)?;
         g.lineas = self.buffer(bytes_de(&l), D3D11_BIND_INDEX_BUFFER, 0)?;
         g.puntos = self.buffer(bytes_de(&p), D3D11_BIND_INDEX_BUFFER, 0)?;
-        (g.n_opacos, g.n_transparentes, g.n_aristas, g.n_lineas, g.n_puntos) = (o.len() as u32, t.len() as u32, a.len() as u32, l.len() as u32, p.len() as u32);
+        (
+            g.n_opacos,
+            g.n_transparentes,
+            g.n_aristas,
+            g.n_lineas,
+            g.n_puntos,
+        ) = (
+            o.len() as u32,
+            t.len() as u32,
+            a.len() as u32,
+            l.len() as u32,
+            p.len() as u32,
+        );
         Ok(())
     }
 
@@ -476,24 +545,45 @@ impl Gpu {
         aristas: bool,
         encima: &[(&PlanoGpu, Vista)],
     ) -> windows::core::Result<()> {
+        self.dibujar_3d_con(fondo, modelo, aristas, encima, None)
+    }
+
+    /// [`Gpu::dibujar_3d`], dejando a `tinta` pintar al final sobre el bufer
+    /// de la ventana (lo anotado sobre un marcador, con el motor del lienzo).
+    pub fn dibujar_3d_con(
+        &mut self,
+        fondo: [f32; 4],
+        modelo: Option<(&ModeloGpu, Vista3d)>,
+        aristas: bool,
+        encima: &[(&PlanoGpu, Vista)],
+        tinta: PintarEncima<'_>,
+    ) -> windows::core::Result<()> {
         self.preparar_3d()?;
         let Some((tex, rtv)) = self.destino.clone() else {
             return Ok(());
         };
         if self.tres.as_ref().is_some_and(|t| t.profundidad.is_none()) {
-            let t = self.textura(DXGI_FORMAT_D32_FLOAT, self.muestras, D3D11_BIND_DEPTH_STENCIL, self.ancho, self.alto)?;
+            let t = self.textura(
+                DXGI_FORMAT_D32_FLOAT,
+                self.muestras,
+                D3D11_BIND_DEPTH_STENCIL,
+                self.ancho,
+                self.alto,
+            )?;
             let v = self.vista_profundidad(&t)?;
             if let Some(tr) = &mut self.tres {
                 tr.profundidad = Some(v);
             }
         }
         let Some(t) = &self.tres else { return Ok(()) };
-        let Some(dsv) = t.profundidad.clone() else { return Ok(()) };
+        let Some(dsv) = t.profundidad.clone() else {
+            return Ok(());
+        };
         let ctx = &self.contexto;
         // SAFETY: todo es de este dispositivo y de este hilo.
         unsafe {
             ctx.ClearRenderTargetView(&rtv, &fondo);
-            ctx.ClearDepthStencilView(&dsv, D3D11_CLEAR_DEPTH.0 as u32, 1.0, 0);
+            ctx.ClearDepthStencilView(&dsv, D3D11_CLEAR_DEPTH.0, 1.0, 0);
             if let Some((m, v)) = modelo {
                 ctx.OMSetRenderTargets(Some(&[Some(rtv.clone())]), &dsv);
                 ctx.RSSetViewports(Some(&[self.ventana_entera()]));
@@ -520,7 +610,9 @@ impl Gpu {
                 }
                 // 2a. Las tapas de la caja de seccion: despues de las aristas,
                 // para que las de dentro del solido (las del fondo) queden tapadas.
-                if v.corte[0] > 0.5 && let Some(ib) = &m.opacos {
+                if v.corte[0] > 0.5
+                    && let Some(ib) = &m.opacos
+                {
                     ctx.OMSetBlendState(None, None, 0xffff_ffff);
                     ctx.OMSetDepthStencilState(&t.prof, 0);
                     ctx.RSSetState(&t.raster_solido);
@@ -568,7 +660,13 @@ impl Gpu {
 
     /// Que elemento (y que punto del mundo, relativo al origen del modelo)
     /// hay bajo el pixel (x, y). Solo los opacos y los vidrios.
-    pub fn elegir(&mut self, m: &ModeloGpu, v: &Vista3d, x: i32, y: i32) -> windows::core::Result<Option<(u32, [f32; 3])>> {
+    pub fn elegir(
+        &mut self,
+        m: &ModeloGpu,
+        v: &Vista3d,
+        x: i32,
+        y: i32,
+    ) -> windows::core::Result<Option<(u32, [f32; 3])>> {
         if x < 0 || y < 0 || x as u32 >= self.ancho || y as u32 >= self.alto {
             return Ok(None);
         }
@@ -576,29 +674,46 @@ impl Gpu {
         if self.tres.as_ref().is_some_and(|t| t.eleccion.is_none()) {
             let (w, h) = (self.ancho, self.alto);
             let ti = self.textura(DXGI_FORMAT_R32_UINT, 1, D3D11_BIND_RENDER_TARGET, w, h)?;
-            let tm = self.textura(DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_BIND_RENDER_TARGET, w, h)?;
+            let tm = self.textura(
+                DXGI_FORMAT_R32G32B32A32_FLOAT,
+                1,
+                D3D11_BIND_RENDER_TARGET,
+                w,
+                h,
+            )?;
             let tp = self.textura(DXGI_FORMAT_D32_FLOAT, 1, D3D11_BIND_DEPTH_STENCIL, w, h)?;
             let d = Destinos {
                 id: (ti.clone(), self.vista_destino(&ti)?),
                 mundo: (tm.clone(), self.vista_destino(&tm)?),
                 prof: self.vista_profundidad(&tp)?,
                 copia_id: self.textura(DXGI_FORMAT_R32_UINT, 1, D3D11_BIND_FLAG(0), 1, 1)?,
-                copia_mundo: self.textura(DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_BIND_FLAG(0), 1, 1)?,
+                copia_mundo: self.textura(
+                    DXGI_FORMAT_R32G32B32A32_FLOAT,
+                    1,
+                    D3D11_BIND_FLAG(0),
+                    1,
+                    1,
+                )?,
             };
             if let Some(t) = &mut self.tres {
                 t.eleccion = Some(d);
             }
         }
         let Some(t) = &self.tres else { return Ok(None) };
-        let Some(d) = &t.eleccion else { return Ok(None) };
+        let Some(d) = &t.eleccion else {
+            return Ok(None);
+        };
         let ctx = &self.contexto;
         // SAFETY: recursos de este dispositivo; las lecturas mapean texturas
         // de 1x1 propias y se desmapean antes de salir.
         unsafe {
             ctx.ClearRenderTargetView(&d.id.1, &[0.0; 4]);
             ctx.ClearRenderTargetView(&d.mundo.1, &[0.0; 4]);
-            ctx.ClearDepthStencilView(&d.prof, D3D11_CLEAR_DEPTH.0 as u32, 1.0, 0);
-            ctx.OMSetRenderTargets(Some(&[Some(d.id.1.clone()), Some(d.mundo.1.clone())]), &d.prof);
+            ctx.ClearDepthStencilView(&d.prof, D3D11_CLEAR_DEPTH.0, 1.0, 0);
+            ctx.OMSetRenderTargets(
+                Some(&[Some(d.id.1.clone()), Some(d.mundo.1.clone())]),
+                &d.prof,
+            );
             ctx.RSSetViewports(Some(&[self.ventana_entera()]));
             ctx.RSSetState(&t.raster_id);
             ctx.OMSetBlendState(None, None, 0xffff_ffff);
@@ -608,15 +723,24 @@ impl Gpu {
             t.raster_id.GetDesc(&mut sin_recorte);
             sin_recorte.ScissorEnable = true.into();
             let mut rr = None;
-            self.dispositivo.CreateRasterizerState(&sin_recorte, Some(&mut rr))?;
+            self.dispositivo
+                .CreateRasterizerState(&sin_recorte, Some(&mut rr))?;
             if let Some(rr) = &rr {
                 ctx.RSSetState(rr);
             }
-            ctx.RSSetScissorRects(Some(&[windows::Win32::Foundation::RECT { left: x, top: y, right: x + 1, bottom: y + 1 }]));
+            ctx.RSSetScissorRects(Some(&[windows::Win32::Foundation::RECT {
+                left: x,
+                top: y,
+                right: x + 1,
+                bottom: y + 1,
+            }]));
             self.poner_modelo(t, m, v);
             ctx.PSSetShader(&t.ps_id, None);
             ctx.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            for (ib, n) in [(&m.opacos, m.n_opacos), (&m.transparentes, m.n_transparentes)] {
+            for (ib, n) in [
+                (&m.opacos, m.n_opacos),
+                (&m.transparentes, m.n_transparentes),
+            ] {
                 if let Some(ib) = ib {
                     ctx.IASetIndexBuffer(ib, DXGI_FORMAT_R32_UINT, 0);
                     ctx.DrawIndexed(n, 0, 0);
@@ -627,7 +751,14 @@ impl Gpu {
                 ctx.IASetIndexBuffer(ib, DXGI_FORMAT_R32_UINT, 0);
                 ctx.DrawIndexed(m.n_puntos, 0, 0);
             }
-            let caja = D3D11_BOX { left: x as u32, top: y as u32, front: 0, right: x as u32 + 1, bottom: y as u32 + 1, back: 1 };
+            let caja = D3D11_BOX {
+                left: x as u32,
+                top: y as u32,
+                front: 0,
+                right: x as u32 + 1,
+                bottom: y as u32 + 1,
+                back: 1,
+            };
             ctx.CopySubresourceRegion(&d.copia_id, 0, 0, 0, 0, &d.id.0, 0, Some(&caja));
             ctx.CopySubresourceRegion(&d.copia_mundo, 0, 0, 0, 0, &d.mundo.0, 0, Some(&caja));
             ctx.OMSetRenderTargets(None, None);

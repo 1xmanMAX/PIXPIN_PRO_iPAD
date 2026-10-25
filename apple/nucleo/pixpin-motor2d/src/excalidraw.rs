@@ -148,7 +148,9 @@ pub fn elementos_a_json(elementos: &[Elemento]) -> Vec<Value> {
         .entradas
         .iter()
         .filter_map(|en| match en {
-            Entrada::Nuestro { elemento, original } => Some(elemento_hacia(elemento, original, false)),
+            Entrada::Nuestro { elemento, original } => {
+                Some(elemento_hacia(elemento, original, false))
+            }
             Entrada::Ajeno(_) => None,
         })
         .collect()
@@ -354,7 +356,10 @@ pub fn a_escena(lienzo: &Lienzo) -> crate::Escena {
                 .as_deref()
                 .or_else(|| original.get("id").and_then(Value::as_str))
                 .and_then(numero_nacido_aqui),
-            Entrada::Ajeno(v) => v.get("id").and_then(Value::as_str).and_then(numero_nacido_aqui),
+            Entrada::Ajeno(v) => v
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(numero_nacido_aqui),
         })
         .max();
     if let Some(n) = mayor {
@@ -781,6 +786,11 @@ fn elemento_desde(v: &Value) -> Option<Elemento> {
             cristal: crate::lupa_elemento::leer(v),
         },
         "ellipse" => Figura::Elipse,
+        // La nube de revision: en el fichero, la linea con sus festones;
+        // aqui, otra vez su caja y su radio (ver `nube_desde`).
+        "line" if nube_desde(v).is_some() => {
+            nube_desde(v).map_or(Figura::Rectangulo, |(_, base)| base.figura())
+        }
         "line" => Figura::Linea {
             puntos: puntos_desde(v, x, y),
         },
@@ -1116,6 +1126,64 @@ fn extras_desde(v: &Value) -> Extras {
         cierre: crate::geometria_exacta::cierre_desde(v),
         marca_angulo: crate::geometria_exacta::marca_desde(v),
         degradado: crate::geometria_exacta::degradado_desde(v),
+        nube: nube_desde(v).map(|(r, _)| r),
+    }
+}
+
+/// **La nube de revision de un elemento del fichero** (`nubeRadio`): su
+/// radio y su base, o `None` si no es una nube. Va en una `line` cerrada con
+/// los festones ya calculados (lo que se escribe aqui, ver [`nube_hacia`]); en
+/// un `rectangle` o un `ellipse` con la clave tambien vale, con la base de su
+/// tipo. Un radio que no es un numero positivo no es una nube: se queda en la
+/// linea que el movil ve.
+fn nube_desde(v: &Value) -> Option<(f32, crate::nube_revision::Base)> {
+    use crate::nube_revision::Base;
+    let r = num(v, "nubeRadio").filter(|r| r.is_finite() && *r > 0.0)?;
+    let base = match v.get("type").and_then(Value::as_str)? {
+        "line" => Base::desde_palabra(v.get("nubeBase").and_then(Value::as_str)),
+        "rectangle" => Base::Rectangulo,
+        "ellipse" => Base::Elipse,
+        _ => return None,
+    };
+    Some((crate::nube_revision::radio_util(r), base))
+}
+
+/// **La nube de vuelta al fichero.** Para el movil y Excalidraw, que no la
+/// conocen, es una `line` cerrada con los festones calculados para la caja
+/// de ahora: se ve igual y se rellena igual. `nubeRadio` y `nubeBase` son
+/// para el PC, que al leerla la recupera parametrica (si alli la estiran, se
+/// estiran sus puntos; aqui, al volver, se rehace con su caja nueva).
+///
+/// Si aqui dejo de ser nube, vuelve a ser la figura que es, sin sus claves.
+fn nube_hacia(mapa: &mut Map<String, Value>, e: &Elemento, objetos: bool) {
+    match (
+        crate::nube_revision::base_de(e),
+        crate::nube_revision::contorno_de(e),
+    ) {
+        (Some(base), Some(contorno)) => {
+            mapa.insert("type".into(), Value::String("line".into()));
+            mapa.insert("points".into(), puntos_hacia(&contorno, e.x, e.y, objetos));
+            mapa.insert(
+                "nubeRadio".into(),
+                Value::from(e.extras.nube.unwrap_or_default() as f64),
+            );
+            mapa.insert("nubeBase".into(), Value::String(base.palabra().into()));
+            // Sin redondeo: una `line` con `roundness` el movil la pasa por
+            // una curva y los picos entre festones se le irian.
+            mapa.insert("roundness".into(), Value::Null);
+        }
+        _ if mapa.contains_key("nubeRadio") => {
+            mapa.remove("nubeRadio");
+            mapa.remove("nubeBase");
+            let tipo = match e.figura {
+                Figura::Rectangulo => "rectangle",
+                Figura::Elipse => "ellipse",
+                _ => return,
+            };
+            mapa.insert("type".into(), Value::String(tipo.into()));
+            mapa.remove("points");
+        }
+        _ => {}
     }
 }
 
@@ -1168,7 +1236,11 @@ fn referencias_visibles_hacia(salida: &mut Lienzo, visibles: bool) {
 /// `pasoDeCuadros`, `azimut`, `elevacion` de `Element.kt`), con sus ejes
 /// sacados del tipo. Lo que no es un numero se lee como ausente.
 fn instrumento_desde(v: &Value, tipo: &str) -> crate::instrumento::Instrumento {
-    let n = |clave: &str| v.get(clave).and_then(Value::as_f64).filter(|x| x.is_finite());
+    let n = |clave: &str| {
+        v.get(clave)
+            .and_then(Value::as_f64)
+            .filter(|x| x.is_finite())
+    };
     crate::instrumento::Instrumento {
         ejes: crate::instrumento::Instrumento::ejes_del_tipo(tipo).unwrap_or(2),
         unidad: n("unidad"),
@@ -1824,6 +1896,7 @@ fn elemento_hacia(e: &Elemento, original: &Value, objetos: bool) -> Value {
         }
         Figura::Rectangulo | Figura::Rombo | Figura::Elipse | Figura::Imagen { .. } => {}
     }
+    nube_hacia(&mut mapa, e, objetos);
     // La letra elegida de lo que rotula sin ser un texto, en su `fontFamily`
     // como en el movil (`newElement` la pone en la cota; el panel, en todo lo
     // que ofrece FUENTE).
@@ -3192,8 +3265,7 @@ mod pruebas {
 
         // Guardar despues de pasar por la escena: el cronograma vuelve
         // exactamente como vino y en el mismo orden.
-        let vuelta: Value =
-            serde_json::from_str(&escribir(&con_escena(&l, &escena))).unwrap();
+        let vuelta: Value = serde_json::from_str(&escribir(&con_escena(&l, &escena))).unwrap();
         let original: Value = serde_json::from_str(json).unwrap();
         let tipos: Vec<_> = vuelta["elements"]
             .as_array()
@@ -3302,23 +3374,47 @@ mod pruebas {
     /// fichero. Caso negativo: sin ids del PC se numera como siempre.
     #[test]
     fn lo_que_nace_aqui_no_repite_el_id_de_otro_nacido_aqui() {
-        let raya = |id: &str| format!(r#"{{"id":"{id}","type":"line","x":0,"y":0,"width":5,"height":0,"seed":1,"points":[[0,0],[5,0]]}}"#);
+        let raya = |id: &str| {
+            format!(
+                r#"{{"id":"{id}","type":"line","x":0,"y":0,"width":5,"height":0,"seed":1,"points":[[0,0],[5,0]]}}"#
+            )
+        };
         // Uno del movil y el `pc3` de otra vez: habia tres y el movil quito
         // uno. Antes, lo nuevo era el tercero: `pc3` otra vez.
-        let json = format!(r#"{{"type":"excalidraw","elements":[{},{}]}}"#, raya("aaaaaaaaaaaaaaaaaaaaa"), raya("pc3"));
+        let json = format!(
+            r#"{{"type":"excalidraw","elements":[{},{}]}}"#,
+            raya("aaaaaaaaaaaaaaaaaaaaa"),
+            raya("pc3")
+        );
         let l = leer(&json).unwrap();
         let mut escena = a_escena(&l);
         let nuevo = escena.anadir(crate::zona::marca((0.0, 0.0, 10.0, 10.0), "x"));
         let v: Value = serde_json::from_str(&escribir(&con_escena(&l, &escena))).unwrap();
-        let ids: Vec<&str> = v["elements"].as_array().unwrap().iter().map(|e| e["id"].as_str().unwrap()).collect();
+        let ids: Vec<&str> = v["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["id"].as_str().unwrap())
+            .collect();
         assert_eq!(ids.len(), 3);
         assert_eq!(ids.iter().filter(|i| **i == "pc3").count(), 1, "{ids:?}");
-        assert_eq!(ids[2], crate::enlace::id_de_texto(nuevo), "lo nuevo, con el id de su numero");
+        assert_eq!(
+            ids[2],
+            crate::enlace::id_de_texto(nuevo),
+            "lo nuevo, con el id de su numero"
+        );
         assert_eq!(nuevo, 4);
         // Caso negativo: solo del movil, lo nuevo va detras como siempre.
-        let json = format!(r#"{{"type":"excalidraw","elements":[{},{}]}}"#, raya("aaaaaaaaaaaaaaaaaaaaa"), raya("pcZZ"));
+        let json = format!(
+            r#"{{"type":"excalidraw","elements":[{},{}]}}"#,
+            raya("aaaaaaaaaaaaaaaaaaaaa"),
+            raya("pcZZ")
+        );
         let mut escena = a_escena(&leer(&json).unwrap());
-        assert_eq!(escena.anadir(crate::zona::marca((0.0, 0.0, 10.0, 10.0), "x")), 3);
+        assert_eq!(
+            escena.anadir(crate::zona::marca((0.0, 0.0, 10.0, 10.0), "x")),
+            3
+        );
     }
 
     #[test]

@@ -792,14 +792,24 @@ fn la_herramienta_angulo_pone_alfa_beta_theta_y_reutiliza_la_borrada() {
     let mut escena = triangulo();
     let mut g = Gesto::nuevo();
     g.tomar_herramienta(Herramienta::Angulo);
-    assert_eq!(g.estilo.modo_angulo, ModoAngulo::Griega, "de fabrica, con letra");
+    assert_eq!(
+        g.estilo.modo_angulo,
+        ModoAngulo::Griega,
+        "de fabrica, con letra"
+    );
     clic(&mut g, &mut escena, p(25.0, -8.0)); // en A
     clic(&mut g, &mut escena, p(175.0, -8.0)); // en B
     assert_eq!(letras(&escena), vec![Some("α".into()), Some("β".into())]);
     // Se borra α: la siguiente vuelve a ser α, no θ (se mira el dibujo).
     let alfa = escena
         .visibles()
-        .find(|e| e.extras.marca_angulo.as_ref().and_then(|m| m.valor.as_deref()) == Some("α"))
+        .find(|e| {
+            e.extras
+                .marca_angulo
+                .as_ref()
+                .and_then(|m| m.valor.as_deref())
+                == Some("α")
+        })
         .map(|e| e.id)
         .unwrap();
     escena.borrar(alfa);
@@ -817,14 +827,20 @@ fn el_recto_lleva_su_cuadradito_y_sin_letra() {
     let mut g = Gesto::nuevo();
     g.tomar_herramienta(Herramienta::Angulo);
     clic(&mut g, &mut escena, p(20.0, -20.0));
-    let m = escena.visibles().find_map(|e| e.extras.marca_angulo.clone()).unwrap();
+    let m = escena
+        .visibles()
+        .find_map(|e| e.extras.marca_angulo.clone())
+        .unwrap();
     assert!(m.recto && m.valor.is_none());
     // La variante de 90: el cuadradito aunque el angulo no mida 90 (el
     // dibujo a mano), y otra vez el atajo la devuelve a la letra.
     let mut escena = triangulo();
     assert_eq!(g.alternar_angulo_recto(), ModoAngulo::Recto);
     clic(&mut g, &mut escena, p(25.0, -8.0));
-    let m = escena.visibles().find_map(|e| e.extras.marca_angulo.clone()).unwrap();
+    let m = escena
+        .visibles()
+        .find_map(|e| e.extras.marca_angulo.clone())
+        .unwrap();
     assert!(m.recto, "a la fuerza, el cuadradito");
     assert!(m.valor.is_none());
     assert_eq!(g.alternar_angulo_recto(), ModoAngulo::Griega);
@@ -843,7 +859,11 @@ fn la_rueda_cambia_la_letra_de_la_ultima_marca_sin_repetir_y_se_deshace() {
     assert!(g.cambiar_letra_de_angulo(&mut escena, -1));
     assert_eq!(letras(&escena)[1].as_deref(), Some("β"));
     assert!(g.cambiar_letra_de_angulo(&mut escena, -1));
-    assert_eq!(letras(&escena)[1].as_deref(), Some("κ"), "salta α, que ya la tiene otra");
+    assert_eq!(
+        letras(&escena)[1].as_deref(),
+        Some("κ"),
+        "salta α, que ya la tiene otra"
+    );
     assert!(escena.deshacer());
     assert_eq!(letras(&escena)[1].as_deref(), Some("β"));
     // Con otra herramienta y nada elegido no toca nada (caso negativo).

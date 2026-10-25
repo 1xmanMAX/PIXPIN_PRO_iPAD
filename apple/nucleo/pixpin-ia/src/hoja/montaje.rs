@@ -126,7 +126,11 @@ impl Entrada<'_> {
     /// El texto ajeno que cae en la zona, en pixeles del recorte.
     pub fn ajenas_en_zona(&self) -> Vec<Caja> {
         let z = &self.zona.caja;
-        self.ajenas.iter().filter(|c| c.comun(z) > 0.0).map(|c| Caja::nueva(c.x - z.x, c.y - z.y, c.w, c.h)).collect()
+        self.ajenas
+            .iter()
+            .filter(|c| c.comun(z) > 0.0)
+            .map(|c| Caja::nueva(c.x - z.x, c.y - z.y, c.w, c.h))
+            .collect()
     }
     /// El recorte de la zona (RGBA, ancho, alto).
     pub fn recorte(&self) -> (Vec<u8>, u32, u32) {
@@ -157,15 +161,30 @@ pub fn hacer(e: &Entrada, leido: Option<&Leido>, via: Via) -> Hecho {
     // Un recuadro (`paneles`): su fondo y su borde, con la herramienta de
     // relleno; lo de dentro son otras zonas.
     if tipo == Tipo::Recuadro {
-        return Hecho { zona: z.id, tipo, via: Via::Editable, elementos: recuadro(e), imagenes: Vec::new(), nota: "recuadro con su fondo y su borde".into() };
+        return Hecho {
+            zona: z.id,
+            tipo,
+            via: Via::Editable,
+            elementos: recuadro(e),
+            imagenes: Vec::new(),
+            nota: "recuadro con su fondo y su borde".into(),
+        };
     }
     // Una «tabla» que es un recuadro de color con texto (un aviso, un dato).
     // (No si el especialista de tablas ya la hizo: eso va primero.)
-    if tipo == Tipo::Tabla && via != Via::Imagen
+    if tipo == Tipo::Tabla
+        && via != Via::Imagen
         && !matches!(leido, Some(Leido::Elementos(v, _)) if !v.is_empty())
         && let Some(elementos) = caja_de_color(e)
     {
-        return Hecho { zona: z.id, tipo, via, elementos, imagenes: Vec::new(), nota: "recuadro de color con su texto en su sitio".into() };
+        return Hecho {
+            zona: z.id,
+            tipo,
+            via,
+            elementos,
+            imagenes: Vec::new(),
+            nota: "recuadro de color con su texto en su sitio".into(),
+        };
     }
     // Lo que hizo un especialista (la tabla): en el sitio de la zona.
     if let Some(Leido::Elementos(v, (ox, oy))) = leido
@@ -185,7 +204,14 @@ pub fn hacer(e: &Entrada, leido: Option<&Leido>, via: Via) -> Hecho {
                 x
             })
             .collect();
-        return Hecho { zona: z.id, tipo, via: Via::Editable, elementos, imagenes: Vec::new(), nota: "tabla del lienzo, como en la foto".into() };
+        return Hecho {
+            zona: z.id,
+            tipo,
+            via: Via::Editable,
+            elementos,
+            imagenes: Vec::new(),
+            nota: "tabla del lienzo, como en la foto".into(),
+        };
     }
     // Sus renglones corregidos por la nube: cada uno en su sitio.
     if let Some(Leido::Renglones(ls)) = leido
@@ -193,13 +219,30 @@ pub fn hacer(e: &Entrada, leido: Option<&Leido>, via: Via) -> Hecho {
         && !ls.is_empty()
         && matches!(tipo, Tipo::Parrafo | Tipo::Encabezado)
     {
-        return Hecho { zona: z.id, tipo, via: Via::Fiel, elementos: fiel_con(e, Some(ls)), imagenes: Vec::new(), nota: "renglones en su sitio, corregidos".into() };
+        return Hecho {
+            zona: z.id,
+            tipo,
+            via: Via::Fiel,
+            elementos: fiel_con(e, Some(ls)),
+            imagenes: Vec::new(),
+            nota: "renglones en su sitio, corregidos".into(),
+        };
     }
     // Un bloque que la nube paso a texto rico: un solo texto, en su sitio.
     if let Some(Leido::Rico(fuente)) = leido {
         let elementos = bloque_rico(e, fuente);
         if !elementos.is_empty() {
-            return Hecho { zona: z.id, tipo: Tipo::Parrafo, via, elementos, imagenes: Vec::new(), nota: format!("texto rico: {}", fuente.chars().take(60).collect::<String>()) };
+            return Hecho {
+                zona: z.id,
+                tipo: Tipo::Parrafo,
+                via,
+                elementos,
+                imagenes: Vec::new(),
+                nota: format!(
+                    "texto rico: {}",
+                    fuente.chars().take(60).collect::<String>()
+                ),
+            };
         }
     }
     let (elementos, nota) = match (via, tipo) {
@@ -220,10 +263,17 @@ pub fn hacer(e: &Entrada, leido: Option<&Leido>, via: Via) -> Hecho {
                     imagenes.push(img);
                 }
             }
-            (els, format!("tabla en su sitio con {} imagen(es)", z.dentro.len()))
+            (
+                els,
+                format!("tabla en su sitio con {} imagen(es)", z.dentro.len()),
+            )
         }
-        (Via::Fiel, Tipo::Parrafo | Tipo::Encabezado | Tipo::Tabla) => (fiel(e), "renglones en su sitio".into()),
-        (_, Tipo::Parrafo | Tipo::Encabezado) => (texto(e, tipo == Tipo::Encabezado), "texto".into()),
+        (Via::Fiel, Tipo::Parrafo | Tipo::Encabezado | Tipo::Tabla) => {
+            (fiel(e), "renglones en su sitio".into())
+        }
+        (_, Tipo::Parrafo | Tipo::Encabezado) => {
+            (texto(e, tipo == Tipo::Encabezado), "texto".into())
+        }
         (_, Tipo::Tabla) => match tabla(e) {
             Some(els) => (els, "tabla dibujada".into()),
             None => (fiel(e), "tabla sin celdas: renglones en su sitio".into()),
@@ -287,8 +337,19 @@ pub fn hacer(e: &Entrada, leido: Option<&Leido>, via: Via) -> Hecho {
     }
     // Lo que salio como figuras exactas es un diagrama (para el registro,
     // el banco y la app, que le pregunta los rotulos a la nube).
-    let tipo = if nota.starts_with("diagrama") { Tipo::Diagrama } else { tipo };
-    Hecho { zona: z.id, tipo, via, elementos, imagenes, nota }
+    let tipo = if nota.starts_with("diagrama") {
+        Tipo::Diagrama
+    } else {
+        tipo
+    };
+    Hecho {
+        zona: z.id,
+        tipo,
+        via,
+        elementos,
+        imagenes,
+        nota,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +358,15 @@ pub fn hacer(e: &Entrada, leido: Option<&Leido>, via: Via) -> Hecho {
 /// Lo que mide un texto con su letra (y su negrita, si hay medidor).
 fn medir(t: &str, tam: f32, familia: &str, negrita: bool) -> (f32, f32) {
     if pixpin_motor2d::texto::hay_medidor() {
-        pixpin_motor2d::texto::medida(t, tam, familia, EstiloDeTexto { negrita, ..Default::default() })
+        pixpin_motor2d::texto::medida(
+            t,
+            tam,
+            familia,
+            EstiloDeTexto {
+                negrita,
+                ..Default::default()
+            },
+        )
     } else {
         crate::lienzo::medir_con(t, tam, familia)
     }
@@ -307,7 +376,9 @@ fn medir(t: &str, tam: f32, familia: &str, negrita: bool) -> (f32, f32) {
 /// la mediana de lo que pide cada renglon largo, sujeta a lo que dice su
 /// alto (un renglon con pocas letras anchas no manda).
 pub fn tam_de_letra(rs: &[Renglon], escala: f64, familia: &str, negrita: bool) -> f64 {
-    let por_alto = mediana(rs.iter().map(|r| r.alto() * escala * 1.05).collect()).unwrap_or(16.0).max(4.0);
+    let por_alto = mediana(rs.iter().map(|r| r.alto() * escala * 1.05).collect())
+        .unwrap_or(16.0)
+        .max(4.0);
     let mut por_ancho: Vec<f64> = rs
         .iter()
         .filter(|r| r.texto.chars().count() >= 10)
@@ -325,7 +396,9 @@ pub fn tam_de_letra(rs: &[Renglon], escala: f64, familia: &str, negrita: bool) -
             })
             .collect();
     }
-    let t = mediana(por_ancho).unwrap_or(por_alto).clamp(por_alto * 0.7, por_alto * 1.45);
+    let t = mediana(por_ancho)
+        .unwrap_or(por_alto)
+        .clamp(por_alto * 0.7, por_alto * 1.45);
     (t * 2.0).round() / 2.0
 }
 
@@ -342,10 +415,18 @@ fn alineacion_motor(a: Alineacion) -> AlineacionTexto {
 pub fn enlace_de(t: &str) -> Option<String> {
     let w = t.split_whitespace().find(|w| {
         let w = w.to_lowercase();
-        w.starts_with("http") || w.starts_with("www.") || [".com/", ".nz/", ".org/", ".net/", ".pe/", ".es/"].iter().any(|d| w.contains(d))
+        w.starts_with("http")
+            || w.starts_with("www.")
+            || [".com/", ".nz/", ".org/", ".net/", ".pe/", ".es/"]
+                .iter()
+                .any(|d| w.contains(d))
     })?;
     let w = w.trim_matches(|c: char| matches!(c, '(' | ')' | '«' | '»' | '"' | ',' | ';'));
-    Some(if w.to_lowercase().starts_with("http") { w.to_string() } else { format!("https://{w}") })
+    Some(if w.to_lowercase().starts_with("http") {
+        w.to_string()
+    } else {
+        format!("https://{w}")
+    })
 }
 
 fn color_motor(c: Option<[u8; 3]>) -> ColorRgba {
@@ -356,8 +437,22 @@ fn color_motor(c: Option<[u8; 3]>) -> ColorRgba {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn un_texto(t: &str, x: f64, y: f64, tam: f64, familia: &str, negrita: bool, al: Alineacion, color: Option<[u8; 3]>) -> Elemento {
-    let estilo = Estilo { color: color_motor(color), tam: tam as f32, opacidad: 1.0, familia: familia.to_string() };
+pub(crate) fn un_texto(
+    t: &str,
+    x: f64,
+    y: f64,
+    tam: f64,
+    familia: &str,
+    negrita: bool,
+    al: Alineacion,
+    color: Option<[u8; 3]>,
+) -> Elemento {
+    let estilo = Estilo {
+        color: color_motor(color),
+        tam: tam as f32,
+        opacidad: 1.0,
+        familia: familia.to_string(),
+    };
     let medida = medir(t, tam as f32, familia, negrita);
     let mut el = elemento_texto(t, x as f32, y as f32, medida, tam as f32, false, &estilo);
     el.extras.negrita = negrita;
@@ -379,37 +474,75 @@ fn texto(e: &Entrada, titulo: bool) -> Vec<Value> {
     if z.renglones.is_empty() {
         return Vec::new();
     }
-    let familia = if titulo { &e.opciones.familia_titulos } else { &e.opciones.familia };
-    let negrita = titulo && (z.renglones.iter().any(|r| r.negrita) || z.renglones.iter().all(|r| r.alto() <= e.alto_letra * 1.3));
+    let familia = if titulo {
+        &e.opciones.familia_titulos
+    } else {
+        &e.opciones.familia
+    };
+    let negrita = titulo
+        && (z.renglones.iter().any(|r| r.negrita)
+            || z.renglones.iter().all(|r| r.alto() <= e.alto_letra * 1.3));
     let negrita = negrita || z.renglones.iter().all(|r| r.negrita);
     let esc = e.mapa.escala;
     let tam = tam_de_letra(&z.renglones, esc, familia, negrita);
-    let k = pixpin_motor2d::texto::interlineado_de(familia).unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
+    let k = pixpin_motor2d::texto::interlineado_de(familia)
+        .unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
     // Que el parrafo no pase del alto que tenia en el papel: con la letra
     // elegida por el ancho, una cursiva estrecha salia mas alta y se montaba
     // en el parrafo de abajo y en la raya del recuadro (banco del 15-oct,
     // amor-a-sofia).
     let alto_papel = e.destino().h;
     let n = z.renglones.len() as f64;
-    let tam = if n >= 2.0 && alto_papel > 0.0 { tam.min(alto_papel * 1.04 / (n * k)).max(tam * 0.7) } else { tam };
+    let tam = if n >= 2.0 && alto_papel > 0.0 {
+        tam.min(alto_papel * 1.04 / (n * k)).max(tam * 0.7)
+    } else {
+        tam
+    };
     let paso = {
-        let v: Vec<f64> = z.renglones.windows(2).map(|w| (w[1].caja.cy() - w[0].caja.cy()) * esc).filter(|d| *d > 0.0).collect();
+        let v: Vec<f64> = z
+            .renglones
+            .windows(2)
+            .map(|w| (w[1].caja.cy() - w[0].caja.cy()) * esc)
+            .filter(|d| *d > 0.0)
+            .collect();
         mediana(v)
     };
-    let color = super::seccion::color_mayoritario(z.renglones.iter().map(|r| (r.color, r.texto.chars().count())));
+    let color = super::seccion::color_mayoritario(
+        z.renglones
+            .iter()
+            .map(|r| (r.color, r.texto.chars().count())),
+    );
     // Renglones de varios enlaces: cada uno suelto, para que cada uno abra
     // el suyo.
-    let enlaces = z.renglones.iter().filter(|r| enlace_de(&r.texto).is_some()).count();
+    let enlaces = z
+        .renglones
+        .iter()
+        .filter(|r| enlace_de(&r.texto).is_some())
+        .count();
     let suelto = enlaces > 1 || paso.is_some_and(|p| (p / (tam * k) - 1.0).abs() > 0.15);
     let mut f = e.fabrica();
     let mut piezas = Vec::new();
     if suelto {
         for r in &z.renglones {
             let d = e.mapa.caja(&r.caja);
-            piezas.push(un_texto(&r.texto, d.x, d.cy() - tam * k / 2.0, tam, familia, negrita || r.negrita, Alineacion::Izquierda, r.color.or(color)));
+            piezas.push(un_texto(
+                &r.texto,
+                d.x,
+                d.cy() - tam * k / 2.0,
+                tam,
+                familia,
+                negrita || r.negrita,
+                Alineacion::Izquierda,
+                r.color.or(color),
+            ));
         }
     } else {
-        let todo = z.renglones.iter().map(|r| r.texto.as_str()).collect::<Vec<_>>().join("\n");
+        let todo = z
+            .renglones
+            .iter()
+            .map(|r| r.texto.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
         let primero = e.mapa.caja(&z.renglones[0].caja);
         let y = primero.cy() - tam * k / 2.0;
         let d = e.destino();
@@ -417,9 +550,22 @@ fn texto(e: &Entrada, titulo: bool) -> Vec<Value> {
         let x = match z.alineacion {
             Alineacion::Centro => d.cx() - w as f64 / 2.0,
             Alineacion::Derecha => d.x1() - w as f64,
-            _ => z.renglones.iter().map(|r| e.mapa.caja(&r.caja).x).fold(f64::MAX, f64::min),
+            _ => z
+                .renglones
+                .iter()
+                .map(|r| e.mapa.caja(&r.caja).x)
+                .fold(f64::MAX, f64::min),
         };
-        piezas.push(un_texto(&todo, x, y, tam, familia, negrita, z.alineacion, color));
+        piezas.push(un_texto(
+            &todo,
+            x,
+            y,
+            tam,
+            familia,
+            negrita,
+            z.alineacion,
+            color,
+        ));
     }
     f.de_motor(&piezas);
     // El marco de un recuadro.
@@ -446,11 +592,14 @@ fn fiel_con(e: &Entrada, textos: Option<&[String]>) -> Vec<Value> {
     }
     let familia = &e.opciones.familia;
     let esc = e.mapa.escala;
-    let k = pixpin_motor2d::texto::interlineado_de(familia).unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
+    let k = pixpin_motor2d::texto::interlineado_de(familia)
+        .unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
     let mut piezas = Vec::new();
     for (i, r) in z.renglones.iter().enumerate() {
         let tam = tam_de_letra(std::slice::from_ref(r), esc, familia, r.negrita);
-        let t = textos.and_then(|v| v.get(i)).map_or(r.texto.as_str(), String::as_str);
+        let t = textos
+            .and_then(|v| v.get(i))
+            .map_or(r.texto.as_str(), String::as_str);
         // (Vacio de la nube: lo suyo va en otro renglon, el de la fraccion.)
         if textos.is_some() && t.trim().is_empty() {
             continue;
@@ -460,7 +609,10 @@ fn fiel_con(e: &Entrada, textos: Option<&[String]>) -> Vec<Value> {
         let mut caja = r.caja;
         if let Some(v) = textos {
             for (j, o) in z.renglones.iter().enumerate() {
-                if j != i && v.get(j).is_some_and(|x| x.trim().is_empty()) && (o.caja.cy() - r.caja.cy()).abs() < r.caja.h * 0.5 {
+                if j != i
+                    && v.get(j).is_some_and(|x| x.trim().is_empty())
+                    && (o.caja.cy() - r.caja.cy()).abs() < r.caja.h * 0.5
+                {
                     caja = caja.union(&o.caja);
                 }
             }
@@ -476,11 +628,25 @@ fn fiel_con(e: &Entrada, textos: Option<&[String]>) -> Vec<Value> {
         } else {
             t
         };
-        let (t, negrita) = match t.trim().strip_prefix("**").and_then(|x| x.strip_suffix("**")).filter(|x| !x.contains("**")) {
+        let (t, negrita) = match t
+            .trim()
+            .strip_prefix("**")
+            .and_then(|x| x.strip_suffix("**"))
+            .filter(|x| !x.contains("**"))
+        {
             Some(x) => (x.trim(), true),
             None => (t, r.negrita),
         };
-        let mut el = un_texto(t, d.x, d.cy() - tam * k / 2.0, tam, familia, negrita, Alineacion::Izquierda, r.color);
+        let mut el = un_texto(
+            t,
+            d.x,
+            d.cy() - tam * k / 2.0,
+            tam,
+            familia,
+            negrita,
+            Alineacion::Izquierda,
+            r.color,
+        );
         // Corregido (con sus formulas compuestas) no puede pasar del ancho de
         // su renglon: se pisaba con lo de al lado.
         // (Hasta el borde de su ZONA, no del renglon del OCR: «Calcule P» era
@@ -488,7 +654,16 @@ fn fiel_con(e: &Entrada, textos: Option<&[String]>) -> Vec<Value> {
         let hasta = (e.destino().x1() - d.x).max(d.w);
         if textos.is_some() && el.ancho as f64 > hasta * 1.04 {
             let t2 = tam * (hasta * 1.02 / el.ancho as f64).max(0.6);
-            el = un_texto(t, d.x, d.cy() - t2 * k / 2.0, t2, familia, negrita, Alineacion::Izquierda, r.color);
+            el = un_texto(
+                t,
+                d.x,
+                d.cy() - t2 * k / 2.0,
+                t2,
+                familia,
+                negrita,
+                Alineacion::Izquierda,
+                r.color,
+            );
         }
         piezas.push(el);
     }
@@ -507,25 +682,63 @@ fn libres(e: &Entrada, lineas: &[String]) -> Vec<Value> {
     let familia = &e.opciones.familia;
     let d = e.destino();
     let esc = e.mapa.escala;
-    let k = pixpin_motor2d::texto::interlineado_de(familia).unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
-    let alto_letra = if z.renglones.is_empty() { e.alto_letra } else { mediana(z.renglones.iter().map(|r| r.alto()).collect()).unwrap_or(e.alto_letra) };
+    let k = pixpin_motor2d::texto::interlineado_de(familia)
+        .unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
+    let alto_letra = if z.renglones.is_empty() {
+        e.alto_letra
+    } else {
+        mediana(z.renglones.iter().map(|r| r.alto()).collect()).unwrap_or(e.alto_letra)
+    };
     let paso_zona = d.h / lineas.len() as f64;
     // (Que quepan en su zona: con la del titulo salian enormes.)
-    let tam = (alto_letra * esc * 1.05).min(paso_zona / k * 0.95).clamp(8.0, 72.0);
+    let tam = (alto_letra * esc * 1.05)
+        .min(paso_zona / k * 0.95)
+        .clamp(8.0, 72.0);
     let paso = paso_zona.max(tam * k);
-    let color = super::seccion::color_mayoritario(z.renglones.iter().map(|r| (r.color, r.texto.chars().count())));
+    let color = super::seccion::color_mayoritario(
+        z.renglones
+            .iter()
+            .map(|r| (r.color, r.texto.chars().count())),
+    );
     let mut piezas = Vec::new();
     for (i, l) in lineas.iter().enumerate() {
-        let sin_sueltas = if l.matches("**").count() % 2 == 1 { l.replace("**", "") } else { l.clone() };
-        let (t, negrita) = match sin_sueltas.trim().strip_prefix("**").and_then(|x| x.strip_suffix("**")).filter(|x| !x.contains("**")) {
+        let sin_sueltas = if l.matches("**").count() % 2 == 1 {
+            l.replace("**", "")
+        } else {
+            l.clone()
+        };
+        let (t, negrita) = match sin_sueltas
+            .trim()
+            .strip_prefix("**")
+            .and_then(|x| x.strip_suffix("**"))
+            .filter(|x| !x.contains("**"))
+        {
             Some(x) => (x.to_string(), true),
             None => (sin_sueltas.clone(), false),
         };
         let y = d.y + paso * i as f64 + (paso - tam * k) / 2.0;
-        let mut el = un_texto(&t, d.x, y, tam, familia, negrita, Alineacion::Izquierda, color);
+        let mut el = un_texto(
+            &t,
+            d.x,
+            y,
+            tam,
+            familia,
+            negrita,
+            Alineacion::Izquierda,
+            color,
+        );
         if el.ancho as f64 > d.w * 1.04 {
             let t2 = tam * (d.w * 1.02 / el.ancho as f64).max(0.6);
-            el = un_texto(&t, d.x, y, t2, familia, negrita, Alineacion::Izquierda, color);
+            el = un_texto(
+                &t,
+                d.x,
+                y,
+                t2,
+                familia,
+                negrita,
+                Alineacion::Izquierda,
+                color,
+            );
         }
         piezas.push(el);
     }
@@ -545,13 +758,27 @@ fn recta(f: &mut Fabrica, a: (f64, f64), b: (f64, f64), grosor: f64) {
 /// **Un recuadro**: un rectangulo con su fondo (relleno solido), su borde y
 /// sus esquinas, del tamano del de la hoja.
 fn recuadro(e: &Entrada) -> Vec<Value> {
-    let Some(st) = e.zona.panel else { return Vec::new() };
+    let Some(st) = e.zona.panel else {
+        return Vec::new();
+    };
     let d = e.destino();
     let mut f = e.fabrica();
-    let trazo = st.borde.map(imagen::hex).unwrap_or_else(|| "transparent".into());
+    let trazo = st
+        .borde
+        .map(imagen::hex)
+        .unwrap_or_else(|| "transparent".into());
     let relleno = st.relleno.map(imagen::hex);
-    let mut v = f.base("rectangle", [d.x, d.y, d.w, d.h], &trazo, relleno.as_deref());
-    v["strokeWidth"] = json!(if st.borde.is_some() { (st.grosor * e.mapa.escala).max(1.0) } else { 0.0 });
+    let mut v = f.base(
+        "rectangle",
+        [d.x, d.y, d.w, d.h],
+        &trazo,
+        relleno.as_deref(),
+    );
+    v["strokeWidth"] = json!(if st.borde.is_some() {
+        (st.grosor * e.mapa.escala).max(1.0)
+    } else {
+        0.0
+    });
     v["roughness"] = json!(0);
     // (El radio del lienzo es fijo: en uno pequeno se ve enorme.)
     if st.redondo && d.w.min(d.h) >= 160.0 {
@@ -584,10 +811,26 @@ fn tabla(e: &Entrada) -> Option<Vec<Value>> {
     let d = e.destino();
     let medir_t = |s: &str, tam: f32| crate::lienzo::medir_con(s, tam, &familia);
     let cabecera = t.parece_cabecera();
-    let color = super::seccion::color_mayoritario(e.zona.renglones.iter().map(|r| (r.color, r.texto.chars().count())));
+    let color = super::seccion::color_mayoritario(
+        e.zona
+            .renglones
+            .iter()
+            .map(|r| (r.color, r.texto.chars().count())),
+    );
     let hacer = |tam: f64| {
-        let estilo = Estilo { color: color_motor(color), tam: tam as f32, opacidad: 1.0, familia: familia.clone() };
-        pixpin_motor2d::tabla_dibujada::elementos_de_tabla(&t.filas, &estilo, Punto2::nuevo(d.x as f32, d.y as f32), &medir_t, cabecera)
+        let estilo = Estilo {
+            color: color_motor(color),
+            tam: tam as f32,
+            opacidad: 1.0,
+            familia: familia.clone(),
+        };
+        pixpin_motor2d::tabla_dibujada::elementos_de_tabla(
+            &t.filas,
+            &estilo,
+            Punto2::nuevo(d.x as f32, d.y as f32),
+            &medir_t,
+            cabecera,
+        )
     };
     let caja_de = |els: &[Elemento]| {
         els.iter()
@@ -619,7 +862,13 @@ fn tabla(e: &Entrada) -> Option<Vec<Value>> {
         if let pixpin_motor2d::Figura::Texto { texto, .. } = &el.figura
             && let Some(url) = enlace_de(texto)
         {
-            if let Some(c) = e.zona.renglones.iter().find(|r| r.texto.contains(texto.as_str()) || texto.contains(r.texto.as_str())).and_then(|r| r.color) {
+            if let Some(c) = e
+                .zona
+                .renglones
+                .iter()
+                .find(|r| r.texto.contains(texto.as_str()) || texto.contains(r.texto.as_str()))
+                .and_then(|r| r.color)
+            {
                 el.trazo = color_motor(Some(c));
             }
             el.enlace = Some(url);
@@ -658,7 +907,12 @@ fn foto(e: &Entrada) -> (Vec<Value>, Vec<ImagenNueva>) {
     // **Sin el texto de otras zonas** (17-oct, «imagenes que se comen algo del
     // texto»): lo que cae dentro del recorte y es de otra zona ya va como
     // texto; en la imagen se tapa con su fondo, y el texto sale una sola vez.
-    let suyas: Vec<Caja> = e.zona.renglones.iter().flat_map(|r| r.palabras.iter().map(|p| p.caja)).collect();
+    let suyas: Vec<Caja> = e
+        .zona
+        .renglones
+        .iter()
+        .flat_map(|r| r.palabras.iter().map(|p| p.caja))
+        .collect();
     let ajenas: Vec<Caja> = e
         .ajenas
         .iter()
@@ -666,7 +920,10 @@ fn foto(e: &Entrada) -> (Vec<Value>, Vec<ImagenNueva>) {
         .filter(|w| !suyas.iter().any(|s| s.comun(w) > 0.5 * w.area().max(1.0)))
         // (Lo que cae de lleno dentro de la zona es suyo aunque el OCR lo
         // apuntara en otra: tapado, la caja de «Cα=90°−α» salia vacia.)
-        .filter(|w| !(matches!(e.zona.tipo, Tipo::Formula | Tipo::Dudosa) && w.dentro_de(&e.zona.caja) >= 0.9))
+        .filter(|w| {
+            !(matches!(e.zona.tipo, Tipo::Formula | Tipo::Dudosa)
+                && w.dentro_de(&e.zona.caja) >= 0.9)
+        })
         .copied()
         .collect();
     // (Un dibujo, una formula o una dudosa recortados: sin la marca de agua.)
@@ -712,15 +969,27 @@ pub fn foto_recortada(e: &Entrada, caja: &Caja) -> Option<(Value, ImagenNueva)> 
         "naturalWidth": hw,
         "naturalHeight": hh,
     });
-    Some((v, ImagenNueva { id, rgba: hoja, ancho: hw, alto: hh }))
+    Some((
+        v,
+        ImagenNueva {
+            id,
+            rgba: hoja,
+            ancho: hw,
+            alto: hh,
+        },
+    ))
 }
-
 
 /// El recorte de `caja` con las palabras `tapar` cubiertas del color del
 /// papel de alrededor (la mediana del borde del recorte), como imagen propia.
 /// `palido`: ademas, lo gris claro (la marca de agua de una lamina) pasa a
 /// ser papel; para lo que no es una foto de verdad.
-fn foto_tapada(e: &Entrada, caja: &Caja, tapar: &[Caja], palido: bool) -> Option<(Value, ImagenNueva)> {
+fn foto_tapada(
+    e: &Entrada,
+    caja: &Caja,
+    tapar: &[Caja],
+    palido: bool,
+) -> Option<(Value, ImagenNueva)> {
     let (rgba, w, h) = e.pagina;
     let c = caja.dentro(w as f64, h as f64);
     let (mut sub, sw, sh) = imagen::recortar(rgba, w, h, &c);
@@ -742,7 +1011,8 @@ fn foto_tapada(e: &Entrada, caja: &Caja, tapar: &[Caja], palido: bool) -> Option
         fondo[k] = borde[k][borde[k].len() / 2];
     }
     if palido {
-        let gris = |p: &[u8]| (p[0] as f64 * 299.0 + p[1] as f64 * 587.0 + p[2] as f64 * 114.0) / 1000.0;
+        let gris =
+            |p: &[u8]| (p[0] as f64 * 299.0 + p[1] as f64 * 587.0 + p[2] as f64 * 114.0) / 1000.0;
         let gf = gris(&fondo);
         for px in sub.chunks_exact_mut(4) {
             let sat = px[..3].iter().max().unwrap() - px[..3].iter().min().unwrap();
@@ -754,7 +1024,10 @@ fn foto_tapada(e: &Entrada, caja: &Caja, tapar: &[Caja], palido: bool) -> Option
     for t in tapar {
         let q = t.crecer(1.5);
         let (x0, y0) = ((q.x - c.x).max(0.0) as u32, (q.y - c.y).max(0.0) as u32);
-        let (x1, y1) = (((q.x1() - c.x).max(0.0) as u32).min(sw), ((q.y1() - c.y).max(0.0) as u32).min(sh));
+        let (x1, y1) = (
+            ((q.x1() - c.x).max(0.0) as u32).min(sw),
+            ((q.y1() - c.y).max(0.0) as u32).min(sh),
+        );
         for y in y0..y1 {
             for x in x0..x1 {
                 let i = ((y * sw + x) * 4) as usize;
@@ -777,12 +1050,25 @@ fn foto_tapada(e: &Entrada, caja: &Caja, tapar: &[Caja], palido: bool) -> Option
     v["scale"] = json!([1.0, 1.0]);
     v["roughness"] = json!(0);
     v["strokeWidth"] = json!(0);
-    Some((v, ImagenNueva { id, rgba: sub, ancho: sw, alto: sh }))
+    Some((
+        v,
+        ImagenNueva {
+            id,
+            rgba: sub,
+            ancho: sw,
+            alto: sh,
+        },
+    ))
 }
 
 /// **Un trozo de la hoja como imagen del lienzo** (la foto de la zona, o el
 /// icono `k` de una celda), en su sitio. `grupo`: el de la zona, si ya hay.
-fn foto_de_caja(e: &Entrada, caja: &Caja, k: usize, grupo: Option<Value>) -> Option<(Value, ImagenNueva)> {
+fn foto_de_caja(
+    e: &Entrada,
+    caja: &Caja,
+    k: usize,
+    grupo: Option<Value>,
+) -> Option<(Value, ImagenNueva)> {
     let (rgba, w, h) = e.pagina;
     let (rgba, w, h) = imagen::recortar(rgba, w, h, caja);
     if w == 0 || h == 0 {
@@ -805,7 +1091,15 @@ fn foto_de_caja(e: &Entrada, caja: &Caja, k: usize, grupo: Option<Value>) -> Opt
     if let Some(g) = grupo {
         v["groupIds"] = g;
     }
-    Some((v, ImagenNueva { id, rgba, ancho: w, alto: h }))
+    Some((
+        v,
+        ImagenNueva {
+            id,
+            rgba,
+            ancho: w,
+            alto: h,
+        },
+    ))
 }
 
 /// Reduce (promediando) si el lado mayor pasa de `lado`.
@@ -815,12 +1109,25 @@ pub fn reducir(rgba: &[u8], w: u32, h: u32, lado: u32) -> (Vec<u8>, u32, u32) {
         return (rgba.to_vec(), w, h);
     }
     let k = mayor as f64 / lado as f64;
-    let (nw, nh) = (((w as f64 / k).round() as u32).max(1), ((h as f64 / k).round() as u32).max(1));
+    let (nw, nh) = (
+        ((w as f64 / k).round() as u32).max(1),
+        ((h as f64 / k).round() as u32).max(1),
+    );
     let mut out = vec![0u8; (nw * nh * 4) as usize];
     for y in 0..nh {
-        let (sy0, sy1) = ((y as f64 * k) as u32, (((y + 1) as f64 * k) as u32).min(h).max((y as f64 * k) as u32 + 1));
+        let (sy0, sy1) = (
+            (y as f64 * k) as u32,
+            (((y + 1) as f64 * k) as u32)
+                .min(h)
+                .max((y as f64 * k) as u32 + 1),
+        );
         for x in 0..nw {
-            let (sx0, sx1) = ((x as f64 * k) as u32, (((x + 1) as f64 * k) as u32).min(w).max((x as f64 * k) as u32 + 1));
+            let (sx0, sx1) = (
+                (x as f64 * k) as u32,
+                (((x + 1) as f64 * k) as u32)
+                    .min(w)
+                    .max((x as f64 * k) as u32 + 1),
+            );
             let mut s = [0u32; 4];
             let mut n = 0;
             for yy in sy0..sy1.min(h) {
@@ -852,7 +1159,10 @@ pub fn reducir(rgba: &[u8], w: u32, h: u32, lado: u32) -> (Vec<u8>, u32, u32) {
 fn formula(e: &Entrada, latex: &[String]) -> Option<Vec<Value>> {
     let mut args = Map::new();
     // Los renglones de verdad (una respuesta trae a veces varios con `\` en uno).
-    let lineas: Vec<String> = latex.iter().flat_map(|l| crate::ecuacion::partir_lineas(&latex_para_el_motor(l))).collect();
+    let lineas: Vec<String> = latex
+        .iter()
+        .flat_map(|l| crate::ecuacion::partir_lineas(&latex_para_el_motor(l)))
+        .collect();
     args.insert("ecuacion".into(), json!(lineas.join("\n")));
     let mut avisos = Vec::new();
     let mut ec = crate::ecuacion::validar(&args, &mut avisos).ok()?;
@@ -866,7 +1176,9 @@ fn formula(e: &Entrada, latex: &[String]) -> Option<Vec<Value>> {
         let por_renglon = rs.len() == lineas.len();
         let color_zona = color_de_la_zona(e.zona);
         let hex = |c: [u8; 3]| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
-        let de_color = |c: Option<[u8; 3]>| c.filter(|c| (*c.iter().max().unwrap() as i32 - *c.iter().min().unwrap() as i32) >= 40);
+        let de_color = |c: Option<[u8; 3]>| {
+            c.filter(|c| (*c.iter().max().unwrap() as i32 - *c.iter().min().unwrap() as i32) >= 40)
+        };
         let fuente_de = |l: &str, c: Option<[u8; 3]>| {
             let l = pixpin_motor2d::texto_rico::sin_barras_dobles(l);
             match de_color(c) {
@@ -880,17 +1192,38 @@ fn formula(e: &Entrada, latex: &[String]) -> Option<Vec<Value>> {
             for (l, r) in lineas.iter().zip(rs) {
                 let c = e.mapa.caja(&r.caja);
                 let tam = (c.h * 0.95).clamp(8.0, 96.0);
-                piezas.push(un_texto(&fuente_de(l, r.color.or(color_zona)), c.x, c.y, tam, &e.opciones.familia, r.negrita, Alineacion::Izquierda, None));
+                piezas.push(un_texto(
+                    &fuente_de(l, r.color.or(color_zona)),
+                    c.x,
+                    c.y,
+                    tam,
+                    &e.opciones.familia,
+                    r.negrita,
+                    Alineacion::Izquierda,
+                    None,
+                ));
             }
         } else {
             let fuente: Vec<String> = lineas.iter().map(|l| fuente_de(l, color_zona)).collect();
-            piezas.push(un_texto(&fuente.join("\n"), d.x, d.y, tam_base, &e.opciones.familia, false, Alineacion::Izquierda, None));
+            piezas.push(un_texto(
+                &fuente.join("\n"),
+                d.x,
+                d.y,
+                tam_base,
+                &e.opciones.familia,
+                false,
+                Alineacion::Izquierda,
+                None,
+            ));
         }
         f.de_motor(&piezas);
         marco(e, &mut f);
         return Some(f.salida);
     }
-    ec.color = color_de_la_zona(e.zona).map_or_else(|| NEGRO.to_string(), |c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
+    ec.color = color_de_la_zona(e.zona).map_or_else(
+        || NEGRO.to_string(),
+        |c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]),
+    );
     ec.tam = (e.alto_letra * e.mapa.escala * 1.1).clamp(8.0, 96.0);
     ec.donde = Some((d.x, d.y));
     let (_, (w, h)) = crate::ecuacion::piezas(&ec);
@@ -926,7 +1259,11 @@ fn color_de_la_zona(z: &Zona) -> Option<[u8; 3]> {
     for p in z.renglones.iter().flat_map(|r| r.palabras.iter()) {
         let Some(c) = p.color else { continue };
         let n = p.texto.chars().count();
-        match cuenta.iter_mut().find(|(k, _)| k.iter().zip(c.iter()).all(|(a, b)| (*a as i32 - *b as i32).abs() < 40)) {
+        match cuenta.iter_mut().find(|(k, _)| {
+            k.iter()
+                .zip(c.iter())
+                .all(|(a, b)| (*a as i32 - *b as i32).abs() < 40)
+        }) {
             Some(x) => x.1 += n,
             None => cuenta.push((c, n)),
         }
@@ -947,21 +1284,50 @@ fn marco(e: &Entrada, f: &mut Fabrica) {
     if sw < 8 || sh < 8 {
         return;
     }
-    let tapar: Vec<Caja> = e.zona.renglones.iter().flat_map(|r| r.palabras.iter()).map(|p| Caja::nueva(p.caja.x - c.x, p.caja.y - c.y, p.caja.w, p.caja.h)).collect();
-    let o = crate::diagrama::Opciones { alto_letra: e.alto_letra, tapar, exacta: false, ..Default::default() };
+    let tapar: Vec<Caja> = e
+        .zona
+        .renglones
+        .iter()
+        .flat_map(|r| r.palabras.iter())
+        .map(|p| Caja::nueva(p.caja.x - c.x, p.caja.y - c.y, p.caja.w, p.caja.h))
+        .collect();
+    let o = crate::diagrama::Opciones {
+        alto_letra: e.alto_letra,
+        tapar,
+        exacta: false,
+        ..Default::default()
+    };
     let mut d = crate::diagrama::vectorizar(&sub, sw, sh, &[], &o, None);
     // Solo un recuadro que rodea la formula (y no mucho mas grande).
     let (zx, zy) = (z.cx() - c.x, z.cy() - c.y);
-    d.recuadros.retain(|r| r.x0 < zx && r.x1 > zx && r.y0 < zy && r.y1 > zy && (r.x1 - r.x0) <= z.w + 3.0 * aire && (r.y1 - r.y0) <= z.h + 3.0 * aire);
+    d.recuadros.retain(|r| {
+        r.x0 < zx
+            && r.x1 > zx
+            && r.y0 < zy
+            && r.y1 > zy
+            && (r.x1 - r.x0) <= z.w + 3.0 * aire
+            && (r.y1 - r.y0) <= z.h + 3.0 * aire
+    });
     if d.recuadros.is_empty() {
         return;
     }
     d.recuadros.truncate(1);
-    let solo = crate::diagrama::Diagrama { ancho: d.ancho, alto: d.alto, recuadros: d.recuadros, ..Default::default() };
+    let solo = crate::diagrama::Diagrama {
+        ancho: d.ancho,
+        alto: d.alto,
+        recuadros: d.recuadros,
+        ..Default::default()
+    };
     let dest = e.mapa.caja(&c);
     // (Debajo de la formula: su relleno no la tapa.)
     let n0 = f.salida.len();
-    crate::diagrama::elementos(&solo, (dest.x, dest.y), e.mapa.escala, f, &e.opciones.familia);
+    crate::diagrama::elementos(
+        &solo,
+        (dest.x, dest.y),
+        e.mapa.escala,
+        f,
+        &e.opciones.familia,
+    );
     let nuevos = f.salida.split_off(n0);
     f.salida.splice(0..0, nuevos);
 }
@@ -972,34 +1338,69 @@ fn marco(e: &Entrada, f: &mut Fabrica) {
 /// **El enganche con el calcado**: sus trazos vienen en el lienzo de 800x600
 /// (`lienzo = original * escala + desplazamiento`); aqui vuelven a pixeles
 /// del recorte y de ahi a la caja destino.
-pub fn calco_en_caja(c: &crate::calcar::Calcado, destino: Caja, escala_pagina: f64, semilla: u64) -> Vec<Value> {
+pub fn calco_en_caja(
+    c: &crate::calcar::Calcado,
+    destino: Caja,
+    escala_pagina: f64,
+    semilla: u64,
+) -> Vec<Value> {
     use crate::calcar::{Calcado, Trazo};
     if c.escala <= 0.0 {
         return Vec::new();
     }
     let a = |(x, y): (f64, f64)| {
-        (destino.x + (x - c.desplazamiento.0) / c.escala * escala_pagina, destino.y + (y - c.desplazamiento.1) / c.escala * escala_pagina)
+        (
+            destino.x + (x - c.desplazamiento.0) / c.escala * escala_pagina,
+            destino.y + (y - c.desplazamiento.1) / c.escala * escala_pagina,
+        )
     };
     let todos = |v: &[(f64, f64)]| v.iter().map(|&p| a(p)).collect::<Vec<_>>();
     let trazos = c
         .trazos
         .iter()
         .map(|t| match t {
-            Trazo::Mancha { contorno, huecos, color } => Trazo::Mancha {
+            Trazo::Mancha {
+                contorno,
+                huecos,
+                color,
+            } => Trazo::Mancha {
                 contorno: todos(contorno),
                 huecos: huecos.iter().map(|h| todos(h)).collect(),
                 color: color.clone(),
             },
-            Trazo::Linea { puntos, cerrada, color } => Trazo::Linea { puntos: todos(puntos), cerrada: *cerrada, color: color.clone() },
-            Trazo::Raya { puntos, color, grosor } => Trazo::Raya { puntos: todos(puntos), color: color.clone(), grosor: grosor / c.escala * escala_pagina },
+            Trazo::Linea {
+                puntos,
+                cerrada,
+                color,
+            } => Trazo::Linea {
+                puntos: todos(puntos),
+                cerrada: *cerrada,
+                color: color.clone(),
+            },
+            Trazo::Raya {
+                puntos,
+                color,
+                grosor,
+            } => Trazo::Raya {
+                puntos: todos(puntos),
+                color: color.clone(),
+                grosor: grosor / c.escala * escala_pagina,
+            },
             Trazo::Fondo { caja, color } => {
                 let (x0, y0) = a((caja[0], caja[1]));
                 let (x1, y1) = a((caja[0] + caja[2], caja[1] + caja[3]));
-                Trazo::Fondo { caja: [x0, y0, x1 - x0, y1 - y0], color: color.clone() }
+                Trazo::Fondo {
+                    caja: [x0, y0, x1 - x0, y1 - y0],
+                    color: color.clone(),
+                }
             }
         })
         .collect();
-    let recolocado = Calcado { trazos, escala: 1.0, desplazamiento: (0.0, 0.0) };
+    let recolocado = Calcado {
+        trazos,
+        escala: 1.0,
+        desplazamiento: (0.0, 0.0),
+    };
     crate::lienzo::elementos_de_calcado(&recolocado, (0.0, 0.0), semilla)
 }
 
@@ -1048,24 +1449,52 @@ fn diagrama(e: &Entrada, leido: Option<&Leido>) -> Option<(Vec<Value>, String)> 
         })
         .collect();
     // El texto de las OTRAS zonas (el de esta va como rotulo: «Inicio» en su ovalo).
-    let propias: Vec<Caja> = z.renglones.iter().flat_map(|r| r.palabras.iter().map(|p| p.caja)).collect();
-    let es_propia = |c: &Caja| propias.iter().any(|q| (q.x - c.x).abs() < 0.5 && (q.y - c.y).abs() < 0.5 && (q.w - c.w).abs() < 0.5);
-    let tapar: Vec<Caja> = e.ajenas.iter().filter(|c| c.comun(&caja) > 0.0 && !es_propia(c)).map(|c| Caja::nueva(c.x - caja.x, c.y - caja.y, c.w, c.h)).collect();
+    let propias: Vec<Caja> = z
+        .renglones
+        .iter()
+        .flat_map(|r| r.palabras.iter().map(|p| p.caja))
+        .collect();
+    let es_propia = |c: &Caja| {
+        propias
+            .iter()
+            .any(|q| (q.x - c.x).abs() < 0.5 && (q.y - c.y).abs() < 0.5 && (q.w - c.w).abs() < 0.5)
+    };
+    let tapar: Vec<Caja> = e
+        .ajenas
+        .iter()
+        .filter(|c| c.comun(&caja) > 0.0 && !es_propia(c))
+        .map(|c| Caja::nueva(c.x - caja.x, c.y - caja.y, c.w, c.h))
+        .collect();
     let mut pistas: Vec<String> = e.pistas.to_vec();
     pistas.extend(z.renglones.iter().map(|r| r.texto.clone()));
-    let o = crate::diagrama::Opciones { alto_letra: e.alto_letra, tapar, pistas, ..Default::default() };
+    let o = crate::diagrama::Opciones {
+        alto_letra: e.alto_letra,
+        tapar,
+        pistas,
+        ..Default::default()
+    };
     let mut d = crate::diagrama::vectorizar(&rgba, w, h, &palabras, &o, e.lector);
     if !d.es_diagrama() {
         return None;
     }
     if let Some(Leido::Rotulos(v, hechos)) = leido {
         // Sus fracciones, pasadas a este recorte.
-        let v: Vec<(String, f64, f64)> = v.iter().map(|(t, fx, fy)| (t.clone(), (de_la_nube.x + fx * de_la_nube.w - caja.x) / w as f64, (de_la_nube.y + fy * de_la_nube.h - caja.y) / h as f64)).collect();
+        let v: Vec<(String, f64, f64)> = v
+            .iter()
+            .map(|(t, fx, fy)| {
+                (
+                    t.clone(),
+                    (de_la_nube.x + fx * de_la_nube.w - caja.x) / w as f64,
+                    (de_la_nube.y + fy * de_la_nube.h - caja.y) / h as f64,
+                )
+            })
+            .collect();
         crate::diagrama::corregir_rotulos(&mut d, &v, e.alto_letra, Some((&rgba, w, h)));
         // Lo que la nube leyo encima del texto de OTRA zona (el «θ=90°» de la
         // formula de debajo, que asoma en el recorte) no es un rotulo de aqui.
         let ajenas: Vec<Caja> = o.tapar.iter().map(|c| c.crecer(e.alto_letra)).collect();
-        d.rotulos.retain(|r| !ajenas.iter().any(|c| c.contiene(r.caja.cx(), r.caja.cy())));
+        d.rotulos
+            .retain(|r| !ajenas.iter().any(|c| c.contiene(r.caja.cx(), r.caja.cy())));
         // Con las letras y los hechos de la nube, otra vuelta de geometria
         // exacta (lo ya exacto no se mueve).
         let mut pistas = o.pistas.clone();
@@ -1074,7 +1503,13 @@ fn diagrama(e: &Entrada, leido: Option<&Leido>) -> Option<(Vec<Value>, String)> 
     }
     let dest = e.mapa.caja(&caja);
     let mut f = e.fabrica();
-    crate::diagrama::elementos(&d, (dest.x, dest.y), e.mapa.escala, &mut f, &e.opciones.familia);
+    crate::diagrama::elementos(
+        &d,
+        (dest.x, dest.y),
+        e.mapa.escala,
+        &mut f,
+        &e.opciones.familia,
+    );
     Some((f.salida, format!("diagrama: {}", d.resumen())))
 }
 
@@ -1084,8 +1519,13 @@ fn diagrama(e: &Entrada, leido: Option<&Leido>) -> Option<(Vec<Value>, String)> 
 /// a papel. Las rectas negras y los rellenos de la figura, mucho mas
 /// oscuros, se quedan.
 fn sin_marca_de_agua(rgba: &mut [u8]) {
-    let gris = |p: &[u8]| (p[0] as f64 * 299.0 + p[1] as f64 * 587.0 + p[2] as f64 * 114.0) / 1000.0;
-    let mut g: Vec<u8> = rgba.chunks_exact(4).step_by(3).map(|p| gris(p) as u8).collect();
+    let gris =
+        |p: &[u8]| (p[0] as f64 * 299.0 + p[1] as f64 * 587.0 + p[2] as f64 * 114.0) / 1000.0;
+    let mut g: Vec<u8> = rgba
+        .chunks_exact(4)
+        .step_by(3)
+        .map(|p| gris(p) as u8)
+        .collect();
     if g.is_empty() {
         return;
     }
@@ -1113,7 +1553,12 @@ pub fn es_diagrama(e: &Entrada) -> bool {
     if w < 8 || h < 8 {
         return false;
     }
-    let o = crate::diagrama::Opciones { alto_letra: e.alto_letra, tapar: e.ajenas_en_zona(), exacta: false, ..Default::default() };
+    let o = crate::diagrama::Opciones {
+        alto_letra: e.alto_letra,
+        tapar: e.ajenas_en_zona(),
+        exacta: false,
+        ..Default::default()
+    };
     crate::diagrama::vectorizar(&rgba, w, h, &[], &o, None).es_diagrama()
 }
 
@@ -1122,16 +1567,26 @@ pub fn es_diagrama(e: &Entrada) -> bool {
 /// 15-oct: salia «m\getsCOD») pasa a lo que quiso decir. Lo demas
 /// (`\measuredangle`, `\overset{\frown}{AC}`) ya lo entiende el motor.
 pub fn latex_para_el_motor(l: &str) -> String {
-    l.replace(r"\gets ", r"\sphericalangle ").replace(r"\gets", r"\sphericalangle ")
+    l.replace(r"\gets ", r"\sphericalangle ")
+        .replace(r"\gets", r"\sphericalangle ")
 }
 
 #[cfg(test)]
 mod pruebas_latex {
     #[test]
     fn el_angulo_mal_escrito_por_la_nube_se_arregla() {
-        assert_eq!(super::latex_para_el_motor(r"m\getsCOD"), r"m\sphericalangle COD");
-        assert_eq!(super::latex_para_el_motor(r"m\gets COD"), r"m\sphericalangle COD");
-        assert_eq!(super::latex_para_el_motor(r"m\overset{\frown}{AC}=2a"), r"m\overset{\frown}{AC}=2a");
+        assert_eq!(
+            super::latex_para_el_motor(r"m\getsCOD"),
+            r"m\sphericalangle COD"
+        );
+        assert_eq!(
+            super::latex_para_el_motor(r"m\gets COD"),
+            r"m\sphericalangle COD"
+        );
+        assert_eq!(
+            super::latex_para_el_motor(r"m\overset{\frown}{AC}=2a"),
+            r"m\overset{\frown}{AC}=2a"
+        );
     }
 }
 
@@ -1139,8 +1594,19 @@ mod pruebas_latex {
 mod pruebas_rico {
     #[test]
     fn una_linea_de_resolucion_sale_como_texto_rico() {
-        let e = super::un_texto(r"$\color{#c04040}{m\measuredangle AOB=90^{\circ}}$", 0.0, 0.0, 20.0, "Work Sans", false, super::Alineacion::Izquierda, None);
-        let pixpin_motor2d::elemento::Figura::Texto { texto, .. } = &e.figura else { panic!() };
+        let e = super::un_texto(
+            r"$\color{#c04040}{m\measuredangle AOB=90^{\circ}}$",
+            0.0,
+            0.0,
+            20.0,
+            "Work Sans",
+            false,
+            super::Alineacion::Izquierda,
+            None,
+        );
+        let pixpin_motor2d::elemento::Figura::Texto { texto, .. } = &e.figura else {
+            panic!()
+        };
         eprintln!("texto {texto:?} rico {:?}", e.extras.rico);
         assert!(!texto.contains(char::from(92)), "{texto}");
         assert!(e.extras.rico.is_some());
@@ -1162,15 +1628,33 @@ fn bloque_rico(e: &Entrada, fuente: &str) -> Vec<Value> {
         .iter()
         .filter(|r| {
             let n = r.texto.chars().count().max(1);
-            r.texto.chars().filter(|c| c.is_alphabetic() || *c == ' ').count() * 10 >= n * 7 && n >= 6
+            r.texto
+                .chars()
+                .filter(|c| c.is_alphabetic() || *c == ' ')
+                .count()
+                * 10
+                >= n * 7
+                && n >= 6
         })
         .cloned()
         .collect();
-    let rs = if de_texto.is_empty() { e.zona.renglones.clone() } else { de_texto };
-    let mut tam = if rs.is_empty() { (e.alto_letra * e.mapa.escala * 1.05).max(6.0) } else { tam_de_letra(&rs, e.mapa.escala, familia, false) };
+    let rs = if de_texto.is_empty() {
+        e.zona.renglones.clone()
+    } else {
+        de_texto
+    };
+    let mut tam = if rs.is_empty() {
+        (e.alto_letra * e.mapa.escala * 1.05).max(6.0)
+    } else {
+        tam_de_letra(&rs, e.mapa.escala, familia, false)
+    };
     // Una zona sola lleva su alineacion (un titulo centrado); un bloque, la
     // de cada renglon (`\centro`).
-    let al = if fuente.contains('\n') { Alineacion::Izquierda } else { e.zona.alineacion };
+    let al = if fuente.contains('\n') {
+        Alineacion::Izquierda
+    } else {
+        e.zona.alineacion
+    };
     let mut el = un_texto(fuente, d.x, d.y, tam, familia, false, al, None);
     for _ in 0..3 {
         let k = (d.w * 1.3 / el.ancho.max(1.0) as f64).min(d.h * 1.5 / el.alto.max(1.0) as f64);
@@ -1209,23 +1693,52 @@ fn caja_de_color(e: &Entrada) -> Option<Vec<Value>> {
     if sw < 16 || sh < 16 {
         return None;
     }
-    let tapar: Vec<Caja> = z.renglones.iter().flat_map(|r| r.palabras.iter()).map(|p| Caja::nueva(p.caja.x - c.x, p.caja.y - c.y, p.caja.w, p.caja.h)).collect();
-    let o = crate::diagrama::Opciones { alto_letra: e.alto_letra, tapar, exacta: false, ..Default::default() };
+    let tapar: Vec<Caja> = z
+        .renglones
+        .iter()
+        .flat_map(|r| r.palabras.iter())
+        .map(|p| Caja::nueva(p.caja.x - c.x, p.caja.y - c.y, p.caja.w, p.caja.h))
+        .collect();
+    let o = crate::diagrama::Opciones {
+        alto_letra: e.alto_letra,
+        tapar,
+        exacta: false,
+        ..Default::default()
+    };
     let d = crate::diagrama::vectorizar(&sub, sw, sh, &[], &o, None);
     // Un recuadro que es casi toda la zona, y nada mas que lo parta (una tabla
     // de verdad tiene rayas por dentro).
-    let q = d.recuadros.iter().find(|q| (q.x1 - q.x0) >= 0.85 * z.caja.w && (q.y1 - q.y0) >= 0.85 * z.caja.h)?;
-    let dentro = d.segmentos.iter().filter(|s| s.largo() >= 0.5 * (q.x1 - q.x0).min(q.y1 - q.y0) && s.a.0 > q.x0 + 4.0 && s.a.0 < q.x1 - 4.0 && s.a.1 > q.y0 + 4.0 && s.a.1 < q.y1 - 4.0).count();
+    let q = d
+        .recuadros
+        .iter()
+        .find(|q| (q.x1 - q.x0) >= 0.85 * z.caja.w && (q.y1 - q.y0) >= 0.85 * z.caja.h)?;
+    let dentro = d
+        .segmentos
+        .iter()
+        .filter(|s| {
+            s.largo() >= 0.5 * (q.x1 - q.x0).min(q.y1 - q.y0)
+                && s.a.0 > q.x0 + 4.0
+                && s.a.0 < q.x1 - 4.0
+                && s.a.1 > q.y0 + 4.0
+                && s.a.1 < q.y1 - 4.0
+        })
+        .count();
     if dentro > 0 {
         return None;
     }
     let mut q = q.clone();
     // Su relleno: lo que hay dentro sin letras (el crema), si no es papel.
     if q.relleno.is_none() {
-        let papel = crate::diagrama::mascara::fondo(&crate::diagrama::mascara::Img::de_rgba(&sub, sw as usize, sh as usize));
+        let papel = crate::diagrama::mascara::fondo(&crate::diagrama::mascara::Img::de_rgba(
+            &sub,
+            sw as usize,
+            sh as usize,
+        ));
         let mut v: Vec<[f32; 3]> = Vec::new();
         for y in (q.y0 + q.grosor + 3.0) as u32..(q.y1 - q.grosor - 3.0).max(0.0) as u32 {
-            for x in ((q.x0 + q.grosor + 3.0) as u32..(q.x1 - q.grosor - 3.0).max(0.0) as u32).step_by(3) {
+            for x in
+                ((q.x0 + q.grosor + 3.0) as u32..(q.x1 - q.grosor - 3.0).max(0.0) as u32).step_by(3)
+            {
                 let i = ((y * sw + x) * 4) as usize;
                 v.push([sub[i] as f32, sub[i + 1] as f32, sub[i + 2] as f32]);
             }
@@ -1242,14 +1755,35 @@ fn caja_de_color(e: &Entrada) -> Option<Vec<Value>> {
             }
         }
     }
-    let solo = crate::diagrama::Diagrama { ancho: d.ancho, alto: d.alto, recuadros: vec![q], ..Default::default() };
+    let solo = crate::diagrama::Diagrama {
+        ancho: d.ancho,
+        alto: d.alto,
+        recuadros: vec![q],
+        ..Default::default()
+    };
     let dest = e.mapa.caja(&c);
     let mut f = e.fabrica();
-    crate::diagrama::elementos(&solo, (dest.x, dest.y), e.mapa.escala, &mut f, &e.opciones.familia);
+    crate::diagrama::elementos(
+        &solo,
+        (dest.x, dest.y),
+        e.mapa.escala,
+        &mut f,
+        &e.opciones.familia,
+    );
     // Sus renglones en su sitio, sin las rayas de la «tabla» (ya estan).
     let mut sin_rayas = (*e.zona).clone();
     sin_rayas.rayas.clear();
-    let e2 = Entrada { zona: &sin_rayas, mapa: e.mapa, opciones: e.opciones, pagina: e.pagina, alto_letra: e.alto_letra, semilla: e.semilla, lector: e.lector, ajenas: e.ajenas, pistas: e.pistas };
+    let e2 = Entrada {
+        zona: &sin_rayas,
+        mapa: e.mapa,
+        opciones: e.opciones,
+        pagina: e.pagina,
+        alto_letra: e.alto_letra,
+        semilla: e.semilla,
+        lector: e.lector,
+        ajenas: e.ajenas,
+        pistas: e.pistas,
+    };
     // (Con su propio id: la fabrica de los renglones empieza por los mismos.)
     let mut els: Vec<Value> = f
         .salida
@@ -1274,9 +1808,21 @@ fn sin_texto_alrededor(e: &Entrada, caja: Caja) -> Caja {
         return caja;
     }
     let mut c = caja;
-    let palabras: Vec<&Caja> = e.ajenas.iter().filter(|w| caja.contiene(w.cx(), w.cy())).collect();
-    let arriba = palabras.iter().filter(|w| w.cy() < caja.y + 0.4 * caja.h).map(|w| w.y1()).fold(f64::MIN, f64::max);
-    let abajo = palabras.iter().filter(|w| w.cy() > caja.y1() - 0.4 * caja.h).map(|w| w.y).fold(f64::MAX, f64::min);
+    let palabras: Vec<&Caja> = e
+        .ajenas
+        .iter()
+        .filter(|w| caja.contiene(w.cx(), w.cy()))
+        .collect();
+    let arriba = palabras
+        .iter()
+        .filter(|w| w.cy() < caja.y + 0.4 * caja.h)
+        .map(|w| w.y1())
+        .fold(f64::MIN, f64::max);
+    let abajo = palabras
+        .iter()
+        .filter(|w| w.cy() > caja.y1() - 0.4 * caja.h)
+        .map(|w| w.y)
+        .fold(f64::MAX, f64::min);
     let (mut y0, mut y1) = (c.y, c.y1());
     if arriba > f64::MIN {
         y0 = arriba + 2.0;

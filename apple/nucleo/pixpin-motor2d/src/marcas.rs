@@ -27,7 +27,7 @@
 //! precision haria que el mismo texto no diera la misma lista en los dos
 //! lados.
 
-use crate::camara::Camara;
+use crate::camara::{Camara, ZOOM_MAXIMO, ZOOM_MINIMO};
 use crate::vector::Punto2;
 
 /// Una marca: un sitio con su emoticono.
@@ -163,9 +163,14 @@ pub fn de_texto(texto: &str) -> Vec<Marca> {
 /// entero, sin decimales (`12`, no `12.0`). Asi el mismo dibujo da la misma
 /// linea en los dos aparatos y un cambio real no se pierde entre ruido.
 fn num(v: f64) -> String {
+    redondeado(v, 100.0)
+}
+
+/// `v` redondeado a `1/por` (como `Math.round`), sin «.0» si es entero.
+fn redondeado(v: f64, por: f64) -> String {
     // `Math.round` de Kotlin redondea las mitades hacia arriba (tambien las
     // negativas), que no es lo que hace `f64::round`: por eso el suelo.
-    let r = (v * 100.0 + 0.5).floor() / 100.0;
+    let r = (v * por + 0.5).floor() / por;
     if r == r.trunc() && r.abs() < 1e15 {
         format!("{}", r as i64)
     } else {
@@ -187,6 +192,86 @@ pub fn camara_con_la_marca_arriba(m: &Marca, zoom: f32, ancho: f32, margen: f32)
         x: m.x as f32 - ancho / (2.0 * z),
         y: m.y as f32 - margen / z,
         zoom: z,
+    }
+}
+
+/// **La vista guardada con una marca**, como las vistas con nombre de
+/// AutoCAD (25-oct-2026, «que guarde la visualizacion que tengo en pantalla
+/// y quede fijada a ese marcador»): al ir a la marca se vuelve a ver lo
+/// mismo que se veia al ponerla, encuadre **y** aumento.
+///
+/// Se guarda el **centro** de lo que se veia y **cuanto mundo** cabia (ancho
+/// y alto, en unidades del mundo), no la camara tal cual: la esquina y el
+/// aumento solo valen para una ventana de ese tamano, y la marca viaja a
+/// otros aparatos (el movil de pie, otro PC con otra pantalla). Al volver se
+/// encaja eso en el hueco que haya ([`VistaDeMarca::camara`]): en la misma
+/// ventana sale exactamente la camara de antes; en otra, lo mismo centrado y
+/// entero. Es el formato de los marcadores de los planos (`plano` en
+/// `.vistas.json`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VistaDeMarca {
+    /// El centro de lo que se veia, en coordenadas del mundo.
+    pub x: f64,
+    pub y: f64,
+    /// Lo que se veia, en unidades del mundo.
+    pub ancho: f64,
+    pub alto: f64,
+}
+
+impl VistaDeMarca {
+    /// Lo que ensena `camara` en un hueco de `ancho_px` × `alto_px` (en los
+    /// pixeles que convierte su `zoom`). `None` si el hueco no mide nada.
+    pub fn de_camara(camara: &Camara, ancho_px: f32, alto_px: f32) -> Option<Self> {
+        if !(ancho_px > 0.0 && alto_px > 0.0 && camara.zoom > 0.0) {
+            return None;
+        }
+        let z = camara.zoom as f64;
+        let (ancho, alto) = (ancho_px as f64 / z, alto_px as f64 / z);
+        Some(Self {
+            x: camara.x as f64 + ancho / 2.0,
+            y: camara.y as f64 + alto / 2.0,
+            ancho,
+            alto,
+        })
+    }
+
+    /// **La camara que la vuelve a ensenar** en un hueco de `ancho_px` ×
+    /// `alto_px`: todo lo que se veia, centrado, con el aumento que lo hace
+    /// caber (y entre [`ZOOM_MINIMO`] y [`ZOOM_MAXIMO`]).
+    pub fn camara(&self, ancho_px: f32, alto_px: f32) -> Camara {
+        let (w, h) = (ancho_px.max(1.0) as f64, alto_px.max(1.0) as f64);
+        let zoom = (w / self.ancho.max(1e-9))
+            .min(h / self.alto.max(1e-9))
+            .clamp(ZOOM_MINIMO as f64, ZOOM_MAXIMO as f64);
+        Camara {
+            x: (self.x - w / (2.0 * zoom)) as f32,
+            y: (self.y - h / (2.0 * zoom)) as f32,
+            zoom: zoom as f32,
+        }
+    }
+
+    /// En texto: `"x y ancho alto"`, separado por espacios como el
+    /// `"zoom x y"` de las vistas de los documentos. A diezmilesimas: con el
+    /// aumento maximo eso es menos de medio pixel.
+    pub fn a_texto(&self) -> String {
+        [self.x, self.y, self.ancho, self.alto]
+            .map(|v| redondeado(v, 10_000.0))
+            .join(" ")
+    }
+
+    /// Y de vuelta. Cuatro numeros finitos, con ancho y alto positivos; si
+    /// no, no es una vista (y la marca vuelve como antes, sin ella).
+    pub fn de_texto(t: &str) -> Option<Self> {
+        let mut v = t
+            .split_whitespace()
+            .map(|s| s.parse::<f64>().ok().filter(|v| v.is_finite()));
+        let vista = Self {
+            x: v.next()??,
+            y: v.next()??,
+            ancho: v.next()??,
+            alto: v.next()??,
+        };
+        (vista.ancho > 0.0 && vista.alto > 0.0).then_some(vista)
     }
 }
 
@@ -231,9 +316,19 @@ pub fn en_la_pagina(pagina: i32, fraccion_alto: f64, fraccion_ancho: f64) -> (f6
 /// QuickView): lo que falta se multiplica por `exp(-VELOCIDAD·dt)` en cada
 /// paso, asi que se ve igual a 60 que a 144 Hz, y pedir otro destino a mitad
 /// de camino lo redirige sin tirones.
+///
+/// Con una vista guardada ([`VistaDeMarca`]) el destino trae otro aumento:
+/// entonces el aumento tambien viaja, por multiplos (se ve igual acercarse
+/// de 1 a 2 que de 10 a 20), y lo que se persigue es el **centro** del hueco
+/// y no la esquina, para que el sitio no se escape hacia un lado mientras se
+/// acerca. Por eso [`Vuelo::hacia_en`] pide el tamano del hueco.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vuelo {
     pub destino: Camara,
+    /// El hueco donde se mira, en los pixeles del `zoom`. `(0, 0)` (el de
+    /// [`Vuelo::hacia`]) persigue la esquina, que es lo mismo mientras el
+    /// aumento no cambie.
+    pub hueco: (f32, f32),
 }
 
 /// Mas lento que el zoom del pin (72): alli se recorren unos cientos de
@@ -247,7 +342,19 @@ const LLEGADA_PX: f32 = 0.5;
 
 impl Vuelo {
     pub fn hacia(destino: Camara) -> Self {
-        Self { destino }
+        Self {
+            destino,
+            hueco: (0.0, 0.0),
+        }
+    }
+
+    /// Hacia `destino` mirando en un hueco de `ancho_px` × `alto_px`: hace
+    /// falta cuando el aumento del destino no es el de ahora.
+    pub fn hacia_en(destino: Camara, ancho_px: f32, alto_px: f32) -> Self {
+        Self {
+            destino,
+            hueco: (ancho_px.max(0.0), alto_px.max(0.0)),
+        }
     }
 
     /// Avanza `dt` segundos. Devuelve `true` mientras siga en el aire; al
@@ -262,11 +369,28 @@ impl Vuelo {
             1.0 / 240.0
         };
         let avance = 1.0 - (-VELOCIDAD_VUELO * dt).exp();
-        camara.x += (self.destino.x - camara.x) * avance;
-        camara.y += (self.destino.y - camara.y) * avance;
-        camara.zoom = self.destino.zoom;
-        let falta = (self.destino.x - camara.x).hypot(self.destino.y - camara.y) * camara.zoom;
-        if falta < LLEGADA_PX {
+        let (w, h) = self.hueco;
+        let centro = |c: &Camara| (c.x + w / (2.0 * c.zoom), c.y + h / (2.0 * c.zoom));
+        let (ax, ay) = centro(camara);
+        let (bx, by) = centro(&self.destino);
+        let zoom = if camara.zoom > 0.0 && camara.zoom.is_finite() {
+            camara.zoom * (self.destino.zoom / camara.zoom).powf(avance)
+        } else {
+            self.destino.zoom
+        };
+        let (cx, cy) = (ax + (bx - ax) * avance, ay + (by - ay) * avance);
+        camara.zoom = zoom;
+        camara.x = cx - w / (2.0 * zoom);
+        camara.y = cy - h / (2.0 * zoom);
+        // Lo que falta, en pixeles: el centro, y cuanto se mueve el borde del
+        // hueco por el aumento que queda.
+        let borde = if w.max(h) > 0.0 {
+            w.max(h) / 2.0
+        } else {
+            500.0
+        };
+        let falta = (bx - cx).hypot(by - cy) * zoom + (self.destino.zoom / zoom).ln().abs() * borde;
+        if !falta.is_finite() || falta < LLEGADA_PX {
             *camara = self.destino;
             return false;
         }
@@ -430,6 +554,120 @@ mod pruebas {
         assert_eq!(c, destino);
         // Ni instantaneo: se tiene que ver el viaje.
         assert!(pasos > 5, "{pasos} pasos es un salto, no un viaje");
+    }
+
+    #[test]
+    fn la_vista_de_una_marca_vuelve_a_la_misma_camara_en_la_misma_ventana() {
+        let c = Camara {
+            x: -120.5,
+            y: 3400.25,
+            zoom: 2.5,
+        };
+        let v = VistaDeMarca::de_camara(&c, 1600.0, 900.0).unwrap();
+        // El centro y lo que se veia, en el mundo.
+        assert!((v.x - (-120.5 + 320.0)).abs() < 1e-6);
+        assert!((v.y - (3400.25 + 180.0)).abs() < 1e-6);
+        assert!((v.ancho - 640.0).abs() < 1e-6 && (v.alto - 360.0).abs() < 1e-6);
+        let vuelta = v.camara(1600.0, 900.0);
+        assert!((vuelta.x - c.x).abs() < 1e-3 && (vuelta.y - c.y).abs() < 1e-3);
+        assert!((vuelta.zoom - c.zoom).abs() < 1e-6);
+        // Y pasando por el texto que viaja, igual (a diezmilesimas).
+        let leida = VistaDeMarca::de_texto(&v.a_texto()).unwrap();
+        let vuelta = leida.camara(1600.0, 900.0);
+        assert!((vuelta.x - c.x).abs() < 1e-3 && (vuelta.y - c.y).abs() < 1e-3);
+        assert!((vuelta.zoom - c.zoom).abs() < 1e-4);
+    }
+
+    #[test]
+    fn en_otra_ventana_la_vista_sale_entera_y_centrada() {
+        let v = VistaDeMarca {
+            x: 500.0,
+            y: 200.0,
+            ancho: 1000.0,
+            alto: 400.0,
+        };
+        // Un movil de pie: manda el ancho.
+        let c = v.camara(400.0, 800.0);
+        assert!((c.zoom - 0.4).abs() < 1e-6);
+        let centro = c.a_mundo(Punto2::nuevo(200.0, 400.0));
+        assert!((centro.x - 500.0).abs() < 1e-3 && (centro.y - 200.0).abs() < 1e-3);
+        let (x0, y0, x1, y1) = c.ventana(400.0, 800.0);
+        assert!(x0 <= 0.0 + 1e-3 && x1 >= 1000.0 - 1e-3, "cabe a lo ancho");
+        assert!(y0 <= 0.0 && y1 >= 400.0, "y a lo alto");
+        // El aumento no se sale de sus topes por una vista rarisima.
+        let diminuta = VistaDeMarca {
+            ancho: 1e-6,
+            alto: 1e-6,
+            ..v
+        };
+        assert_eq!(diminuta.camara(800.0, 600.0).zoom, ZOOM_MAXIMO);
+    }
+
+    #[test]
+    fn el_texto_de_la_vista_y_lo_que_no_es_una() {
+        let v = VistaDeMarca {
+            x: 12.0,
+            y: -3.5,
+            ancho: 640.0,
+            alto: 360.123456,
+        };
+        assert_eq!(v.a_texto(), "12 -3.5 640 360.1235");
+        assert_eq!(
+            VistaDeMarca::de_texto("  1  2 3   4 "),
+            Some(VistaDeMarca {
+                x: 1.0,
+                y: 2.0,
+                ancho: 3.0,
+                alto: 4.0
+            })
+        );
+        // Casos negativos: le falta un numero, no es un numero, no mide nada
+        // o es el «zoom x y» de un documento.
+        assert_eq!(VistaDeMarca::de_texto(""), None);
+        assert_eq!(VistaDeMarca::de_texto("1 2 3"), None);
+        assert_eq!(VistaDeMarca::de_texto("1 2 x 4"), None);
+        assert_eq!(VistaDeMarca::de_texto("1 2 0 4"), None);
+        assert_eq!(VistaDeMarca::de_texto("1 2 inf 4"), None);
+        assert_eq!(VistaDeMarca::de_camara(&Camara::nueva(), 0.0, 600.0), None);
+    }
+
+    #[test]
+    fn el_vuelo_con_otro_aumento_llega_clavado_por_el_centro() {
+        let (w, h) = (1600.0, 900.0);
+        let destino = VistaDeMarca {
+            x: 5000.0,
+            y: -2000.0,
+            ancho: 200.0,
+            alto: 112.5,
+        }
+        .camara(w, h);
+        assert!((destino.zoom - 8.0).abs() < 1e-4);
+        let v = Vuelo::hacia_en(destino, w, h);
+        let mut c = Camara::nueva();
+        let mut pasos = 0;
+        let mut zoom_antes = c.zoom;
+        while v.avanzar(&mut c, 1.0 / 60.0) {
+            assert!(
+                c.zoom >= zoom_antes,
+                "el aumento solo crece hacia el destino"
+            );
+            assert!(c.zoom <= destino.zoom + 1e-4, "y no se pasa");
+            zoom_antes = c.zoom;
+            pasos += 1;
+            assert!(pasos < 240, "llega en menos de cuatro segundos a 60 Hz");
+        }
+        assert_eq!(c, destino);
+        assert!(pasos > 5, "se ve el viaje: {pasos} pasos");
+        // Sin hueco y con el mismo aumento, el vuelo de siempre.
+        let mismo = Vuelo::hacia(Camara {
+            x: 10.0,
+            y: 0.0,
+            zoom: 1.0,
+        });
+        let mut d = Camara::nueva();
+        mismo.avanzar(&mut d, 1.0 / 60.0);
+        assert_eq!(d.zoom, 1.0);
+        assert!(d.x > 0.0 && d.x < 10.0);
     }
 
     #[test]

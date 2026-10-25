@@ -1094,7 +1094,11 @@ impl Lectura<'_> {
     fn a_la_vista(&self, p: (f32, f32)) -> (f32, f32) {
         let f = a_fraccion(self.caja, self.giro, [p.0, p.1, p.0, p.1]);
         let (w, h) = (self.caja[2] - self.caja[0], self.caja[3] - self.caja[1]);
-        let (w, h) = if matches!(self.giro, 90 | 270) { (h, w) } else { (w, h) };
+        let (w, h) = if matches!(self.giro, 90 | 270) {
+            (h, w)
+        } else {
+            (w, h)
+        };
         (f[0] * w, f[1] * h)
     }
 
@@ -1299,9 +1303,15 @@ mod pruebas {
     fn en_una_hoja_girada_el_texto_que_se_ve_derecho_cuenta() {
         // Con /Rotate 90 lo que va hacia arriba en el papel se ve de
         // izquierda a derecha: la hoja vista mide 100 de ancho y 200 de alto.
-        let t = uno(&una_hoja("BT /F1 10 Tf 0 1 -1 0 50 20 Tm (Hola) Tj ET", "/Rotate 90"));
+        let t = uno(&una_hoja(
+            "BT /F1 10 Tf 0 1 -1 0 50 20 Tm (Hola) Tj ET",
+            "/Rotate 90",
+        ));
         assert_eq!(t.len(), 1, "{t:?}");
-        assert!(cerca(t[0].x, 20.0) && cerca(t[0].y, 50.0) && cerca(t[0].fin, 41.0), "{t:?}");
+        assert!(
+            cerca(t[0].x, 20.0) && cerca(t[0].y, 50.0) && cerca(t[0].fin, 41.0),
+            "{t:?}"
+        );
     }
 
     #[test]
@@ -1323,7 +1333,10 @@ mod pruebas {
 
     #[test]
     fn sin_pdf_no_hay_trozos_y_un_escaneo_da_hojas_vacias() {
-        assert_eq!(trozos_de_bytes(b"esto no es un pdf"), Err(SinTexto::NoEsPdf));
+        assert_eq!(
+            trozos_de_bytes(b"esto no es un pdf"),
+            Err(SinTexto::NoEsPdf)
+        );
         let t = uno(&una_hoja("0 0 1 rg 10 10 50 50 re f", ""));
         assert!(t.is_empty());
         // Y pedir los trozos no cambia el texto de buscar.
@@ -1491,7 +1504,10 @@ mod pruebas {
         let (t, e) = hoja_con_enlaces(&b, 0).unwrap();
         assert_eq!(t, de_bytes(&b).unwrap()[0], "lo mismo que leyendo todas");
         assert_eq!(e.len(), 1);
-        assert_eq!(e[0].destino, crate::enlaces::Destino::Web("https://example.org".into()));
+        assert_eq!(
+            e[0].destino,
+            crate::enlaces::Destino::Web("https://example.org".into())
+        );
         // Casos negativos: una hoja que no existe sale vacia; un no-PDF, error.
         assert_eq!(hoja_con_enlaces(&b, 3).unwrap(), Default::default());
         assert_eq!(hoja_con_enlaces(b"nada", 0).unwrap_err(), SinTexto::NoEsPdf);

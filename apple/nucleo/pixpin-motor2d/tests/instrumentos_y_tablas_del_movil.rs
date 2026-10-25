@@ -8,11 +8,11 @@
 //! cambian solo lo que deben; y la tabla editada aqui vuelve en el formato
 //! que lee su `Scene`, sin perder lo que no se conoce.
 
+use pixpin_geom::Tirador;
 use pixpin_motor2d::elemento::Figura;
 use pixpin_motor2d::excalidraw::{Entrada, a_escena, con_escena, escribir, leer};
 use pixpin_motor2d::instrumento::tabla::{PuntoDeTabla, TablaDeCoordenadas};
 use pixpin_motor2d::instrumento::{self, Instrumento};
-use pixpin_geom::Tirador;
 use pixpin_motor2d::transformar;
 use pixpin_motor2d::vector::Punto2;
 use serde_json::Value;
@@ -112,7 +112,13 @@ fn estirar_por_un_lado_ensena_mas_numeros_y_por_una_esquina_los_agranda() {
     // Por el lado este, cien pixeles mas.
     {
         let p = e.buscar_mut(id).unwrap();
-        transformar::escalar(p, Tirador::EsteBorde, Punto2::nuevo(820.0, 170.0), false, false);
+        transformar::escalar(
+            p,
+            Tirador::EsteBorde,
+            Punto2::nuevo(820.0, 170.0),
+            false,
+            false,
+        );
     }
     let p = e.buscar(id).unwrap().clone();
     let i = *instrumento::de(&p).unwrap();
@@ -124,8 +130,19 @@ fn estirar_por_un_lado_ensena_mas_numeros_y_por_una_esquina_los_agranda() {
     assert_eq!(el["unidad"], 40.0);
     assert_eq!(el["width"], 420.0);
     // Caso negativo: nada mas del plano cambio, y los otros dos ni se tocan.
-    for clave in ["pasoDeNumeros", "pasoDeCuadros", "fontSize", "fontFamily", "height", "y"] {
-        assert_eq!(el[clave], json(&del_movil())["elements"][1][clave], "{clave}");
+    for clave in [
+        "pasoDeNumeros",
+        "pasoDeCuadros",
+        "fontSize",
+        "fontFamily",
+        "height",
+        "y",
+    ] {
+        assert_eq!(
+            el[clave],
+            json(&del_movil())["elements"][1][clave],
+            "{clave}"
+        );
     }
     assert_eq!(salida["elements"][0], json(&del_movil())["elements"][0]);
     assert_eq!(salida["elements"][2], json(&del_movil())["elements"][2]);
@@ -134,7 +151,13 @@ fn estirar_por_un_lado_ensena_mas_numeros_y_por_una_esquina_los_agranda() {
     let (_, mut e) = escena_y_lienzo();
     {
         let p = e.buscar_mut(id).unwrap();
-        transformar::escalar(p, Tirador::SuresteEsquina, Punto2::nuevo(1040.0, 650.0), false, false);
+        transformar::escalar(
+            p,
+            Tirador::SuresteEsquina,
+            Punto2::nuevo(1040.0, 650.0),
+            false,
+            false,
+        );
     }
     let p = e.buscar(id).unwrap();
     let i = instrumento::de(p).unwrap();
@@ -150,7 +173,11 @@ fn el_tirador_de_giro_da_la_vuelta_al_espacio_y_no_inclina_la_caja() {
     // A la derecha del centro: un cuarto de vuelta.
     let (x0, y0, x1, y1) = p.caja();
     let c = Punto2::nuevo((x0 + x1) / 2.0, (y0 + y1) / 2.0);
-    assert!(transformar::girar_el_espacio(p, Punto2::nuevo(c.x + 100.0, c.y), false));
+    assert!(transformar::girar_el_espacio(
+        p,
+        Punto2::nuevo(c.x + 100.0, c.y),
+        false
+    ));
     assert_eq!(p.angulo, 0.0);
     let a = instrumento::de(p).unwrap().azimut.unwrap();
     assert!((a - 90.0).abs() < 1e-3, "{a}");
@@ -160,16 +187,28 @@ fn el_tirador_de_giro_da_la_vuelta_al_espacio_y_no_inclina_la_caja() {
     // Caso negativo: el plano no es un espacio y no se deja girar asi.
     let plano = e.elementos[1].clone();
     let mut copia = plano.clone();
-    assert!(!transformar::girar_el_espacio(&mut copia, Punto2::nuevo(0.0, 0.0), false));
+    assert!(!transformar::girar_el_espacio(
+        &mut copia,
+        Punto2::nuevo(0.0, 0.0),
+        false
+    ));
     assert_eq!(copia, plano);
 }
 
 #[test]
 fn un_instrumento_nacido_aqui_sale_con_las_claves_del_movil() {
     let mut e = pixpin_motor2d::Escena::nueva();
-    let nuevo = instrumento::elemento_de_fabrica(3, pixpin_motor2d::ColorRgba::opaco(0.0, 0.0, 0.0), 2.0, 1.0);
+    let nuevo = instrumento::elemento_de_fabrica(
+        3,
+        pixpin_motor2d::ColorRgba::opaco(0.0, 0.0, 0.0),
+        2.0,
+        1.0,
+    );
     e.anadir(nuevo);
-    let salida = json(&escribir(&con_escena(&pixpin_motor2d::excalidraw::Lienzo::vacio(), &e)));
+    let salida = json(&escribir(&con_escena(
+        &pixpin_motor2d::excalidraw::Lienzo::vacio(),
+        &e,
+    )));
     let el = &salida["elements"][0];
     assert_eq!(el["type"], "pixpin-space");
     assert_eq!(el["unidad"], 40.0);
@@ -251,7 +290,8 @@ fn unas_tablas_rotas_no_se_pisan_si_aqui_no_se_cambian() {
 #[test]
 fn los_puntos_tecleados_salen_al_exportar_y_el_eje_no() {
     let (_, e) = escena_y_lienzo();
-    let hojas = pixpin_motor2d::exportar::hojas(&e, pixpin_motor2d::exportar::Alcance::Todo, &[], None);
+    let hojas =
+        pixpin_motor2d::exportar::hojas(&e, pixpin_motor2d::exportar::Alcance::Todo, &[], None);
     let rotulos: Vec<String> = hojas[0]
         .ordenes
         .iter()
@@ -280,16 +320,51 @@ fn el_iman_se_pega_a_un_punto_tecleado_y_cerca_del_cero_manda_el_cero() {
     let config = Ajustes::default();
     let o = Punto2::nuevo(0.0, 0.0);
     let tecleado = [Punto2::nuevo(100.0, -50.0)];
-    let a = con_coordenadas(None, Punto2::nuevo(103.0, -48.0), 1.0, Faena::Trazando, &config, Some(o), &tecleado)
-        .unwrap();
+    let a = con_coordenadas(
+        None,
+        Punto2::nuevo(103.0, -48.0),
+        1.0,
+        Faena::Trazando,
+        &config,
+        Some(o),
+        &tecleado,
+    )
+    .unwrap();
     assert_eq!(a.punto, tecleado[0]);
-    let cero = con_coordenadas(None, Punto2::nuevo(3.0, 1.0), 1.0, Faena::Trazando, &config, Some(o), &[])
-        .unwrap();
+    let cero = con_coordenadas(
+        None,
+        Punto2::nuevo(3.0, 1.0),
+        1.0,
+        Faena::Trazando,
+        &config,
+        Some(o),
+        &[],
+    )
+    .unwrap();
     assert_eq!((cero.punto, cero.tipo), (o, TipoAnclaje::Eje));
     // Sobre la recta del eje, lejos del cero: la proyeccion.
-    let recta = con_coordenadas(None, Punto2::nuevo(200.0, 4.0), 1.0, Faena::Trazando, &config, Some(o), &[])
-        .unwrap();
+    let recta = con_coordenadas(
+        None,
+        Punto2::nuevo(200.0, 4.0),
+        1.0,
+        Faena::Trazando,
+        &config,
+        Some(o),
+        &[],
+    )
+    .unwrap();
     assert_eq!(recta.punto, Punto2::nuevo(200.0, 0.0));
     // Caso negativo: a mano alzada no tira nada.
-    assert!(con_coordenadas(None, Punto2::nuevo(3.0, 1.0), 1.0, Faena::AMano, &config, Some(o), &tecleado).is_none());
+    assert!(
+        con_coordenadas(
+            None,
+            Punto2::nuevo(3.0, 1.0),
+            1.0,
+            Faena::AMano,
+            &config,
+            Some(o),
+            &tecleado
+        )
+        .is_none()
+    );
 }

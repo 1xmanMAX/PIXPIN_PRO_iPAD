@@ -110,7 +110,10 @@ mod pruebas {
         ];
         let r: Vec<&Momento> = v.iter().collect();
         assert_eq!(lo_mas_repetido(&r), Some(LoMas::Emoticono("📚".into())));
-        assert_eq!(lo_mas_con_cuenta(&r), Some((LoMas::Emoticono("📚".into()), 3)));
+        assert_eq!(
+            lo_mas_con_cuenta(&r),
+            Some((LoMas::Emoticono("📚".into()), 3))
+        );
     }
 
     #[test]

@@ -25,13 +25,20 @@ const FAMILIA: &str = "Nunito";
 /// de las notas (con DirectWrite si la app puso su medidor; si no, a ojo
 /// y algo de mas, que es lo seguro).
 fn partir(texto: &str, tam: f32, ancho: f32, negrita: bool) -> Vec<String> {
-    let estilo = pixpin_motor2d::texto::EstiloDeTexto { negrita, ..Default::default() };
+    let estilo = pixpin_motor2d::texto::EstiloDeTexto {
+        negrita,
+        ..Default::default()
+    };
     let mide = |s: &str| pixpin_motor2d::texto::medida(s, tam, FAMILIA, estilo).0;
     let mut v = Vec::new();
     for parrafo in texto.split('\n') {
         let mut l = String::new();
         for w in parrafo.split_whitespace() {
-            let prueba = if l.is_empty() { w.to_string() } else { format!("{l} {w}") };
+            let prueba = if l.is_empty() {
+                w.to_string()
+            } else {
+                format!("{l} {w}")
+            };
             if !l.is_empty() && mide(&prueba) > ancho {
                 v.push(std::mem::replace(&mut l, w.to_string()));
             } else {
@@ -74,13 +81,22 @@ impl Nota {
             (c, _) => c.titulo().to_string(),
         };
         let mut cuerpo = p.nota.trim().to_string();
-        if let Some(c) = p.correccion.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+        if let Some(c) = p
+            .correccion
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+        {
             if !cuerpo.is_empty() {
                 cuerpo.push('\n');
             }
             cuerpo.push_str(&format!("→ {c}"));
         }
-        Nota { titulo, cuerpo, letra: letra.max(1.0) }
+        Nota {
+            titulo,
+            cuerpo,
+            letra: letra.max(1.0),
+        }
     }
 
     fn tam_titulo(&self) -> f32 {
@@ -101,7 +117,11 @@ impl Nota {
         // Un pelo menos que el hueco, por si la letra sale algo mas ancha.
         let util = ((ancho - 2.0 * self.relleno()) * 0.96).max(self.letra * 3.0);
         let t = partir(&self.titulo, self.tam_titulo(), util, true);
-        let c = if self.cuerpo.is_empty() { Vec::new() } else { partir(&self.cuerpo, self.letra, util, false) };
+        let c = if self.cuerpo.is_empty() {
+            Vec::new()
+        } else {
+            partir(&self.cuerpo, self.letra, util, false)
+        };
         (t, c)
     }
 
@@ -118,22 +138,60 @@ impl Nota {
 }
 
 fn base(grupos: &[String], trazo: ColorRgba, grosor: f32) -> Elemento {
-    Elemento { trazo, grosor: grosor.max(0.5), rugosidad: 0.0, grupos: grupos.to_vec(), ..Default::default() }
+    Elemento {
+        trazo,
+        grosor: grosor.max(0.5),
+        rugosidad: 0.0,
+        grupos: grupos.to_vec(),
+        ..Default::default()
+    }
 }
 
 fn rect(c: [f32; 4], b: &Elemento) -> Elemento {
-    Elemento { figura: Figura::Rectangulo, x: c[0], y: c[1], ancho: (c[2] - c[0]).max(0.5), alto: (c[3] - c[1]).max(0.5), ..b.clone() }
+    Elemento {
+        figura: Figura::Rectangulo,
+        x: c[0],
+        y: c[1],
+        ancho: (c[2] - c[0]).max(0.5),
+        alto: (c[3] - c[1]).max(0.5),
+        ..b.clone()
+    }
 }
 
 fn linea(puntos: &[(f32, f32)], b: &Elemento) -> Elemento {
     let pts: Vec<Punto2> = puntos.iter().map(|(x, y)| Punto2::nuevo(*x, *y)).collect();
-    let (x0, y0, x1, y1) = pts.iter().fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |a, p| (a.0.min(p.x), a.1.min(p.y), a.2.max(p.x), a.3.max(p.y)));
-    Elemento { figura: Figura::Linea { puntos: pts }, x: x0, y: y0, ancho: x1 - x0, alto: y1 - y0, ..b.clone() }
+    let (x0, y0, x1, y1) = pts
+        .iter()
+        .fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |a, p| {
+            (a.0.min(p.x), a.1.min(p.y), a.2.max(p.x), a.3.max(p.y))
+        });
+    Elemento {
+        figura: Figura::Linea { puntos: pts },
+        x: x0,
+        y: y0,
+        ancho: x1 - x0,
+        alto: y1 - y0,
+        ..b.clone()
+    }
 }
 
-fn texto(t: &str, x: f32, y: f32, tam: f32, ancho: f32, renglones: usize, b: &Elemento, negrita: bool) -> Elemento {
+#[allow(clippy::too_many_arguments)]
+fn texto(
+    t: &str,
+    x: f32,
+    y: f32,
+    tam: f32,
+    ancho: f32,
+    renglones: usize,
+    b: &Elemento,
+    negrita: bool,
+) -> Elemento {
     let mut e = Elemento {
-        figura: Figura::Texto { texto: t.to_string(), tam, familia: FAMILIA.into() },
+        figura: Figura::Texto {
+            texto: t.to_string(),
+            tam,
+            familia: FAMILIA.into(),
+        },
         x,
         y,
         ancho,
@@ -147,7 +205,14 @@ fn texto(t: &str, x: f32, y: f32, tam: f32, ancho: f32, renglones: usize, b: &El
 
 /// **Las figuras de una anotacion**: la marca sobre `a`, la nota en
 /// `colocada` y la linea guia entre las dos, todas en `grupos`.
-pub fn de(clase: Clase, a: &Anclaje, colocada: &Colocada, nota: &Nota, pag: &Pagina, grupos: Vec<String>) -> Vec<Elemento> {
+pub fn de(
+    clase: Clase,
+    a: &Anclaje,
+    colocada: &Colocada,
+    nota: &Nota,
+    pag: &Pagina,
+    grupos: Vec<String>,
+) -> Vec<Elemento> {
     let l = nota.letra;
     let c = clase.color();
     let tinta = color(c);
@@ -161,18 +226,40 @@ pub fn de(clase: Clase, a: &Anclaje, colocada: &Colocada, nota: &Nota, pag: &Pag
     match clase {
         Clase::Definicion => {
             for caja in &a.cajas {
-                let mut r = rect([caja[0] - aire * 0.5, caja[1] - aire * 0.3, caja[2] + aire * 0.5, caja[3] + aire * 0.3], &b);
+                let mut r = rect(
+                    [
+                        caja[0] - aire * 0.5,
+                        caja[1] - aire * 0.3,
+                        caja[2] + aire * 0.5,
+                        caja[3] + aire * 0.3,
+                    ],
+                    &b,
+                );
                 r.trazo = ColorRgba { a: 0.0, ..tinta };
                 r.relleno = Some(tinta);
                 r.estilo_relleno = EstiloRelleno::Solido;
                 r.opacidad = 0.22;
                 v.push(r);
-                v.push(linea(&[(caja[0], caja[3] + aire * 0.4), (caja[2], caja[3] + aire * 0.4)], &b));
+                v.push(linea(
+                    &[
+                        (caja[0], caja[3] + aire * 0.4),
+                        (caja[2], caja[3] + aire * 0.4),
+                    ],
+                    &b,
+                ));
             }
         }
         Clase::Error => {
             for caja in &a.cajas {
-                let mut r = rect([caja[0] - aire * 0.5, caja[1] - aire * 0.3, caja[2] + aire * 0.5, caja[3] + aire * 0.3], &b);
+                let mut r = rect(
+                    [
+                        caja[0] - aire * 0.5,
+                        caja[1] - aire * 0.3,
+                        caja[2] + aire * 0.5,
+                        caja[3] + aire * 0.3,
+                    ],
+                    &b,
+                );
                 r.trazo = ColorRgba { a: 0.0, ..tinta };
                 r.relleno = Some(tinta);
                 r.estilo_relleno = EstiloRelleno::Solido;
@@ -219,13 +306,29 @@ pub fn de(clase: Clase, a: &Anclaje, colocada: &Colocada, nota: &Nota, pag: &Pag
         let n = nota.titulo.trim_start_matches("Paso ").to_string();
         let d = l * 1.25;
         let (cx, cy) = (marca[0] - d * 0.6, (a.cajas[0][1] + a.cajas[0][3]) / 2.0);
-        let mut circulo = Elemento { figura: Figura::Elipse, x: cx - d / 2.0, y: cy - d / 2.0, ancho: d, alto: d, ..b.clone() };
+        let mut circulo = Elemento {
+            figura: Figura::Elipse,
+            x: cx - d / 2.0,
+            y: cy - d / 2.0,
+            ancho: d,
+            alto: d,
+            ..b.clone()
+        };
         circulo.relleno = Some(tinta);
         circulo.estilo_relleno = EstiloRelleno::Solido;
         v.push(circulo);
         let tam = l * 0.8;
         let ancho = pixpin_motor2d::exportar::ancho_de_texto(&n, tam);
-        let mut t = texto(&n, cx - ancho / 2.0, cy - tam * interlineado() / 2.0, tam, ancho, 1, &b, true);
+        let mut t = texto(
+            &n,
+            cx - ancho / 2.0,
+            cy - tam * interlineado() / 2.0,
+            tam,
+            ancho,
+            1,
+            &b,
+            true,
+        );
         t.trazo = ColorRgba::opaco(1.0, 1.0, 1.0);
         v.push(t);
     }
@@ -246,10 +349,28 @@ pub fn de(clase: Clase, a: &Anclaje, colocada: &Colocada, nota: &Nota, pag: &Pag
     let p = nota.relleno();
     let ancho = caja[2] - caja[0] - 2.0 * p;
     let tt = nota.tam_titulo();
-    v.push(texto(&t.join("\n"), caja[0] + p, caja[1] + p, tt, ancho, t.len(), &b, true));
+    v.push(texto(
+        &t.join("\n"),
+        caja[0] + p,
+        caja[1] + p,
+        tt,
+        ancho,
+        t.len(),
+        &b,
+        true,
+    ));
     if !cu.is_empty() {
         let y = caja[1] + p + t.len() as f32 * tt * interlineado() + l * 0.2;
-        let mut e = texto(&cu.join("\n"), caja[0] + p, y, l, ancho, cu.len(), &b, false);
+        let mut e = texto(
+            &cu.join("\n"),
+            caja[0] + p,
+            y,
+            l,
+            ancho,
+            cu.len(),
+            &b,
+            false,
+        );
         e.trazo = color(TINTA);
         v.push(e);
     }
@@ -281,16 +402,33 @@ fn tapa(camino: &[(f32, f32)], palabras: &[[f32; 4]], paso: f32) -> bool {
 
 /// **La linea guia** de la nota (`caja`) a lo senalado (`marca`): el
 /// primer camino que no tapa texto, y un punto donde llega.
-fn guia(a: &Anclaje, marca: [f32; 4], caja: [f32; 4], lado: Lado, pag: &Pagina, b: &Elemento, l: f32) -> Vec<Elemento> {
+fn guia(
+    a: &Anclaje,
+    marca: [f32; 4],
+    caja: [f32; 4],
+    lado: Lado,
+    pag: &Pagina,
+    b: &Elemento,
+    l: f32,
+) -> Vec<Elemento> {
     // En una hoja de calculo la «columna» es todo lo usado: lo de fuera del
     // rango leido tambien son celdas con numeros que la guia no puede tachar.
-    let col = if pag.solo_derecha { pag.caja } else { pag.columna().unwrap_or(marca) };
+    let col = if pag.solo_derecha {
+        pag.caja
+    } else {
+        pag.columna().unwrap_or(marca)
+    };
     // Las palabras que no son de lo senalado.
     let palabras: Vec<[f32; 4]> = pag
         .renglones
         .iter()
         .flat_map(|r| r.palabras.iter().map(|p| p.caja))
-        .filter(|c| !(c[0] >= marca[0] - 0.5 && c[2] <= marca[2] + 0.5 && c[1] >= marca[1] - 0.5 && c[3] <= marca[3] + 0.5))
+        .filter(|c| {
+            !(c[0] >= marca[0] - 0.5
+                && c[2] <= marca[2] + 0.5
+                && c[1] >= marca[1] - 0.5
+                && c[3] <= marca[3] + 0.5)
+        })
         .collect();
     let primera = a.cajas[0];
     let ay = (primera[1] + primera[3]) / 2.0;
@@ -298,28 +436,75 @@ fn guia(a: &Anclaje, marca: [f32; 4], caja: [f32; 4], lado: Lado, pag: &Pagina, 
     let derecha = lado == Lado::Derecha;
     // Donde sale de la nota: su canto de dentro, a la altura de lo senalado
     // si cae dentro de la nota.
-    let sy = ay.clamp(caja[1] + l * 0.6, (caja[3] - l * 0.6).max(caja[1] + l * 0.6));
+    let sy = ay.clamp(
+        caja[1] + l * 0.6,
+        (caja[3] - l * 0.6).max(caja[1] + l * 0.6),
+    );
     let s = (if derecha { caja[0] } else { caja[2] }, sy);
     // El borde de lo senalado del lado de la nota, y el de la columna.
-    let (borde, borde_col) = if derecha { (marca[2], col[2].max(marca[2]) + g) } else { (marca[0], col[0].min(marca[0]) - g) };
+    let (borde, borde_col) = if derecha {
+        (marca[2], col[2].max(marca[2]) + g)
+    } else {
+        (marca[0], col[0].min(marca[0]) - g)
+    };
     // El hueco entre renglones encima y debajo de lo senalado: lo que queda
     // libre entre la marca y la palabra mas cercana que la solapa a lo ancho.
-    let (xa, xb) = if derecha { (marca[0], borde_col) } else { (borde_col, marca[2]) };
+    let (xa, xb) = if derecha {
+        (marca[0], borde_col)
+    } else {
+        (borde_col, marca[2])
+    };
     let solapa = |c: &[f32; 4]| c[2] > xa && c[0] < xb;
-    let techo = palabras.iter().filter(|c| solapa(c) && c[3] <= marca[1] + 0.5).map(|c| c[3]).fold(f32::MIN, f32::max);
-    let suelo = palabras.iter().filter(|c| solapa(c) && c[1] >= marca[3] - 0.5).map(|c| c[1]).fold(f32::MAX, f32::min);
-    let hueco_arriba = if techo == f32::MIN { Some(marca[1] - l * 0.4) } else { (marca[1] - techo >= l * 0.12).then(|| (marca[1] + techo) / 2.0) };
-    let hueco_abajo = if suelo == f32::MAX { Some(marca[3] + l * 0.4) } else { (suelo - marca[3] >= l * 0.12).then(|| (marca[3] + suelo) / 2.0) };
-    let entrada_x = if derecha { borde - l * 0.6 } else { borde + l * 0.6 };
-    let mut caminos: Vec<Vec<(f32, f32)>> = if pag.solo_derecha { Vec::new() } else { vec![vec![s, (borde, ay)]] };
+    let techo = palabras
+        .iter()
+        .filter(|c| solapa(c) && c[3] <= marca[1] + 0.5)
+        .map(|c| c[3])
+        .fold(f32::MIN, f32::max);
+    let suelo = palabras
+        .iter()
+        .filter(|c| solapa(c) && c[1] >= marca[3] - 0.5)
+        .map(|c| c[1])
+        .fold(f32::MAX, f32::min);
+    let hueco_arriba = if techo == f32::MIN {
+        Some(marca[1] - l * 0.4)
+    } else {
+        (marca[1] - techo >= l * 0.12).then(|| (marca[1] + techo) / 2.0)
+    };
+    let hueco_abajo = if suelo == f32::MAX {
+        Some(marca[3] + l * 0.4)
+    } else {
+        (suelo - marca[3] >= l * 0.12).then(|| (marca[3] + suelo) / 2.0)
+    };
+    let entrada_x = if derecha {
+        borde - l * 0.6
+    } else {
+        borde + l * 0.6
+    };
+    let mut caminos: Vec<Vec<(f32, f32)>> = if pag.solo_derecha {
+        Vec::new()
+    } else {
+        vec![vec![s, (borde, ay)]]
+    };
     if !pag.solo_derecha {
         caminos.push(vec![s, (borde_col, sy), (borde_col, ay), (borde, ay)]);
     }
     if let Some(y) = hueco_arriba {
-        caminos.push(vec![s, (borde_col, sy), (borde_col, y), (entrada_x, y), (entrada_x, marca[1])]);
+        caminos.push(vec![
+            s,
+            (borde_col, sy),
+            (borde_col, y),
+            (entrada_x, y),
+            (entrada_x, marca[1]),
+        ]);
     }
     if let Some(y) = hueco_abajo {
-        caminos.push(vec![s, (borde_col, sy), (borde_col, y), (entrada_x, y), (entrada_x, marca[3])]);
+        caminos.push(vec![
+            s,
+            (borde_col, sy),
+            (borde_col, y),
+            (entrada_x, y),
+            (entrada_x, marca[3]),
+        ]);
     }
     if pag.solo_derecha {
         // Hasta el borde de lo usado, a la altura de su celda (abajo).
@@ -337,7 +522,9 @@ fn guia(a: &Anclaje, marca: [f32; 4], caja: [f32; 4], lado: Lado, pag: &Pagina, 
         // senalado.
         .unwrap_or_else(|| (vec![s, (borde_col, sy), (borde_col, ay)], (borde_col, ay)));
     let camino: Vec<(f32, f32)> = camino.into_iter().fold(Vec::new(), |mut v, p| {
-        if v.last().is_none_or(|q: &(f32, f32)| (q.0 - p.0).abs() + (q.1 - p.1).abs() > 0.01) {
+        if v.last()
+            .is_none_or(|q: &(f32, f32)| (q.0 - p.0).abs() + (q.1 - p.1).abs() > 0.01)
+        {
             v.push(p);
         }
         v
@@ -349,7 +536,14 @@ fn guia(a: &Anclaje, marca: [f32; 4], caja: [f32; 4], lado: Lado, pag: &Pagina, 
         v.push(e);
     }
     let r = l * 0.18;
-    let mut punto = Elemento { figura: Figura::Elipse, x: llega.0 - r, y: llega.1 - r, ancho: 2.0 * r, alto: 2.0 * r, ..b.clone() };
+    let mut punto = Elemento {
+        figura: Figura::Elipse,
+        x: llega.0 - r,
+        y: llega.1 - r,
+        ancho: 2.0 * r,
+        alto: 2.0 * r,
+        ..b.clone()
+    };
     punto.relleno = Some(b.trazo);
     punto.estilo_relleno = EstiloRelleno::Solido;
     v.push(punto);

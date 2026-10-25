@@ -285,9 +285,14 @@ pub fn lineas_en_orden(trozos: &[Trozo]) -> Vec<Linea> {
         }
         v
     };
-    let izquierda = con_columna(lineas(&de(&|t: &Trozo| t.fin <= pasillo + holgura && !cruza(t))), 1);
+    let izquierda = con_columna(
+        lineas(&de(&|t: &Trozo| t.fin <= pasillo + holgura && !cruza(t))),
+        1,
+    );
     let derecha = con_columna(
-        lineas(&de(&|t: &Trozo| t.x >= pasillo - holgura && t.fin > pasillo + holgura)),
+        lineas(&de(&|t: &Trozo| {
+            t.x >= pasillo - holgura && t.fin > pasillo + holgura
+        })),
         2,
     );
     anchas.sort_by(|a, b| a.y.total_cmp(&b.y));
@@ -346,13 +351,19 @@ pub fn parrafos(lineas: &[Linea], cuerpo: f64, pagina: usize) -> Vec<Parrafo> {
         })
         .collect();
     saltos.sort_by(f64::total_cmp);
-    let normal = saltos.get(saltos.len() / 2).copied().unwrap_or(cuerpo * 1.3);
+    let normal = saltos
+        .get(saltos.len() / 2)
+        .copied()
+        .unwrap_or(cuerpo * 1.3);
     // El borde izquierdo y derecho del texto, **en cada columna**: a dos
     // columnas, la derecha empieza en medio de la hoja y eso no es sangria.
     let izquierda_de = |c: u8| {
         let de_la_columna: Vec<&Linea> = lineas.iter().filter(|l| l.columna == c).collect();
-        let mut x0s: Vec<f64> =
-            de_la_columna.iter().filter(|l| del_cuerpo(l)).map(|l| l.x0).collect();
+        let mut x0s: Vec<f64> = de_la_columna
+            .iter()
+            .filter(|l| del_cuerpo(l))
+            .map(|l| l.x0)
+            .collect();
         x0s.sort_by(f64::total_cmp);
         x0s.get(x0s.len() / 4)
             .copied()
@@ -375,7 +386,11 @@ pub fn parrafos(lineas: &[Linea], cuerpo: f64, pagina: usize) -> Vec<Parrafo> {
             let texto = actual.trim().to_string();
             if !texto.is_empty() {
                 let nivel = nivel_de(p, &texto, cuerpo);
-                sale.push(Parrafo { texto, nivel, pagina });
+                sale.push(Parrafo {
+                    texto,
+                    nivel,
+                    pagina,
+                });
             }
         }
         actual.clear();
@@ -453,8 +468,15 @@ pub fn es_numero_de_pagina(texto: &str) -> bool {
         i += 1;
     }
     let cifras = cs[i..].iter().take_while(|c| c.is_ascii_digit()).count();
-    let romanos = cs[i..].iter().take_while(|c| "ivxlcdmIVXLCDM".contains(**c)).count();
-    let numero = if cifras > 0 { cifras.min(4) } else { romanos.min(6) };
+    let romanos = cs[i..]
+        .iter()
+        .take_while(|c| "ivxlcdmIVXLCDM".contains(**c))
+        .count();
+    let numero = if cifras > 0 {
+        cifras.min(4)
+    } else {
+        romanos.min(6)
+    };
     if numero == 0 {
         return false;
     }
@@ -468,7 +490,11 @@ pub fn es_numero_de_pagina(texto: &str) -> bool {
     while i < cs.len() && cs[i].is_whitespace() {
         i += 1;
     }
-    let mas = cs[i..].iter().take_while(|c| c.is_ascii_digit()).count().min(4);
+    let mas = cs[i..]
+        .iter()
+        .take_while(|c| c.is_ascii_digit())
+        .count()
+        .min(4);
     i += mas;
     cs[i..].iter().all(|c| relleno(*c))
 }
@@ -499,7 +525,11 @@ pub fn idioma_de(parrafos: &[Parrafo], del_aparato: &str) -> String {
         .chars()
         .take(5000)
         .collect();
-    let por_defecto = del_aparato.split('-').next().filter(|s| !s.trim().is_empty()).unwrap_or("es");
+    let por_defecto = del_aparato
+        .split('-')
+        .next()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("es");
     crate::voz_alta::idioma_del_texto(&muestra, por_defecto)
 }
 
@@ -530,7 +560,11 @@ pub fn html(titulo: &str, parrafos: &[Parrafo], idioma: &str, hoja: &str) -> Str
                 escapar(hoja)
             ));
         }
-        let etiqueta = if p.nivel == 0 { "p".to_string() } else { format!("h{}", p.nivel) };
+        let etiqueta = if p.nivel == 0 {
+            "p".to_string()
+        } else {
+            format!("h{}", p.nivel)
+        };
         s.push_str(&format!(
             "<{etiqueta} data-hoja=\"{}\">{}</{etiqueta}>\n",
             pagina + 1,
@@ -587,11 +621,29 @@ mod pruebas {
     }
 
     fn dos_columnas() -> Vec<Trozo> {
-        let mut trozos = vec![Trozo::nuevo(72.0, 60.0, 520.0, 20.0, "Un título que cruza las dos columnas")];
+        let mut trozos = vec![Trozo::nuevo(
+            72.0,
+            60.0,
+            520.0,
+            20.0,
+            "Un título que cruza las dos columnas",
+        )];
         for k in 0..10 {
             let y = 100.0 + k as f64 * 14.0;
-            trozos.push(Trozo::nuevo(72.0, y, 280.0, 11.0, &format!("izquierda {k} de la columna que va primero")));
-            trozos.push(Trozo::nuevo(310.0, y, 520.0, 11.0, &format!("derecha {k} de la columna que va después")));
+            trozos.push(Trozo::nuevo(
+                72.0,
+                y,
+                280.0,
+                11.0,
+                &format!("izquierda {k} de la columna que va primero"),
+            ));
+            trozos.push(Trozo::nuevo(
+                310.0,
+                y,
+                520.0,
+                11.0,
+                &format!("derecha {k} de la columna que va después"),
+            ));
         }
         trozos
     }
@@ -613,7 +665,10 @@ mod pruebas {
         let p = parrafos(&l, 11.0, 0);
         assert_eq!(p.len(), 2);
         assert!(p[1].texto.starts_with("izquierda 0"));
-        assert!(p[1].texto.ends_with("derecha 9 de la columna que va después"));
+        assert!(
+            p[1].texto
+                .ends_with("derecha 9 de la columna que va después")
+        );
         // A una columna, nada de pasillo.
         let sola: Vec<Trozo> = trozos.into_iter().filter(|t| t.x < 300.0).collect();
         assert_eq!(pasillo_de_columnas(&sola), None);
@@ -634,8 +689,18 @@ mod pruebas {
         renglon(200.0, 60.0, 17.0, "Un título centrado");
         for k in 0..12 {
             let y = 100.0 + k as f64 * 12.0;
-            renglon(72.0, y, 10.0, &format!("izq {k} uno dos tres cuatro cinco seis siete"));
-            renglon(72.0 + 238.0, y, 10.0, &format!("der {k} uno dos tres cuatro cinco seis siete"));
+            renglon(
+                72.0,
+                y,
+                10.0,
+                &format!("izq {k} uno dos tres cuatro cinco seis siete"),
+            );
+            renglon(
+                72.0 + 238.0,
+                y,
+                10.0,
+                &format!("der {k} uno dos tres cuatro cinco seis siete"),
+            );
         }
         t
     }
@@ -649,13 +714,26 @@ mod pruebas {
         assert_eq!(juntos[0].texto, "Un título centrado");
         let l = lineas_en_orden(&t);
         assert_eq!(l[0].texto, "Un título centrado");
-        assert!(l[1].texto.starts_with("izq 0") && l[12].texto.starts_with("izq 11"), "{l:?}");
-        assert!(l[13].texto.starts_with("der 0") && l[24].texto.starts_with("der 11"), "{l:?}");
+        assert!(
+            l[1].texto.starts_with("izq 0") && l[12].texto.starts_with("izq 11"),
+            "{l:?}"
+        );
+        assert!(
+            l[13].texto.starts_with("der 0") && l[24].texto.starts_with("der 11"),
+            "{l:?}"
+        );
         // Caso negativo: dos palabras con un hueco de pasillo no se juntan.
-        let lejos = corridos(&[Trozo::nuevo(0.0, 0.0, 20.0, 10.0, "a"), Trozo::nuevo(30.0, 0.0, 40.0, 10.0, "b")]);
+        let lejos = corridos(&[
+            Trozo::nuevo(0.0, 0.0, 20.0, 10.0, "a"),
+            Trozo::nuevo(30.0, 0.0, 40.0, 10.0, "b"),
+        ]);
         assert_eq!(lejos.len(), 2);
         // Ni las de otro renglon u otro tamano.
-        let otras = corridos(&[Trozo::nuevo(0.0, 0.0, 20.0, 10.0, "a"), Trozo::nuevo(21.0, 12.0, 40.0, 10.0, "b"), Trozo::nuevo(41.0, 12.0, 50.0, 20.0, "c")]);
+        let otras = corridos(&[
+            Trozo::nuevo(0.0, 0.0, 20.0, 10.0, "a"),
+            Trozo::nuevo(21.0, 12.0, 40.0, 10.0, "b"),
+            Trozo::nuevo(41.0, 12.0, 50.0, 20.0, "c"),
+        ]);
         assert_eq!(otras.len(), 3);
     }
 
@@ -672,10 +750,22 @@ mod pruebas {
         };
         let lineas = [
             linea(100.0, "Título grande", 300.0, 72.0, 20.0),
-            linea(140.0, "Esto es el primer párrafo, que ocupa varias líneas y habla de la inter-", 520.0, 72.0, 11.0),
+            linea(
+                140.0,
+                "Esto es el primer párrafo, que ocupa varias líneas y habla de la inter-",
+                520.0,
+                72.0,
+                11.0,
+            ),
             linea(154.0, "pretación de un documento.", 520.0, 72.0, 11.0),
             linea(168.0, "Sigue igual porque no hay salto.", 300.0, 72.0, 11.0),
-            linea(196.0, "Segundo párrafo tras un salto grande.", 520.0, 72.0, 11.0),
+            linea(
+                196.0,
+                "Segundo párrafo tras un salto grande.",
+                520.0,
+                72.0,
+                11.0,
+            ),
             linea(780.0, "12", 300.0, 290.0, 11.0),
         ];
         let p = parrafos(&lineas, 11.0, 0);
@@ -691,14 +781,35 @@ mod pruebas {
 
     #[test]
     fn un_guion_ante_mayuscula_no_junta_palabras() {
-        let l = |y: f64, t: &str| Linea { y, x0: 72.0, x1: 520.0, alto: 11.0, texto: t.into(), negrita: false, columna: 0 };
-        let p = parrafos(&[l(100.0, "Norte-"), l(114.0, "Sur es una frontera")], 11.0, 0);
+        let l = |y: f64, t: &str| Linea {
+            y,
+            x0: 72.0,
+            x1: 520.0,
+            alto: 11.0,
+            texto: t.into(),
+            negrita: false,
+            columna: 0,
+        };
+        let p = parrafos(
+            &[l(100.0, "Norte-"), l(114.0, "Sur es una frontera")],
+            11.0,
+            0,
+        );
         assert_eq!(p[0].texto, "Norte- Sur es una frontera");
     }
 
     #[test]
     fn los_numeros_de_pagina_se_reconocen_y_las_palabras_no() {
-        for si in ["12", "- 3 -", "iv", "3 de 10", "4/20", "Page 2 of 9".trim_start_matches("Page "), "(7)", "1234"] {
+        for si in [
+            "12",
+            "- 3 -",
+            "iv",
+            "3 de 10",
+            "4/20",
+            "Page 2 of 9".trim_start_matches("Page "),
+            "(7)",
+            "1234",
+        ] {
             assert!(es_numero_de_pagina(si), "{si} es numero de pagina");
         }
         for no in ["Hola", "12 manzanas", "", "Capítulo 3", "3.5 kg"] {
@@ -709,9 +820,21 @@ mod pruebas {
     #[test]
     fn la_pagina_lleva_marcas_de_hoja_titulos_e_idioma() {
         let parrafos = [
-            Parrafo { texto: "Capítulo <uno>".into(), nivel: 1, pagina: 0 },
-            Parrafo { texto: "Texto".into(), nivel: 0, pagina: 0 },
-            Parrafo { texto: "Más".into(), nivel: 0, pagina: 1 },
+            Parrafo {
+                texto: "Capítulo <uno>".into(),
+                nivel: 1,
+                pagina: 0,
+            },
+            Parrafo {
+                texto: "Texto".into(),
+                nivel: 0,
+                pagina: 0,
+            },
+            Parrafo {
+                texto: "Más".into(),
+                nivel: 0,
+                pagina: 1,
+            },
         ];
         let h = html("Apuntes", &parrafos, "es", "Hoja");
         assert!(h.contains("<html lang=\"es\">"));

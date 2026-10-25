@@ -30,7 +30,11 @@ pub struct V3 {
 const _: () = {
     use std::mem::{offset_of, size_of};
     assert!(size_of::<V3>() == 24);
-    assert!(offset_of!(V3, normal) == 12 && offset_of!(V3, color) == 16 && offset_of!(V3, elemento) == 20);
+    assert!(
+        offset_of!(V3, normal) == 12
+            && offset_of!(V3, color) == 16
+            && offset_of!(V3, elemento) == 20
+    );
 };
 
 /// **Los indices de lo que se ve**: los de [`Modelo3d`] quitando los
@@ -145,7 +149,10 @@ impl Default for Constructor3d {
 impl Constructor3d {
     pub fn nuevo() -> Constructor3d {
         Constructor3d {
-            m: Modelo3d { metros: 1.0, ..Default::default() },
+            m: Modelo3d {
+                metros: 1.0,
+                ..Default::default()
+            },
             origen: None,
             min: [f64::INFINITY; 3],
             max: [f64::NEG_INFINITY; 3],
@@ -153,7 +160,11 @@ impl Constructor3d {
     }
 
     pub fn elemento(&mut self, tipo: &str, nombre: &str) -> u32 {
-        self.m.elementos.push(Elemento { tipo: tipo.to_string(), nombre: nombre.to_string(), ..Default::default() });
+        self.m.elementos.push(Elemento {
+            tipo: tipo.to_string(),
+            nombre: nombre.to_string(),
+            ..Default::default()
+        });
         (self.m.elementos.len() - 1) as u32
     }
 
@@ -167,7 +178,14 @@ impl Constructor3d {
     /// Una malla: `puntos` del mundo, `normales` (pueden faltar: se calculan
     /// por cara), `indices` de a tres y su color RGBA (0..1).
     #[allow(clippy::needless_range_loop)]
-    pub fn malla(&mut self, elemento: u32, puntos: &[[f64; 3]], normales: Option<&[[f32; 3]]>, indices: &[u32], color: [f32; 4]) {
+    pub fn malla(
+        &mut self,
+        elemento: u32,
+        puntos: &[[f64; 3]],
+        normales: Option<&[[f32; 3]]>,
+        indices: &[u32],
+        color: [f32; 4],
+    ) {
         if puntos.is_empty() || indices.len() < 3 {
             return;
         }
@@ -181,9 +199,22 @@ impl Constructor3d {
         let mut norms: Vec<[f32; 3]> = Vec::new();
         match normales {
             Some(n) => {
-                pts_locales = puntos.iter().map(|p| [(p[0] - o[0]) as f32, (p[1] - o[1]) as f32, (p[2] - o[2]) as f32]).collect();
+                pts_locales = puntos
+                    .iter()
+                    .map(|p| {
+                        [
+                            (p[0] - o[0]) as f32,
+                            (p[1] - o[1]) as f32,
+                            (p[2] - o[2]) as f32,
+                        ]
+                    })
+                    .collect();
                 norms = n.to_vec();
-                idx = indices.iter().copied().filter(|&i| (i as usize) < puntos.len()).collect();
+                idx = indices
+                    .iter()
+                    .copied()
+                    .filter(|&i| (i as usize) < puntos.len())
+                    .collect();
                 idx.truncate(idx.len() / 3 * 3);
             }
             None => {
@@ -191,8 +222,17 @@ impl Constructor3d {
                     if t.iter().any(|&i| i as usize >= puntos.len()) {
                         continue;
                     }
-                    let p: Vec<[f32; 3]> =
-                        t.iter().map(|&i| puntos[i as usize]).map(|p| [(p[0] - o[0]) as f32, (p[1] - o[1]) as f32, (p[2] - o[2]) as f32]).collect();
+                    let p: Vec<[f32; 3]> = t
+                        .iter()
+                        .map(|&i| puntos[i as usize])
+                        .map(|p| {
+                            [
+                                (p[0] - o[0]) as f32,
+                                (p[1] - o[1]) as f32,
+                                (p[2] - o[2]) as f32,
+                            ]
+                        })
+                        .collect();
                     let n = cruz(resta(p[1], p[0]), resta(p[2], p[0]));
                     for q in p {
                         idx.push(pts_locales.len() as u32);
@@ -203,15 +243,21 @@ impl Constructor3d {
             }
         }
         for p in puntos {
-            for k in 0..3 {
-                self.min[k] = self.min[k].min(p[k]);
-                self.max[k] = self.max[k].max(p[k]);
-            }
+            self.ampliar_caja(*p);
         }
         for (p, n) in pts_locales.iter().zip(&norms) {
-            self.m.vertices.push(V3 { pos: *p, normal: normal_a_u32(*n), color: col, elemento });
+            self.m.vertices.push(V3 {
+                pos: *p,
+                normal: normal_a_u32(*n),
+                color: col,
+                elemento,
+            });
         }
-        let destino = if color[3] < 0.98 { &mut self.m.transparentes } else { &mut self.m.opacos };
+        let destino = if color[3] < 0.98 {
+            &mut self.m.transparentes
+        } else {
+            &mut self.m.opacos
+        };
         destino.extend(idx.iter().map(|i| i + base));
         if color[3] >= 0.98 {
             let aristas = aristas_vivas(&pts_locales, &idx, 30.0);
@@ -219,14 +265,22 @@ impl Constructor3d {
         }
     }
 
-    #[allow(clippy::needless_range_loop)]
+    /// La caja del modelo, para que quepa `p`.
+    fn ampliar_caja(&mut self, p: [f64; 3]) {
+        for ((min, max), v) in self.min.iter_mut().zip(self.max.iter_mut()).zip(p) {
+            *min = min.min(v);
+            *max = max.max(v);
+        }
+    }
+
     fn local(&mut self, p: [f64; 3]) -> [f32; 3] {
         let o = *self.origen.get_or_insert(p);
-        for k in 0..3 {
-            self.min[k] = self.min[k].min(p[k]);
-            self.max[k] = self.max[k].max(p[k]);
-        }
-        [(p[0] - o[0]) as f32, (p[1] - o[1]) as f32, (p[2] - o[2]) as f32]
+        self.ampliar_caja(p);
+        [
+            (p[0] - o[0]) as f32,
+            (p[1] - o[1]) as f32,
+            (p[2] - o[2]) as f32,
+        ]
     }
 
     /// Una polilinea del mundo.
@@ -238,7 +292,12 @@ impl Constructor3d {
         let base = self.m.vertices.len() as u32;
         for p in puntos {
             let pos = self.local(*p);
-            self.m.vertices.push(V3 { pos, normal: 0, color: col, elemento });
+            self.m.vertices.push(V3 {
+                pos,
+                normal: 0,
+                color: col,
+                elemento,
+            });
         }
         for i in 0..puntos.len() as u32 - 1 {
             self.m.lineas.extend([base + i, base + i + 1]);
@@ -252,14 +311,25 @@ impl Constructor3d {
             let base = self.m.vertices.len() as u32;
             for p in par {
                 let pos = self.local(*p);
-                self.m.vertices.push(V3 { pos, normal: 0, color: col, elemento });
+                self.m.vertices.push(V3 {
+                    pos,
+                    normal: 0,
+                    color: col,
+                    elemento,
+                });
             }
             self.m.lineas.extend([base, base + 1]);
         }
     }
 
     /// Una malla sin aristas vivas (un terreno: sus pliegues no son aristas).
-    pub fn malla_sin_aristas(&mut self, elemento: u32, puntos: &[[f64; 3]], indices: &[u32], color: [f32; 4]) {
+    pub fn malla_sin_aristas(
+        &mut self,
+        elemento: u32,
+        puntos: &[[f64; 3]],
+        indices: &[u32],
+        color: [f32; 4],
+    ) {
         let antes = self.m.aristas.len();
         self.malla(elemento, puntos, None, indices, color);
         self.m.aristas.truncate(antes);
@@ -271,9 +341,16 @@ impl Constructor3d {
         let pos = self.local(p);
         let base = self.m.vertices.len() as u32;
         for k in 0..4u32 {
-            self.m.vertices.push(V3 { pos, normal: (0x80 | k) << 24, color: col, elemento });
+            self.m.vertices.push(V3 {
+                pos,
+                normal: (0x80 | k) << 24,
+                color: col,
+                elemento,
+            });
         }
-        self.m.puntos.extend([base, base + 1, base + 2, base + 1, base + 3, base + 2]);
+        self.m
+            .puntos
+            .extend([base, base + 1, base + 2, base + 1, base + 3, base + 2]);
     }
 
     /// Los niveles del modelo y en cual esta cada elemento
@@ -287,7 +364,10 @@ impl Constructor3d {
         }
         self.m.niveles = orden.iter().map(|k| niveles[*k].clone()).collect();
         for (e, n) in de {
-            if let (Some(el), Some(n)) = (self.m.elementos.get_mut(*e as usize), nuevo.get(*n as usize)) {
+            if let (Some(el), Some(n)) = (
+                self.m.elementos.get_mut(*e as usize),
+                nuevo.get(*n as usize),
+            ) {
                 el.nivel = Some(*n);
             }
         }
@@ -324,7 +404,10 @@ pub fn medir(m: &mut Modelo3d) {
     let mut me = vec![Medidas::default(); n];
     // La rejilla para juntar vertices repetidos (uno por cara): una
     // millonesima del modelo.
-    let lado = (m.caja[3] - m.caja[0]).max(m.caja[4] - m.caja[1]).max(m.caja[5] - m.caja[2]).max(1e-6) as f64;
+    let lado = (m.caja[3] - m.caja[0])
+        .max(m.caja[4] - m.caja[1])
+        .max(m.caja[5] - m.caja[2])
+        .max(1e-6) as f64;
     let q = |p: [f32; 3]| -> u64 {
         let k = |v: f32| ((v as f64 / lado * 1.0e6).round() as i64 & 0x1f_ffff) as u64;
         k(p[0]) | k(p[1]) << 21 | k(p[2]) << 42
@@ -332,7 +415,11 @@ pub fn medir(m: &mut Modelo3d) {
     let mut aristas: Vec<(u32, u64, u64)> = Vec::new();
     for lista in [&m.opacos, &m.transparentes] {
         for t in lista.chunks_exact(3) {
-            let (a, b, c) = (m.vertices[t[0] as usize], m.vertices[t[1] as usize], m.vertices[t[2] as usize]);
+            let (a, b, c) = (
+                m.vertices[t[0] as usize],
+                m.vertices[t[1] as usize],
+                m.vertices[t[2] as usize],
+            );
             let e = a.elemento as usize;
             if e >= n {
                 continue;
@@ -342,13 +429,21 @@ pub fn medir(m: &mut Modelo3d) {
             let (p0, p1, p2) = (d(p0), d(p1), d(p2));
             let u = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
             let v = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
-            let c3 = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+            let c3 = [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ];
             let area = 0.5 * (c3[0] * c3[0] + c3[1] * c3[1] + c3[2] * c3[2]).sqrt();
             if area <= 0.0 {
                 continue;
             }
             // p0 · (p1 × p2) / 6
-            let x = [p1[1] * p2[2] - p1[2] * p2[1], p1[2] * p2[0] - p1[0] * p2[2], p1[0] * p2[1] - p1[1] * p2[0]];
+            let x = [
+                p1[1] * p2[2] - p1[2] * p2[1],
+                p1[2] * p2[0] - p1[0] * p2[2],
+                p1[0] * p2[1] - p1[1] * p2[0],
+            ];
             vol[e] += (p0[0] * x[0] + p0[1] * x[1] + p0[2] * x[2]) / 6.0;
             let nz = c3[2] / (2.0 * area);
             let mm = &mut me[e];
@@ -393,7 +488,11 @@ fn resta(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 }
 
 fn cruz(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 fn unitario(a: [f32; 3]) -> Option<[f32; 3]> {
@@ -418,14 +517,24 @@ pub fn aristas_vivas(puntos: &[[f32; 3]], indices: &[u32], grados: f32) -> Vec<u
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let k = [(p[0] / celda).round() as i64, (p[1] / celda).round() as i64, (p[2] / celda).round() as i64];
+            let k = [
+                (p[0] / celda).round() as i64,
+                (p[1] / celda).round() as i64,
+                (p[2] / celda).round() as i64,
+            ];
             *por_sitio.entry(k).or_insert(i as u32)
         })
         .collect();
     // Cada arista (sus dos extremos soldados) con las normales de sus caras.
-    let mut aristas: HashMap<(u32, u32), (Option<[f32; 3]>, Option<[f32; 3]>, u8, (u32, u32))> = HashMap::new();
+    // Las normales de sus dos caras, cuantas caras y los indices originales.
+    type Caras = (Option<[f32; 3]>, Option<[f32; 3]>, u8, (u32, u32));
+    let mut aristas: HashMap<(u32, u32), Caras> = HashMap::new();
     for t in indices.chunks_exact(3) {
-        let p = [puntos[t[0] as usize], puntos[t[1] as usize], puntos[t[2] as usize]];
+        let p = [
+            puntos[t[0] as usize],
+            puntos[t[1] as usize],
+            puntos[t[2] as usize],
+        ];
         let n = unitario(cruz(resta(p[1], p[0]), resta(p[2], p[0])));
         if n.is_none() {
             continue;
@@ -474,23 +583,35 @@ impl Modelo3d {
         if !e.clave.is_empty() {
             return Some(e.clave.clone());
         }
-        let k = self.elementos[..el as usize].iter().filter(|o| o.clave.is_empty() && o.tipo == e.tipo && o.nombre == e.nombre).count();
+        let k = self.elementos[..el as usize]
+            .iter()
+            .filter(|o| o.clave.is_empty() && o.tipo == e.tipo && o.nombre == e.nombre)
+            .count();
         Some(format!("~{}|{}|{k}", e.tipo, e.nombre))
     }
 
     /// Y al reves: el elemento de esa clave en este modelo.
     pub fn elemento_de_clave(&self, clave: &str) -> Option<u32> {
         if !clave.starts_with('~') {
-            return self.elementos.iter().position(|e| e.clave == clave).map(|i| i as u32);
+            return self
+                .elementos
+                .iter()
+                .position(|e| e.clave == clave)
+                .map(|i| i as u32);
         }
-        (0..self.elementos.len() as u32).find(|&i| self.clave_de_elemento(i).as_deref() == Some(clave))
+        (0..self.elementos.len() as u32)
+            .find(|&i| self.clave_de_elemento(i).as_deref() == Some(clave))
     }
 
     /// **La clave estable del nivel `k`**: su `GlobalId`; si no, el nombre y
     /// la cota en milimetros (`<nombre>@<mm>`).
     pub fn clave_de_nivel(&self, k: u32) -> Option<String> {
         let n = self.niveles.get(k as usize)?;
-        Some(if n.clave.is_empty() { format!("{}@{}", n.nombre, (n.cota * 1000.0).round() as i64) } else { n.clave.clone() })
+        Some(if n.clave.is_empty() {
+            format!("{}@{}", n.nombre, (n.cota * 1000.0).round() as i64)
+        } else {
+            n.clave.clone()
+        })
     }
 
     /// Y al reves: el nivel de esa clave en este modelo.
@@ -502,7 +623,15 @@ impl Modelo3d {
     /// (ver [`Visibles`]).
     pub fn visibles(&self, ver: &dyn Fn(u32) -> bool) -> Visibles {
         let f = |l: &[u32], paso: usize| -> Vec<u32> {
-            l.chunks_exact(paso).filter(|t| self.vertices.get(t[0] as usize).is_some_and(|v| ver(v.elemento))).flatten().copied().collect()
+            l.chunks_exact(paso)
+                .filter(|t| {
+                    self.vertices
+                        .get(t[0] as usize)
+                        .is_some_and(|v| ver(v.elemento))
+                })
+                .flatten()
+                .copied()
+                .collect()
         };
         Visibles {
             opacos: f(&self.opacos, 3),
@@ -524,7 +653,13 @@ impl Modelo3d {
         let paso = (n / 20_000).max(1);
         let mut out = self.caja;
         for k in 0..3 {
-            let mut v: Vec<f32> = self.vertices.iter().step_by(paso).map(|p| p.pos[k]).filter(|x| x.is_finite()).collect();
+            let mut v: Vec<f32> = self
+                .vertices
+                .iter()
+                .step_by(paso)
+                .map(|p| p.pos[k])
+                .filter(|x| x.is_finite())
+                .collect();
             if v.len() < 100 {
                 continue;
             }
@@ -538,11 +673,18 @@ impl Modelo3d {
     }
 
     pub fn vacio(&self) -> bool {
-        self.opacos.is_empty() && self.transparentes.is_empty() && self.lineas.is_empty() && self.puntos.is_empty()
+        self.opacos.is_empty()
+            && self.transparentes.is_empty()
+            && self.lineas.is_empty()
+            && self.puntos.is_empty()
     }
 
     pub fn a_bytes(&self) -> Vec<u8> {
-        let indices = self.opacos.len() + self.transparentes.len() + self.aristas.len() + self.lineas.len() + self.puntos.len();
+        let indices = self.opacos.len()
+            + self.transparentes.len()
+            + self.aristas.len()
+            + self.lineas.len()
+            + self.puntos.len();
         let mut b: Vec<u8> = Vec::with_capacity(self.vertices.len() * 24 + indices * 4 + 1024);
         b.extend_from_slice(MAGIA);
         for v in self.origen {
@@ -561,7 +703,13 @@ impl Modelo3d {
                 b.extend_from_slice(&x.to_le_bytes());
             }
         }
-        for l in [&self.opacos, &self.transparentes, &self.aristas, &self.lineas, &self.puntos] {
+        for l in [
+            &self.opacos,
+            &self.transparentes,
+            &self.aristas,
+            &self.lineas,
+            &self.puntos,
+        ] {
             b.extend_from_slice(&(l.len() as u32).to_le_bytes());
             for x in l.iter() {
                 b.extend_from_slice(&x.to_le_bytes());
@@ -610,9 +758,20 @@ impl Modelo3d {
         }
         m.vertices.reserve(n);
         for _ in 0..n {
-            m.vertices.push(V3 { pos: [r.f()?, r.f()?, r.f()?], normal: r.u()?, color: r.u()?, elemento: r.u()? });
+            m.vertices.push(V3 {
+                pos: [r.f()?, r.f()?, r.f()?],
+                normal: r.u()?,
+                color: r.u()?,
+                elemento: r.u()?,
+            });
         }
-        for l in [&mut m.opacos, &mut m.transparentes, &mut m.aristas, &mut m.lineas, &mut m.puntos] {
+        for l in [
+            &mut m.opacos,
+            &mut m.transparentes,
+            &mut m.aristas,
+            &mut m.lineas,
+            &mut m.puntos,
+        ] {
             let n = r.u()? as usize;
             if n > b.len() / 4 {
                 return None;
@@ -635,8 +794,20 @@ impl Modelo3d {
             let nombre = r.texto()?;
             let clave = r.texto()?;
             let nivel = Some(r.u()?).filter(|n| *n != u32::MAX);
-            let medidas = Medidas { volumen: r.f()?, planta: r.f()?, alzado: r.f()?, superficie: r.f()?, cerrado: r.tomar(1)?[0] != 0 };
-            m.elementos.push(Elemento { tipo, nombre, nivel, clave, medidas });
+            let medidas = Medidas {
+                volumen: r.f()?,
+                planta: r.f()?,
+                alzado: r.f()?,
+                superficie: r.f()?,
+                cerrado: r.tomar(1)?[0] != 0,
+            };
+            m.elementos.push(Elemento {
+                tipo,
+                nombre,
+                nivel,
+                clave,
+                medidas,
+            });
         }
         let n = r.u()? as usize;
         if n > b.len() {
@@ -646,9 +817,16 @@ impl Modelo3d {
             let nombre = r.texto()?;
             let cota = f64::from_le_bytes(r.tomar(8)?.try_into().ok()?);
             let clave = r.texto()?;
-            m.niveles.push(Nivel { nombre, cota, clave });
+            m.niveles.push(Nivel {
+                nombre,
+                cota,
+                clave,
+            });
         }
-        if m.elementos.iter().any(|e| e.nivel.is_some_and(|k| k as usize >= m.niveles.len())) {
+        if m.elementos
+            .iter()
+            .any(|e| e.nivel.is_some_and(|k| k as usize >= m.niveles.len()))
+        {
             return None;
         }
         Some(m)
@@ -727,7 +905,11 @@ pub fn tipo_legible(tipo: &str) -> String {
         "ifcshadingdevice" => "Parasol",
         _ => "",
     };
-    if es.is_empty() { tipo.strip_prefix("Ifc").unwrap_or(tipo).to_string() } else { es.to_string() }
+    if es.is_empty() {
+        tipo.strip_prefix("Ifc").unwrap_or(tipo).to_string()
+    } else {
+        es.to_string()
+    }
 }
 
 #[cfg(test)]
@@ -735,8 +917,23 @@ mod pruebas {
     use super::*;
 
     fn cubo(c: &mut Constructor3d, e: u32, color: [f32; 4]) {
-        let p: Vec<[f64; 3]> = (0..8).map(|i| [(i & 1) as f64, ((i >> 1) & 1) as f64, ((i >> 2) & 1) as f64 + 1000.0]).collect();
-        let caras = [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]];
+        let p: Vec<[f64; 3]> = (0..8)
+            .map(|i| {
+                [
+                    (i & 1) as f64,
+                    ((i >> 1) & 1) as f64,
+                    ((i >> 2) & 1) as f64 + 1000.0,
+                ]
+            })
+            .collect();
+        let caras = [
+            [0, 1, 3, 2],
+            [4, 6, 7, 5],
+            [0, 4, 5, 1],
+            [2, 3, 7, 6],
+            [0, 2, 6, 4],
+            [1, 5, 7, 3],
+        ];
         let mut idx = Vec::new();
         for f in caras {
             idx.extend([f[0], f[1], f[2], f[0], f[2], f[3]]);
@@ -773,14 +970,26 @@ mod pruebas {
         cubo(&mut c, e, [0.8, 0.8, 0.8, 1.0]);
         let md = c.terminar().elementos[0].medidas;
         assert!((md.volumen - 1.0).abs() < 1e-4, "{md:?}");
-        assert!((md.planta - 1.0).abs() < 1e-4 && (md.alzado - 2.0).abs() < 1e-4 && (md.superficie - 6.0).abs() < 1e-4);
+        assert!(
+            (md.planta - 1.0).abs() < 1e-4
+                && (md.alzado - 2.0).abs() < 1e-4
+                && (md.superficie - 6.0).abs() < 1e-4
+        );
         assert!(md.cerrado);
         // Caso negativo: sin la tapa de arriba, abierto.
         let mut c = Constructor3d::nuevo();
         let e = c.elemento("IfcWall", "");
-        let p: Vec<[f64; 3]> = (0..8).map(|i| [(i & 1) as f64, ((i >> 1) & 1) as f64, ((i >> 2) & 1) as f64]).collect();
+        let p: Vec<[f64; 3]> = (0..8)
+            .map(|i| [(i & 1) as f64, ((i >> 1) & 1) as f64, ((i >> 2) & 1) as f64])
+            .collect();
         let mut idx = Vec::new();
-        for f in [[0, 1, 3, 2], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]] {
+        for f in [
+            [0, 1, 3, 2],
+            [0, 4, 5, 1],
+            [2, 3, 7, 6],
+            [0, 2, 6, 4],
+            [1, 5, 7, 3],
+        ] {
             idx.extend([f[0], f[1], f[2], f[0], f[2], f[3]]);
         }
         c.malla(e, &p, None, &idx, [0.8, 0.8, 0.8, 1.0]);
@@ -795,8 +1004,16 @@ mod pruebas {
         let _sin = c.elemento("IfcBeam", "");
         c.niveles(
             vec![
-                Nivel { nombre: "2DO PISO".into(), cota: 6.65, clave: "2gRXFgjRn2HPE$YoDLX3FV".into() },
-                Nivel { nombre: "1ER PISO".into(), cota: 3.4, ..Default::default() },
+                Nivel {
+                    nombre: "2DO PISO".into(),
+                    cota: 6.65,
+                    clave: "2gRXFgjRn2HPE$YoDLX3FV".into(),
+                },
+                Nivel {
+                    nombre: "1ER PISO".into(),
+                    cota: 3.4,
+                    ..Default::default()
+                },
             ],
             &[(a, 0), (b, 1)],
         );
@@ -847,7 +1064,15 @@ mod pruebas_lineas {
     fn lineas_y_puntos_van_aparte_y_cuentan_en_la_caja() {
         let mut c = Constructor3d::nuevo();
         let e = c.elemento("Alineamiento", "Eje 1");
-        c.linea(e, &[[100.0, 200.0, 10.0], [110.0, 200.0, 11.0], [120.0, 205.0, 12.0]], [1.0, 0.0, 0.0, 1.0]);
+        c.linea(
+            e,
+            &[
+                [100.0, 200.0, 10.0],
+                [110.0, 200.0, 11.0],
+                [120.0, 205.0, 12.0],
+            ],
+            [1.0, 0.0, 0.0, 1.0],
+        );
         let p = c.elemento("Punto", "15");
         c.punto(p, [105.0, 190.0, 9.0], [1.0, 1.0, 0.0, 1.0]);
         let m = c.terminar();

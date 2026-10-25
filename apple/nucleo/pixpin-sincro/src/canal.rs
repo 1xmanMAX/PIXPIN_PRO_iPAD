@@ -546,15 +546,14 @@ mod pruebas {
 
     use crate::compartidos::{Llaves, mezcladas};
 
+    type Lado = Result<(Canal<Tuberia>, Vec<u8>), ErrorCanal>;
+
     /// Los dos lados de una conversacion entre personas, a la vez. `acepta`
     /// dice que claves acepta cada uno.
     fn personas(
         uno: (Llaves, fn(&[u8]) -> bool),
         otro: (Llaves, fn(&[u8]) -> bool),
-    ) -> (
-        Result<(Canal<Tuberia>, Vec<u8>), ErrorCanal>,
-        Result<(Canal<Tuberia>, Vec<u8>), ErrorCanal>,
-    ) {
+    ) -> (Lado, Lado) {
         let (a, b) = par();
         let hilo = std::thread::spawn(move || {
             Canal::entre_personas(b, &otro.0, [9u8; NONCE], false, otro.1)

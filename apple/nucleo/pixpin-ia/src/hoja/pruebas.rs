@@ -20,7 +20,12 @@ struct Papel {
 
 impl Papel {
     fn nuevo(w: u32, h: u32) -> Papel {
-        Papel { w, h, rgba: vec![255; (w * h * 4) as usize], palabras: Vec::new() }
+        Papel {
+            w,
+            h,
+            rgba: vec![255; (w * h * 4) as usize],
+            palabras: Vec::new(),
+        }
     }
     fn pixel(&mut self, x: i64, y: i64, g: u8) {
         if x < 0 || y < 0 || x >= self.w as i64 || y >= self.h as i64 {
@@ -69,9 +74,22 @@ impl Papel {
         for i in 0..n {
             let mut cx = x;
             let mut k = 0;
-            let fin = if i + 1 == n { x + ancho * 0.6 } else { x + ancho };
+            let fin = if i + 1 == n {
+                x + ancho * 0.6
+            } else {
+                x + ancho
+            };
             loop {
-                let palabra = ["lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit"][k % 8];
+                let palabra = [
+                    "lorem",
+                    "ipsum",
+                    "dolor",
+                    "sit",
+                    "amet",
+                    "consectetur",
+                    "adipiscing",
+                    "elit",
+                ][k % 8];
                 let w = palabra.chars().count() as f64 * alto * 0.5;
                 if cx + w > fin {
                     break;
@@ -129,7 +147,11 @@ fn una_columna_con_titulo_y_dos_parrafos() {
     let y = p.parrafo(100.0, 200.0, 800.0, 5, 20.0);
     p.parrafo(100.0, y + 30.0, 800.0, 4, 20.0);
     let s = p.seccionar();
-    assert_eq!(tipos(&s), vec![Tipo::Encabezado, Tipo::Parrafo, Tipo::Parrafo], "{s:#?}");
+    assert_eq!(
+        tipos(&s),
+        vec![Tipo::Encabezado, Tipo::Parrafo, Tipo::Parrafo],
+        "{s:#?}"
+    );
     assert_eq!(s.zonas[1].renglones.len(), 5);
     assert_eq!(s.zonas[2].renglones.len(), 4);
     assert_eq!(s.columnas, 1);
@@ -149,18 +171,53 @@ fn dos_columnas_con_raya_en_medio_se_leen_por_columnas() {
     let s = p.seccionar();
     let t = tipos(&s);
     assert_eq!(t.iter().filter(|x| **x == Tipo::Linea).count(), 1, "{t:?}");
-    assert_eq!(s.columnas, 2, "{:?}", s.zonas.iter().map(|z| (z.tipo, z.caja.x as i32, z.caja.w as i32, z.columna)).collect::<Vec<_>>());
+    assert_eq!(
+        s.columnas,
+        2,
+        "{:?}",
+        s.zonas
+            .iter()
+            .map(|z| (z.tipo, z.caja.x as i32, z.caja.w as i32, z.columna))
+            .collect::<Vec<_>>()
+    );
     let textos: Vec<&Zona> = s.zonas.iter().filter(|z| z.tipo != Tipo::Linea).collect();
     assert_eq!(textos[0].tipo, Tipo::Encabezado, "{t:?}");
     // Orden: la izquierda entera antes que la derecha.
-    let izq: Vec<usize> = textos.iter().filter(|z| z.tipo == Tipo::Parrafo && z.caja.x < 600.0).map(|z| z.orden).collect();
-    let der: Vec<usize> = textos.iter().filter(|z| z.tipo == Tipo::Parrafo && z.caja.x > 600.0).map(|z| z.orden).collect();
+    let izq: Vec<usize> = textos
+        .iter()
+        .filter(|z| z.tipo == Tipo::Parrafo && z.caja.x < 600.0)
+        .map(|z| z.orden)
+        .collect();
+    let der: Vec<usize> = textos
+        .iter()
+        .filter(|z| z.tipo == Tipo::Parrafo && z.caja.x > 600.0)
+        .map(|z| z.orden)
+        .collect();
     assert_eq!(izq.len(), 2, "{t:?}");
     assert_eq!(der.len(), 1, "{t:?}");
-    assert!(izq.iter().all(|i| der.iter().all(|d| i < d)), "{izq:?} {der:?}");
+    assert!(
+        izq.iter().all(|i| der.iter().all(|d| i < d)),
+        "{izq:?} {der:?}"
+    );
     // Ningun renglon cruza la raya.
-    assert!(s.zonas.iter().filter(|z| z.tipo == Tipo::Parrafo).flat_map(|z| &z.renglones).all(|r| r.caja.x1() < 600.0 || r.caja.x > 600.0));
-    assert!(s.zonas.iter().filter(|z| z.tipo == Tipo::Parrafo).all(|z| z.columna == if z.caja.x < 600.0 { 0 } else { 1 }), "{:?}", s.zonas.iter().map(|z| (z.tipo, z.caja.x as i32, z.columna)).collect::<Vec<_>>());
+    assert!(
+        s.zonas
+            .iter()
+            .filter(|z| z.tipo == Tipo::Parrafo)
+            .flat_map(|z| &z.renglones)
+            .all(|r| r.caja.x1() < 600.0 || r.caja.x > 600.0)
+    );
+    assert!(
+        s.zonas
+            .iter()
+            .filter(|z| z.tipo == Tipo::Parrafo)
+            .all(|z| z.columna == if z.caja.x < 600.0 { 0 } else { 1 }),
+        "{:?}",
+        s.zonas
+            .iter()
+            .map(|z| (z.tipo, z.caja.x as i32, z.columna))
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]
@@ -177,10 +234,23 @@ fn dos_columnas_sin_raya_tambien() {
 /// Una tabla de `filas x 3` con rayas o sin ellas.
 fn tabla(p: &mut Papel, x: f64, y: f64, filas: usize, rayas: bool) -> Caja {
     let (cw, rh) = (180.0, 40.0);
-    let datos = [["Partida", "Cantidad", "Precio"], ["Cemento", "12", "450"], ["Arena", "3", "120"], ["Acero", "40", "2300"], ["Ladrillo", "900", "810"]];
+    let datos = [
+        ["Partida", "Cantidad", "Precio"],
+        ["Cemento", "12", "450"],
+        ["Arena", "3", "120"],
+        ["Acero", "40", "2300"],
+        ["Ladrillo", "900", "810"],
+    ];
     for f in 0..filas {
+        #[allow(clippy::needless_range_loop)] // `c` tambien da la x
         for c in 0..3 {
-            p.palabra(datos[f % datos.len()][c], x + c as f64 * cw + 12.0, y + f as f64 * rh + 10.0, 18.0, f == 0);
+            p.palabra(
+                datos[f % datos.len()][c],
+                x + c as f64 * cw + 12.0,
+                y + f as f64 * rh + 10.0,
+                18.0,
+                f == 0,
+            );
         }
     }
     if rayas {
@@ -200,7 +270,11 @@ fn una_tabla_rayada_sale_con_sus_celdas() {
     let y = p.parrafo(100.0, 80.0, 800.0, 3, 18.0);
     tabla(&mut p, 150.0, y + 40.0, 5, true);
     let s = p.seccionar();
-    let t = s.zonas.iter().find(|z| z.tipo == Tipo::Tabla).unwrap_or_else(|| panic!("{:?}", tipos(&s)));
+    let t = s
+        .zonas
+        .iter()
+        .find(|z| z.tipo == Tipo::Tabla)
+        .unwrap_or_else(|| panic!("{:?}", tipos(&s)));
     let leida = t.tabla.as_ref().unwrap();
     assert_eq!(leida.filas.len(), 5, "{leida:?}");
     assert_eq!(leida.columnas(), 3, "{leida:?}");
@@ -227,13 +301,27 @@ fn la_foto_es_foto_y_lo_que_el_ocr_vio_dentro_no_es_texto() {
     let y = p.parrafo(100.0, 80.0, 800.0, 3, 18.0);
     p.foto(250.0, y + 40.0, 500.0, 350.0);
     // El OCR «lee» algo dentro de la foto.
-    p.palabras.push(PalabraHoja::nueva("xq", 400.0, y + 140.0, 30.0, 18.0));
+    p.palabras
+        .push(PalabraHoja::nueva("xq", 400.0, y + 140.0, 30.0, 18.0));
     p.parrafo(100.0, y + 430.0, 800.0, 3, 18.0);
     let s = p.seccionar();
-    assert_eq!(tipos(&s), vec![Tipo::Parrafo, Tipo::Foto, Tipo::Parrafo], "{s:#?}");
+    assert_eq!(
+        tipos(&s),
+        vec![Tipo::Parrafo, Tipo::Foto, Tipo::Parrafo],
+        "{s:#?}"
+    );
     let f = &s.zonas[1];
-    assert!((f.caja.x - 250.0).abs() < 25.0 && (f.caja.w - 500.0).abs() < 50.0, "{:?}", f.caja);
-    assert!(!s.zonas.iter().flat_map(|z| &z.renglones).any(|r| r.texto.contains("xq")));
+    assert!(
+        (f.caja.x - 250.0).abs() < 25.0 && (f.caja.w - 500.0).abs() < 50.0,
+        "{:?}",
+        f.caja
+    );
+    assert!(
+        !s.zonas
+            .iter()
+            .flat_map(|z| &z.renglones)
+            .any(|r| r.texto.contains("xq"))
+    );
 }
 
 #[test]
@@ -251,11 +339,27 @@ fn la_formula_centrada_es_formula() {
     p.renglon("E = m c ^ 2", 400.0, y + 30.0, 22.0);
     p.parrafo(100.0, y + 100.0, 800.0, 3, 18.0);
     let s = p.seccionar();
-    assert_eq!(tipos(&s), vec![Tipo::Parrafo, Tipo::Formula, Tipo::Parrafo], "{s:#?}");
+    assert_eq!(
+        tipos(&s),
+        vec![Tipo::Parrafo, Tipo::Formula, Tipo::Parrafo],
+        "{s:#?}"
+    );
     // Una frase con un «=» suelto sigue siendo texto.
     let r = Caja::nueva(100.0, 0.0, 800.0, 20.0);
-    assert!(seccion::puntuar_formula("La velocidad media es v = d / t en metros por segundo", &r, &r) < 0.55);
-    assert!(seccion::puntuar_formula("x = \u{221a}(b² − 4ac)", &Caja::nueva(400.0, 0.0, 200.0, 20.0), &r) >= 0.55);
+    assert!(
+        seccion::puntuar_formula(
+            "La velocidad media es v = d / t en metros por segundo",
+            &r,
+            &r
+        ) < 0.55
+    );
+    assert!(
+        seccion::puntuar_formula(
+            "x = \u{221a}(b² − 4ac)",
+            &Caja::nueva(400.0, 0.0, 200.0, 20.0),
+            &r
+        ) >= 0.55
+    );
 }
 
 #[test]
@@ -294,11 +398,26 @@ fn seccionar_es_rapido() {
 // Montaje
 
 fn entrada<'a>(z: &'a Zona, pagina: (&'a [u8], u32, u32), o: &'a Opciones) -> Entrada<'a> {
-    Entrada { zona: z, mapa: Mapa { escala: 0.5, origen: (0.0, 0.0) }, opciones: o, pagina, alto_letra: 18.0, semilla: 77, lector: None, ajenas: &[], pistas: &[] }
+    Entrada {
+        zona: z,
+        mapa: Mapa {
+            escala: 0.5,
+            origen: (0.0, 0.0),
+        },
+        opciones: o,
+        pagina,
+        alto_letra: 18.0,
+        semilla: 77,
+        lector: None,
+        ajenas: &[],
+        pistas: &[],
+    }
 }
 
 fn leer(els: &[serde_json::Value]) -> Vec<pixpin_motor2d::Elemento> {
-    pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(els.to_vec())).unwrap().elementos()
+    pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(els.to_vec()))
+        .unwrap()
+        .elementos()
 }
 
 #[test]
@@ -318,8 +437,16 @@ fn cada_zona_sale_en_su_sitio_y_el_lienzo_la_lee() {
         assert!(!els.is_empty(), "{:?}", z.tipo);
         // Dentro de su caja destino (con holgura: la letra no es la del papel).
         let d = e.destino().crecer(60.0);
-        let caja = els.iter().map(|e| e.caja()).reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3))).unwrap();
-        assert!(d.contiene(caja.0 as f64, caja.1 as f64) && d.contiene(caja.2 as f64, caja.3 as f64), "{:?}: {caja:?} fuera de {d:?}", z.tipo);
+        let caja = els
+            .iter()
+            .map(|e| e.caja())
+            .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)))
+            .unwrap();
+        assert!(
+            d.contiene(caja.0 as f64, caja.1 as f64) && d.contiene(caja.2 as f64, caja.3 as f64),
+            "{:?}: {caja:?} fuera de {d:?}",
+            z.tipo
+        );
         // Todo en un grupo.
         assert!(els.iter().all(|e| !e.grupos.is_empty()), "{:?}", z.tipo);
         match z.tipo {
@@ -373,17 +500,37 @@ fn una_formula_leida_sale_compuesta_y_sin_leer_como_imagen() {
     let mut p = Papel::nuevo(800, 400);
     p.renglon("x = a + b", 300.0, 150.0, 24.0);
     let s = p.seccionar();
-    let z = s.zonas.iter().find(|z| z.tipo == Tipo::Formula).expect("formula");
+    let z = s
+        .zonas
+        .iter()
+        .find(|z| z.tipo == Tipo::Formula)
+        .expect("formula");
     let o = Opciones::default();
     let e = entrada(z, (&p.rgba, p.w, p.h), &o);
-    let h = montaje::hacer(&e, Some(&Leido::Latex(vec!["x = \\frac{a+b}{2}".into()])), Via::Editable);
+    let h = montaje::hacer(
+        &e,
+        Some(&Leido::Latex(vec!["x = \\frac{a+b}{2}".into()])),
+        Via::Editable,
+    );
     let els = leer(&h.elementos);
-    assert!(els.iter().any(|e| matches!(e.figura, pixpin_motor2d::Figura::Linea { .. })), "la raya de la fraccion");
+    assert!(
+        els.iter()
+            .any(|e| matches!(e.figura, pixpin_motor2d::Figura::Linea { .. })),
+        "la raya de la fraccion"
+    );
     assert!(h.imagenes.is_empty());
     let sin = montaje::hacer(&e, None, Via::Editable);
-    assert_eq!(sin.imagenes.len(), 1, "sin LaTeX, la formula va como imagen");
+    assert_eq!(
+        sin.imagenes.len(),
+        1,
+        "sin LaTeX, la formula va como imagen"
+    );
     // Un LaTeX roto no rompe: imagen.
-    let roto = montaje::hacer(&e, Some(&Leido::Latex(vec!["\\frac{a".into()])), Via::Editable);
+    let roto = montaje::hacer(
+        &e,
+        Some(&Leido::Latex(vec!["\\frac{a".into()])),
+        Via::Editable,
+    );
     assert_eq!(roto.imagenes.len(), 1);
 }
 
@@ -409,16 +556,31 @@ fn una_dudosa_toma_el_tipo_que_dice_el_modelo() {
     let o = Opciones::default();
     let e = entrada(&z, (&p.rgba, p.w, p.h), &o);
     // (Un dibujo de rayas sale con figuras exactas: diagrama.)
-    assert!(matches!(montaje::hacer(&e, Some(&Leido::Tipo(Tipo::Dibujo)), Via::Editable).tipo, Tipo::Dibujo | Tipo::Diagrama));
-    assert_eq!(montaje::hacer(&e, None, Via::Editable).imagenes.len(), 1, "sin modelo: imagen");
+    assert!(matches!(
+        montaje::hacer(&e, Some(&Leido::Tipo(Tipo::Dibujo)), Via::Editable).tipo,
+        Tipo::Dibujo | Tipo::Diagrama
+    ));
+    assert_eq!(
+        montaje::hacer(&e, None, Via::Editable).imagenes.len(),
+        1,
+        "sin modelo: imagen"
+    );
     // Un dibujo por el que la app pregunto y que es una formula (el sistema
     // con llave escaneado, banco del 15-oct): formula, no calco.
     let mut d = z.clone();
     d.tipo = Tipo::Dibujo;
     let e = entrada(&d, (&p.rgba, p.w, p.h), &o);
-    let latex = Leido::Latex(vec![r"\begin{cases} x + y = 1 \\ x - y = 0 \end{cases}".into()]);
-    assert_eq!(montaje::hacer(&e, Some(&latex), Via::Editable).tipo, Tipo::Formula);
-    assert!(matches!(montaje::hacer(&e, Some(&Leido::Tipo(Tipo::Dibujo)), Via::Editable).tipo, Tipo::Dibujo | Tipo::Diagrama));
+    let latex = Leido::Latex(vec![
+        r"\begin{cases} x + y = 1 \\ x - y = 0 \end{cases}".into(),
+    ]);
+    assert_eq!(
+        montaje::hacer(&e, Some(&latex), Via::Editable).tipo,
+        Tipo::Formula
+    );
+    assert!(matches!(
+        montaje::hacer(&e, Some(&Leido::Tipo(Tipo::Dibujo)), Via::Editable).tipo,
+        Tipo::Dibujo | Tipo::Diagrama
+    ));
 }
 
 #[test]
@@ -428,9 +590,16 @@ fn el_calco_cae_en_su_caja() {
     let c = crate::calcar::calcar(&p.rgba, p.w, p.h, &Default::default());
     let destino = Caja::nueva(1000.0, 500.0, 200.0, 200.0);
     let els = montaje::calco_en_caja(&c, destino, 0.5, 1);
-    let caja = leer(&els).iter().map(|e| e.caja()).reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3))).unwrap();
+    let caja = leer(&els)
+        .iter()
+        .map(|e| e.caja())
+        .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)))
+        .unwrap();
     // El cuadrado de 200 px de la hoja a escala 0.5: 100 px desde (1050, 550).
-    assert!((caja.0 - 1050.0).abs() < 8.0 && (caja.1 - 550.0).abs() < 8.0, "{caja:?}");
+    assert!(
+        (caja.0 - 1050.0).abs() < 8.0 && (caja.1 - 550.0).abs() < 8.0,
+        "{caja:?}"
+    );
     assert!((caja.2 - 1150.0).abs() < 8.0, "{caja:?}");
 }
 
@@ -440,7 +609,10 @@ fn el_id_de_imagen_es_valido_y_distinto_por_zona() {
     let b = montaje::id_de_imagen(5, 2);
     assert_ne!(a, b);
     assert!(a > 1 && a < (1 << 48));
-    assert_eq!(pixpin_motor2d::enlace::id_del_fichero(&pixpin_motor2d::enlace::id_de_texto(a)), a);
+    assert_eq!(
+        pixpin_motor2d::enlace::id_del_fichero(&pixpin_motor2d::enlace::id_de_texto(a)),
+        a
+    );
 }
 
 #[test]
@@ -460,21 +632,40 @@ fn reducir_guarda_la_proporcion() {
 #[test]
 fn el_latex_se_lee_con_manga_ancha() {
     assert_eq!(leer_latex("$x^2$").unwrap(), vec!["x^2"]);
-    assert_eq!(leer_latex("```latex\n\\frac{a}{b}\n```").unwrap(), vec!["\\frac{a}{b}"]);
-    assert_eq!(leer_latex("\\[ a = b \\\\ c = d \\]").unwrap(), vec!["a = b", "c = d"]);
-    assert_eq!(leer_latex("Aqui esta la formula: E = mc^2").unwrap(), vec!["E = mc^2"]);
+    assert_eq!(
+        leer_latex("```latex\n\\frac{a}{b}\n```").unwrap(),
+        vec!["\\frac{a}{b}"]
+    );
+    assert_eq!(
+        leer_latex("\\[ a = b \\\\ c = d \\]").unwrap(),
+        vec!["a = b", "c = d"]
+    );
+    assert_eq!(
+        leer_latex("Aqui esta la formula: E = mc^2").unwrap(),
+        vec!["E = mc^2"]
+    );
     assert!(leer_latex("NADA").is_none());
     assert!(leer_latex("   ").is_none());
     assert_eq!(leer_tipo("Fórmula."), Some(Tipo::Formula));
     assert_eq!(leer_tipo("foto"), Some(Tipo::Foto));
     assert_eq!(leer_tipo("no se"), None);
-    assert_eq!(super::vision::leer_dudosa("FORMULA: a^2 + b^2"), Some(Leido::Latex(vec!["a^2 + b^2".into()])));
-    assert_eq!(super::vision::leer_dudosa("Fórmula"), Some(Leido::Tipo(Tipo::Formula)));
-    assert_eq!(super::vision::leer_dudosa("dibujo"), Some(Leido::Tipo(Tipo::Dibujo)));
+    assert_eq!(
+        super::vision::leer_dudosa("FORMULA: a^2 + b^2"),
+        Some(Leido::Latex(vec!["a^2 + b^2".into()]))
+    );
+    assert_eq!(
+        super::vision::leer_dudosa("Fórmula"),
+        Some(Leido::Tipo(Tipo::Formula))
+    );
+    assert_eq!(
+        super::vision::leer_dudosa("dibujo"),
+        Some(Leido::Tipo(Tipo::Dibujo))
+    );
     assert_eq!(super::vision::leer_dudosa("no lo se"), None);
     assert!(leer_grafica("NO").is_none());
     assert!(leer_grafica("{\"funciones\":[]}").is_none());
-    let g = leer_grafica("```json\n{\"funciones\":[\"x^2\"],\"x_desde\":-2,\"x_hasta\":2}\n```").unwrap();
+    let g = leer_grafica("```json\n{\"funciones\":[\"x^2\"],\"x_desde\":-2,\"x_hasta\":2}\n```")
+        .unwrap();
     assert_eq!(g["funciones"][0], "x^2");
 }
 
@@ -501,7 +692,9 @@ fn el_parecido_distingue() {
 fn pasar_una_hoja_se_reconoce_y_con_el_local_se_contesta_que_no() {
     assert!(pide_hoja_a_lienzo("pasa esta hoja al lienzo"));
     assert!(pide_hoja_a_lienzo("Digitaliza esta foto"));
-    assert!(pide_hoja_a_lienzo("pon esta página en el lienzo, por favor"));
+    assert!(pide_hoja_a_lienzo(
+        "pon esta página en el lienzo, por favor"
+    ));
     assert!(!pide_hoja_a_lienzo("dibuja un circulo en el lienzo"));
     assert!(!pide_hoja_a_lienzo("pasa esta tabla a Excel"));
     let mut h = vec![Mensaje::usuario("pasa esta hoja al lienzo")];
@@ -521,7 +714,11 @@ fn pasar_una_hoja_se_reconoce_y_con_el_local_se_contesta_que_no() {
 
 #[test]
 fn el_mapa_lleva_la_hoja_al_ancho_pedido() {
-    let s = Seccionado { ancho: 1700, alto: 2200, ..Default::default() };
+    let s = Seccionado {
+        ancho: 1700,
+        alto: 2200,
+        ..Default::default()
+    };
     let m = Mapa::para(&s, &Opciones::default());
     let (w, h) = m.hoja(&s);
     assert!((w - 1000.0).abs() < 1e-9);
@@ -536,8 +733,14 @@ fn el_mapa_lleva_la_hoja_al_ancho_pedido() {
 
 #[test]
 fn los_enlaces_y_los_colores_se_conservan() {
-    assert_eq!(montaje::enlace_de("Clic en https://mega.nz/folder/abc ya").as_deref(), Some("https://mega.nz/folder/abc"));
-    assert_eq!(montaje::enlace_de("visita www.pixpin.pe").as_deref(), Some("https://www.pixpin.pe"));
+    assert_eq!(
+        montaje::enlace_de("Clic en https://mega.nz/folder/abc ya").as_deref(),
+        Some("https://mega.nz/folder/abc")
+    );
+    assert_eq!(
+        montaje::enlace_de("visita www.pixpin.pe").as_deref(),
+        Some("https://www.pixpin.pe")
+    );
     assert!(montaje::enlace_de("un texto sin enlace").is_none());
     // Tinta roja: se mide; negra: nada (es la de siempre).
     let mut p = Papel::nuevo(100, 40);
@@ -551,9 +754,13 @@ fn los_enlaces_y_los_colores_se_conservan() {
             p.rgba[i..i + 3].copy_from_slice(&[25, 25, 25]);
         }
     }
-    let rojo = imagen::color_de_tinta(&p.rgba, 100, 40, &Caja::nueva(5.0, 5.0, 40.0, 30.0), 158).unwrap();
+    let rojo =
+        imagen::color_de_tinta(&p.rgba, 100, 40, &Caja::nueva(5.0, 5.0, 40.0, 30.0), 158).unwrap();
     assert!(rojo[0] > 200 && rojo[1] < 60, "{rojo:?}");
-    assert!(imagen::color_de_tinta(&p.rgba, 100, 40, &Caja::nueva(55.0, 5.0, 40.0, 30.0), 158).is_none());
+    assert!(
+        imagen::color_de_tinta(&p.rgba, 100, 40, &Caja::nueva(55.0, 5.0, 40.0, 30.0), 158)
+            .is_none()
+    );
     assert_eq!(imagen::hex([255, 0, 16]), "#ff0010");
 }
 
@@ -568,11 +775,19 @@ impl Papel {
             for x in (cx - r - 4.0) as i64..(cx + r + 4.0) as i64 {
                 let d = ((x as f64 + 0.5 - cx).powi(2) + (y as f64 + 0.5 - cy).powi(2)).sqrt();
                 let en_arco = (d - r).abs();
-                let en_diametro = if (x as f64 - cx).abs() <= r { (y as f64 + 0.5 - cy).abs() } else { 99.0 };
+                let en_diametro = if (x as f64 - cx).abs() <= r {
+                    (y as f64 + 0.5 - cy).abs()
+                } else {
+                    99.0
+                };
                 // Y un triangulo inscrito (de los extremos del diametro a lo alto).
                 let tope = (cx, cy - r);
-                let lado = |a: (f64, f64), b: (f64, f64)| crate::diagrama::ajuste::dist_a_segmento((x as f64 + 0.5, y as f64 + 0.5), a, b);
-                let en_diametro = en_diametro.min(lado((cx - r, cy), tope)).min(lado(tope, (cx + r, cy)));
+                let lado = |a: (f64, f64), b: (f64, f64)| {
+                    crate::diagrama::ajuste::dist_a_segmento((x as f64 + 0.5, y as f64 + 0.5), a, b)
+                };
+                let en_diametro = en_diametro
+                    .min(lado((cx - r, cy), tope))
+                    .min(lado(tope, (cx + r, cy)));
                 let t = en_arco.min(en_diametro);
                 if t < 1.6 {
                     let g = (20.0 + 200.0 * (t / 1.6)).min(255.0) as u8;
@@ -594,7 +809,11 @@ fn lo_que_no_se_dibuja_va_recortado_y_un_diagrama_no() {
     let mut p = Papel::nuevo(900, 700);
     p.foto(120.0, 100.0, 420.0, 300.0);
     let s = p.seccionar();
-    let z = s.zonas.iter().find(|z| matches!(z.tipo, Tipo::Foto | Tipo::Dibujo)).expect("la zona de la foto");
+    let z = s
+        .zonas
+        .iter()
+        .find(|z| matches!(z.tipo, Tipo::Foto | Tipo::Dibujo))
+        .expect("la zona de la foto");
     let e = entrada(z, (&p.rgba, p.w, p.h), &o);
     let h = montaje::hacer(&e, None, Via::Editable);
     assert_eq!(h.imagenes.len(), 1, "{}", h.nota);
@@ -605,27 +824,142 @@ fn lo_que_no_se_dibuja_va_recortado_y_un_diagrama_no() {
     // El recorte es la zona (con 2 px de aire) sobre la hoja entera.
     let img = &h.imagenes[0];
     let k = img.ancho as f64 / p.w as f64;
-    assert!((crop["x"].as_f64().unwrap() / k - (z.caja.x - 2.0)).abs() < 1.5, "{crop}");
-    assert!((crop["width"].as_f64().unwrap() / k - (z.caja.w + 4.0)).abs() < 2.5, "{crop}");
+    assert!(
+        (crop["x"].as_f64().unwrap() / k - (z.caja.x - 2.0)).abs() < 1.5,
+        "{crop}"
+    );
+    assert!(
+        (crop["width"].as_f64().unwrap() / k - (z.caja.w + 4.0)).abs() < 2.5,
+        "{crop}"
+    );
     assert_eq!(crop["naturalWidth"].as_u64().unwrap(), img.ancho as u64);
     // Y en su sitio y a su escala (la del mapa).
     let d = e.mapa.caja(&z.caja.crecer(2.0));
-    assert!((v["x"].as_f64().unwrap() - d.x).abs() < 0.5 && (v["width"].as_f64().unwrap() - d.w).abs() < 0.5, "{v}");
+    assert!(
+        (v["x"].as_f64().unwrap() - d.x).abs() < 0.5
+            && (v["width"].as_f64().unwrap() - d.w).abs() < 0.5,
+        "{v}"
+    );
     let els = leer(&h.elementos);
-    assert!(matches!(&els[0].figura, pixpin_motor2d::Figura::Imagen { .. }));
+    assert!(matches!(
+        &els[0].figura,
+        pixpin_motor2d::Figura::Imagen { .. }
+    ));
     assert!(els[0].extras.recorte.is_some(), "el lienzo lee el recorte");
 
     // Un diagrama sencillo: figuras exactas, sin recorte.
     let mut p = Papel::nuevo(900, 700);
     p.diagrama(450.0, 380.0, 200.0);
     let s = p.seccionar();
-    let z = s.zonas.iter().filter(|z| matches!(z.tipo, Tipo::Dibujo | Tipo::Grafica | Tipo::Foto)).max_by(|a, b| a.caja.area().total_cmp(&b.caja.area())).expect("la zona del dibujo");
+    let z = s
+        .zonas
+        .iter()
+        .filter(|z| matches!(z.tipo, Tipo::Dibujo | Tipo::Grafica | Tipo::Foto))
+        .max_by(|a, b| a.caja.area().total_cmp(&b.caja.area()))
+        .expect("la zona del dibujo");
     let h = montaje::hacer(&entrada(z, (&p.rgba, p.w, p.h), &o), None, Via::Editable);
     {
         let (rgba, w, h) = super::imagen::recortar(&p.rgba, p.w, p.h, &z.caja.crecer(12.0));
-        let d = crate::diagrama::vectorizar(&rgba, w, h, &[], &crate::diagrama::Opciones { alto_letra: 18.0, ..Default::default() }, None);
+        let d = crate::diagrama::vectorizar(
+            &rgba,
+            w,
+            h,
+            &[],
+            &crate::diagrama::Opciones {
+                alto_letra: 18.0,
+                ..Default::default()
+            },
+            None,
+        );
         eprintln!("zona {:?} {:?}: {}", z.tipo, z.caja, d.resumen());
     }
     assert_eq!(h.tipo, Tipo::Diagrama, "{}", h.nota);
-    assert!(h.imagenes.is_empty(), "un diagrama no se recorta: {}", h.nota);
+    assert!(
+        h.imagenes.is_empty(),
+        "un diagrama no se recorta: {}",
+        h.nota
+    );
+}
+
+/// 24-oct-2026, el OCR de Windows de la CI: «m = Δy/Δx = (480 − 120)/6» con
+/// el «m =» y los «=» sin leer. Quedan dos fracciones lado a lado, numerador
+/// sobre denominador con su raya en medio, que parecian una tabla sin rayas
+/// de 2 × 2 («Ay | 480- 120» sobre «Ax | 6»). Son una formula.
+#[test]
+fn dos_fracciones_lado_a_lado_no_son_una_tabla() {
+    let mut p = Papel::nuevo(1400, 900);
+    p.renglon(
+        "El grupo salio a las ocho y llego al mirador a mediodia.",
+        83.0,
+        192.0,
+        36.0,
+    );
+    p.renglon(
+        "La pendiente media del camino se calcula asi:",
+        83.0,
+        246.0,
+        36.0,
+    );
+    // «m =», sin texto del OCR: solo su tinta.
+    p.rect(130.0, 368.0, 40.0, 4.0, 20);
+    p.rect(185.0, 372.0, 22.0, 3.0, 20);
+    p.rect(185.0, 382.0, 22.0, 3.0, 20);
+    // Δy / Δx
+    p.renglon("Ay", 240.0, 332.0, 40.0);
+    p.raya_h(232.0, 300.0, 382.0, 3.0);
+    p.renglon("Ax", 240.0, 398.0, 40.0);
+    // «=», sin texto del OCR.
+    p.rect(318.0, 372.0, 24.0, 3.0, 20);
+    p.rect(318.0, 382.0, 24.0, 3.0, 20);
+    // (480 − 120) / 6
+    p.renglon("480- 120", 380.0, 332.0, 40.0);
+    p.raya_h(354.0, 558.0, 382.0, 3.0);
+    p.renglon("6", 450.0, 398.0, 40.0);
+    let s = p.seccionar();
+    assert!(
+        !tipos(&s).contains(&Tipo::Tabla),
+        "{:?}",
+        s.zonas
+            .iter()
+            .map(|z| (z.tipo, z.caja, z.texto()))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// La misma, como la vio el OCR de la CI: la raya de la primera fraccion
+/// fundida con el «m =» y el «=» en una sola mancha ancha y baja.
+#[test]
+fn la_raya_fundida_con_los_iguales_tambien_es_una_fraccion() {
+    let mut p = Papel::nuevo(1400, 900);
+    p.renglon(
+        "El grupo salio a las ocho y llego al mirador a mediodia.",
+        83.0,
+        192.0,
+        36.0,
+    );
+    p.renglon(
+        "La pendiente media del camino se calcula asi:",
+        83.0,
+        246.0,
+        36.0,
+    );
+    p.renglon("Ay", 240.0, 332.0, 40.0);
+    // «m =», la raya y el «=», todo junto: 196 x 26.
+    p.rect(124.0, 374.0, 196.0, 4.0, 20);
+    p.rect(124.0, 374.0, 6.0, 26.0, 20);
+    p.rect(150.0, 384.0, 170.0, 4.0, 20);
+    p.rect(150.0, 394.0, 170.0, 4.0, 20);
+    p.renglon("Ax", 240.0, 406.0, 32.0);
+    p.renglon("480- 120", 363.0, 332.0, 32.0);
+    p.raya_h(354.0, 558.0, 382.0, 4.0);
+    p.renglon("6", 445.0, 406.0, 32.0);
+    let s = p.seccionar();
+    assert!(
+        !tipos(&s).contains(&Tipo::Tabla),
+        "{:?}",
+        s.zonas
+            .iter()
+            .map(|z| (z.tipo, z.caja, z.texto()))
+            .collect::<Vec<_>>()
+    );
 }

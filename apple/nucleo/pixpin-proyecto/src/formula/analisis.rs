@@ -201,7 +201,9 @@ pub(super) fn trocear(texto: &str) -> Result<Vec<Pieza>, ErrorFormula> {
                 }
             }
             // Aqui caen los «1.2.3»: mejor un error que quedarse con el 1.2.
-            let n: f64 = texto[empieza..i].parse().map_err(|_| ErrorFormula::Sintaxis)?;
+            let n: f64 = texto[empieza..i]
+                .parse()
+                .map_err(|_| ErrorFormula::Sintaxis)?;
             piezas.push(Pieza::Numero(n));
             continue;
         }
@@ -256,9 +258,7 @@ pub(super) fn trocear(texto: &str) -> Result<Vec<Pieza>, ErrorFormula> {
                 Some(r) => Pieza::Celda(r),
                 // Con dolar o con numeros dentro solo puede querer ser una
                 // celda; sin ellos es un nombre.
-                None if con_dolar || limpio.bytes().any(|c| c.is_ascii_digit()) => {
-                    Pieza::CeldaMala
-                }
+                None if con_dolar || limpio.bytes().any(|c| c.is_ascii_digit()) => Pieza::CeldaMala,
                 None => Pieza::Nombre(limpio.to_uppercase(), false),
             });
             continue;

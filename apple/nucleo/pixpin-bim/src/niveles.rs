@@ -59,11 +59,18 @@ fn entidades(t: &str) -> impl Iterator<Item = Entidad<'_>> {
             i = j + 1;
             let s = &t[ini..j.min(t.len())];
             let Some(igual) = s.find('=') else { continue };
-            let Ok(id) = s[1..igual].trim().parse::<u32>() else { continue };
+            let Ok(id) = s[1..igual].trim().parse::<u32>() else {
+                continue;
+            };
             let resto = s[igual + 1..].trim_start();
-            let Some(abre) = resto.find('(') else { continue };
+            let Some(abre) = resto.find('(') else {
+                continue;
+            };
             let tipo = resto[..abre].trim();
-            let params = resto[abre + 1..].trim_end().strip_suffix(')').unwrap_or(&resto[abre + 1..]);
+            let params = resto[abre + 1..]
+                .trim_end()
+                .strip_suffix(')')
+                .unwrap_or(&resto[abre + 1..]);
             return Some(Entidad { id, tipo, params });
         }
     })
@@ -97,7 +104,12 @@ fn referencia(s: &str) -> Option<u32> {
 
 /// `(#1,#2)` → [1, 2].
 fn referencias(s: &str) -> Vec<u32> {
-    s.trim().trim_start_matches('(').trim_end_matches(')').split(',').filter_map(referencia).collect()
+    s.trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .split(',')
+        .filter_map(referencia)
+        .collect()
 }
 
 /// Un texto STEP (`'1ER PISO'`) sin comillas, con los `\X2\…\X0\` de los
@@ -120,7 +132,11 @@ fn desescapar(s: &str) -> String {
         };
         let hex = &tras[..fin];
         for c in hex.as_bytes().chunks(4) {
-            if let Some(ch) = std::str::from_utf8(c).ok().and_then(|h| u32::from_str_radix(h, 16).ok()).and_then(char::from_u32) {
+            if let Some(ch) = std::str::from_utf8(c)
+                .ok()
+                .and_then(|h| u32::from_str_radix(h, 16).ok())
+                .and_then(char::from_u32)
+            {
                 out.push(ch);
             }
         }
@@ -162,8 +178,14 @@ fn metros_de_la_unidad(ifc: &str) -> f64 {
                 _ => 1.0,
             };
         }
-        if e.tipo.eq_ignore_ascii_case("IFCCONVERSIONBASEDUNIT") && e.params.contains(".LENGTHUNIT.") {
-            let nombre = partir(e.params).get(2).and_then(|s| texto(s)).unwrap_or_default().to_ascii_uppercase();
+        if e.tipo.eq_ignore_ascii_case("IFCCONVERSIONBASEDUNIT")
+            && e.params.contains(".LENGTHUNIT.")
+        {
+            let nombre = partir(e.params)
+                .get(2)
+                .and_then(|s| texto(s))
+                .unwrap_or_default()
+                .to_ascii_uppercase();
             if nombre.contains("FOOT") {
                 return 0.3048;
             }
@@ -207,14 +229,24 @@ pub fn de_ifc_con(ifc: &[u8], quien: &std::collections::HashSet<u32>) -> Espacia
                 // (GlobalId, OwnerHistory, Name, Description, ObjectType,
                 // ObjectPlacement, Representation, LongName, CompositionType, Elevation)
                 let p = partir(e.params);
-                let nombre = p.get(2).and_then(|s| texto(s)).or_else(|| p.get(7).and_then(|s| texto(s))).unwrap_or_default();
+                let nombre = p
+                    .get(2)
+                    .and_then(|s| texto(s))
+                    .or_else(|| p.get(7).and_then(|s| texto(s)))
+                    .unwrap_or_default();
                 let cota = p.get(9).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0) * escala;
-                esp.niveles.push(NivelIfc { id: e.id, global: global_de(e.params), nombre, cota });
+                esp.niveles.push(NivelIfc {
+                    id: e.id,
+                    global: global_de(e.params),
+                    nombre,
+                    cota,
+                });
             }
             "IFCRELCONTAINEDINSPATIALSTRUCTURE" => {
                 // (GlobalId, OwnerHistory, Name, Description, RelatedElements, RelatingStructure)
                 let p = partir(e.params);
-                if let (Some(hijos), Some(sitio)) = (p.get(4), p.get(5).and_then(|s| referencia(s))) {
+                if let (Some(hijos), Some(sitio)) = (p.get(4), p.get(5).and_then(|s| referencia(s)))
+                {
                     contenido.push((referencias(hijos), sitio));
                 }
             }
@@ -251,7 +283,11 @@ pub fn de_ifc_con(ifc: &[u8], quien: &std::collections::HashSet<u32>) -> Espacia
     }
     // Las piezas de algo (tramos de una escalera, paneles de un muro
     // cortina) van al nivel de ese algo.
-    let piezas: Vec<u32> = padre.keys().copied().filter(|h| !esp.de.contains_key(h)).collect();
+    let piezas: Vec<u32> = padre
+        .keys()
+        .copied()
+        .filter(|h| !esp.de.contains_key(h))
+        .collect();
     for h in piezas {
         let mut p = h;
         for _ in 0..8 {
@@ -293,13 +329,19 @@ ENDSEC;\n";
         // El `;` dentro del nombre no corta y la ñ se traduce.
         assert_eq!(e.niveles[1].nombre, "Planta ño; dos");
         // Su GlobalId, la clave estable.
-        assert_eq!((e.niveles[0].global.as_str(), e.niveles[1].global.as_str()), ("3Zu", "15Z"));
+        assert_eq!(
+            (e.niveles[0].global.as_str(), e.niveles[1].global.as_str()),
+            ("3Zu", "15Z")
+        );
         assert_eq!(e.de.get(&100), Some(&42));
         // El tramo, por su escalera.
         assert_eq!(e.de.get(&102), Some(&42));
         // Caso negativo: lo que no esta en ningun nivel, no sale.
         assert_eq!(e.de.get(&38), None);
-        assert!(e.globales.is_empty(), "sin pedirlos no se guarda ningun GlobalId");
+        assert!(
+            e.globales.is_empty(),
+            "sin pedirlos no se guarda ningun GlobalId"
+        );
     }
 
     #[test]

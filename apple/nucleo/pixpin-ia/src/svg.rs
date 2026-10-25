@@ -87,7 +87,10 @@ pub enum Modo {
     AMano,
     /// Las lineas a lapiz (`freedraw`) con su material, y los rellenos como
     /// sombreado suave.
-    Lapiz { material: &'static str, dureza: Option<&'static str> },
+    Lapiz {
+        material: &'static str,
+        dureza: Option<&'static str>,
+    },
 }
 
 /// Con que se pinta una pieza, ya en el lienzo.
@@ -106,11 +109,27 @@ pub struct Pintura {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pieza {
     /// Un rectangulo o una elipse derechos.
-    Caja { tipo: &'static str, caja: [f64; 4], redondo: bool, pinta: Pintura },
+    Caja {
+        tipo: &'static str,
+        caja: [f64; 4],
+        redondo: bool,
+        pinta: Pintura,
+    },
     /// Uno o varios anillos (los subcaminos de un `path`), con si cada uno
     /// esta cerrado.
-    Forma { anillos: Vec<(Vec<(f64, f64)>, bool)>, pinta: Pintura },
-    Texto { x: f64, y: f64, texto: String, tam: f64, alinear: &'static str, color: String, opacidad: f64 },
+    Forma {
+        anillos: Vec<(Vec<(f64, f64)>, bool)>,
+        pinta: Pintura,
+    },
+    Texto {
+        x: f64,
+        y: f64,
+        texto: String,
+        tam: f64,
+        alinear: &'static str,
+        color: String,
+        opacidad: f64,
+    },
 }
 
 /// Un SVG leido, saneado y encajado.
@@ -124,7 +143,10 @@ pub struct Svg {
 // Validar: leer, sanear, encajar.
 // ---------------------------------------------------------------------------
 
-pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Svg, ErrorHerramienta> {
+pub fn validar(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Svg, ErrorHerramienta> {
     let texto = match args.get("svg") {
         Some(Value::String(s)) => s.as_str(),
         _ => return Err(mal("falta «svg» (el dibujo en SVG, de <svg> a </svg>)")),
@@ -132,12 +154,27 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Sv
     let caja = match args.get("caja").filter(|v| !v.is_null()) {
         None => None,
         Some(Value::Array(l)) => {
-            let n: Vec<f64> = l.iter().filter_map(Value::as_f64).filter(|v| v.is_finite()).collect();
+            let n: Vec<f64> = l
+                .iter()
+                .filter_map(Value::as_f64)
+                .filter(|v| v.is_finite())
+                .collect();
             match n.as_slice() {
-                [x, y, w, h] if *w >= 10.0 && *h >= 10.0 && x.abs() < 2000.0 && y.abs() < 2000.0 && *w < 4000.0 && *h < 4000.0 => {
+                [x, y, w, h]
+                    if *w >= 10.0
+                        && *h >= 10.0
+                        && x.abs() < 2000.0
+                        && y.abs() < 2000.0
+                        && *w < 4000.0
+                        && *h < 4000.0 =>
+                {
                     Some([*x, *y, *w, *h])
                 }
-                _ => return Err(mal("«caja» tiene que ser [x, y, ancho, alto] con ancho y alto de 10 o mas")),
+                _ => {
+                    return Err(mal(
+                        "«caja» tiene que ser [x, y, ancho, alto] con ancho y alto de 10 o mas",
+                    ));
+                }
             }
         }
         Some(_) => return Err(mal("«caja» tiene que ser [x, y, ancho, alto]")),
@@ -146,23 +183,47 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Sv
         .get("dureza")
         .and_then(Value::as_str)
         .and_then(crate::herramientas::dureza);
-    let modo = match args.get("trazo").and_then(Value::as_str).map(crate::acciones::normalizar).as_deref() {
+    let modo = match args
+        .get("trazo")
+        .and_then(Value::as_str)
+        .map(crate::acciones::normalizar)
+        .as_deref()
+    {
         None | Some("liso" | "vectorial" | "limpio") => Modo::Liso,
         Some("a_mano" | "a mano" | "mano" | "boceto") => Modo::AMano,
         Some("lapiz" | "lapiz2b") => Modo::Lapiz {
-            material: if dureza.is_some() { "cuadritos" } else { "lapiz2b" },
+            material: if dureza.is_some() {
+                "cuadritos"
+            } else {
+                "lapiz2b"
+            },
             dureza,
         },
-        Some("grafito" | "cuadritos") => Modo::Lapiz { material: "cuadritos", dureza },
-        Some(otro) => return Err(mal(format!("«trazo» = «{otro}» no existe; usa liso, a_mano, lapiz o grafito"))),
+        Some("grafito" | "cuadritos") => Modo::Lapiz {
+            material: "cuadritos",
+            dureza,
+        },
+        Some(otro) => {
+            return Err(mal(format!(
+                "«trazo» = «{otro}» no existe; usa liso, a_mano, lapiz o grafito"
+            )));
+        }
     };
-    let piezas = leer(texto, caja.unwrap_or([60.0, 40.0, ANCHO_LIENZO - 120.0, ALTO_LIENZO - 80.0]), avisos)?;
+    let piezas = leer(
+        texto,
+        caja.unwrap_or([60.0, 40.0, ANCHO_LIENZO - 120.0, ALTO_LIENZO - 80.0]),
+        avisos,
+    )?;
     Ok(Svg { piezas, modo })
 }
 
 /// **Lee un SVG** y lo encaja en `destino` (del lienzo de 800x600),
 /// centrado y sin deformarlo.
-pub fn leer(texto: &str, destino: [f64; 4], avisos: &mut Vec<String>) -> Result<Vec<Pieza>, ErrorHerramienta> {
+pub fn leer(
+    texto: &str,
+    destino: [f64; 4],
+    avisos: &mut Vec<String>,
+) -> Result<Vec<Pieza>, ErrorHerramienta> {
     if texto.len() > MAX_BYTES {
         return Err(mal(format!(
             "el SVG ocupa {} KB; el maximo es {} KB: simplificalo (menos puntos, menos figuras)",
@@ -171,7 +232,9 @@ pub fn leer(texto: &str, destino: [f64; 4], avisos: &mut Vec<String>) -> Result<
         )));
     }
     // Lo de alrededor (vallas de Markdown, una frase) se quita.
-    let desde = texto.find("<svg").ok_or_else(|| mal("no hay ningun <svg> en «svg»"))?;
+    let desde = texto
+        .find("<svg")
+        .ok_or_else(|| mal("no hay ningun <svg> en «svg»"))?;
     let hasta = texto.rfind("</svg>").map(|i| i + 6).unwrap_or(texto.len());
     if hasta <= desde {
         return Err(mal("el SVG no se cierra con </svg>"));
@@ -181,8 +244,11 @@ pub fn leer(texto: &str, destino: [f64; 4], avisos: &mut Vec<String>) -> Result<
         allow_dtd: false,
         nodes_limit: MAX_NODOS,
     };
-    let doc = roxmltree::Document::parse_with_options(trozo, opciones)
-        .map_err(|e| mal(format!("el SVG no es XML valido ({e}); sin DOCTYPE ni entidades")))?;
+    let doc = roxmltree::Document::parse_with_options(trozo, opciones).map_err(|e| {
+        mal(format!(
+            "el SVG no es XML valido ({e}); sin DOCTYPE ni entidades"
+        ))
+    })?;
     let raiz = doc.root_element();
     if raiz.tag_name().name() != "svg" {
         return Err(mal("el elemento de fuera tiene que ser <svg>"));
@@ -238,10 +304,15 @@ pub fn leer(texto: &str, destino: [f64; 4], avisos: &mut Vec<String>) -> Result<
     if !lector.ignorados.is_empty() {
         lector.ignorados.sort();
         lector.ignorados.dedup();
-        avisos.push(format!("del SVG se ignoro: {}", lector.ignorados.join(", ")));
+        avisos.push(format!(
+            "del SVG se ignoro: {}",
+            lector.ignorados.join(", ")
+        ));
     }
     if lector.piezas.is_empty() {
-        return Err(mal("el SVG no dibuja nada visible (¿todo con fill=\"none\" y sin stroke?)"));
+        return Err(mal(
+            "el SVG no dibuja nada visible (¿todo con fill=\"none\" y sin stroke?)",
+        ));
     }
     // Encajar: centrado en el destino.
     let (ox, oy) = (
@@ -254,23 +325,54 @@ pub fn leer(texto: &str, destino: [f64; 4], avisos: &mut Vec<String>) -> Result<
         .piezas
         .into_iter()
         .map(|p| match p {
-            Pieza::Caja { tipo, caja: [x, y, w, h], redondo, mut pinta } => {
+            Pieza::Caja {
+                tipo,
+                caja: [x, y, w, h],
+                redondo,
+                mut pinta,
+            } => {
                 pinta.grosor = (pinta.grosor * escala).clamp(0.5, 40.0);
                 let (x, y) = a((x, y));
-                Pieza::Caja { tipo, caja: [x, y, w * escala, h * escala], redondo, pinta }
+                Pieza::Caja {
+                    tipo,
+                    caja: [x, y, w * escala, h * escala],
+                    redondo,
+                    pinta,
+                }
             }
             Pieza::Forma { anillos, mut pinta } => {
                 pinta.grosor = (pinta.grosor * escala).clamp(0.5, 40.0);
                 let anillos = anillos
                     .into_iter()
-                    .map(|(pts, cerrado)| (simplificar(&pts.into_iter().map(a).collect::<Vec<_>>(), tolerancia), cerrado))
+                    .map(|(pts, cerrado)| {
+                        (
+                            simplificar(&pts.into_iter().map(a).collect::<Vec<_>>(), tolerancia),
+                            cerrado,
+                        )
+                    })
                     .filter(|(pts, _)| pts.len() >= 2)
                     .collect();
                 Pieza::Forma { anillos, pinta }
             }
-            Pieza::Texto { x, y, texto, tam, alinear, color, opacidad } => {
+            Pieza::Texto {
+                x,
+                y,
+                texto,
+                tam,
+                alinear,
+                color,
+                opacidad,
+            } => {
                 let (x, y) = a((x, y));
-                Pieza::Texto { x, y, texto, tam: (tam * escala).clamp(4.0, 400.0), alinear, color, opacidad }
+                Pieza::Texto {
+                    x,
+                    y,
+                    texto,
+                    tam: (tam * escala).clamp(4.0, 400.0),
+                    alinear,
+                    color,
+                    opacidad,
+                }
             }
         })
         .filter(|p| !matches!(p, Pieza::Forma { anillos, .. } if anillos.is_empty()))
@@ -289,12 +391,19 @@ fn caja_de(piezas: &[Pieza]) -> Option<[f64; 4]> {
     };
     for p in piezas {
         match p {
-            Pieza::Caja { caja: [x, y, w, h], .. } => {
+            Pieza::Caja {
+                caja: [x, y, w, h], ..
+            } => {
                 meter(*x, *y);
                 meter(x + w, y + h);
             }
-            Pieza::Forma { anillos, .. } => anillos.iter().flat_map(|(a, _)| a).for_each(|&(x, y)| meter(x, y)),
-            Pieza::Texto { x, y, tam, texto, .. } => {
+            Pieza::Forma { anillos, .. } => anillos
+                .iter()
+                .flat_map(|(a, _)| a)
+                .for_each(|&(x, y)| meter(x, y)),
+            Pieza::Texto {
+                x, y, tam, texto, ..
+            } => {
                 meter(*x, *y);
                 meter(x + tam * 0.6 * texto.chars().count() as f64, y + tam);
             }
@@ -318,7 +427,14 @@ impl Matriz {
     fn por(self, otra: Matriz) -> Matriz {
         let [a, b, c, d, e, f] = self.0;
         let [g, h, i, j, k, l] = otra.0;
-        Matriz([a * g + c * h, b * g + d * h, a * i + c * j, b * i + d * j, a * k + c * l + e, b * k + d * l + f])
+        Matriz([
+            a * g + c * h,
+            b * g + d * h,
+            a * i + c * j,
+            b * i + d * j,
+            a * k + c * l + e,
+            b * k + d * l + f,
+        ])
     }
 
     fn aplicar(&self, (x, y): (f64, f64)) -> (f64, f64) {
@@ -348,8 +464,12 @@ fn transformacion(t: &str) -> Matriz {
     let mut m = Matriz::IDENTIDAD;
     let mut resto = t;
     while let Some(abre) = resto.find('(') {
-        let nombre = resto[..abre].trim_matches(|c: char| c.is_whitespace() || c == ',').to_ascii_lowercase();
-        let Some(cierra) = resto[abre..].find(')') else { break };
+        let nombre = resto[..abre]
+            .trim_matches(|c: char| c.is_whitespace() || c == ',')
+            .to_ascii_lowercase();
+        let Some(cierra) = resto[abre..].find(')') else {
+            break;
+        };
         let n = numeros_sueltos(&resto[abre + 1..abre + cierra]);
         let r = |g: f64| g.to_radians();
         let otra = match (nombre.as_str(), n.as_slice()) {
@@ -358,9 +478,23 @@ fn transformacion(t: &str) -> Matriz {
             ("translate", [x, y]) => Matriz::trasladar(*x, *y),
             ("scale", [s]) => Matriz([*s, 0.0, 0.0, *s, 0.0, 0.0]),
             ("scale", [sx, sy]) => Matriz([*sx, 0.0, 0.0, *sy, 0.0, 0.0]),
-            ("rotate", [g]) => Matriz([r(*g).cos(), r(*g).sin(), -r(*g).sin(), r(*g).cos(), 0.0, 0.0]),
+            ("rotate", [g]) => Matriz([
+                r(*g).cos(),
+                r(*g).sin(),
+                -r(*g).sin(),
+                r(*g).cos(),
+                0.0,
+                0.0,
+            ]),
             ("rotate", [g, cx, cy]) => Matriz::trasladar(*cx, *cy)
-                .por(Matriz([r(*g).cos(), r(*g).sin(), -r(*g).sin(), r(*g).cos(), 0.0, 0.0]))
+                .por(Matriz([
+                    r(*g).cos(),
+                    r(*g).sin(),
+                    -r(*g).sin(),
+                    r(*g).cos(),
+                    0.0,
+                    0.0,
+                ]))
                 .por(Matriz::trasladar(-cx, -cy)),
             ("skewx", [g]) => Matriz([1.0, 0.0, r(*g).tan(), 1.0, 0.0, 0.0]),
             ("skewy", [g]) => Matriz([1.0, r(*g).tan(), 0.0, 1.0, 0.0, 0.0]),
@@ -376,7 +510,10 @@ fn transformacion(t: &str) -> Matriz {
 
 /// Los numeros de una lista de SVG (`"1,2 3-4.5e1.5"`).
 fn numeros_sueltos(s: &str) -> Vec<f64> {
-    let mut l = Lector { b: s.as_bytes(), i: 0 };
+    let mut l = Lector {
+        b: s.as_bytes(),
+        i: 0,
+    };
     let mut v = Vec::new();
     while let Some(n) = l.numero() {
         v.push(n);
@@ -398,7 +535,11 @@ fn longitud(s: &str) -> Option<f64> {
     } else {
         (t, 1.0)
     };
-    num.trim().parse::<f64>().ok().map(|v| v * k).filter(|v| v.is_finite())
+    num.trim()
+        .parse::<f64>()
+        .ok()
+        .map(|v| v * k)
+        .filter(|v| v.is_finite())
 }
 
 /// Lee numeros y banderas de los datos de un `path`.
@@ -409,7 +550,9 @@ struct Lector<'a> {
 
 impl Lector<'_> {
     fn saltar(&mut self) {
-        while self.i < self.b.len() && (self.b[self.i].is_ascii_whitespace() || self.b[self.i] == b',') {
+        while self.i < self.b.len()
+            && (self.b[self.i].is_ascii_whitespace() || self.b[self.i] == b',')
+        {
             self.i += 1;
         }
     }
@@ -488,7 +631,11 @@ impl Lector<'_> {
 }
 
 /// Un color de SVG a `#rrggbb`, o `None` si es `none`.
-fn color_svg(t: &str, actual: &str, degradados: &HashMap<String, String>) -> Option<Option<String>> {
+fn color_svg(
+    t: &str,
+    actual: &str,
+    degradados: &HashMap<String, String>,
+) -> Option<Option<String>> {
     let t = t.trim();
     let l = t.to_ascii_lowercase();
     if l == "none" || l == "transparent" {
@@ -498,7 +645,11 @@ fn color_svg(t: &str, actual: &str, degradados: &HashMap<String, String>) -> Opt
         return Some(Some(actual.to_string()));
     }
     if let Some(id) = l.strip_prefix("url(") {
-        let id = id.trim_end_matches(')').trim().trim_matches(|c| c == '\'' || c == '"').trim_start_matches('#');
+        let id = id
+            .trim_end_matches(')')
+            .trim()
+            .trim_matches(|c| c == '\'' || c == '"')
+            .trim_start_matches('#');
         // Un degradado: su color medio. Uno que no existe: lo que diga la
         // reserva que va detras (`url(#a) red`), o nada.
         if let Some(c) = degradados.get(id) {
@@ -508,15 +659,25 @@ fn color_svg(t: &str, actual: &str, degradados: &HashMap<String, String>) -> Opt
         return reserva.and_then(|r| color_svg(r, actual, degradados));
     }
     if let Some(dentro) = l.strip_prefix("rgb(").or_else(|| l.strip_prefix("rgba(")) {
-        let partes: Vec<&str> = dentro.trim_end_matches(')').split([',', ' ', '/']).filter(|s| !s.is_empty()).collect();
+        let partes: Vec<&str> = dentro
+            .trim_end_matches(')')
+            .split([',', ' ', '/'])
+            .filter(|s| !s.is_empty())
+            .collect();
         if partes.len() < 3 {
             return None;
         }
         let canal = |s: &str| -> Option<u8> {
             if let Some(p) = s.strip_suffix('%') {
-                p.trim().parse::<f64>().ok().map(|v| (v.clamp(0.0, 100.0) * 2.55).round() as u8)
+                p.trim()
+                    .parse::<f64>()
+                    .ok()
+                    .map(|v| (v.clamp(0.0, 100.0) * 2.55).round() as u8)
             } else {
-                s.trim().parse::<f64>().ok().map(|v| v.clamp(0.0, 255.0).round() as u8)
+                s.trim()
+                    .parse::<f64>()
+                    .ok()
+                    .map(|v| v.clamp(0.0, 255.0).round() as u8)
             }
         };
         let (r, g, b) = (canal(partes[0])?, canal(partes[1])?, canal(partes[2])?);
@@ -605,8 +766,13 @@ fn color_svg(t: &str, actual: &str, degradados: &HashMap<String, String>) -> Opt
 fn degradados(doc: &roxmltree::Document) -> HashMap<String, String> {
     let mut paradas: HashMap<String, Vec<(f64, f64, f64)>> = HashMap::new();
     let mut herencia: Vec<(String, String)> = Vec::new();
-    for n in doc.descendants().filter(|n| matches!(n.tag_name().name(), "linearGradient" | "radialGradient")) {
-        let Some(id) = n.attribute("id") else { continue };
+    for n in doc
+        .descendants()
+        .filter(|n| matches!(n.tag_name().name(), "linearGradient" | "radialGradient"))
+    {
+        let Some(id) = n.attribute("id") else {
+            continue;
+        };
         let mut lista = Vec::new();
         for s in n.children().filter(|c| c.tag_name().name() == "stop") {
             let mut c = s.attribute("stop-color").map(str::to_string);
@@ -617,7 +783,10 @@ fn degradados(doc: &roxmltree::Document) -> HashMap<String, String> {
                     }
                 }
             }
-            if let Some(Some(hex)) = c.as_deref().and_then(|c| color_svg(c, "#000000", &HashMap::new())) {
+            if let Some(Some(hex)) = c
+                .as_deref()
+                .and_then(|c| color_svg(c, "#000000", &HashMap::new()))
+            {
                 let h = hex.trim_start_matches('#');
                 let v = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(0) as f64;
                 lista.push((v(0), v(2), v(4)));
@@ -640,8 +809,18 @@ fn degradados(doc: &roxmltree::Document) -> HashMap<String, String> {
         .filter(|(_, l)| !l.is_empty())
         .map(|(id, l)| {
             let n = l.len() as f64;
-            let (r, g, b) = l.iter().fold((0.0, 0.0, 0.0), |a, c| (a.0 + c.0, a.1 + c.1, a.2 + c.2));
-            (id, format!("#{:02x}{:02x}{:02x}", (r / n) as u8, (g / n) as u8, (b / n) as u8))
+            let (r, g, b) = l
+                .iter()
+                .fold((0.0, 0.0, 0.0), |a, c| (a.0 + c.0, a.1 + c.1, a.2 + c.2));
+            (
+                id,
+                format!(
+                    "#{:02x}{:02x}{:02x}",
+                    (r / n) as u8,
+                    (g / n) as u8,
+                    (b / n) as u8
+                ),
+            )
         })
         .collect()
 }
@@ -658,7 +837,10 @@ fn declaraciones(s: &str) -> Vec<(String, String)> {
     s.split(';')
         .filter_map(|d| {
             let (k, v) = d.split_once(':')?;
-            Some((k.trim().to_ascii_lowercase(), v.trim().trim_end_matches("!important").trim().to_string()))
+            Some((
+                k.trim().to_ascii_lowercase(),
+                v.trim().trim_end_matches("!important").trim().to_string(),
+            ))
         })
         .filter(|(k, v)| !k.is_empty() && !v.is_empty())
         .collect()
@@ -671,8 +853,11 @@ fn declaraciones(s: &str) -> Vec<(String, String)> {
 /// Las reglas de los `<style>`, en orden y con su peso (tipo 1, clase 10,
 /// id 100), para aplicarlas de menos a mas.
 struct Hojas {
-    reglas: Vec<(u32, Selector, Vec<(String, String)>)>,
+    reglas: Vec<Regla>,
 }
+
+/// Una regla de estilo: su especificidad, el selector y sus propiedades.
+type Regla = (u32, Selector, Vec<(String, String)>);
 
 struct Selector {
     tipo: Option<String>,
@@ -694,15 +879,24 @@ impl Hojas {
             }
             limpio.push_str(resto);
             for bloque in limpio.split('}') {
-                let Some((sel, decl)) = bloque.split_once('{') else { continue };
+                let Some((sel, decl)) = bloque.split_once('{') else {
+                    continue;
+                };
                 let decl = declaraciones(decl);
                 for s in sel.split(',') {
                     let s = s.trim();
                     // Solo selectores simples (`g.hoja`, `.tronco`, `#cielo`).
-                    if s.is_empty() || s.contains([' ', '>', '+', '~', ':', '[']) || s.starts_with('@') {
+                    if s.is_empty()
+                        || s.contains([' ', '>', '+', '~', ':', '['])
+                        || s.starts_with('@')
+                    {
                         continue;
                     }
-                    let mut sel = Selector { tipo: None, clases: Vec::new(), id: None };
+                    let mut sel = Selector {
+                        tipo: None,
+                        clases: Vec::new(),
+                        id: None,
+                    };
                     let mut peso = 0;
                     // Partir en `tipo`, `.clase` y `#id`.
                     let mut actual = String::new();
@@ -742,7 +936,12 @@ impl Hojas {
 
     fn para<'h>(&'h self, n: &roxmltree::Node) -> impl Iterator<Item = &'h (String, String)> + 'h {
         let tipo = n.tag_name().name().to_string();
-        let clases: Vec<String> = n.attribute("class").unwrap_or("").split_whitespace().map(str::to_string).collect();
+        let clases: Vec<String> = n
+            .attribute("class")
+            .unwrap_or("")
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
         let id = n.attribute("id").map(str::to_string);
         self.reglas
             .iter()
@@ -853,7 +1052,12 @@ impl Estilo {
     fn pintura(&self, escala: f64) -> Pintura {
         // La opacidad de Excalidraw es una por elemento: la del relleno si
         // lo hay, si no la del trazo.
-        let o = self.opacidad * if self.relleno.is_some() { self.opacidad_relleno } else { self.opacidad_trazo };
+        let o = self.opacidad
+            * if self.relleno.is_some() {
+                self.opacidad_relleno
+            } else {
+                self.opacidad_trazo
+            };
         Pintura {
             relleno: self.relleno.clone(),
             trazo: self.trazo.clone(),
@@ -892,27 +1096,38 @@ struct Recorrido<'d, 'a, 'i> {
 }
 
 impl<'a, 'i> Recorrido<'_, 'a, 'i> {
-    fn recorrer(&mut self, n: roxmltree::Node<'a, 'i>, m: Matriz, padre: &Estilo, hondo: usize) -> Result<(), ErrorHerramienta> {
+    fn recorrer(
+        &mut self,
+        n: roxmltree::Node<'a, 'i>,
+        m: Matriz,
+        padre: &Estilo,
+        hondo: usize,
+    ) -> Result<(), ErrorHerramienta> {
         if hondo > MAX_PROFUNDIDAD {
-            return Err(mal(format!("el SVG anida mas de {MAX_PROFUNDIDAD} niveles de grupos")));
+            return Err(mal(format!(
+                "el SVG anida mas de {MAX_PROFUNDIDAD} niveles de grupos"
+            )));
         }
         let tipo = n.tag_name().name();
         match tipo {
-            "script" | "foreignObject" | "image" | "iframe" | "video" | "audio" | "animate" | "animateTransform"
-            | "set" | "filter" | "mask" | "pattern" => {
+            "script" | "foreignObject" | "image" | "iframe" | "video" | "audio" | "animate"
+            | "animateTransform" | "set" | "filter" | "mask" | "pattern" => {
                 self.ignorados.push(tipo.to_string());
                 return Ok(());
             }
             // Lo que no se pinta por si solo.
-            "defs" | "style" | "title" | "desc" | "metadata" | "linearGradient" | "radialGradient" | "clipPath"
-            | "symbol" | "marker" => return Ok(()),
+            "defs" | "style" | "title" | "desc" | "metadata" | "linearGradient"
+            | "radialGradient" | "clipPath" | "symbol" | "marker" => return Ok(()),
             _ => {}
         }
         // El estilo: lo heredado, los atributos, las reglas de <style> y el
         // `style` del elemento, por ese orden.
         // La opacidad no se hereda tal cual: la del grupo multiplica a la
         // del hijo, una sola vez.
-        let mut propio = Estilo { opacidad: 1.0, ..padre.clone() };
+        let mut propio = Estilo {
+            opacidad: 1.0,
+            ..padre.clone()
+        };
         for k in PROPIEDADES {
             if let Some(v) = n.attribute(k) {
                 propio.poner(k, v, self.degradados);
@@ -968,28 +1183,52 @@ impl<'a, 'i> Recorrido<'_, 'a, 'i> {
                 if w <= 0.0 || h <= 0.0 {
                     return Ok(());
                 }
-                let rx = n.attribute("rx").or(n.attribute("ry")).and_then(longitud).unwrap_or(0.0);
+                let rx = n
+                    .attribute("rx")
+                    .or(n.attribute("ry"))
+                    .and_then(longitud)
+                    .unwrap_or(0.0);
                 if m.derecha() {
                     let (x0, y0) = m.aplicar((x, y));
                     let (x1, y1) = m.aplicar((x + w, y + h));
-                    self.caja("rectangle", [x0, y0, x1 - x0, y1 - y0], rx > 0.0, e.pintura(escala))?;
+                    self.caja(
+                        "rectangle",
+                        [x0, y0, x1 - x0, y1 - y0],
+                        rx > 0.0,
+                        e.pintura(escala),
+                    )?;
                 } else {
                     let anillo = vec![(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
-                    self.forma(vec![(anillo.into_iter().map(|p| m.aplicar(p)).collect(), true)], e.pintura(escala))?;
+                    self.forma(
+                        vec![(anillo.into_iter().map(|p| m.aplicar(p)).collect(), true)],
+                        e.pintura(escala),
+                    )?;
                 }
             }
             "circle" | "ellipse" => {
                 let (cx, cy) = (num("cx"), num("cy"));
-                let (rx, ry) = if tipo == "circle" { (num("r"), num("r")) } else { (num("rx"), num("ry")) };
+                let (rx, ry) = if tipo == "circle" {
+                    (num("r"), num("r"))
+                } else {
+                    (num("rx"), num("ry"))
+                };
                 if rx <= 0.0 || ry <= 0.0 {
                     return Ok(());
                 }
                 if m.derecha() {
                     let (x0, y0) = m.aplicar((cx - rx, cy - ry));
                     let (x1, y1) = m.aplicar((cx + rx, cy + ry));
-                    self.caja("ellipse", [x0, y0, x1 - x0, y1 - y0], false, e.pintura(escala))?;
+                    self.caja(
+                        "ellipse",
+                        [x0, y0, x1 - x0, y1 - y0],
+                        false,
+                        e.pintura(escala),
+                    )?;
                 } else {
-                    let pasos = ((rx.max(ry) * escala * self.detalle * std::f64::consts::TAU).ceil() as usize).clamp(12, 72);
+                    let pasos =
+                        ((rx.max(ry) * escala * self.detalle * std::f64::consts::TAU).ceil()
+                            as usize)
+                            .clamp(12, 72);
                     let anillo: Vec<(f64, f64)> = (0..pasos)
                         .map(|k| {
                             let a = k as f64 / pasos as f64 * std::f64::consts::TAU;
@@ -1008,7 +1247,8 @@ impl<'a, 'i> Recorrido<'_, 'a, 'i> {
             }
             "polyline" | "polygon" => {
                 let v = numeros_sueltos(n.attribute("points").unwrap_or(""));
-                let pts: Vec<(f64, f64)> = v.chunks_exact(2).map(|c| m.aplicar((c[0], c[1]))).collect();
+                let pts: Vec<(f64, f64)> =
+                    v.chunks_exact(2).map(|c| m.aplicar((c[0], c[1]))).collect();
                 if pts.len() >= 2 {
                     let cerrado = tipo == "polygon";
                     self.forma(vec![(pts, cerrado)], e.pintura(escala))?;
@@ -1041,10 +1281,18 @@ impl<'a, 'i> Recorrido<'_, 'a, 'i> {
                         }
                     }
                 }
-                let primero = |k: &str| n.attribute(k).and_then(|v| numeros_sueltos(v).first().copied()).unwrap_or(0.0);
+                let primero = |k: &str| {
+                    n.attribute(k)
+                        .and_then(|v| numeros_sueltos(v).first().copied())
+                        .unwrap_or(0.0)
+                };
                 let (x, y) = m.aplicar((primero("x"), primero("y")));
                 let tam = e.tam_letra * escala;
-                let color = e.relleno.clone().or(e.trazo.clone()).unwrap_or_else(|| "#000000".into());
+                let color = e
+                    .relleno
+                    .clone()
+                    .or(e.trazo.clone())
+                    .unwrap_or_else(|| "#000000".into());
                 self.contar(1)?;
                 self.piezas.push(Pieza::Texto {
                     x,
@@ -1054,7 +1302,9 @@ impl<'a, 'i> Recorrido<'_, 'a, 'i> {
                     tam,
                     alinear: e.ancla,
                     color,
-                    opacidad: (e.opacidad * e.opacidad_relleno * 100.0).round().clamp(5.0, 100.0),
+                    opacidad: (e.opacidad * e.opacidad_relleno * 100.0)
+                        .round()
+                        .clamp(5.0, 100.0),
                 });
             }
             otro => self.ignorados.push(otro.to_string()),
@@ -1070,27 +1320,51 @@ impl<'a, 'i> Recorrido<'_, 'a, 'i> {
             )));
         }
         if self.puntos > MAX_PUNTOS {
-            return Err(mal(format!("el SVG pasa de {MAX_PUNTOS} puntos: simplifica las curvas")));
+            return Err(mal(format!(
+                "el SVG pasa de {MAX_PUNTOS} puntos: simplifica las curvas"
+            )));
         }
         Ok(())
     }
 
-    fn caja(&mut self, tipo: &'static str, caja: [f64; 4], redondo: bool, pinta: Pintura) -> Result<(), ErrorHerramienta> {
+    fn caja(
+        &mut self,
+        tipo: &'static str,
+        caja: [f64; 4],
+        redondo: bool,
+        pinta: Pintura,
+    ) -> Result<(), ErrorHerramienta> {
         if pinta.relleno.is_none() && pinta.trazo.is_none() || caja.iter().any(|v| !v.is_finite()) {
             return Ok(());
         }
         self.contar(4)?;
-        self.piezas.push(Pieza::Caja { tipo, caja, redondo, pinta });
+        self.piezas.push(Pieza::Caja {
+            tipo,
+            caja,
+            redondo,
+            pinta,
+        });
         Ok(())
     }
 
-    fn forma(&mut self, anillos: Vec<(Vec<(f64, f64)>, bool)>, pinta: Pintura) -> Result<(), ErrorHerramienta> {
+    fn forma(
+        &mut self,
+        anillos: Vec<(Vec<(f64, f64)>, bool)>,
+        pinta: Pintura,
+    ) -> Result<(), ErrorHerramienta> {
         if pinta.relleno.is_none() && pinta.trazo.is_none() {
             return Ok(());
         }
         let anillos: Vec<(Vec<(f64, f64)>, bool)> = anillos
             .into_iter()
-            .map(|(a, c)| (a.into_iter().filter(|p| p.0.is_finite() && p.1.is_finite()).collect::<Vec<_>>(), c))
+            .map(|(a, c)| {
+                (
+                    a.into_iter()
+                        .filter(|p| p.0.is_finite() && p.1.is_finite())
+                        .collect::<Vec<_>>(),
+                    c,
+                )
+            })
             .filter(|(a, _)| a.len() >= 2)
             .collect();
         if anillos.is_empty() {
@@ -1110,7 +1384,10 @@ impl<'a, 'i> Recorrido<'_, 'a, 'i> {
 /// polilineas (`detalle`: segmentos por unidad, ya en el espacio de fuera).
 /// Lo que no se entiende corta el camino ahi, como hacen los navegadores.
 fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
-    let mut l = Lector { b: d.as_bytes(), i: 0 };
+    let mut l = Lector {
+        b: d.as_bytes(),
+        i: 0,
+    };
     let mut anillos: Vec<(Vec<(f64, f64)>, bool)> = Vec::new();
     let mut actual: Vec<(f64, f64)> = Vec::new();
     // Todo en coordenadas del SVG; se transforma al guardar el punto.
@@ -1127,7 +1404,9 @@ fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
             })
             .sum()
     };
-    let cerrar = |actual: &mut Vec<(f64, f64)>, anillos: &mut Vec<(Vec<(f64, f64)>, bool)>, cerrado: bool| {
+    let cerrar = |actual: &mut Vec<(f64, f64)>,
+                  anillos: &mut Vec<(Vec<(f64, f64)>, bool)>,
+                  cerrado: bool| {
         if actual.len() >= 2 {
             anillos.push((std::mem::take(actual), cerrado));
         } else {
@@ -1190,7 +1469,7 @@ fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
                 None => ok = false,
             },
             b'C' | b'S' => {
-                let c1 = if cmd.to_ascii_uppercase() == b'C' {
+                let c1 = if cmd.eq_ignore_ascii_case(&b'C') {
                     match (l.numero(), l.numero()) {
                         (Some(a), Some(b)) => Some((bx + a, by + b)),
                         _ => None,
@@ -1198,7 +1477,9 @@ fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
                 } else {
                     // El reflejo del control anterior (o el punto actual).
                     Some(match control {
-                        Some((cx, cy)) if matches!(ultimo.to_ascii_uppercase(), b'C' | b'S') => (2.0 * x - cx, 2.0 * y - cy),
+                        Some((cx, cy)) if matches!(ultimo.to_ascii_uppercase(), b'C' | b'S') => {
+                            (2.0 * x - cx, 2.0 * y - cy)
+                        }
                         _ => (x, y),
                     })
                 };
@@ -1211,8 +1492,14 @@ fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
                         for k in 1..=n {
                             let t = k as f64 / n as f64;
                             let u = 1.0 - t;
-                            let px = u * u * u * p0.0 + 3.0 * u * u * t * c1.0 + 3.0 * u * t * t * c2.0 + t * t * t * fin.0;
-                            let py = u * u * u * p0.1 + 3.0 * u * u * t * c1.1 + 3.0 * u * t * t * c2.1 + t * t * t * fin.1;
+                            let px = u * u * u * p0.0
+                                + 3.0 * u * u * t * c1.0
+                                + 3.0 * u * t * t * c2.0
+                                + t * t * t * fin.0;
+                            let py = u * u * u * p0.1
+                                + 3.0 * u * u * t * c1.1
+                                + 3.0 * u * t * t * c2.1
+                                + t * t * t * fin.1;
                             actual.push(m.aplicar((px, py)));
                         }
                         control = Some(c2);
@@ -1222,14 +1509,16 @@ fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
                 }
             }
             b'Q' | b'T' => {
-                let c1 = if cmd.to_ascii_uppercase() == b'Q' {
+                let c1 = if cmd.eq_ignore_ascii_case(&b'Q') {
                     match (l.numero(), l.numero()) {
                         (Some(a), Some(b)) => Some((bx + a, by + b)),
                         _ => None,
                     }
                 } else {
                     Some(match control {
-                        Some((cx, cy)) if matches!(ultimo.to_ascii_uppercase(), b'Q' | b'T') => (2.0 * x - cx, 2.0 * y - cy),
+                        Some((cx, cy)) if matches!(ultimo.to_ascii_uppercase(), b'Q' | b'T') => {
+                            (2.0 * x - cx, 2.0 * y - cy)
+                        }
                         _ => (x, y),
                     })
                 };
@@ -1252,10 +1541,28 @@ fn camino(d: &str, m: Matriz, detalle: f64) -> Vec<(Vec<(f64, f64)>, bool)> {
                 }
             }
             b'A' => {
-                match (l.numero(), l.numero(), l.numero(), l.bandera(), l.bandera(), l.numero(), l.numero()) {
-                    (Some(rx), Some(ry), Some(giro), Some(grande), Some(barre), Some(a), Some(b)) => {
+                match (
+                    l.numero(),
+                    l.numero(),
+                    l.numero(),
+                    l.bandera(),
+                    l.bandera(),
+                    l.numero(),
+                    l.numero(),
+                ) {
+                    (
+                        Some(rx),
+                        Some(ry),
+                        Some(giro),
+                        Some(grande),
+                        Some(barre),
+                        Some(a),
+                        Some(b),
+                    ) => {
                         let fin = (bx + a, by + b);
-                        for p in arco((x, y), rx, ry, giro, grande, barre, fin, &|largo| pasos(largo)) {
+                        for p in arco((x, y), rx, ry, giro, grande, barre, fin, &|largo| {
+                            pasos(largo)
+                        }) {
                             actual.push(m.aplicar(p));
                         }
                         (x, y) = fin;
@@ -1323,7 +1630,12 @@ fn arco(
     let cy = s * cx1 + c * cy1 + (desde.1 + hasta.1) / 2.0;
     let angulo = |ux: f64, uy: f64, vx: f64, vy: f64| (ux * vy - uy * vx).atan2(ux * vx + uy * vy);
     let t1 = angulo(1.0, 0.0, (x1 - cx1) / rx, (y1 - cy1) / ry);
-    let mut dt = angulo((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry);
+    let mut dt = angulo(
+        (x1 - cx1) / rx,
+        (y1 - cy1) / ry,
+        (-x1 - cx1) / rx,
+        (-y1 - cy1) / ry,
+    );
     if !barre && dt > 0.0 {
         dt -= std::f64::consts::TAU;
     } else if barre && dt < 0.0 {
@@ -1347,7 +1659,10 @@ fn arco(
 fn simplificar(pts: &[(f64, f64)], tol: f64) -> Vec<(f64, f64)> {
     let mut sin_repetir: Vec<(f64, f64)> = Vec::with_capacity(pts.len());
     for &p in pts {
-        if sin_repetir.last().is_none_or(|q: &(f64, f64)| (q.0 - p.0).hypot(q.1 - p.1) > 1e-6) {
+        if sin_repetir
+            .last()
+            .is_none_or(|q: &(f64, f64)| (q.0 - p.0).hypot(q.1 - p.1) > 1e-6)
+        {
             sin_repetir.push(p);
         }
     }
@@ -1382,7 +1697,12 @@ fn simplificar(pts: &[(f64, f64)], tol: f64) -> Vec<(f64, f64)> {
             pila.push((mayor.1, b));
         }
     }
-    sin_repetir.into_iter().zip(guardar).filter(|(_, g)| *g).map(|(p, _)| p).collect()
+    sin_repetir
+        .into_iter()
+        .zip(guardar)
+        .filter(|(_, g)| *g)
+        .map(|(p, _)| p)
+        .collect()
 }
 
 /// Si `p` cae dentro del poligono (par/impar).
@@ -1392,7 +1712,9 @@ fn dentro(p: (f64, f64), poligono: &[(f64, f64)]) -> bool {
     let mut j = n - 1;
     for i in 0..n {
         let (a, b) = (poligono[i], poligono[j]);
-        if (a.1 > p.1) != (b.1 > p.1) && p.0 < (b.0 - a.0) * (p.1 - a.1) / (b.1 - a.1 + 1e-300) + a.0 {
+        if (a.1 > p.1) != (b.1 > p.1)
+            && p.0 < (b.0 - a.0) * (p.1 - a.1) / (b.1 - a.1 + 1e-300) + a.0
+        {
             si = !si;
         }
         j = i;
@@ -1423,8 +1745,17 @@ pub(crate) fn elementos(f: &mut Fabrica, s: &Svg) {
     for p in &s.piezas {
         let desde = f.salida.len();
         match p {
-            Pieza::Caja { tipo, caja, redondo, pinta } => {
-                let trazo = pinta.trazo.as_deref().or(pinta.relleno.as_deref()).unwrap_or("#1e1e1e");
+            Pieza::Caja {
+                tipo,
+                caja,
+                redondo,
+                pinta,
+            } => {
+                let trazo = pinta
+                    .trazo
+                    .as_deref()
+                    .or(pinta.relleno.as_deref())
+                    .unwrap_or("#1e1e1e");
                 f.caja(tipo, *caja, trazo, pinta.relleno.as_deref());
                 if let Some(e) = f.salida.last_mut() {
                     if *redondo {
@@ -1439,13 +1770,22 @@ pub(crate) fn elementos(f: &mut Fabrica, s: &Svg) {
                         }
                         e["strokeWidth"] = json!(pinta.grosor.max(1.5));
                         if pinta.trazo.is_none() {
-                            e["strokeColor"] = json!(oscurecer(pinta.relleno.as_deref().unwrap_or("#1e1e1e")));
+                            e["strokeColor"] =
+                                json!(oscurecer(pinta.relleno.as_deref().unwrap_or("#1e1e1e")));
                         }
                     }
                 }
             }
             Pieza::Forma { anillos, pinta } => forma(f, anillos, pinta, rugosidad, lapiz),
-            Pieza::Texto { x, y, texto, tam, alinear, color, opacidad } => {
+            Pieza::Texto {
+                x,
+                y,
+                texto,
+                tam,
+                alinear,
+                color,
+                opacidad,
+            } => {
                 // `texto()` mide con 0.6 por letra para alinear al centro.
                 f.texto(*x, *y, texto, *tam, color, alinear);
                 if let Some(e) = f.salida.last_mut() {
@@ -1457,7 +1797,9 @@ pub(crate) fn elementos(f: &mut Fabrica, s: &Svg) {
         // En modo lapiz, los rellenos se aclaran: son el sombreado.
         if lapiz.is_some() {
             for e in f.salida.iter_mut().skip(desde) {
-                if e["type"] == "pixpin-region" || e["backgroundColor"] != "transparent" && e["type"] != "freedraw" {
+                if e["type"] == "pixpin-region"
+                    || e["backgroundColor"] != "transparent" && e["type"] != "freedraw"
+                {
                     let o = e["opacity"].as_f64().unwrap_or(100.0);
                     e["opacity"] = json!((o * 0.45).round().max(5.0));
                 }
@@ -1470,7 +1812,9 @@ pub(crate) fn elementos(f: &mut Fabrica, s: &Svg) {
 /// Un `#rrggbb` mas oscuro (el contorno a lapiz de una mancha).
 fn oscurecer(hex: &str) -> String {
     let h = hex.trim_start_matches('#');
-    let c = |i: usize| (u8::from_str_radix(h.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0) as f64 * 0.55) as u8;
+    let c = |i: usize| {
+        (u8::from_str_radix(h.get(i..i + 2).unwrap_or("00"), 16).unwrap_or(0) as f64 * 0.55) as u8
+    };
     format!("#{:02x}{:02x}{:02x}", c(0), c(2), c(4))
 }
 
@@ -1498,20 +1842,38 @@ fn forma(
     if let Some(relleno) = &pinta.relleno {
         // Los anillos que caen dentro de un numero impar de otros son
         // agujeros del que los contiene (la regla par/impar).
-        let cerrados: Vec<&Vec<(f64, f64)>> = anillos.iter().map(|(a, _)| a).filter(|a| a.len() >= 3).collect();
+        let cerrados: Vec<&Vec<(f64, f64)>> = anillos
+            .iter()
+            .map(|(a, _)| a)
+            .filter(|a| a.len() >= 3)
+            .collect();
         let nivel: Vec<usize> = cerrados
             .iter()
             .enumerate()
-            .map(|(i, a)| cerrados.iter().enumerate().filter(|(j, b)| *j != i && dentro(a[0], b)).count())
+            .map(|(i, a)| {
+                cerrados
+                    .iter()
+                    .enumerate()
+                    .filter(|(j, b)| *j != i && dentro(a[0], b))
+                    .count()
+            })
             .collect();
-        for (i, a) in cerrados.iter().enumerate().filter(|(i, _)| nivel[*i] % 2 == 0) {
+        for (i, a) in cerrados
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| nivel[*i] % 2 == 0)
+        {
             let huecos: Vec<Vec<(f64, f64)>> = cerrados
                 .iter()
                 .enumerate()
                 .filter(|(j, b)| nivel[*j] == nivel[i] + 1 && dentro(b[0], a))
                 .map(|(_, b)| (*b).clone())
                 .collect();
-            let trazo = pinta.trazo.as_deref().filter(|_| lapiz.is_none()).unwrap_or(relleno);
+            let trazo = pinta
+                .trazo
+                .as_deref()
+                .filter(|_| lapiz.is_none())
+                .unwrap_or(relleno);
             f.region(a, &huecos, trazo, relleno);
             if let Some(e) = f.salida.last_mut() {
                 pintar(e, pinta, rugosidad);
@@ -1527,7 +1889,9 @@ fn forma(
         (None, Some(r), Some(_)) => Some(oscurecer(r)),
         _ => None,
     };
-    let Some(trazo) = pinta.trazo.clone().or(contorno_de_lapiz) else { return };
+    let Some(trazo) = pinta.trazo.clone().or(contorno_de_lapiz) else {
+        return;
+    };
     let trazo = &trazo;
     // El contorno: con relleno, solo si no es a lapiz ya lo pinto la mancha
     // (los anillos cerrados); los abiertos y el modo lapiz van como lineas.
@@ -1588,12 +1952,18 @@ mod pruebas {
         let els = lienzo.elementos();
         assert_eq!(els.len(), 4);
         // Todo en un grupo, para moverlo de una vez.
-        assert!(els.iter().all(|e| e.grupos == els[0].grupos && !e.grupos.is_empty()));
+        assert!(
+            els.iter()
+                .all(|e| e.grupos == els[0].grupos && !e.grupos.is_empty())
+        );
         // Encajado en el hueco de fabrica (680x520 con margen): 100
         // unidades -> 520 px.
         let tronco = &f.salida[0];
         assert_eq!(tronco["type"], "rectangle");
-        assert!((tronco["width"].as_f64().unwrap() - 52.0).abs() < 0.01, "{tronco}");
+        assert!(
+            (tronco["width"].as_f64().unwrap() - 52.0).abs() < 0.01,
+            "{tronco}"
+        );
         assert_eq!(f.salida[1]["type"], "ellipse");
         assert_eq!(f.salida[1]["backgroundColor"], "#2f9e44");
         // La curva de Bezier, hecha polilinea.
@@ -1607,16 +1977,26 @@ mod pruebas {
     fn caminos_con_relativos_arcos_y_agujeros() {
         // Un anillo: un cuadrado con un agujero dentro, en un solo path.
         let p = leer_(r#"<svg viewBox="0 0 100 100"><path fill="red" d="M0 0 H100 V100 H0 Z M25 25 v50 h50 v-50 z"/></svg>"#).unwrap();
-        let Pieza::Forma { anillos, .. } = &p[0] else { panic!() };
+        let Pieza::Forma { anillos, .. } = &p[0] else {
+            panic!()
+        };
         assert_eq!(anillos.len(), 2);
         let mut f = Fabrica::nueva((0.0, 0.0), 1);
-        elementos(&mut f, &Svg { piezas: p, modo: Modo::Liso });
+        elementos(
+            &mut f,
+            &Svg {
+                piezas: p,
+                modo: Modo::Liso,
+            },
+        );
         assert_eq!(f.salida.len(), 1);
         assert_eq!(f.salida[0]["type"], "pixpin-region");
         assert_eq!(f.salida[0]["huecos"].as_array().unwrap().len(), 1);
         // Un arco: media circunferencia de radio 50.
         let p = leer_(r#"<svg viewBox="0 0 200 200"><path d="M0 100 A 50 50 0 0 1 100 100" fill="none" stroke="black"/></svg>"#).unwrap();
-        let Pieza::Forma { anillos, .. } = &p[0] else { panic!() };
+        let Pieza::Forma { anillos, .. } = &p[0] else {
+            panic!()
+        };
         let medio = anillos[0].0[anillos[0].0.len() / 2];
         // El punto de arriba del arco: (50, 50) en el SVG -> (150, 50)*3 + desplazamiento.
         assert!(anillos[0].0.len() > 5, "{:?}", anillos[0].0);
@@ -1635,15 +2015,24 @@ mod pruebas {
         )
         .unwrap();
         assert_eq!(p.len(), 3);
-        let Pieza::Caja { caja, pinta, .. } = &p[0] else { panic!("{:?}", p[0]) };
+        let Pieza::Caja { caja, pinta, .. } = &p[0] else {
+            panic!("{:?}", p[0])
+        };
         // 100 unidades -> 600 px, centrado en 800: x = 100 + (50-10)*6.
-        assert!((caja[0] - 340.0).abs() < 0.01 && (caja[2] - 120.0).abs() < 0.01, "{caja:?}");
+        assert!(
+            (caja[0] - 340.0).abs() < 0.01 && (caja[2] - 120.0).abs() < 0.01,
+            "{caja:?}"
+        );
         assert_eq!(pinta.relleno.as_deref(), Some("#2f9e44"));
         assert_eq!(pinta.opacidad, 50.0);
-        let Pieza::Caja { pinta, .. } = &p[1] else { panic!() };
+        let Pieza::Caja { pinta, .. } = &p[1] else {
+            panic!()
+        };
         assert_eq!(pinta.relleno.as_deref(), Some("#ffff00"));
         // Girado: ya no es un rectangulo derecho.
-        let Pieza::Forma { pinta, anillos } = &p[2] else { panic!("{:?}", p[2]) };
+        let Pieza::Forma { pinta, anillos } = &p[2] else {
+            panic!("{:?}", p[2])
+        };
         assert_eq!(anillos[0].0.len(), 4);
         assert_eq!(pinta.trazo.as_deref(), Some("#0000ff"));
     }
@@ -1663,14 +2052,39 @@ mod pruebas {
         )
         .unwrap();
         assert_eq!(p.len(), 1);
-        assert!(avisos[0].contains("script") && avisos[0].contains("image"), "{avisos:?}");
+        assert!(
+            avisos[0].contains("script") && avisos[0].contains("image"),
+            "{avisos:?}"
+        );
         // Demasiado grande, demasiadas figuras, demasiado hondo, nada.
         let enorme = format!("<svg>{}</svg>", "<!-- relleno -->".repeat(MAX_BYTES / 10));
-        assert!(validar_(json!({"svg": enorme})).unwrap_err().to_string().contains("KB"));
-        let muchas = format!(r#"<svg viewBox="0 0 10 10">{}</svg>"#, r#"<rect width="1" height="1"/>"#.repeat(MAX_FIGURAS + 5));
-        assert!(validar_(json!({"svg": muchas})).unwrap_err().to_string().contains("figuras"));
-        let hondo = format!(r#"<svg viewBox="0 0 10 10">{}<rect width="1" height="1"/>{}</svg>"#, "<g>".repeat(40), "</g>".repeat(40));
-        assert!(validar_(json!({"svg": hondo})).unwrap_err().to_string().contains("niveles"));
+        assert!(
+            validar_(json!({"svg": enorme}))
+                .unwrap_err()
+                .to_string()
+                .contains("KB")
+        );
+        let muchas = format!(
+            r#"<svg viewBox="0 0 10 10">{}</svg>"#,
+            r#"<rect width="1" height="1"/>"#.repeat(MAX_FIGURAS + 5)
+        );
+        assert!(
+            validar_(json!({"svg": muchas}))
+                .unwrap_err()
+                .to_string()
+                .contains("figuras")
+        );
+        let hondo = format!(
+            r#"<svg viewBox="0 0 10 10">{}<rect width="1" height="1"/>{}</svg>"#,
+            "<g>".repeat(40),
+            "</g>".repeat(40)
+        );
+        assert!(
+            validar_(json!({"svg": hondo}))
+                .unwrap_err()
+                .to_string()
+                .contains("niveles")
+        );
         // Un `use` que se apunta a si mismo no se cuelga.
         let bucle = r##"<svg viewBox="0 0 10 10"><g id="a"><use href="#a"/><rect width="1" height="1"/></g></svg>"##;
         assert!(validar_(json!({"svg": bucle})).is_err());
@@ -1680,7 +2094,10 @@ mod pruebas {
         assert!(validar_(json!({})).is_err());
         assert!(validar_(json!({"svg": "<svg viewBox='0 0 10 10'><rect width='5' height='5'/></svg>", "trazo": "acuarela"})).is_err());
         // Numeros rotos en el camino: se corta ahi, sin panico.
-        let p = leer_(r#"<svg viewBox="0 0 10 10"><path d="M1 1 L 5 5 L nan 3 Z" stroke="red"/></svg>"#).unwrap();
+        let p = leer_(
+            r#"<svg viewBox="0 0 10 10"><path d="M1 1 L 5 5 L nan 3 Z" stroke="red"/></svg>"#,
+        )
+        .unwrap();
         assert_eq!(p.len(), 1);
     }
 
@@ -1690,17 +2107,24 @@ mod pruebas {
         .unwrap();
         let mut f = Fabrica::nueva((0.0, 0.0), 1);
         elementos(&mut f, &s);
-        let trazo = f.salida.iter().find(|e| e["type"] == "freedraw").expect("un trazo de lapiz");
+        let trazo = f
+            .salida
+            .iter()
+            .find(|e| e["type"] == "freedraw")
+            .expect("un trazo de lapiz");
         assert_eq!(trazo["material"], "cuadritos");
         assert_eq!(trazo["dureza"], "6B");
-        let lienzo = pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
+        let lienzo =
+            pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
         assert_eq!(lienzo.cuantos_ajenos(), 0);
     }
 
     #[test]
     fn sin_viewbox_se_encaja_por_lo_dibujado() {
         let p = leer_(r#"<svg><rect x="1000" y="1000" width="10" height="20"/></svg>"#).unwrap();
-        let Pieza::Caja { caja, .. } = &p[0] else { panic!() };
+        let Pieza::Caja { caja, .. } = &p[0] else {
+            panic!()
+        };
         // 20 de alto -> los 600 del lienzo.
         assert!((caja[3] - 600.0).abs() < 0.01, "{caja:?}");
         assert!(caja[0] >= 0.0 && caja[0] + caja[2] <= 800.0);
@@ -1711,8 +2135,14 @@ mod pruebas {
         assert_eq!(numeros_sueltos("1.5.5-2e1,3"), vec![1.5, 0.5, -20.0, 3.0]);
         let m = transformacion("translate(10,20) scale(2)");
         assert_eq!(m.aplicar((1.0, 1.0)), (12.0, 22.0));
-        assert_eq!(color_svg("rgb(255, 0, 0)", "", &HashMap::new()), Some(Some("#ff0000".into())));
+        assert_eq!(
+            color_svg("rgb(255, 0, 0)", "", &HashMap::new()),
+            Some(Some("#ff0000".into()))
+        );
         assert_eq!(color_svg("none", "", &HashMap::new()), Some(None));
-        assert_eq!(color_svg("verde", "", &HashMap::new()), Some(Some("#2f9e44".into())));
+        assert_eq!(
+            color_svg("verde", "", &HashMap::new()),
+            Some(Some("#2f9e44".into()))
+        );
     }
 }

@@ -314,7 +314,10 @@ fn recortar_arco(e: &Elemento, otros: &[Elemento], p: Punto2) -> Option<Recorte>
     let mut solo_arco = e.clone();
     solo_arco.extras.cierre = None;
     solo_arco.extras.marca_angulo = None;
-    let camino = contornos_de(&solo_arco, PASO_PERIMETRO).into_iter().next()?.puntos;
+    let camino = contornos_de(&solo_arco, PASO_PERIMETRO)
+        .into_iter()
+        .next()?
+        .puntos;
     if camino.len() < 2 {
         return None;
     }
@@ -431,7 +434,13 @@ fn angulo_en_el_ovalo(e: &Elemento, p: Punto2) -> f32 {
 pub fn extender_en(e: &Elemento, otros: &[Elemento], p: Punto2, alcance: f32) -> Option<Elemento> {
     // **El arco se extiende por su circunferencia**, no en recta: alargar un
     // arco es seguir girando el compas (`geometria_exacta::extender_arco`).
-    if matches!(e.figura, Figura::Arco { barrido: Some(_), .. }) {
+    if matches!(
+        e.figura,
+        Figura::Arco {
+            barrido: Some(_),
+            ..
+        }
+    ) {
         return crate::geometria_exacta::extender_arco(e, otros, p);
     }
     let camino = trazado_en_el_mundo(e);
@@ -675,7 +684,11 @@ pub fn punto_del_recorrido(e: &Elemento, d: f32) -> Option<Punto2> {
 }
 
 /// Las paredes de un recorte en la escena: todo lo demas, o solo `contra`.
-fn victima_y_paredes(escena: &crate::escena::Escena, id: u64, contra: Option<&[u64]>) -> Option<(Elemento, Vec<Elemento>)> {
+fn victima_y_paredes(
+    escena: &crate::escena::Escena,
+    id: u64,
+    contra: Option<&[u64]>,
+) -> Option<(Elemento, Vec<Elemento>)> {
     let victima = escena.buscar(id).filter(|e| !e.borrado)?.clone();
     let otros = escena
         .elementos
@@ -693,7 +706,12 @@ fn victima_y_paredes(escena: &crate::escena::Escena, id: u64, contra: Option<&[u
 /// Si el trozo estaba en medio, la raya se parte en dos y la segunda mitad es
 /// un elemento nuevo —no la de antes: compartir el id las convertiria en la
 /// misma raya dos veces, y borrar una borraria la otra—.
-pub fn recortar_en_escena(escena: &mut crate::escena::Escena, id: u64, p: Punto2, contra: Option<&[u64]>) -> bool {
+pub fn recortar_en_escena(
+    escena: &mut crate::escena::Escena,
+    id: u64,
+    p: Punto2,
+    contra: Option<&[u64]>,
+) -> bool {
     let Some((victima, otros)) = victima_y_paredes(escena, id, contra) else {
         return false;
     };
@@ -775,7 +793,12 @@ mod pruebas_en_la_escena {
         let v1 = e.anadir(raya((100.0, 0.0), (100.0, 100.0)));
         let _v2 = e.anadir(raya((150.0, 0.0), (150.0, 100.0)));
         // Contra la de x=100 solamente: el final se va entero hasta x=100.
-        assert!(recortar_en_escena(&mut e, h, Punto2::nuevo(180.0, 50.0), Some(&[v1])));
+        assert!(recortar_en_escena(
+            &mut e,
+            h,
+            Punto2::nuevo(180.0, 50.0),
+            Some(&[v1])
+        ));
         assert!((largo_del_recorrido(e.buscar(h).unwrap()) - 100.0).abs() < 0.5);
         assert!(e.deshacer());
         assert!((largo_del_recorrido(e.buscar(h).unwrap()) - 200.0).abs() < 0.5);
@@ -787,7 +810,13 @@ mod pruebas_en_la_escena {
         let mut e = Escena::nueva();
         let h = e.anadir(raya((0.0, 0.0), (10.0, 0.0)));
         let antes = e.pasos_cerrados();
-        assert!(!extender_en_escena(&mut e, h, Punto2::nuevo(10.0, 0.0), None, ALCANCE_EXTENDER));
+        assert!(!extender_en_escena(
+            &mut e,
+            h,
+            Punto2::nuevo(10.0, 0.0),
+            None,
+            ALCANCE_EXTENDER
+        ));
         assert_eq!(e.pasos_cerrados(), antes);
     }
 

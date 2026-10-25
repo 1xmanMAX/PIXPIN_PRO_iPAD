@@ -84,7 +84,10 @@ pub fn ruta_de_hablar(conexion: &str, gec: &str) -> String {
 
 /// `wss://…` (`EdgeVoz.urlDeHablar`, con el servidor nuevo).
 pub fn url_de_hablar(conexion: &str, gec: &str) -> String {
-    format!("wss://{SERVIDOR_DE_HABLAR}{}", ruta_de_hablar(conexion, gec))
+    format!(
+        "wss://{SERVIDOR_DE_HABLAR}{}",
+        ruta_de_hablar(conexion, gec)
+    )
 }
 
 fn mayor() -> &'static str {
@@ -189,12 +192,12 @@ pub fn segundos_de_fecha_http(texto: &str) -> Option<f64> {
         return None;
     }
     let dia: u32 = p[0].parse().ok().filter(|d| (1..=31).contains(d))?;
-    let mes = MESES
-        .iter()
-        .position(|m| m.eq_ignore_ascii_case(p[1]))? as u32
-        + 1;
+    let mes = MESES.iter().position(|m| m.eq_ignore_ascii_case(p[1]))? as u32 + 1;
     let ano: i64 = p[2].parse().ok()?;
-    let hora: Vec<i64> = p[3].split(':').map(|x| x.parse().ok()).collect::<Option<_>>()?;
+    let hora: Vec<i64> = p[3]
+        .split(':')
+        .map(|x| x.parse().ok())
+        .collect::<Option<_>>()?;
     if hora.len() != 3 || hora[0] > 23 || hora[1] > 59 || hora[2] > 60 {
         return None;
     }
@@ -257,9 +260,7 @@ pub fn escapar(texto: &str) -> String {
 /// «turn.end»…).
 pub fn ruta_de(mensaje: &str) -> Option<&str> {
     let cabeza = mensaje.split("\r\n\r\n").next()?;
-    cabeza
-        .split("\r\n")
-        .find_map(|l| l.strip_prefix("Path:"))
+    cabeza.split("\r\n").find_map(|l| l.strip_prefix("Path:"))
 }
 
 /// **El audio de un mensaje binario**: dos bytes con lo que miden las
@@ -365,7 +366,11 @@ pub fn es_multilingue(v: &Voz) -> bool {
 /// grande»): hasta [`NATIVAS`] del idioma —las del pais primero— y las
 /// [`MULTILINGUES`]. De 322 a unas diez.
 pub fn las_mejores(voces: &[Voz], idioma: &str) -> Vec<Voz> {
-    let sin_ia: Vec<Voz> = voces.iter().filter(|v| !es_multilingue(v)).cloned().collect();
+    let sin_ia: Vec<Voz> = voces
+        .iter()
+        .filter(|v| !es_multilingue(v))
+        .cloned()
+        .collect();
     let mut salida: Vec<Voz> = de_la_lengua(&sin_ia, idioma)
         .into_iter()
         .take(NATIVAS)
@@ -403,7 +408,7 @@ pub fn nombre_en_cache(voz: &str, texto: &str) -> String {
 /// vez que se oyeron), los que sobran pasado `tope`, empezando por los que
 /// hace mas que no se oyen (`VozDeEdge.podar`).
 pub fn sobran(mut ficheros: Vec<(String, u64, u64)>, tope: u64) -> Vec<String> {
-    ficheros.sort_by(|a, b| b.2.cmp(&a.2));
+    ficheros.sort_by_key(|f| std::cmp::Reverse(f.2));
     let mut suma = 0u64;
     let mut fuera = Vec::new();
     for (n, bytes, _) in ficheros {
@@ -438,13 +443,14 @@ mod red {
         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_ADDREQ_FLAG_ADD, WINHTTP_ADDREQ_FLAG_REPLACE,
         WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,
         WINHTTP_QUERY_DATE, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
-        WINHTTP_WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE, WINHTTP_WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE,
-        WINHTTP_WEB_SOCKET_BUFFER_TYPE, WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE,
-        WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE,
-        WinHttpAddRequestHeaders, WinHttpCloseHandle, WinHttpConnect, WinHttpOpen,
-        WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse,
-        WinHttpSendRequest, WinHttpSetOption, WinHttpSetTimeouts, WinHttpWebSocketClose,
-        WinHttpWebSocketCompleteUpgrade, WinHttpWebSocketReceive, WinHttpWebSocketSend,
+        WINHTTP_WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE,
+        WINHTTP_WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE, WINHTTP_WEB_SOCKET_BUFFER_TYPE,
+        WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE, WINHTTP_WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE,
+        WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, WinHttpAddRequestHeaders, WinHttpCloseHandle,
+        WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReadData,
+        WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption, WinHttpSetTimeouts,
+        WinHttpWebSocketClose, WinHttpWebSocketCompleteUpgrade, WinHttpWebSocketReceive,
+        WinHttpWebSocketSend,
     };
     use windows::core::{HSTRING, PCWSTR, w};
 
@@ -656,7 +662,11 @@ mod red {
                     Some(texto.as_bytes()),
                 )
             };
-            if r == 0 { Ok(()) } else { Err(red(format!("enviar: {r}"))) }
+            if r == 0 {
+                Ok(())
+            } else {
+                Err(red(format!("enviar: {r}")))
+            }
         };
         let f = fecha(
             SystemTime::now()
@@ -845,8 +855,13 @@ mod red {
             let mut n: u32 = 0;
             // SAFETY: peticion viva; bufer nuestro de ese largo.
             unsafe {
-                WinHttpReadData(peticion.0, buf.as_mut_ptr().cast(), buf.len() as u32, &mut n)
-                    .ok()?;
+                WinHttpReadData(
+                    peticion.0,
+                    buf.as_mut_ptr().cast(),
+                    buf.len() as u32,
+                    &mut n,
+                )
+                .ok()?;
             }
             if n == 0 {
                 break;
@@ -868,7 +883,11 @@ mod pruebas {
         // siguiente tramo, otro.
         assert_eq!(a, gec(1_790_000_000.0 + 50.0));
         assert_ne!(a, gec(1_790_000_000.0 + 400.0));
-        assert!(a.len() == 64 && a.chars().all(|c| c.is_ascii_digit() || ('A'..='F').contains(&c)));
+        assert!(
+            a.len() == 64
+                && a.chars()
+                    .all(|c| c.is_ascii_digit() || ('A'..='F').contains(&c))
+        );
         // Cuenta a mano: (1790000000 + 11644473600) redondeado a 300, en
         // centenas de nanosegundos.
         let t = 1_790_000_000u64 + 11_644_473_600;
@@ -891,7 +910,10 @@ mod pruebas {
         assert!(a.starts_with("X-Timestamp:f\r\n"));
         assert!(a.contains("Path:speech.config\r\n\r\n{\"context\""));
         assert!(a.contains("\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n"));
-        assert!(serde_json::from_str::<serde_json::Value>(a.split("\r\n\r\n").nth(1).unwrap().trim()).is_ok());
+        assert!(
+            serde_json::from_str::<serde_json::Value>(a.split("\r\n\r\n").nth(1).unwrap().trim())
+                .is_ok()
+        );
     }
 
     #[test]
@@ -905,7 +927,10 @@ mod pruebas {
         }
         let mp3 = [1u8, 2, 3];
         assert_eq!(
-            audio_de(&trama("X-RequestId:x\r\nContent-Type:audio/mpeg\r\nPath:audio\r\n", &mp3)),
+            audio_de(&trama(
+                "X-RequestId:x\r\nContent-Type:audio/mpeg\r\nPath:audio\r\n",
+                &mp3
+            )),
             Some(&mp3[..])
         );
         assert_eq!(audio_de(&trama("Path:audio\r\n", &[])), None);
@@ -913,7 +938,10 @@ mod pruebas {
         assert_eq!(audio_de(&[0]), None);
         // Cabeceras que dicen medir mas de lo que llega: nada.
         assert_eq!(audio_de(&[0, 200, 1, 2]), None);
-        assert_eq!(ruta_de("X-RequestId:x\r\nPath:turn.end\r\n\r\n{}"), Some("turn.end"));
+        assert_eq!(
+            ruta_de("X-RequestId:x\r\nPath:turn.end\r\n\r\n{}"),
+            Some("turn.end")
+        );
         assert_eq!(ruta_de("X-RequestId:x\r\n\r\nPath:turn.end"), None);
     }
 
@@ -940,7 +968,10 @@ mod pruebas {
         assert_eq!(lista.len(), NATIVAS + MULTILINGUES.len());
         assert!(lista[..NATIVAS].iter().all(|v| v.idioma == "es-ES"));
         assert_eq!(
-            lista[NATIVAS..].iter().map(|v| v.nombre.as_str()).collect::<Vec<_>>(),
+            lista[NATIVAS..]
+                .iter()
+                .map(|v| v.nombre.as_str())
+                .collect::<Vec<_>>(),
             MULTILINGUES.to_vec()
         );
         // Una preferida que ya no esta entre las mejores no se usa.
@@ -968,7 +999,10 @@ mod pruebas {
         );
         // En frances no hay nativa en esta lista: la multilingue, que lee
         // cualquier idioma.
-        assert_eq!(nombre(elegir(&voces, "fr-FR", None)), "en-US-EmmaMultilingualNeural");
+        assert_eq!(
+            nombre(elegir(&voces, "fr-FR", None)),
+            "en-US-EmmaMultilingualNeural"
+        );
         assert_eq!(voces[3].corto(), "Emma multilingüe");
         assert_eq!(voces[1].corto(), "Elvira");
         assert!(de_lista("no es json").is_empty());
@@ -983,12 +1017,27 @@ mod pruebas {
             fecha(s * 1000 + 250),
             "Tue Oct 13 2026 10:00:00 GMT+0000 (Coordinated Universal Time)"
         );
-        assert_eq!(fecha(0), "Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)");
+        assert_eq!(
+            fecha(0),
+            "Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)"
+        );
         assert_eq!(fecha_de_dias(dias_desde_1970(2024, 2, 29)), (2024, 2, 29));
-        assert_eq!(segundos_de_fecha_http("Tue, 13 Oct 2026 10:00:00 GMT"), Some(s as f64));
-        assert_eq!(segundos_de_fecha_http("13 Oct 2026 10:00:00 GMT"), Some(s as f64));
-        assert_eq!(segundos_de_fecha_http("Tue, 13 Foo 2026 10:00:00 GMT"), None);
-        assert_eq!(segundos_de_fecha_http("Tue, 13 Oct 2026 25:00:00 GMT"), None);
+        assert_eq!(
+            segundos_de_fecha_http("Tue, 13 Oct 2026 10:00:00 GMT"),
+            Some(s as f64)
+        );
+        assert_eq!(
+            segundos_de_fecha_http("13 Oct 2026 10:00:00 GMT"),
+            Some(s as f64)
+        );
+        assert_eq!(
+            segundos_de_fecha_http("Tue, 13 Foo 2026 10:00:00 GMT"),
+            None
+        );
+        assert_eq!(
+            segundos_de_fecha_http("Tue, 13 Oct 2026 25:00:00 GMT"),
+            None
+        );
         assert_eq!(segundos_de_fecha_http(""), None);
     }
 
@@ -1026,7 +1075,10 @@ mod pruebas {
     fn las_cabeceras_y_la_url_son_las_de_edge() {
         let c = cabeceras("ABC");
         assert!(c.iter().any(|(k, v)| *k == "Cookie" && v == "muid=ABC;"));
-        assert!(c.iter().any(|(k, v)| *k == "User-Agent" && v.contains("Edg/143.0.0.0")));
+        assert!(
+            c.iter()
+                .any(|(k, v)| *k == "User-Agent" && v.contains("Edg/143.0.0.0"))
+        );
         let u = url_de_hablar("id", "GEC");
         assert!(u.starts_with(
             "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=6A5AA1D4EAFF4E9FB37E23D68491D6F4&"
@@ -1075,9 +1127,12 @@ mod pruebas {
         println!("dura {ms} ms");
         assert!(ms > 2_000, "{ms}");
         // La segunda vez sale de la cache, sin red: el mismo fichero.
-        let otra = archivo(&carpeta, "Hola, esto es PixPin leyendo en voz alta con Microsoft.", "es-ES-ElviraNeural", |_| {
-            panic!("no tenia que pedirlo otra vez")
-        })
+        let otra = archivo(
+            &carpeta,
+            "Hola, esto es PixPin leyendo en voz alta con Microsoft.",
+            "es-ES-ElviraNeural",
+            |_| panic!("no tenia que pedirlo otra vez"),
+        )
         .unwrap();
         assert_eq!(otra, f);
         let _ = std::fs::remove_dir_all(&carpeta);

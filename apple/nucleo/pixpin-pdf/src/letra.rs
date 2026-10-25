@@ -722,9 +722,7 @@ impl Reservas {
         };
         let familia = familia.clone();
         let nueva = match cara_del_sistema(&familia) {
-            Some(cara)
-                if licencia_deja_incrustar(tabla_de_cara(&cara, b"OS/2").as_deref()) =>
-            {
+            Some(cara) if licencia_deja_incrustar(tabla_de_cara(&cara, b"OS/2").as_deref()) => {
                 match tabla_de_cara(&cara, b"cmap").and_then(|c| leer_cmap(&c)) {
                     Some(mapa) => Reserva::Mirada {
                         familia,
@@ -896,7 +894,10 @@ mod pruebas {
         }
         let mut r = Reservas::del_sistema(Some("Segoe UI"));
         assert!(r.cuantas() > 3);
-        assert!((0..r.cuantas()).all(|i| r.letra(i).is_none()), "nada leido aun");
+        assert!(
+            (0..r.cuantas()).all(|i| r.letra(i).is_none()),
+            "nada leido aun"
+        );
         for c in ['θ', '≤', '∞', '√', '→', '😀', '♔'] {
             let (i, g) = r.para(c).unwrap_or_else(|| panic!("nadie tiene {c}"));
             assert!(g != 0 && r.letra(i).is_some_and(|l| l.glifo(c) == Some(g)));

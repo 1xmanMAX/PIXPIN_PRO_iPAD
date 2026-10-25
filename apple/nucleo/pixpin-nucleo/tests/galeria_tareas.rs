@@ -266,13 +266,18 @@ fn el_timeline_da_los_dias_y_sus_momentos_por_paginas() {
 /// Una lista de tareas escrita en un chat como la escribe Windows.
 fn lista(n: &Nucleo, datos: &Path, chat: &str, titulo: &str, tareas: &[mini::Tarea]) -> String {
     let doc = mini::escribir_tareas(titulo, tareas);
-    let numero = n.ultimos_mensajes(chat.into(), 1).unwrap().total as i64 + 1;
+    let pagina = n.ultimos_mensajes(chat.into(), 1000).unwrap();
+    let numero = pagina.total as i64 + 1;
+    // Un id (los milisegundos) que no sea el de otro mensaje del chat: una
+    // nota escrita en el mismo milisegundo daria el mismo y la lista no
+    // seria la que se busca.
+    let ultimo = pagina.mensajes.iter().map(|m| m.cuando).max().unwrap_or(0);
     let m = Mensaje::miniapp(
         mini::TAREAS,
         titulo,
         &doc,
         &Sello {
-            cuando: ahora() + numero,
+            cuando: (ahora() + numero).max(ultimo + 1),
             numero,
             aparato: "PC01".into(),
             proyecto: chat.into(),
@@ -363,7 +368,9 @@ fn las_tareas_de_todos_los_chats_se_marcan_en_su_mensaje() {
 
     // Lo que se entiende al escribir (Windows, 17-oct): prioridad y #etiqueta
     // van como marcas detras del titulo, y la vista las ensena.
-    let con = n.apuntar_tarea("llamar al banco prioridad alta #casa".into(), 0).unwrap();
+    let con = n
+        .apuntar_tarea("llamar al banco prioridad alta #casa".into(), 0)
+        .unwrap();
     let crudo = &con.tareas[2].crudo;
     assert!(crudo.starts_with("llamar al banco 🔼 #casa ➕ "), "{crudo}");
     let m = pixpin_nucleo::marcas_de_tarea(crudo.clone(), 0);
@@ -371,10 +378,17 @@ fn las_tareas_de_todos_los_chats_se_marcan_en_su_mensaje() {
     assert_eq!(m.urgencia.as_deref(), Some("urgente"));
     assert_eq!(m.etiquetas, ["casa"]);
     assert_eq!(m.marca_urgencia.as_deref(), Some("🔼"));
-    assert_eq!(m.vista, "llamar al banco", "las #etiquetas van en chapitas aparte");
+    assert_eq!(
+        m.vista, "llamar al banco",
+        "las #etiquetas van en chapitas aparte"
+    );
     // Caso negativo: lo que no se entiende se queda en el titulo.
     let raro = n.apuntar_tarea("comprar pan #".into(), 0).unwrap();
-    assert!(raro.tareas[3].crudo.starts_with("comprar pan #"), "{}", raro.tareas[3].crudo);
+    assert!(
+        raro.tareas[3].crudo.starts_with("comprar pan #"),
+        "{}",
+        raro.tareas[3].crudo
+    );
 }
 
 #[test]
@@ -460,41 +474,91 @@ fn editar_borrar_deshacer_y_mover_tareas() {
         n.tareas(0)
             .unwrap()
             .into_iter()
-            .find(|l| l.mensaje == lista)
+            .find(|l| l.chat == chat && l.mensaje == lista)
             .unwrap()
             .tareas
     };
     let t = leer();
     // Corregir: el texto nuevo, entendido, con su fecha de creacion.
-    assert!(n
-        .editar_tarea(chat.clone(), lista.clone(), 0, t[0].crudo.clone(), "pagar la luz #casa".into(), 0)
-        .unwrap());
+    assert!(
+        n.editar_tarea(
+            chat.clone(),
+            lista.clone(),
+            0,
+            t[0].crudo.clone(),
+            "pagar la luz #casa".into(),
+            0
+        )
+        .unwrap()
+    );
     let t = leer();
-    assert!(t[0].crudo.starts_with("pagar la luz #casa ➕ "), "{}", t[0].crudo);
+    assert!(
+        t[0].crudo.starts_with("pagar la luz #casa ➕ "),
+        "{}",
+        t[0].crudo
+    );
     // Caso negativo: con el texto viejo ya no se toca.
-    assert!(!n
-        .editar_tarea(chat.clone(), lista.clone(), 0, "pagar luz".into(), "x".into(), 0)
-        .unwrap());
+    assert!(
+        !n.editar_tarea(
+            chat.clone(),
+            lista.clone(),
+            0,
+            "pagar luz".into(),
+            "x".into(),
+            0
+        )
+        .unwrap()
+    );
     // Borrar y deshacer: vuelve a su sitio.
     let crudo = t[0].crudo.clone();
-    assert!(n.borrar_tarea(chat.clone(), lista.clone(), 0, crudo.clone()).unwrap());
+    assert!(
+        n.borrar_tarea(chat.clone(), lista.clone(), 0, crudo.clone())
+            .unwrap()
+    );
     assert_eq!(leer().len(), 1);
-    n.devolver_tarea(chat.clone(), lista.clone(), 0, crudo.clone(), false).unwrap();
+    n.devolver_tarea(chat.clone(), lista.clone(), 0, crudo.clone(), false)
+        .unwrap();
     assert_eq!(leer()[0].crudo, crudo);
     // Mover a una lista de otro chat: sale de aqui y entra alli.
     let obra = n.crear_chat("Obra".into()).unwrap();
     let otra = self::lista(&n, &tmp.datos(), &obra.id, "Compras", &[]);
-    assert!(n
-        .mover_tarea(chat.clone(), lista.clone(), 1, leer()[1].crudo.clone(), obra.id.clone(), otra.clone())
-        .unwrap());
+    assert!(
+        n.mover_tarea(
+            chat.clone(),
+            lista.clone(),
+            1,
+            leer()[1].crudo.clone(),
+            obra.id.clone(),
+            otra.clone()
+        )
+        .unwrap()
+    );
     assert_eq!(leer().len(), 1);
-    let alli = n.tareas(0).unwrap().into_iter().find(|l| l.mensaje == otra).unwrap();
+    let alli = n
+        .tareas(0)
+        .unwrap()
+        .into_iter()
+        .find(|l| l.chat == obra.id && l.mensaje == otra)
+        .unwrap();
     assert!(alli.tareas[0].crudo.starts_with("comprar pan"));
     // Caso negativo: mover algo que ya no esta no deja copia en el destino.
-    assert!(!n
-        .mover_tarea(chat.clone(), lista.clone(), 0, "no esta".into(), obra.id.clone(), otra.clone())
-        .unwrap());
-    let alli = n.tareas(0).unwrap().into_iter().find(|l| l.mensaje == otra).unwrap();
+    assert!(
+        !n.mover_tarea(
+            chat.clone(),
+            lista.clone(),
+            0,
+            "no esta".into(),
+            obra.id.clone(),
+            otra.clone()
+        )
+        .unwrap()
+    );
+    let alli = n
+        .tareas(0)
+        .unwrap()
+        .into_iter()
+        .find(|l| l.chat == obra.id && l.mensaje == otra)
+        .unwrap();
     assert_eq!(alli.tareas.len(), 1);
 }
 
@@ -502,24 +566,53 @@ fn editar_borrar_deshacer_y_mover_tareas() {
 fn el_pin_de_una_tarea_la_encuentra_por_su_titulo_y_le_pone_la_nota() {
     let tmp = Temporal::nueva("pin-tarea");
     let n = tmp.nucleo();
-    let l = n.apuntar_tarea("llamar al banco prioridad alta".into(), 0).unwrap();
+    let l = n
+        .apuntar_tarea("llamar al banco prioridad alta".into(), 0)
+        .unwrap();
     let (chat, lista) = (l.chat.clone(), l.mensaje.clone());
-    let t = n.tarea_por_titulo(chat.clone(), lista.clone(), "llamar al banco".into()).unwrap().unwrap();
-    assert_eq!(t.indice, 0);
-    let crudo = n
-        .poner_nota_tarea(chat.clone(), lista.clone(), "llamar al banco".into(), "no abren hasta el lunes".into())
+    let t = n
+        .tarea_por_titulo(chat.clone(), lista.clone(), "llamar al banco".into())
         .unwrap()
         .unwrap();
-    assert!(crudo.contains("🔼 💬 no abren hasta el lunes ➕ "), "{crudo}");
+    assert_eq!(t.indice, 0);
+    let crudo = n
+        .poner_nota_tarea(
+            chat.clone(),
+            lista.clone(),
+            "llamar al banco".into(),
+            "no abren hasta el lunes".into(),
+        )
+        .unwrap()
+        .unwrap();
+    assert!(
+        crudo.contains("🔼 💬 no abren hasta el lunes ➕ "),
+        "{crudo}"
+    );
     let m = pixpin_nucleo::marcas_de_tarea(crudo, 0);
     assert_eq!(m.nota.as_deref(), Some("no abren hasta el lunes"));
     assert_eq!(m.titulo, "llamar al banco", "la nota no cambia el titulo");
     // Quitar la nota.
-    let sin = n.poner_nota_tarea(chat.clone(), lista.clone(), "llamar al banco".into(), "".into()).unwrap().unwrap();
+    let sin = n
+        .poner_nota_tarea(
+            chat.clone(),
+            lista.clone(),
+            "llamar al banco".into(),
+            "".into(),
+        )
+        .unwrap()
+        .unwrap();
     assert!(!sin.contains('💬'));
     // Caso negativo: un titulo que no esta.
-    assert!(n.tarea_por_titulo(chat.clone(), lista.clone(), "otra".into()).unwrap().is_none());
-    assert!(n.poner_nota_tarea(chat, lista, "otra".into(), "x".into()).unwrap().is_none());
+    assert!(
+        n.tarea_por_titulo(chat.clone(), lista.clone(), "otra".into())
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        n.poner_nota_tarea(chat, lista, "otra".into(), "x".into())
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -527,26 +620,51 @@ fn el_horario_nace_con_la_plantilla_que_no_llama_y_despues_avisa() {
     let tmp = Temporal::nueva("horario");
     let n = tmp.nucleo();
     let ruta = n.fichero_del_horario().unwrap();
-    assert!(std::fs::read_to_string(&ruta).unwrap().contains("# Horario de clases"));
+    assert!(
+        std::fs::read_to_string(&ruta)
+            .unwrap()
+            .contains("# Horario de clases")
+    );
     // La plantilla trae el ejemplo comentado: no llama.
     assert!(n.avisos_del_horario(0).is_empty());
-    assert!(n.nota_de_voz_de_clase(0).is_none(), "sin clases no hay donde grabar");
+    assert!(
+        n.nota_de_voz_de_clase(0).is_none(),
+        "sin clases no hay donde grabar"
+    );
     // Una clase todos los dias: siempre hay un aviso en los proximos dias.
-    std::fs::write(&ruta, "Lun Mar Mie Jue Vie Sab Dom 9:00-10:00 Geometría @A-12\n> traer el compás\n").unwrap();
+    std::fs::write(
+        &ruta,
+        "Lun Mar Mie Jue Vie Sab Dom 9:00-10:00 Geometría @A-12\n> traer el compás\n",
+    )
+    .unwrap();
     let a = n.avisos_del_horario(0);
     assert!(a.len() >= 7, "{a:?}");
     assert_eq!(a[0].nombre, "Geometría");
-    assert!(a[0].detalle.starts_with("09:00–10:00 · A-12"), "{}", a[0].detalle);
+    assert!(
+        a[0].detalle.starts_with("09:00–10:00 · A-12"),
+        "{}",
+        a[0].detalle
+    );
     assert_eq!(a[0].texto.as_deref(), Some("traer el compás"));
     assert!(a[0].audio.is_none(), "sin nota de voz grabada");
     // 10 min antes por omision.
-    assert_eq!(a[0].cuando_utc_ms.rem_euclid(86_400_000), (8 * 60 + 50) * 60_000);
+    assert_eq!(
+        a[0].cuando_utc_ms.rem_euclid(86_400_000),
+        (8 * 60 + 50) * 60_000
+    );
     let otra_vez = n.aviso_del_horario(a[0].id.clone(), 0).unwrap();
     assert_eq!(otra_vez.id, a[0].id);
     let nota = n.nota_de_voz_de_clase(0).unwrap();
     assert_eq!(nota.clase, "Geometría");
-    assert!(nota.ruta.ends_with("horario/voz/geometria.m4a"), "{}", nota.ruta);
-    assert!(n.aviso_del_horario("horario:clase:0:otra".into(), 0).is_none());
+    assert!(
+        nota.ruta.ends_with("horario/voz/geometria.m4a"),
+        "{}",
+        nota.ruta
+    );
+    assert!(
+        n.aviso_del_horario("horario:clase:0:otra".into(), 0)
+            .is_none()
+    );
 }
 
 #[test]
@@ -579,24 +697,43 @@ fn una_tarea_con_imagen_la_copia_al_chat_y_la_lleva_en_su_texto() {
     // Casos negativos: algo que no es imagen, y nada de nada.
     let txt = tmp.0.join("nota.txt");
     std::fs::write(&txt, b"x").unwrap();
-    assert!(n.apuntar_tarea_con_imagenes("x".into(), vec![txt.display().to_string()], 0).is_err());
-    assert!(n.apuntar_tarea_con_imagenes("  ".into(), vec![], 0).is_err());
+    assert!(
+        n.apuntar_tarea_con_imagenes("x".into(), vec![txt.display().to_string()], 0)
+            .is_err()
+    );
+    assert!(
+        n.apuntar_tarea_con_imagenes("  ".into(), vec![], 0)
+            .is_err()
+    );
 }
 
 #[test]
 fn una_tarea_de_una_asignatura_va_a_su_lista_del_chat_asignaturas() {
     let tmp = Temporal::nueva("asignaturas");
     let n = tmp.nucleo();
-    let l = n.apuntar_en_asignatura("Geometría".into(), "repasar ángulos".into(), vec![], 0).unwrap();
+    let l = n
+        .apuntar_en_asignatura("Geometría".into(), "repasar ángulos".into(), vec![], 0)
+        .unwrap();
     assert_eq!(l.titulo, "Geometría");
     assert!(l.tareas[0].crudo.starts_with("repasar ángulos"));
-    let otra = n.apuntar_en_asignatura("geometria".into(), "traer compás".into(), vec![], 0).unwrap();
+    let otra = n
+        .apuntar_en_asignatura("geometria".into(), "traer compás".into(), vec![], 0)
+        .unwrap();
     assert_eq!(otra.mensaje, l.mensaje, "la misma lista sin mirar tildes");
     let chats = n.chats().unwrap();
-    assert_eq!(chats.iter().filter(|c| c.nombre == "Asignaturas").count(), 1);
+    assert_eq!(
+        chats.iter().filter(|c| c.nombre == "Asignaturas").count(),
+        1
+    );
     // Casos negativos.
-    assert!(n.apuntar_en_asignatura("".into(), "x".into(), vec![], 0).is_err());
-    assert!(n.apuntar_en_asignatura("Física".into(), " ".into(), vec![], 0).is_err());
+    assert!(
+        n.apuntar_en_asignatura("".into(), "x".into(), vec![], 0)
+            .is_err()
+    );
+    assert!(
+        n.apuntar_en_asignatura("Física".into(), " ".into(), vec![], 0)
+            .is_err()
+    );
 }
 
 #[test]
@@ -604,19 +741,41 @@ fn una_tarea_con_imagen_va_a_una_lista_de_un_proyecto() {
     let tmp = Temporal::nueva("tarea-imagen-lista");
     let n = tmp.nucleo();
     let obra = n.crear_chat("Obra".into()).unwrap();
-    let id = lista(&n, &tmp.datos(), &obra.id, "Pendientes", &[t("medir", false)]);
+    let id = lista(
+        &n,
+        &tmp.datos(),
+        &obra.id,
+        "Pendientes",
+        &[t("medir", false)],
+    );
     let foto = tmp.0.join("grieta.png");
     std::fs::write(&foto, b"\x89PNG de mentira").unwrap();
     let l = n
-        .apuntar_tarea_con_imagenes_en(obra.id.clone(), id.clone(), "revisar grieta".into(), vec![foto.display().to_string()], 0)
+        .apuntar_tarea_con_imagenes_en(
+            obra.id.clone(),
+            id.clone(),
+            "revisar grieta".into(),
+            vec![foto.display().to_string()],
+            0,
+        )
         .unwrap();
     assert_eq!(l.mensaje, id, "en esa lista, no en el Inbox");
     assert_eq!(l.tareas.len(), 2);
     let t = &l.tareas[1];
     assert!(t.crudo.starts_with("revisar grieta"), "{}", t.crudo);
     assert_eq!(t.imagenes.len(), 1, "con su imagen");
-    assert!(t.imagenes[0].contains(&obra.id) || t.crudo.contains("/archivos/tarea-"), "{:?}", t.imagenes);
+    assert!(
+        t.imagenes[0].contains(&obra.id) || t.crudo.contains("/archivos/tarea-"),
+        "{:?}",
+        t.imagenes
+    );
     // Casos negativos: una lista que no esta y una tarea vacia.
-    assert!(n.apuntar_tarea_con_imagenes_en(obra.id.clone(), "no-esta".into(), "x".into(), vec![], 0).is_err());
-    assert!(n.apuntar_tarea_con_imagenes_en(obra.id.clone(), id, " ".into(), vec![], 0).is_err());
+    assert!(
+        n.apuntar_tarea_con_imagenes_en(obra.id.clone(), "no-esta".into(), "x".into(), vec![], 0)
+            .is_err()
+    );
+    assert!(
+        n.apuntar_tarea_con_imagenes_en(obra.id.clone(), id, " ".into(), vec![], 0)
+            .is_err()
+    );
 }

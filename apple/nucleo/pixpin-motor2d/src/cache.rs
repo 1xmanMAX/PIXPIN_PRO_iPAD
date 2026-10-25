@@ -177,7 +177,10 @@ impl Cache {
     /// que no puede pararse a recalcular cientos de trazos al cambiar de
     /// octava) pide las ordenes a esa octava y las rehace luego.
     pub fn nivel_guardado(&self, e: &Elemento) -> Option<i8> {
-        self.mapa.get(&e.id).filter(|x| x.version == e.version).map(|x| x.nivel)
+        self.mapa
+            .get(&e.id)
+            .filter(|x| x.version == e.version)
+            .map(|x| x.nivel)
     }
 
     /// **La cota entera y los cuadros de la barra**, calculandolos solo si

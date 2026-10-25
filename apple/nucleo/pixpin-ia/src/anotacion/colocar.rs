@@ -60,7 +60,11 @@ impl Colocador {
     /// `hueco`: el aire entre dos notas.
     pub fn nuevo(franjas: Vec<Franja>, hueco: f32) -> Colocador {
         let ocupado = vec![Vec::new(); franjas.len()];
-        Colocador { franjas, ocupado, hueco: hueco.max(0.0) }
+        Colocador {
+            franjas,
+            ocupado,
+            hueco: hueco.max(0.0),
+        }
     }
 
     pub fn franjas(&self) -> &[Franja] {
@@ -85,25 +89,46 @@ impl Colocador {
             return None;
         }
         let g = self.hueco;
-        let libre = |y: f32| y >= min - 1e-3 && y <= max + 1e-3 && self.ocupado[i].iter().all(|t| y + alto + g <= t[0] || y >= t[1] + g);
+        let libre = |y: f32| {
+            y >= min - 1e-3
+                && y <= max + 1e-3
+                && self.ocupado[i]
+                    .iter()
+                    .all(|t| y + alto + g <= t[0] || y >= t[1] + g)
+        };
         let mut candidatos = vec![deseado.clamp(min, max)];
         for t in &self.ocupado[i] {
             candidatos.push(t[1] + g);
             candidatos.push(t[0] - g - alto);
         }
-        candidatos.into_iter().filter(|y| libre(*y)).min_by(|a, b| (a - deseado).abs().total_cmp(&(b - deseado).abs()))
+        candidatos
+            .into_iter()
+            .filter(|y| libre(*y))
+            .min_by(|a, b| (a - deseado).abs().total_cmp(&(b - deseado).abs()))
     }
 
     /// **Coloca una nota** para lo senalado en `ancla`: `alto_con(ancho)`
     /// dice cuanto mide de alto la nota partida a ese ancho, y no se hace
     /// mas ancha que `ancho_maximo`. Queda apuntada como ocupada.
-    pub fn colocar(&mut self, ancla: [f32; 4], alto_con: &dyn Fn(f32) -> f32, ancho_maximo: f32) -> Option<Colocada> {
+    pub fn colocar(
+        &mut self,
+        ancla: [f32; 4],
+        alto_con: &dyn Fn(f32) -> f32,
+        ancho_maximo: f32,
+    ) -> Option<Colocada> {
         let letra = (self.hueco * 2.0).max(1.0);
         let centro_x = (ancla[0] + ancla[2]) / 2.0;
         // El lado de lo senalado: el de la mitad de la zona de franjas en
         // que cae.
-        let (izq, der) = self.franjas.iter().fold((f32::MAX, f32::MIN), |a, f| (a.0.min(f.x1), a.1.max(f.x0)));
-        let lado_natural = if centro_x < (izq + der) / 2.0 { Lado::Izquierda } else { Lado::Derecha };
+        let (izq, der) = self
+            .franjas
+            .iter()
+            .fold((f32::MAX, f32::MIN), |a, f| (a.0.min(f.x1), a.1.max(f.x0)));
+        let lado_natural = if centro_x < (izq + der) / 2.0 {
+            Lado::Izquierda
+        } else {
+            Lado::Derecha
+        };
         let mut mejor: Option<(f32, usize, f32, f32, f32)> = None;
         for (i, f) in self.franjas.iter().enumerate() {
             let ancho = (f.x1 - f.x0).min(ancho_maximo);
@@ -113,7 +138,9 @@ impl Colocador {
             let alto = alto_con(ancho);
             // Arriba a la altura de lo senalado.
             let deseado = ancla[1] - self.hueco * 0.5;
-            let Some(y) = self.hueco_en(i, deseado, alto) else { continue };
+            let Some(y) = self.hueco_en(i, deseado, alto) else {
+                continue;
+            };
             let mut coste = (y - deseado).abs();
             if f.fuera {
                 coste += COSTE_FUERA * letra;
@@ -134,6 +161,9 @@ impl Colocador {
             Lado::Izquierda => f.x1 - ancho,
         };
         self.ocupado[i].push([y, y + alto]);
-        Some(Colocada { franja: f, caja: [x0, y, x0 + ancho, y + alto] })
+        Some(Colocada {
+            franja: f,
+            caja: [x0, y, x0 + ancho, y + alto],
+        })
     }
 }

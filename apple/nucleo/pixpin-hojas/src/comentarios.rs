@@ -67,9 +67,15 @@ pub fn leer(paquete: &Paquete, rels: &[Relacion]) -> Vec<Comentario> {
         }
     }
     let hilos: Vec<Comentario> = {
-        let personas = paquete.leer("xl/persons/person.xml").map(|b| personas(&xml::arbol(&b))).unwrap_or_default();
+        let personas = paquete
+            .leer("xl/persons/person.xml")
+            .map(|b| personas(&xml::arbol(&b)))
+            .unwrap_or_default();
         let mut hilos = Vec::new();
-        for r in rels.iter().filter(|r| r.tipo == "threadedComment" && !r.externa) {
+        for r in rels
+            .iter()
+            .filter(|r| r.tipo == "threadedComment" && !r.externa)
+        {
             if let Some(b) = paquete.leer(&r.destino) {
                 encadenados(&xml::arbol(&b), &personas, &mut hilos);
             }
@@ -94,34 +100,63 @@ fn notas(raiz: &Nodo, salida: &mut Vec<Comentario>) {
         if salida.len() >= MAX_COMENTARIOS {
             break;
         }
-        let Some((fila, col)) = c.attr("ref").and_then(|r| referencia(r.as_bytes())) else { continue };
-        let autor = c.attr("authorId").and_then(|i| i.parse::<usize>().ok()).and_then(|i| autores.get(i)).cloned().unwrap_or_default();
+        let Some((fila, col)) = c.attr("ref").and_then(|r| referencia(r.as_bytes())) else {
+            continue;
+        };
+        let autor = c
+            .attr("authorId")
+            .and_then(|i| i.parse::<usize>().ok())
+            .and_then(|i| autores.get(i))
+            .cloned()
+            .unwrap_or_default();
         let texto = c.hijo("text").map(texto_de).unwrap_or_default();
         if texto.trim().is_empty() {
             continue;
         }
-        salida.push(Comentario { fila, col, autor, texto: recortar(texto), respuestas: Vec::new(), encadenado: false });
+        salida.push(Comentario {
+            fila,
+            col,
+            autor,
+            texto: recortar(texto),
+            respuestas: Vec::new(),
+            encadenado: false,
+        });
     }
 }
 
 fn personas(raiz: &Nodo) -> HashMap<String, String> {
     let mut v = Vec::new();
     raiz.todos("person", &mut v);
-    v.iter().filter_map(|p| Some((p.attr("id")?.to_ascii_lowercase(), p.attr("displayName")?.to_string()))).collect()
+    v.iter()
+        .filter_map(|p| {
+            Some((
+                p.attr("id")?.to_ascii_lowercase(),
+                p.attr("displayName")?.to_string(),
+            ))
+        })
+        .collect()
 }
 
 fn encadenados(raiz: &Nodo, personas: &HashMap<String, String>, salida: &mut Vec<Comentario>) {
     let mut cs = Vec::new();
     raiz.todos("threadedComment", &mut cs);
     let nombre = |c: &Nodo| {
-        c.attr("personId").and_then(|p| personas.get(&p.to_ascii_lowercase())).cloned().unwrap_or_else(|| "Comentarista".to_string())
+        c.attr("personId")
+            .and_then(|p| personas.get(&p.to_ascii_lowercase()))
+            .cloned()
+            .unwrap_or_else(|| "Comentarista".to_string())
     };
     // Primero las raices; despues las respuestas, en el orden del archivo.
-    for c in cs.iter().filter(|c| c.attr("parentId").is_none_or(|p| p.is_empty())) {
+    for c in cs
+        .iter()
+        .filter(|c| c.attr("parentId").is_none_or(|p| p.is_empty()))
+    {
         if salida.len() >= MAX_COMENTARIOS {
             break;
         }
-        let Some((fila, col)) = c.attr("ref").and_then(|r| referencia(r.as_bytes())) else { continue };
+        let Some((fila, col)) = c.attr("ref").and_then(|r| referencia(r.as_bytes())) else {
+            continue;
+        };
         let texto = c.hijo("text").map(|t| t.texto.clone()).unwrap_or_default();
         if texto.trim().is_empty() {
             continue;
@@ -136,7 +171,14 @@ fn encadenados(raiz: &Nodo, personas: &HashMap<String, String>, salida: &mut Vec
             })
             .take(200)
             .collect();
-        salida.push(Comentario { fila, col, autor: nombre(c), texto: recortar(texto), respuestas, encadenado: true });
+        salida.push(Comentario {
+            fila,
+            col,
+            autor: nombre(c),
+            texto: recortar(texto),
+            respuestas,
+            encadenado: true,
+        });
     }
 }
 
@@ -149,8 +191,20 @@ mod pruebas {
         let x = br#"<comments><authors><author>Ana</author><author>Luis</author></authors><commentList><comment ref="B2" authorId="1"><text><r><rPr><b/></rPr><t>Luis:</t></r><r><t xml:space="preserve"> revisar</t></r><rPh><t>x</t></rPh></text></comment><comment ref="C3" authorId="9"><text><t>sin autor</t></text></comment><comment ref="ZZZZ99999" authorId="0"><text><t>mal</t></text></comment><comment ref="D4" authorId="0"><text><t>  </t></text></comment></commentList></comments>"#;
         let mut v = Vec::new();
         notas(&xml::arbol(x), &mut v);
-        assert_eq!(v.len(), 2, "la de referencia imposible y la vacia se descartan: {v:?}");
-        assert_eq!((v[0].fila, v[0].col, v[0].autor.as_str(), v[0].texto.as_str()), (1, 1, "Luis", "Luis: revisar"));
+        assert_eq!(
+            v.len(),
+            2,
+            "la de referencia imposible y la vacia se descartan: {v:?}"
+        );
+        assert_eq!(
+            (
+                v[0].fila,
+                v[0].col,
+                v[0].autor.as_str(),
+                v[0].texto.as_str()
+            ),
+            (1, 1, "Luis", "Luis: revisar")
+        );
         assert_eq!(v[1].autor, "", "autor fuera de la lista");
         assert!(!v[0].encadenado);
     }
@@ -163,8 +217,14 @@ mod pruebas {
         let mut v = Vec::new();
         encadenados(&xml::arbol(x), &personas, &mut v);
         assert_eq!(v.len(), 2);
-        assert_eq!(v[0].autor, "Ana Paz", "el id se compara sin mirar mayusculas");
-        assert_eq!(v[0].respuestas, vec![("Luis".to_string(), "Respuesta".to_string())]);
+        assert_eq!(
+            v[0].autor, "Ana Paz",
+            "el id se compara sin mirar mayusculas"
+        );
+        assert_eq!(
+            v[0].respuestas,
+            vec![("Luis".to_string(), "Respuesta".to_string())]
+        );
         assert_eq!(v[1].autor, "Comentarista");
         assert!(v[1].encadenado && v[1].respuestas.is_empty());
     }

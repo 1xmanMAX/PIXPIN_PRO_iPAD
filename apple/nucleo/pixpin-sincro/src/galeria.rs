@@ -326,10 +326,7 @@ pub fn al_dia(
             v.conservada = true;
             v.se_va = None;
             v.cambiado = ahora;
-        } else if !vieja.conservada
-            && !conservada
-            && efectiva.is_some()
-            && efectiva != vieja.se_va
+        } else if !vieja.conservada && !conservada && efectiva.is_some() && efectiva != vieja.se_va
         {
             // «7 dias mas» aqui: la fecha se movio.
             let v = &mut nuevas[i];
@@ -564,8 +561,7 @@ pub trait CapturasDelAparato {
     /// El registro de caducidad de aqui.
     fn caducidad(&self, ahora: i64) -> Caducidad;
     /// Cambia el registro de caducidad y lo escribe.
-    fn cambiar_caducidad(&self, ahora: i64, f: &mut dyn FnMut(&mut Caducidad))
-    -> io::Result<()>;
+    fn cambiar_caducidad(&self, ahora: i64, f: &mut dyn FnMut(&mut Caducidad)) -> io::Result<()>;
     /// Algo de la galeria cambio (para refrescar lo que este abierto).
     fn avisar(&self) {}
     /// El texto de una captura que ya esta aqui, llegado de otro aparato:
@@ -627,16 +623,16 @@ pub fn aplicar_juntas(
         }
         Estado {
             entradas: juntas.clone(),
-            tenia: e
-                .tenia
-                .into_iter()
-                .filter(|n| !tirar.contains(n))
-                .collect(),
+            tenia: e.tenia.into_iter().filter(|n| !tirar.contains(n)).collect(),
         }
     })?;
     // Y al reves: el texto que trae el otro de una captura que ya esta aqui
     // pero aun no se leyo, a donde lo busca la galeria.
-    for j in e.entradas.iter().filter(|j| !j.borrada && !j.texto.is_empty()) {
+    for j in e
+        .entradas
+        .iter()
+        .filter(|j| !j.borrada && !j.texto.is_empty())
+    {
         if aqui.contains(&j.nombre) && !texto_local.contains_key(j.nombre.as_str()) {
             c.apuntar_texto(&j.nombre, &j.texto);
         }

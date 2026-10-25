@@ -212,8 +212,7 @@ impl std::hash::Hasher for HashRapido {
     }
 }
 
-type MapaRapido<K, V> =
-    std::collections::HashMap<K, V, std::hash::BuildHasherDefault<HashRapido>>;
+type MapaRapido<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<HashRapido>>;
 
 /// Lo que se va sabiendo mientras se calcula: por donde se va (para cazar
 /// los ciclos), lo ya calculado y las celdas escritas ordenadas por columna
@@ -434,7 +433,11 @@ fn numero_corriente(texto: &str) -> Option<Option<f64>> {
     if primero.is_ascii_alphabetic() {
         // Letra de entrada: solo las monedas «S/» y «US$» (y los «inf»/«NaN»
         // que nunca fueron numeros) merecen la mirada larga; el resto es texto.
-        return if matches!(primero, b'S' | b'U' | b's' | b'u') { None } else { Some(None) };
+        return if matches!(primero, b'S' | b'U' | b's' | b'u') {
+            None
+        } else {
+            Some(None)
+        };
     }
     let cuerpo = if primero == b'-' { &b[1..] } else { b };
     let puntos = cuerpo.iter().filter(|c| **c == b'.').count();
@@ -521,7 +524,6 @@ fn evaluar_formula<'t>(tabla: &'t Tabla, texto: &str, m: &mut Memoria<'t>) -> Va
     let mut ctx = motor::Ctx { tabla, m };
     ctx.valor(&arbol)
 }
-
 
 /// Las celdas escritas que caen dentro de un rango.
 ///

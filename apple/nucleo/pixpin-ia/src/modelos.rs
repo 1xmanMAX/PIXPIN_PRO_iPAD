@@ -121,7 +121,11 @@ pub const GEMMA4_E2B: Modelo = Modelo {
 pub const OPCIONALES: [Modelo; 1] = [GEMMA4_E2B];
 
 pub fn por_id(id: &str) -> Option<Modelo> {
-    MODELOS.iter().chain(OPCIONALES.iter()).copied().find(|m| m.id == id)
+    MODELOS
+        .iter()
+        .chain(OPCIONALES.iter())
+        .copied()
+        .find(|m| m.id == id)
 }
 
 /// El motor: la version de llama.cpp con Vulkan para Windows x64. Trae
@@ -170,7 +174,9 @@ pub fn se_extrae(patrones: &[&str], nombre: &str) -> bool {
     }
     patrones.iter().any(|p| match p.split_once('*') {
         Some((antes, despues)) => {
-            nombre.len() >= antes.len() + despues.len() && nombre.starts_with(antes) && nombre.ends_with(despues)
+            nombre.len() >= antes.len() + despues.len()
+                && nombre.starts_with(antes)
+                && nombre.ends_with(despues)
         }
         None => *p == nombre,
     })
@@ -182,11 +188,19 @@ mod pruebas {
 
     #[test]
     fn las_huellas_son_sha256_en_hexadecimal() {
-        let mut todas: Vec<Fichero> = MODELOS.iter().chain(OPCIONALES.iter()).flat_map(|m| m.ficheros()).collect();
+        let mut todas: Vec<Fichero> = MODELOS
+            .iter()
+            .chain(OPCIONALES.iter())
+            .flat_map(|m| m.ficheros())
+            .collect();
         todas.push(LLAMA_CPP.zip);
         for f in todas {
             assert_eq!(f.sha256.len(), 64, "{}", f.nombre);
-            assert!(f.sha256.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+            assert!(
+                f.sha256
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+            );
             assert!(f.url.starts_with("https://"));
             assert!(f.bytes > 1_000_000);
         }

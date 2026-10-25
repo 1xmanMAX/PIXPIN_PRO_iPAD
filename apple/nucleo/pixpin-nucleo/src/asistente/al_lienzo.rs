@@ -30,6 +30,8 @@ use crate::Nucleo;
 use crate::editor::{self, EditorLienzo};
 use crate::lienzo::ImagenDelLienzo;
 
+pub mod plantilla;
+
 /// El nombre del lienzo propio del asistente, al crearlo.
 pub const NOMBRE_LIENZO_PROPIO: &str = "Lienzo del asistente";
 
@@ -53,6 +55,25 @@ pub enum Trabajo {
     Elegido,
     /// **Mirarlo** (`ojos`): se copia la zona con sus fotos.
     Ver { mirada: pixpin_ia::ojos::Mirada, ctx: Contexto },
+    /// **Una plantilla de serie con otro intervalo** (Windows, 22-oct,
+    /// «damela del 1 al 40», «de 10 en 10»): la elegida, rehecha en su
+    /// sitio, o la de `nombre`. Ver [`plantilla::poner_plantilla`].
+    Plantilla {
+        nombre: Option<String>,
+        intervalo: pixpin_motor2d::figuras_de_serie::Intervalo,
+    },
+    /// **Las secciones de la plantilla del lienzo** (25-oct): la elegida o
+    /// la unica que hay, para que el modelo las lea antes de personalizarla.
+    /// No cambia nada.
+    Secciones,
+    /// **Una copia de como esta** (23-oct, la revision con rubrica): antes
+    /// de cada ronda de correccion, para volver si la deja peor.
+    Copia,
+    /// **Volver a una copia** de [`Trabajo::Copia`], como un paso mas.
+    VolverA { copia: Vec<Elemento> },
+    /// **Las comprobaciones duras** de todo el lienzo (`pixpin_ia::lint`):
+    /// una linea por fallo en [`Respuesta::texto`].
+    Comprobar,
 }
 
 /// Lo que contesta el lienzo: el texto para el modelo, los ids que toco
@@ -66,6 +87,8 @@ pub struct Respuesta {
     pub elegido: Vec<Elemento>,
     /// Con [`Trabajo::Ver`]: lo copiado para pintarlo.
     pub vista: Option<Box<super::ojos::Encargo>>,
+    /// Con [`Trabajo::Copia`]: los elementos tal cual.
+    pub copia: Option<Vec<Elemento>>,
 }
 
 /// Los elementos de un documento del asistente.
@@ -168,8 +191,10 @@ pub fn trabajar(escena: &mut Escena, trabajo: &Trabajo, elegidos: &[u64], marco:
                 elegidos: elegidos.to_vec(),
                 ultimos: Vec::new(),
             };
+            // Con la guia de las plantillas que hay (25-oct): para cambiar la
+            // que hay con sus piezas y no dibujar otra al lado.
             Ok(Respuesta {
-                texto: pixpin_ia::edicion::resumen(escena, &ctx),
+                texto: format!("{}{}", pixpin_ia::edicion::resumen(escena, &ctx), plantilla::guias_del_lienzo(escena)),
                 ctx: Some(ctx),
                 ..Default::default()
             })
@@ -189,6 +214,33 @@ pub fn trabajar(escena: &mut Escena, trabajo: &Trabajo, elegidos: &[u64], marco:
             elegido: escena.visibles().filter(|e| elegidos.contains(&e.id)).cloned().collect(),
             ..Default::default()
         }),
+        Trabajo::Plantilla { nombre, intervalo } => plantilla::poner_plantilla(escena, elegidos, nombre.as_deref(), intervalo, None),
+        Trabajo::Secciones => plantilla::secciones_de_la_plantilla(escena, elegidos).map(|texto| Respuesta {
+            texto,
+            ..Default::default()
+        }),
+        Trabajo::Copia => Ok(Respuesta {
+            copia: Some(escena.elementos.clone()),
+            ..Default::default()
+        }),
+        Trabajo::VolverA { copia } => {
+            let cambio = escena.volver_a(copia);
+            Ok(Respuesta {
+                texto: if cambio {
+                    "vuelto a la version guardada".into()
+                } else {
+                    "ya estaba como la version guardada".into()
+                },
+                ..Default::default()
+            })
+        }
+        Trabajo::Comprobar => {
+            let avisos = pixpin_ia::lint::revisar(escena, None);
+            Ok(Respuesta {
+                texto: avisos.iter().map(|h| h.texto.clone()).collect::<Vec<_>>().join("\n"),
+                ..Default::default()
+            })
+        }
         Trabajo::Dibujar(_) | Trabajo::DibujarHoja { .. } => Err("eso no es un trabajo de editar".into()),
     }
 }
@@ -201,7 +253,7 @@ fn en_el_abierto(editor: &EditorLienzo, trabajo: &Trabajo, marco: Option<(f32, f
     registrar_fotos(editor, trabajo)?;
     let elegidos = editor.elegidos();
     let fotos = editor.imagenes();
-    editor.con_la_escena(|escena, vista| {
+    let r = editor.con_la_escena(|escena, vista| {
         let vista = vista.unwrap_or_else(|| {
             let c = escena.caja().unwrap_or((0.0, 0.0, 800.0, 600.0));
             (c.0, c.1, c.0 + 800.0, c.1 + 600.0)
@@ -212,9 +264,22 @@ fn en_el_abierto(editor: &EditorLienzo, trabajo: &Trabajo, marco: Option<(f32, f
                 let ids = meter_ids(escena, doc, centro)?;
                 Ok(resumen_con_ids(escena, ids, marco))
             }
+            // Las hojas nuevas, centradas en lo que se ve si no ocupan el
+            // sitio de la elegida (se eligen al salir de aqui).
+            Trabajo::Plantilla { nombre, intervalo } => {
+                let centro = ((vista.0 + vista.2) / 2.0, (vista.1 + vista.3) / 2.0);
+                plantilla::poner_plantilla(escena, &elegidos, nombre.as_deref(), intervalo, Some(centro))
+            }
             otro => trabajar(escena, otro, &elegidos, (vista.0.floor(), vista.1.floor()), &fotos),
         }
-    })
+    })?;
+    // La plantilla rehecha queda elegida, lista para «Guardar en figuras»
+    // (Windows: `tomar_para_elegir`).
+    if matches!(trabajo, Trabajo::Plantilla { .. }) && !r.ids.is_empty() {
+        editor.tomar().gesto.seleccion.poner_todos(r.ids.clone());
+        editor.subir_version();
+    }
+    Ok(r)
 }
 
 /// Las fotos de una hoja, al editor antes de meter su documento.
@@ -301,7 +366,12 @@ pub fn en_el_chat(
             Trabajo::Elegido => return Ok((Respuesta::default(), None)),
             Trabajo::Ver { .. } => return Err("todavia no hay ningun lienzo en este chat: no hay nada que ver".into()),
             Trabajo::Editar { .. } => return Err("todavia no hay ningun lienzo en este chat: dibuja algo primero".into()),
-            Trabajo::Dibujar(_) | Trabajo::DibujarHoja { .. } => {
+            Trabajo::Secciones => return Err("todavia no hay ningun lienzo en este chat: no hay plantilla que leer".into()),
+            Trabajo::Copia | Trabajo::VolverA { .. } | Trabajo::Comprobar => {
+                return Err("todavia no hay ningun lienzo en este chat".into());
+            }
+            // Una plantilla pedida por su nombre si estrena el lienzo.
+            Trabajo::Dibujar(_) | Trabajo::DibujarHoja { .. } | Trabajo::Plantilla { .. } => {
                 let m = nucleo
                     .crear_lienzo_con(chat.to_string(), Some(NOMBRE_LIENZO_PROPIO.into()), |m| {
                         m.aparato = Some(ia_chat::APARATO.into());
@@ -334,7 +404,7 @@ pub fn en_el_chat(
         Ok(_) => {}
         Err(e) => return Err(format!("no se pudo guardar el lienzo: {e}")),
     }
-    if matches!(trabajo, Trabajo::Resumir | Trabajo::Elegido | Trabajo::Ver { .. }) {
+    if matches!(trabajo, Trabajo::Resumir | Trabajo::Elegido | Trabajo::Ver { .. } | Trabajo::Secciones | Trabajo::Copia | Trabajo::Comprobar) {
         return Ok((respuesta, Some(referencia)));
     }
     Ok((con_nombre(respuesta, Some(&mensaje), nuevo), Some(referencia)))
@@ -402,5 +472,72 @@ mod pruebas {
         assert_eq!(escena.pasos_cerrados(), antes + 1);
         assert!(escena.deshacer());
         assert_eq!(escena.cuantos_visibles(), 0);
+    }
+
+    use pixpin_motor2d::biblioteca;
+    use pixpin_motor2d::figuras_de_serie as serie;
+
+    fn trabajo_de(escena: &mut Escena, t: Trabajo) -> Respuesta {
+        trabajar(escena, &t, &[], (0.0, 0.0), &[]).unwrap()
+    }
+
+    /// La revision guarda una copia, la correccion la estropea y se vuelve a
+    /// la copia en un solo paso que el Ctrl+Z deshace.
+    #[test]
+    fn la_copia_vuelve_tal_cual_y_se_deshace_de_una() {
+        let mut escena = Escena::nueva();
+        let f = serie::catalogo()
+            .into_iter()
+            .find(|f| f.id == "serie-lista-de-tareas")
+            .unwrap();
+        let ids = biblioteca::estampar_en_escena(
+            &mut escena,
+            &f,
+            pixpin_motor2d::vector::Punto2::nuevo(500.0, 600.0),
+        );
+        let antes: Vec<_> = escena.visibles().map(|e| (e.id, e.caja())).collect();
+        let copia = trabajo_de(&mut escena, Trabajo::Copia)
+            .copia
+            .expect("la copia");
+        // La «correccion» mueve una cosa y borra otra.
+        escena.abrir_paso();
+        escena.mover(ids[0], 40.0, 0.0);
+        escena.borrar_apuntando(ids[1]);
+        escena.cerrar_paso();
+        assert_ne!(
+            escena
+                .visibles()
+                .map(|e| (e.id, e.caja()))
+                .collect::<Vec<_>>(),
+            antes
+        );
+        let pasos = escena.pasos_cerrados();
+        let r = trabajo_de(
+            &mut escena,
+            Trabajo::VolverA {
+                copia: copia.clone(),
+            },
+        );
+        assert!(r.texto.starts_with("vuelto"), "{}", r.texto);
+        assert_eq!(
+            escena
+                .visibles()
+                .map(|e| (e.id, e.caja()))
+                .collect::<Vec<_>>(),
+            antes
+        );
+        assert_eq!(escena.pasos_cerrados(), pasos + 1, "volver es un paso");
+        // Otra vez: sigue igual (puede apuntar un paso, por las versiones).
+        trabajo_de(&mut escena, Trabajo::VolverA { copia });
+        assert_eq!(
+            escena
+                .visibles()
+                .map(|e| (e.id, e.caja()))
+                .collect::<Vec<_>>(),
+            antes
+        );
+        // Y comprobar contesta con una linea por fallo (o ninguna).
+        let r = trabajo_de(&mut escena, Trabajo::Comprobar);
+        assert!(r.texto.lines().count() <= pixpin_ia::lint::MAX_LINEAS.max(64));
     }
 }

@@ -233,6 +233,21 @@ pub fn resolver_lienzo(pregunta: &str, mensajes: &[Nota]) -> (String, Option<Str
     (texto, destino)
 }
 
+/// **El lienzo del chat que se llama asi** (`usar_lienzo`, Windows 17-oct):
+/// el nombre entero sin mayusculas ni tildes o, si no hay, el ultimo que lo
+/// contiene.
+pub fn lienzo_por_nombre(mensajes: &[Nota], nombre: &str) -> Option<usize> {
+    let buscado = sin_tildes(nombre.trim());
+    if buscado.trim().is_empty() {
+        return None;
+    }
+    let lienzos = || mensajes.iter().enumerate().rev().filter(|(_, m)| es_lienzo(m));
+    lienzos()
+        .find(|(_, m)| sin_tildes(&nombre_de_lienzo(m)) == buscado)
+        .or_else(|| lienzos().find(|(_, m)| sin_tildes(&nombre_de_lienzo(m)).contains(buscado.trim())))
+        .map(|(i, _)| i)
+}
+
 /// El lienzo propio del asistente en esta conversacion: el ultimo que creo
 /// el (su `aparato` es [`APARATO`]).
 pub fn lienzo_propio(mensajes: &[Nota]) -> Option<usize> {
@@ -445,6 +460,9 @@ pub struct EnVivo {
     pub plan: Option<pixpin_ia::pensar::Plan>,
     /// El turno empezo con el contexto renovado.
     pub reiniciado: bool,
+    /// El plan del jefe o la lista de pasos del turno y como va cada tarea
+    /// (`pixpin_ia::orquesta`, `pixpin_ia::pasos`).
+    pub tareas: Vec<pixpin_ia::orquesta::TareaVisible>,
 }
 
 /// Como acabo una pregunta de confirmar.
@@ -469,6 +487,10 @@ pub fn rotulo_de(nombre: &str) -> String {
         };
     }
     match nombre {
+        "repasar" => "🔎 repasando el pedido…",
+        "jefe:planear" => "🧭 el jefe está planeando…",
+        "jefe:supervisar" => "🧐 el jefe revisa la tarea…",
+        "jefe:revisar" => "🧐 el jefe revisa el resultado…",
         DIBUJAR => "✏️ dibujando en el lienzo…",
         GRAFICA => "📊 haciendo la gráfica…",
         OCR => "🔎 leyendo el documento…",
@@ -476,6 +498,8 @@ pub fn rotulo_de(nombre: &str) -> String {
         pixpin_ia::contexto::BUSCAR_HISTORIAL => "🗂️ buscando en la conversación…",
         CALCAR => "🖼️ calcando la imagen…",
         AYUDA => "📖 mirando la ayuda…",
+        pixpin_ia::nube::claude::BUSCAR_EN_LA_WEB => "🌐 buscando en la web…",
+        pixpin_ia::nube::claude::LEER_LA_WEB => "🌐 leyendo la página…",
         _ => "⚙️ trabajando…",
     }
     .to_string()
@@ -516,7 +540,50 @@ impl EnVivo {
                 self.estado = Some("💭 …".into());
             }
             Evento::Reintento { .. } => self.estado = Some("🔁 corrigiendo…".into()),
+            Evento::Tareas(t) => self.tareas = t.clone(),
         }
+    }
+
+    /// **El plan del jefe** (o la lista de pasos) como lista que se va
+    /// marcando, encima de la respuesta: «📋 Plan» y una linea por tarea.
+    pub fn plan_visible(&self) -> String {
+        use pixpin_ia::orquesta::EstadoTarea as E;
+        if self.tareas.is_empty() {
+            return String::new();
+        }
+        let mut s = String::from("📋 Plan\n");
+        for (i, t) in self.tareas.iter().enumerate() {
+            let marca = match t.estado {
+                E::Pendiente => "⬜",
+                E::EnCurso => "⏳",
+                E::Corrigiendo => "🔁",
+                E::Hecha => "✅",
+                E::NoSePudo => "✖️",
+            };
+            s.push_str(&format!("{marca} {}. {}\n", i + 1, t.titulo));
+        }
+        s
+    }
+
+    /// **Una duda con opciones** (`preguntar_usuario`, 22-oct): la tarjeta la
+    /// pinta el chat; aqui solo el estado mientras espera.
+    pub fn preguntar_con_opciones(&mut self) {
+        self.estado = Some("✋ elige una opción o escribe la tuya…".into());
+    }
+
+    /// **La duda contestada queda en el historial**, en su linea:
+    /// «❓ ¿Traduzco todo o solo la figura? → ✅ Solo la figura». `respuesta`
+    /// `None`: nadie contesto y el turno sigue con la recomendada.
+    pub fn contestada_con_opciones(&mut self, pregunta: &str, respuesta: Option<&str>, recomendada: &str) {
+        if !self.texto.is_empty() && !self.texto.ends_with('\n') {
+            self.texto.push('\n');
+        }
+        let fin = match respuesta {
+            Some(r) => format!("✅ {}", r.trim()),
+            None => format!("⌛ sin respuesta: sigo con «{}»", recomendada.trim()),
+        };
+        self.texto.push_str(&format!("❓ {} → {fin}\n", pregunta.trim()));
+        self.estado = (!self.acabado).then(|| "💭 …".to_string());
     }
 
     /// Llega una pregunta: la burbuja ensena su tarjeta con «Sí» y «No».
@@ -583,7 +650,7 @@ impl EnVivo {
 
     /// El texto de la burbuja tal como se ve ahora.
     pub fn mostrar(&self) -> String {
-        let mut s = self.texto.trim_end().to_string();
+        let mut s = format!("{}{}", self.plan_visible(), self.texto.trim_end());
         if let Some(e) = &self.estado {
             if !s.is_empty() {
                 s.push('\n');
@@ -592,7 +659,9 @@ impl EnVivo {
         } else if !self.acabado {
             s.push_str(" ▍");
         }
-        if self.acabado && !self.fallos.is_empty() {
+        // Con jefe, lo que fallo por el camino ya lo corrigio o lo dice su
+        // respuesta: no se repite abajo.
+        if self.acabado && !self.fallos.is_empty() && self.tareas.is_empty() {
             s.push_str(&format!("\n⚠️ {}", self.fallos.join(" · ")));
         }
         s.trim_start().to_string()

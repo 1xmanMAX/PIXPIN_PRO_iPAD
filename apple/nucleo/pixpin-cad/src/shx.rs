@@ -44,7 +44,10 @@ fn sin_nombre(d: &[u8]) -> &[u8] {
 impl Shx {
     pub fn leer(bytes: &[u8]) -> Option<Shx> {
         let fin_cab = bytes.iter().position(|&c| c == 0x1a)? + 1;
-        let cab = std::str::from_utf8(&bytes[..fin_cab - 1]).ok()?.trim().to_ascii_lowercase();
+        let cab = std::str::from_utf8(&bytes[..fin_cab - 1])
+            .ok()?
+            .trim()
+            .to_ascii_lowercase();
         let mut formas = HashMap::new();
         if cab.contains("unifont") {
             // u32 numero de formas, u16 largo de la cabecera de la fuente,
@@ -56,12 +59,20 @@ impl Shx {
             let arriba = *datos.first()? as f32;
             let mut i = fin_cab + 6 + largo_info;
             for _ in 0..n.min(70_000) {
-                let (Some(num), Some(largo)) = (u16le(bytes, i), u16le(bytes, i + 2)) else { break };
-                let Some(d) = bytes.get(i + 4..i + 4 + largo as usize) else { break };
+                let (Some(num), Some(largo)) = (u16le(bytes, i), u16le(bytes, i + 2)) else {
+                    break;
+                };
+                let Some(d) = bytes.get(i + 4..i + 4 + largo as usize) else {
+                    break;
+                };
                 formas.insert(num, sin_nombre(d).to_vec());
                 i += 4 + largo as usize;
             }
-            return Some(Shx { formas, arriba: arriba.max(1.0), unifont: true });
+            return Some(Shx {
+                formas,
+                arriba: arriba.max(1.0),
+                unifont: true,
+            });
         }
         if cab.contains("shapes") {
             // u16 primero, u16 ultimo, u16 cuantas; el indice (numero, largo)
@@ -84,7 +95,11 @@ impl Shx {
                     formas.insert(num, d.to_vec());
                 }
             }
-            return Some(Shx { formas, arriba: if arriba > 0.0 { arriba } else { 9.0 }, unifont: false });
+            return Some(Shx {
+                formas,
+                arriba: if arriba > 0.0 { arriba } else { 9.0 },
+                unifont: false,
+            });
         }
         None
     }
@@ -272,7 +287,10 @@ impl Pluma {
                 }
                 7 => {
                     let num = if f.unifont {
-                        let n = u16::from_be_bytes([*d.get(i).unwrap_or(&0), *d.get(i + 1).unwrap_or(&0)]);
+                        let n = u16::from_be_bytes([
+                            *d.get(i).unwrap_or(&0),
+                            *d.get(i + 1).unwrap_or(&0),
+                        ]);
                         i += 2;
                         n
                     } else {
@@ -313,12 +331,20 @@ impl Pluma {
                         0 => 8,
                         k => k,
                     } as f32;
-                    let (cx, cy) = (self.x - r * inicio.to_radians().cos(), self.y - r * inicio.to_radians().sin());
+                    let (cx, cy) = (
+                        self.x - r * inicio.to_radians().cos(),
+                        self.y - r * inicio.to_radians().sin(),
+                    );
                     self.arco(cx, cy, r, inicio, inicio + sentido * n * 45.0);
                 }
                 11 => {
-                    let (o0, o1) = (*d.get(i).unwrap_or(&0) as f32, *d.get(i + 1).unwrap_or(&0) as f32);
-                    let r = (*d.get(i + 2).unwrap_or(&0) as f32 * 256.0 + *d.get(i + 3).unwrap_or(&0) as f32) * self.escala;
+                    let (o0, o1) = (
+                        *d.get(i).unwrap_or(&0) as f32,
+                        *d.get(i + 1).unwrap_or(&0) as f32,
+                    );
+                    let r = (*d.get(i + 2).unwrap_or(&0) as f32 * 256.0
+                        + *d.get(i + 3).unwrap_or(&0) as f32)
+                        * self.escala;
                     let s = *d.get(i + 4).unwrap_or(&0);
                     i += 5;
                     let sentido = if s & 0x80 != 0 { -1.0 } else { 1.0 };
@@ -329,11 +355,18 @@ impl Pluma {
                     } as f32;
                     let a0 = oct * 45.0 + sentido * o0 * 45.0 / 256.0;
                     let a1 = (oct + sentido * (n - 1.0)) * 45.0 + sentido * o1 * 45.0 / 256.0;
-                    let (cx, cy) = (self.x - r * a0.to_radians().cos(), self.y - r * a0.to_radians().sin());
+                    let (cx, cy) = (
+                        self.x - r * a0.to_radians().cos(),
+                        self.y - r * a0.to_radians().sin(),
+                    );
                     self.arco(cx, cy, r, a0, a1);
                 }
                 12 => {
-                    let (dx, dy, b) = (sb(*d.get(i).unwrap_or(&0)), sb(*d.get(i + 1).unwrap_or(&0)), sb(*d.get(i + 2).unwrap_or(&0)));
+                    let (dx, dy, b) = (
+                        sb(*d.get(i).unwrap_or(&0)),
+                        sb(*d.get(i + 1).unwrap_or(&0)),
+                        sb(*d.get(i + 2).unwrap_or(&0)),
+                    );
                     i += 3;
                     let e = self.escala;
                     if !self.seco {
@@ -423,9 +456,16 @@ pub fn carpetas() -> Vec<PathBuf> {
 /// Las de AutoCAD y las de Windows, sin las del usuario.
 pub fn carpetas_del_sistema() -> Vec<PathBuf> {
     let mut v = Vec::new();
-    for base in ["C:\\Program Files\\Autodesk", "C:\\Program Files (x86)\\Autodesk"] {
+    for base in [
+        "C:\\Program Files\\Autodesk",
+        "C:\\Program Files (x86)\\Autodesk",
+    ] {
         if let Ok(d) = std::fs::read_dir(base) {
-            let mut versiones: Vec<PathBuf> = d.flatten().map(|e| e.path().join("Fonts")).filter(|p| p.is_dir()).collect();
+            let mut versiones: Vec<PathBuf> = d
+                .flatten()
+                .map(|e| e.path().join("Fonts"))
+                .filter(|p| p.is_dir())
+                .collect();
             versiones.sort();
             versiones.reverse();
             v.extend(versiones);
@@ -441,7 +481,11 @@ pub fn buscar(nombre: &str, carpetas: &[PathBuf]) -> Option<PathBuf> {
     if base.is_empty() {
         return None;
     }
-    let con_ext = if base.to_ascii_lowercase().ends_with(".shx") { base.to_string() } else { format!("{base}.shx") };
+    let con_ext = if base.to_ascii_lowercase().ends_with(".shx") {
+        base.to_string()
+    } else {
+        format!("{base}.shx")
+    };
     for c in carpetas {
         let r = c.join(&con_ext);
         if r.is_file() {
@@ -450,7 +494,10 @@ pub fn buscar(nombre: &str, carpetas: &[PathBuf]) -> Option<PathBuf> {
         // Windows no distingue mayusculas, pero por si acaso.
         if let Ok(d) = std::fs::read_dir(c) {
             for e in d.flatten() {
-                if e.file_name().to_string_lossy().eq_ignore_ascii_case(&con_ext) {
+                if e.file_name()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&con_ext)
+                {
                     return Some(e.path());
                 }
             }
@@ -504,9 +551,18 @@ mod pruebas {
         };
         let f = abrir(&r).expect("romans.shx se lee");
         let a = f.letra('A').expect("la A");
-        assert!(!a.trazos.is_empty() && a.avance > 0.4 && a.avance < 1.5, "{:?}", a.avance);
+        assert!(
+            !a.trazos.is_empty() && a.avance > 0.4 && a.avance < 1.5,
+            "{:?}",
+            a.avance
+        );
         // La A llega hasta arriba (mayuscula = 1).
-        let alto = a.trazos.iter().flatten().map(|p| p[1]).fold(f32::MIN, f32::max);
+        let alto = a
+            .trazos
+            .iter()
+            .flatten()
+            .map(|p| p[1])
+            .fold(f32::MIN, f32::max);
         assert!((alto - 1.0).abs() < 0.15, "{alto}");
         assert!(f.letra('ñ').is_some() || f.letra('n').is_some());
     }
@@ -535,8 +591,10 @@ pub fn reserva_para(clave: &str) -> Option<&'static str> {
     let base = c.rsplit(['/', '\\']).next().unwrap_or(&c);
     let base = base.strip_suffix(".shx").unwrap_or(base);
     let conocida = [
-        "txt", "simplex", "romans", "romand", "romanc", "romant", "complex", "italic", "italicc", "italict", "scripts", "scriptc", "gothice",
-        "gothicg", "gothici", "greeks", "greekc", "monotxt", "isocp", "isocp2", "isocp3", "isoct", "isoct2", "isoct3", "isocteur", "isocpeur",
+        "txt", "simplex", "romans", "romand", "romanc", "romant", "complex", "italic", "italicc",
+        "italict", "scripts", "scriptc", "gothice", "gothicg", "gothici", "greeks", "greekc",
+        "monotxt", "isocp", "isocp2", "isocp3", "isoct", "isoct2", "isoct3", "isocteur",
+        "isocpeur",
     ];
     if !c.ends_with(".shx") && !conocida.contains(&base) {
         return None;
@@ -556,7 +614,10 @@ pub fn reserva_para(clave: &str) -> Option<&'static str> {
 /// La SHX de PixPin que va en lugar de `clave`, ya leida.
 pub fn de_reserva(clave: &str) -> Option<Shx> {
     let nombre = reserva_para(clave)?;
-    DE_PIXPIN.iter().find(|(n, _)| *n == nombre).and_then(|(_, b)| Shx::leer(b))
+    DE_PIXPIN
+        .iter()
+        .find(|(n, _)| *n == nombre)
+        .and_then(|(_, b)| Shx::leer(b))
 }
 
 #[cfg(test)]

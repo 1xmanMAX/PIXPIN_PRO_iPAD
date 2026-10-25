@@ -27,7 +27,10 @@ use pixpin_ia::acciones::{self, Accion, CONSULTA};
 pub enum Contenido {
     Texto(String),
     /// Una imagen (contenido `image` de MCP): sus bytes y su tipo.
-    Imagen { datos: Vec<u8>, mime: &'static str },
+    Imagen {
+        datos: Vec<u8>,
+        mime: &'static str,
+    },
 }
 
 pub type Resultado = Result<Vec<Contenido>, String>;
@@ -46,11 +49,18 @@ pub struct Local {
 /// que cambian algo que el usuario ya tenia (una tarea, un documento
 /// anotado). Crear (una tarea, una nota, un mensaje) no pregunta: no se
 /// pierde nada y se ve en su aviso.
-pub const MODIFICA: &[&str] = &["marcar_tarea", "mover_tarea", "editar_tarea", pixpin_ia::acciones_documentos::ANOTAR];
+pub const MODIFICA: &[&str] = &[
+    "marcar_tarea",
+    "mover_tarea",
+    "editar_tarea",
+    pixpin_ia::acciones_documentos::ANOTAR,
+];
 
 /// Las filas de la tabla que no se ofrecen (ver la cabecera).
 fn fuera(a: &Accion) -> bool {
-    a.accion == CONSULTA || a.herramienta == pixpin_ia::hoja::NOMBRE || local(a.herramienta).is_some()
+    a.accion == CONSULTA
+        || a.herramienta == pixpin_ia::hoja::NOMBRE
+        || local(a.herramienta).is_some()
 }
 
 /// Las filas de la tabla que se ofrecen como herramientas de la app.
@@ -72,7 +82,8 @@ fn esquema_buscar() -> Value {
 }
 
 fn esquema_tareas() -> Value {
-    acciones::herramienta(acciones::por_nombre("consultar_tareas").expect("esta en la tabla")).parametros
+    acciones::herramienta(acciones::por_nombre("consultar_tareas").expect("esta en la tabla"))
+        .parametros
 }
 
 fn esquema_ruta_y_paginas() -> Value {
@@ -232,7 +243,9 @@ pub fn llamar(nombre: &str, args: &Map<String, Value>) -> Option<Value> {
         return Some(resultado((l.hacer)(args)));
     }
     let a = de_la_app_por_nombre(nombre)?;
-    Some(resultado(crate::escribir::hacer(a, args).map(|t| vec![Contenido::Texto(t)])))
+    Some(resultado(
+        crate::escribir::hacer(a, args).map(|t| vec![Contenido::Texto(t)]),
+    ))
 }
 
 #[cfg(test)]
@@ -255,15 +268,27 @@ mod pruebas {
         }
         // El esquema es el de la tabla, no una copia.
         let abrir = l.iter().find(|h| h["name"] == "abrir_ventana").unwrap();
-        assert_eq!(abrir["inputSchema"], acciones::herramienta(acciones::por_nombre("abrir_ventana").unwrap()).parametros);
+        assert_eq!(
+            abrir["inputSchema"],
+            acciones::herramienta(acciones::por_nombre("abrir_ventana").unwrap()).parametros
+        );
         assert!(!existe("hoja_a_lienzo") && existe("consultar_tareas") && existe("anadir_tarea"));
     }
 
     #[test]
     fn lo_que_borra_o_cambia_va_marcado() {
         let l = lista();
-        let marcado = |n: &str| l.iter().find(|h| h["name"] == n).unwrap()["annotations"]["destructiveHint"] == true;
-        for n in ["borrar_lista", "quitar_tarea", "borrar_captura", "enviar_al_movil", "editar_tarea", "anotar_documento"] {
+        let marcado = |n: &str| {
+            l.iter().find(|h| h["name"] == n).unwrap()["annotations"]["destructiveHint"] == true
+        };
+        for n in [
+            "borrar_lista",
+            "quitar_tarea",
+            "borrar_captura",
+            "enviar_al_movil",
+            "editar_tarea",
+            "anotar_documento",
+        ] {
             assert!(marcado(n), "{n}");
         }
         for n in ["anadir_tarea", "nota_nueva", "escribir_en_chat"] {
@@ -275,7 +300,13 @@ mod pruebas {
 
     #[test]
     fn el_resultado_lleva_texto_imagen_o_error() {
-        let r = resultado(Ok(vec![Contenido::Texto("hola".into()), Contenido::Imagen { datos: vec![1, 2, 3], mime: "image/png" }]));
+        let r = resultado(Ok(vec![
+            Contenido::Texto("hola".into()),
+            Contenido::Imagen {
+                datos: vec![1, 2, 3],
+                mime: "image/png",
+            },
+        ]));
         assert_eq!(r["isError"], false);
         assert_eq!(r["content"][0]["text"], "hola");
         assert_eq!(r["content"][1]["type"], "image");

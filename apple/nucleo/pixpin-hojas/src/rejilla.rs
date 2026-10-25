@@ -48,7 +48,9 @@ pub fn ancho_digito_en(f: &Fuente, ppp: f64) -> f64 {
     } else {
         0.5
     };
-    ((f.tam as f64 * ppp / 72.0).round() * razon).round().max(1.0)
+    ((f.tam as f64 * ppp / 72.0).round() * razon)
+        .round()
+        .max(1.0)
 }
 
 /// El alto por defecto de una fila para esa fuente, en puntos (Calibri 11:
@@ -72,7 +74,9 @@ pub fn alto_por_fuente(f: &Fuente) -> f32 {
 
 /// Ancho de columna en caracteres -> pixeles (ECMA-376 18.3.1.13).
 pub fn px_de_ancho(ancho: f64, mdw: f64) -> f64 {
-    (((256.0 * ancho + (128.0 / mdw).trunc()) / 256.0) * mdw).trunc().max(0.0)
+    (((256.0 * ancho + (128.0 / mdw).trunc()) / 256.0) * mdw)
+        .trunc()
+        .max(0.0)
 }
 
 /// Puntos -> pixeles enteros, como redondea Excel las filas.
@@ -102,7 +106,10 @@ pub struct Panel {
 impl Panel {
     /// De hoja (px al 100 %) a pantalla.
     pub fn a_pantalla(&self, x: f64, y: f64, escala: f64) -> (f64, f64) {
-        (self.pantalla[0] + (x - self.origen.0) * escala, self.pantalla[1] + (y - self.origen.1) * escala)
+        (
+            self.pantalla[0] + (x - self.origen.0) * escala,
+            self.pantalla[1] + (y - self.origen.1) * escala,
+        )
     }
 }
 
@@ -162,8 +169,14 @@ impl Rejilla {
     /// en la misma pantalla. `digito` es el ancho del digito medido a esa
     /// resolucion (o `None` para estimarlo).
     pub fn nueva_en(hoja: &Hoja, fuente_normal: &Fuente, digito: Option<f64>, ppp: f64) -> Rejilla {
-        let ppp = if ppp.is_finite() && ppp >= 24.0 { ppp.min(960.0) } else { 96.0 };
-        let mdw = digito.filter(|d| d.is_finite() && *d >= 1.0).unwrap_or_else(|| ancho_digito_en(fuente_normal, ppp));
+        let ppp = if ppp.is_finite() && ppp >= 24.0 {
+            ppp.min(960.0)
+        } else {
+            96.0
+        };
+        let mdw = digito
+            .filter(|d| d.is_finite() && *d >= 1.0)
+            .unwrap_or_else(|| ancho_digito_en(fuente_normal, ppp));
         let cab = &hoja.cabecera;
         let ancho_defecto = match cab.ancho_defecto {
             Some(w) => px_de_ancho(w, mdw),
@@ -177,12 +190,22 @@ impl Rejilla {
                 (px / 8.0).ceil() * 8.0
             }
         };
-        let alto_pt = cab.alto_defecto.unwrap_or_else(|| alto_por_fuente(fuente_normal));
+        let alto_pt = cab
+            .alto_defecto
+            .unwrap_or_else(|| alto_por_fuente(fuente_normal));
         let ocultas_por_defecto = cab.filas_ocultas_por_defecto;
-        let alto_defecto = if ocultas_por_defecto { 0.0 } else { px_de_pt_en(alto_pt, ppp) };
+        let alto_defecto = if ocultas_por_defecto {
+            0.0
+        } else {
+            px_de_pt_en(alto_pt, ppp)
+        };
         let mut anchos = vec![ancho_defecto; MAX_COLUMNAS as usize];
         for c in &cab.columnas {
-            let w = if c.oculta { 0.0 } else { c.ancho.map_or(ancho_defecto, |a| px_de_ancho(a, mdw)) };
+            let w = if c.oculta {
+                0.0
+            } else {
+                c.ancho.map_or(ancho_defecto, |a| px_de_ancho(a, mdw))
+            };
             for k in c.min..=c.max.min(MAX_COLUMNAS - 1) {
                 anchos[k as usize] = w;
             }
@@ -220,7 +243,10 @@ impl Rejilla {
             return;
         }
         self.version = hoja.version;
-        if hoja.filas.len() < self.cursor || (self.cursor > 0 && hoja.filas.get(self.cursor - 1).map(|f| f.indice) != Some(self.ultima)) {
+        if hoja.filas.len() < self.cursor
+            || (self.cursor > 0
+                && hoja.filas.get(self.cursor - 1).map(|f| f.indice) != Some(self.ultima))
+        {
             // Se reordenaron: de cero.
             self.ys.truncate(1);
             self.cursor = 0;
@@ -293,7 +319,11 @@ impl Rejilla {
     pub fn y(&self, fila: u32) -> f64 {
         let n = self.cubiertas();
         let fila = fila.min(MAX_FILAS);
-        if fila <= n { self.ys[fila as usize] } else { self.ys[n as usize] + (fila - n) as f64 * self.alto_defecto }
+        if fila <= n {
+            self.ys[fila as usize]
+        } else {
+            self.ys[n as usize] + (fila - n) as f64 * self.alto_defecto
+        }
     }
 
     pub fn ancho(&self, col: u32) -> f64 {
@@ -317,7 +347,9 @@ impl Rejilla {
             if self.alto_defecto <= 0.0 {
                 return n.min(MAX_FILAS - 1);
             }
-            return n.saturating_add(((y - fin) / self.alto_defecto) as u32).min(MAX_FILAS - 1);
+            return n
+                .saturating_add(((y - fin) / self.alto_defecto) as u32)
+                .min(MAX_FILAS - 1);
         }
         let k = self.ys.partition_point(|&v| v <= y);
         (k.max(1) as u32 - 1).min(MAX_FILAS - 1)
@@ -331,8 +363,12 @@ impl Rejilla {
 
     /// Lo que mide todo lo usado (para las barras de desplazamiento).
     pub fn tamano_usado(&self, hoja: &Hoja) -> (f64, f64) {
-        let col = hoja.max_col.max(hoja.cabecera.dimension.map_or(0, |d| d.col1));
-        let fila = hoja.max_fila().max(hoja.cabecera.dimension.map_or(0, |d| d.fila1));
+        let col = hoja
+            .max_col
+            .max(hoja.cabecera.dimension.map_or(0, |d| d.col1));
+        let fila = hoja
+            .max_fila()
+            .max(hoja.cabecera.dimension.map_or(0, |d| d.fila1));
         let mut w = self.x(col + 1);
         let mut h = self.y(fila + 1);
         for d in &hoja.cola.dibujos {
@@ -354,7 +390,13 @@ impl Rejilla {
         let ox = v.x.max(self.x(cf));
         let oy = v.y.max(self.y(ff));
         let mut ps = Vec::with_capacity(4);
-        let mut panel = |x0: f64, y0: f64, ancho: f64, alto: f64, origen: (f64, f64), tope_c: Option<u32>, tope_f: Option<u32>| {
+        let mut panel = |x0: f64,
+                         y0: f64,
+                         ancho: f64,
+                         alto: f64,
+                         origen: (f64, f64),
+                         tope_c: Option<u32>,
+                         tope_f: Option<u32>| {
             if ancho <= 0.0 || alto <= 0.0 {
                 return;
             }
@@ -368,18 +410,57 @@ impl Rejilla {
             if let Some(t) = tope_f {
                 fila1 = fila1.min(t.saturating_sub(1));
             }
-            ps.push(Panel { fila0, fila1, col0, col1, pantalla: [x0, y0, ancho, alto], origen });
+            ps.push(Panel {
+                fila0,
+                fila1,
+                col0,
+                col1,
+                pantalla: [x0, y0, ancho, alto],
+                origen,
+            });
         };
         if cf > 0 && ff > 0 {
-            panel(0.0, 0.0, ancho_fijo, alto_fijo, (0.0, 0.0), Some(cf), Some(ff));
+            panel(
+                0.0,
+                0.0,
+                ancho_fijo,
+                alto_fijo,
+                (0.0, 0.0),
+                Some(cf),
+                Some(ff),
+            );
         }
         if ff > 0 {
-            panel(ancho_fijo, 0.0, v.ancho - ancho_fijo, alto_fijo, (ox, 0.0), None, Some(ff));
+            panel(
+                ancho_fijo,
+                0.0,
+                v.ancho - ancho_fijo,
+                alto_fijo,
+                (ox, 0.0),
+                None,
+                Some(ff),
+            );
         }
         if cf > 0 {
-            panel(0.0, alto_fijo, ancho_fijo, v.alto - alto_fijo, (0.0, oy), Some(cf), None);
+            panel(
+                0.0,
+                alto_fijo,
+                ancho_fijo,
+                v.alto - alto_fijo,
+                (0.0, oy),
+                Some(cf),
+                None,
+            );
         }
-        panel(ancho_fijo, alto_fijo, v.ancho - ancho_fijo, v.alto - alto_fijo, (ox, oy), None, None);
+        panel(
+            ancho_fijo,
+            alto_fijo,
+            v.ancho - ancho_fijo,
+            v.alto - alto_fijo,
+            (ox, oy),
+            None,
+            None,
+        );
         ps
     }
 
@@ -399,7 +480,10 @@ impl Rejilla {
     /// La celda bajo el punto, subiendo a la esquina de su combinacion.
     pub fn celda_en_hoja(&self, hoja: &Hoja, v: &Vista, px: f64, py: f64) -> Option<(u32, u32)> {
         let (f, c) = self.celda_en(v, px, py)?;
-        Some(hoja.combinada_en(f, c).map_or((f, c), |r| (r.fila0, r.col0)))
+        Some(
+            hoja.combinada_en(f, c)
+                .map_or((f, c), |r| (r.fila0, r.col0)),
+        )
     }
 
     /// La caja de un dibujo en px al 100 %.
@@ -414,11 +498,21 @@ impl Rejilla {
                 let y1 = self.y(hasta.fila) + (hasta.dy * k).min(self.alto(hasta.fila));
                 [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
             }
-            Ancla::UnaCelda { desde, ancho, alto } => [self.x(desde.col) + desde.dx * k, self.y(desde.fila) + desde.dy * k, ancho * k, alto * k],
+            Ancla::UnaCelda { desde, ancho, alto } => [
+                self.x(desde.col) + desde.dx * k,
+                self.y(desde.fila) + desde.dy * k,
+                ancho * k,
+                alto * k,
+            ],
             Ancla::Absoluta { x, y, ancho, alto } => [x * k, y * k, ancho * k, alto * k],
         };
         match d.dentro {
-            Some([fx, fy, fw, fh]) => [base[0] + fx * base[2], base[1] + fy * base[3], fw * base[2], fh * base[3]],
+            Some([fx, fy, fw, fh]) => [
+                base[0] + fx * base[2],
+                base[1] + fy * base[3],
+                fw * base[2],
+                fh * base[3],
+            ],
             None => base,
         }
     }
@@ -426,7 +520,9 @@ impl Rejilla {
     /// ¿Esta vacia (sin valor) la celda, y fuera de cualquier combinacion?
     /// Es lo que deja que un texto se desborde sobre ella.
     pub fn libre(hoja: &Hoja, fila: u32, col: u32) -> bool {
-        let vacia = hoja.celda(fila, col).is_none_or(|c| c.valor == Valor::Vacio);
+        let vacia = hoja
+            .celda(fila, col)
+            .is_none_or(|c| c.valor == Valor::Vacio);
         vacia && hoja.combinada_en(fila, col).is_none()
     }
 }
@@ -443,7 +539,11 @@ mod pruebas {
         assert_eq!(px_de_ancho(9.140625, 7.0), 64.0);
         assert_eq!(px_de_ancho(8.43, 7.0), 59.0);
         assert_eq!(alto_por_fuente(&calibri), 15.0);
-        let arial = Fuente { nombre: Arc::from("Arial"), tam: 10.0, ..Fuente::default() };
+        let arial = Fuente {
+            nombre: Arc::from("Arial"),
+            tam: 10.0,
+            ..Fuente::default()
+        };
         assert_eq!(ancho_digito(&arial), 7.0);
         assert_eq!(alto_por_fuente(&arial), 12.75);
         assert_eq!(px_de_pt(15.0), 20.0);

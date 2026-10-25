@@ -26,7 +26,9 @@ pub const MAX_TAREAS: usize = 40;
 pub const MAX_PERIODOS: i64 = 3700;
 
 /// La paleta de las barras (la del lienzo).
-const COLORES: [&str; 8] = ["#1971c2", "#2f9e44", "#f08c00", "#6741d9", "#0c8599", "#c2255c", "#e03131", "#868e96"];
+const COLORES: [&str; 8] = [
+    "#1971c2", "#2f9e44", "#f08c00", "#6741d9", "#0c8599", "#c2255c", "#e03131", "#868e96",
+];
 const GRIS: &str = "#868e96";
 const NEGRO: &str = "#1e1e1e";
 
@@ -39,6 +41,7 @@ pub fn herramienta() -> Herramienta {
         nombre: NOMBRE.into(),
         descripcion: concat!(
             "Dibuja en el lienzo un cronograma (diagrama de Gantt): escala de tiempo, una barra por tarea, hitos y flechas de dependencia. ",
+            "Es para un cronograma NUEVO con tareas y fechas: para agrandar la plantilla «Cronograma» que ya esta en el lienzo (mas semanas o actividades) usa figuras_guardadas con «alargar». ",
             "«inicio» y «fin» como fechas AAAA-MM-DD o como numeros de dia/semana; un hito lleva «hito»:true (o fin igual a inicio). ",
             "Ejemplo: {\"titulo\":\"Obra\",\"tareas\":[{\"nombre\":\"Excavacion\",\"inicio\":\"2026-11-02\",\"fin\":\"2026-11-06\"},",
             "{\"nombre\":\"Cimientos\",\"inicio\":\"2026-11-09\",\"fin\":\"2026-11-20\",\"depende_de\":[\"Excavacion\"]},",
@@ -117,7 +120,11 @@ pub fn fecha_de(z: i64) -> (i64, i64, i64) {
 
 /// `2026-11-02`, `2026/11/02` o `02/11/2026`.
 fn fecha(t: &str) -> Option<i64> {
-    let p: Vec<i64> = t.trim().split(['-', '/', '.']).map(|s| s.trim().parse().ok()).collect::<Option<_>>()?;
+    let p: Vec<i64> = t
+        .trim()
+        .split(['-', '/', '.'])
+        .map(|s| s.trim().parse().ok())
+        .collect::<Option<_>>()?;
     let (a, m, d) = match p.as_slice() {
         [a, m, d] if *a > 999 => (*a, *m, *d),
         [d, m, a] if *a > 999 => (*a, *m, *d),
@@ -140,22 +147,32 @@ fn momento(v: &Value, donde: &str, campo: &str) -> Result<Option<Momento>, Error
     match v {
         Value::Null => Ok(None),
         Value::Number(n) => {
-            let x = n.as_f64().filter(|x| x.is_finite() && x.abs() <= 1e5).ok_or_else(|| mal(format!("{donde}: «{campo}» fuera de rango")))?;
+            let x = n
+                .as_f64()
+                .filter(|x| x.is_finite() && x.abs() <= 1e5)
+                .ok_or_else(|| mal(format!("{donde}: «{campo}» fuera de rango")))?;
             Ok(Some(Momento::Numero(x.round() as i64)))
         }
         Value::String(s) => {
             if let Ok(x) = s.trim().parse::<f64>() {
                 return momento(&json!(x), donde, campo);
             }
-            fecha(s)
-                .map(|d| Some(Momento::Fecha(d)))
-                .ok_or_else(|| mal(format!("{donde}: «{campo}» = «{s}» no es una fecha (AAAA-MM-DD) ni un numero")))
+            fecha(s).map(|d| Some(Momento::Fecha(d))).ok_or_else(|| {
+                mal(format!(
+                    "{donde}: «{campo}» = «{s}» no es una fecha (AAAA-MM-DD) ni un numero"
+                ))
+            })
         }
-        _ => Err(mal(format!("{donde}: «{campo}» tiene que ser una fecha o un numero"))),
+        _ => Err(mal(format!(
+            "{donde}: «{campo}» tiene que ser una fecha o un numero"
+        ))),
     }
 }
 
-pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cronograma, ErrorHerramienta> {
+pub fn validar(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Cronograma, ErrorHerramienta> {
     let lista = match args.get("tareas") {
         Some(Value::Array(l)) => l,
         _ => return Err(mal("falta «tareas» (una lista con nombre, inicio y fin)")),
@@ -164,14 +181,18 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
         return Err(mal("«tareas» esta vacia"));
     }
     if lista.len() > MAX_TAREAS {
-        return Err(mal(format!("como mucho {MAX_TAREAS} tareas; agrupa las pequenas")));
+        return Err(mal(format!(
+            "como mucho {MAX_TAREAS} tareas; agrupa las pequenas"
+        )));
     }
     let mut fechas: Option<bool> = None;
     let mut tareas = Vec::new();
     let mut deps_crudas: Vec<Vec<Value>> = Vec::new();
     for (i, v) in lista.iter().enumerate() {
         let donde = format!("tarea {}", i + 1);
-        let Value::Object(o) = v else { return Err(mal(format!("{donde}: tiene que ser un objeto"))) };
+        let Value::Object(o) = v else {
+            return Err(mal(format!("{donde}: tiene que ser un objeto")));
+        };
         let nombre: String = ["nombre", "tarea", "texto", "name"]
             .iter()
             .find_map(|k| o.get(*k).and_then(Value::as_str))
@@ -185,13 +206,20 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
             .ok_or_else(|| mal(format!("{donde} («{nombre}»): falta «inicio»")))?;
         let fin = momento(o.get("fin").unwrap_or(&Value::Null), &donde, "fin")?;
         let es_fecha = matches!(inicio, Momento::Fecha(_));
-        if fin.as_ref().is_some_and(|f| matches!(f, Momento::Fecha(_)) != es_fecha) {
-            return Err(mal(format!("{donde}: «inicio» y «fin» tienen que ser los dos fechas o los dos numeros")));
+        if fin
+            .as_ref()
+            .is_some_and(|f| matches!(f, Momento::Fecha(_)) != es_fecha)
+        {
+            return Err(mal(format!(
+                "{donde}: «inicio» y «fin» tienen que ser los dos fechas o los dos numeros"
+            )));
         }
         match fechas {
             None => fechas = Some(es_fecha),
             Some(f) if f != es_fecha => {
-                return Err(mal("todas las tareas tienen que usar fechas, o todas numeros".to_string()));
+                return Err(mal(
+                    "todas las tareas tienen que usar fechas, o todas numeros".to_string(),
+                ));
             }
             _ => {}
         }
@@ -199,7 +227,10 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
             Momento::Fecha(d) | Momento::Numero(d) => d,
         };
         let hito_pedido = o.get("hito").and_then(Value::as_bool).unwrap_or(false);
-        let duracion = o.get("duracion").and_then(Value::as_f64).filter(|d| d.is_finite());
+        let duracion = o
+            .get("duracion")
+            .and_then(Value::as_f64)
+            .filter(|d| d.is_finite());
         // Las fechas cuentan el ultimo dia entero: del 2 al 6 son 5 dias.
         let b = match (fin, duracion) {
             (Some(Momento::Fecha(d)), _) => d + 1,
@@ -207,7 +238,11 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
             (None, Some(d)) if d >= 0.0 && d <= MAX_PERIODOS as f64 => a + d.round() as i64,
             (None, Some(d)) => return Err(mal(format!("{donde}: «duracion» = {d} no vale"))),
             (None, None) if hito_pedido => a,
-            (None, None) => return Err(mal(format!("{donde} («{nombre}»): falta «fin» (o «duracion», o «hito»:true)"))),
+            (None, None) => {
+                return Err(mal(format!(
+                    "{donde} («{nombre}»): falta «fin» (o «duracion», o «hito»:true)"
+                )));
+            }
         };
         let (b, hito) = if hito_pedido {
             (a, true)
@@ -216,7 +251,9 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
                 "{donde} («{nombre}»): las fechas estan al reves: termina antes de empezar"
             )));
         } else if b == a {
-            avisos.push(format!("{donde} («{nombre}»): dura cero, se pone como hito"));
+            avisos.push(format!(
+                "{donde} («{nombre}»): dura cero, se pone como hito"
+            ));
             (a, true)
         } else {
             (b, false)
@@ -226,27 +263,67 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
             .and_then(Value::as_str)
             .and_then(crate::herramientas::color)
             .map_or_else(|| COLORES[i % COLORES.len()].to_string(), |c| c.0);
-        deps_crudas.push(match o.get("depende_de").or(o.get("dependencias")).or(o.get("despues_de")) {
-            Some(Value::Array(l)) => l.clone(),
-            Some(Value::Null) | None => Vec::new(),
-            Some(otro) => vec![otro.clone()],
+        deps_crudas.push(
+            match o
+                .get("depende_de")
+                .or(o.get("dependencias"))
+                .or(o.get("despues_de"))
+            {
+                Some(Value::Array(l)) => l.clone(),
+                Some(Value::Null) | None => Vec::new(),
+                Some(otro) => vec![otro.clone()],
+            },
+        );
+        tareas.push(Tarea {
+            nombre,
+            inicio: a,
+            fin: b,
+            hito,
+            depende: Vec::new(),
+            color,
         });
-        tareas.push(Tarea { nombre, inicio: a, fin: b, hito, depende: Vec::new(), color });
     }
     // Las dependencias, por nombre (sin mayusculas) o por numero (de 1).
-    let por_nombre: HashMap<String, usize> = tareas.iter().enumerate().map(|(i, t)| (t.nombre.to_lowercase(), i)).collect();
+    let por_nombre: HashMap<String, usize> = tareas
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.nombre.to_lowercase(), i))
+        .collect();
     for (i, deps) in deps_crudas.iter().enumerate() {
         for d in deps {
             let j = match d {
-                Value::Number(n) => n.as_u64().map(|n| n as usize).filter(|n| (1..=tareas.len()).contains(n)).map(|n| n - 1),
-                Value::String(s) => por_nombre.get(&s.trim().to_lowercase()).copied().or_else(|| {
-                    s.trim().parse::<usize>().ok().filter(|n| (1..=tareas.len()).contains(n)).map(|n| n - 1)
-                }),
+                Value::Number(n) => n
+                    .as_u64()
+                    .map(|n| n as usize)
+                    .filter(|n| (1..=tareas.len()).contains(n))
+                    .map(|n| n - 1),
+                Value::String(s) => {
+                    por_nombre
+                        .get(&s.trim().to_lowercase())
+                        .copied()
+                        .or_else(|| {
+                            s.trim()
+                                .parse::<usize>()
+                                .ok()
+                                .filter(|n| (1..=tareas.len()).contains(n))
+                                .map(|n| n - 1)
+                        })
+                }
                 _ => None,
             }
-            .ok_or_else(|| mal(format!("tarea {} («{}»): depende de {d}, que no es ninguna tarea", i + 1, tareas[i].nombre)))?;
+            .ok_or_else(|| {
+                mal(format!(
+                    "tarea {} («{}»): depende de {d}, que no es ninguna tarea",
+                    i + 1,
+                    tareas[i].nombre
+                ))
+            })?;
             if j == i {
-                return Err(mal(format!("tarea {} («{}») depende de si misma", i + 1, tareas[i].nombre)));
+                return Err(mal(format!(
+                    "tarea {} («{}») depende de si misma",
+                    i + 1,
+                    tareas[i].nombre
+                )));
             }
             if !tareas[i].depende.contains(&j) {
                 tareas[i].depende.push(j);
@@ -270,30 +347,57 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Cr
         }
     }
     if vistas < n {
-        return Err(mal("las dependencias hacen un circulo (A depende de B y B de A)"));
+        return Err(mal(
+            "las dependencias hacen un circulo (A depende de B y B de A)",
+        ));
     }
     for t in &tareas {
         for &j in &t.depende {
             if t.inicio < tareas[j].fin && !tareas[j].hito || t.inicio < tareas[j].inicio {
-                avisos.push(format!("«{}» empieza antes de que acabe «{}», de la que depende", t.nombre, tareas[j].nombre));
+                avisos.push(format!(
+                    "«{}» empieza antes de que acabe «{}», de la que depende",
+                    t.nombre, tareas[j].nombre
+                ));
             }
         }
     }
     let desde = tareas.iter().map(|t| t.inicio).min().unwrap_or(0);
     let hasta = tareas.iter().map(|t| t.fin).max().unwrap_or(0);
     if hasta - desde > MAX_PERIODOS {
-        return Err(mal(format!("el cronograma dura {} periodos; como mucho {MAX_PERIODOS}", hasta - desde)));
+        return Err(mal(format!(
+            "el cronograma dura {} periodos; como mucho {MAX_PERIODOS}",
+            hasta - desde
+        )));
     }
-    let unidad = match args.get("unidad").and_then(Value::as_str).map(crate::acciones::normalizar).as_deref() {
+    let unidad = match args
+        .get("unidad")
+        .and_then(Value::as_str)
+        .map(crate::acciones::normalizar)
+        .as_deref()
+    {
         Some("semanas" | "semana") => "semanas",
         Some("meses" | "mes") => "meses",
         _ => "dias",
     };
-    let titulo = args.get("titulo").and_then(Value::as_str).unwrap_or("").trim().chars().take(120).collect();
-    Ok(Cronograma { titulo, tareas, fechas: fechas.unwrap_or(false), unidad })
+    let titulo = args
+        .get("titulo")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .chars()
+        .take(120)
+        .collect();
+    Ok(Cronograma {
+        titulo,
+        tareas,
+        fechas: fechas.unwrap_or(false),
+        unidad,
+    })
 }
 
-const MESES: [&str; 12] = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const MESES: [&str; 12] = [
+    "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+];
 
 /// Las marcas de la escala: (periodo, rotulo).
 fn marcas(c: &Cronograma, desde: i64, hasta: i64) -> Vec<(i64, String)> {
@@ -321,7 +425,11 @@ fn marcas(c: &Cronograma, desde: i64, hasta: i64) -> Vec<(i64, String)> {
                     break;
                 }
                 if d >= desde {
-                    let rot = if m == 1 || v.is_empty() { format!("{} {a}", MESES[(m - 1) as usize]) } else { MESES[(m - 1) as usize].to_string() };
+                    let rot = if m == 1 || v.is_empty() {
+                        format!("{} {a}", MESES[(m - 1) as usize])
+                    } else {
+                        MESES[(m - 1) as usize].to_string()
+                    };
                     v.push((d, rot));
                 }
                 m += 1;
@@ -356,7 +464,13 @@ pub(crate) fn elementos(f: &mut Fabrica, c: &Cronograma) {
     let antes = f.grupo.clone();
     f.grupo = Some(f.nombre_de_grupo("cronograma"));
     let desde = c.tareas.iter().map(|t| t.inicio).min().unwrap_or(0);
-    let hasta = c.tareas.iter().map(|t| t.fin + i64::from(t.hito && c.fechas)).max().unwrap_or(1).max(desde + 1);
+    let hasta = c
+        .tareas
+        .iter()
+        .map(|t| t.fin + i64::from(t.hito && c.fechas))
+        .max()
+        .unwrap_or(1)
+        .max(desde + 1);
     let (x0, x1) = (210.0, 780.0);
     let arriba = if c.titulo.is_empty() { 20.0 } else { 64.0 };
     let y_escala = arriba;
@@ -379,7 +493,12 @@ pub(crate) fn elementos(f: &mut Fabrica, c: &Cronograma) {
     let y_fin = y_filas + fila * n;
     // Las bandas de las filas, una si y otra no.
     for i in (0..c.tareas.len()).step_by(2) {
-        f.caja("rectangle", [20.0, y_filas + fila * i as f64, x1 - 20.0, fila], "#f1f3f5", Some("#f1f3f5"));
+        f.caja(
+            "rectangle",
+            [20.0, y_filas + fila * i as f64, x1 - 20.0, fila],
+            "#f1f3f5",
+            Some("#f1f3f5"),
+        );
         liso(f);
         if let Some(e) = f.salida.last_mut() {
             e["strokeWidth"] = json!(1);
@@ -400,7 +519,12 @@ pub(crate) fn elementos(f: &mut Fabrica, c: &Cronograma) {
             liso(f);
         }
     }
-    f.trazo("line", &[(x0, y_escala + 22.0), (x1, y_escala + 22.0)], GRIS, None);
+    f.trazo(
+        "line",
+        &[(x0, y_escala + 22.0), (x1, y_escala + 22.0)],
+        GRIS,
+        None,
+    );
     liso(f);
     // Las tareas: su nombre a la izquierda y su barra (o su rombo).
     let mut extremos: Vec<((f64, f64), (f64, f64))> = Vec::new();
@@ -410,7 +534,11 @@ pub(crate) fn elementos(f: &mut Fabrica, c: &Cronograma) {
         let tam = (fila * 0.42).clamp(10.0, 15.0);
         let maximo = ((x0 - 34.0) / (tam * 0.6)) as usize;
         let rotulo: String = if t.nombre.chars().count() > maximo {
-            t.nombre.chars().take(maximo.saturating_sub(1)).collect::<String>() + "…"
+            t.nombre
+                .chars()
+                .take(maximo.saturating_sub(1))
+                .collect::<String>()
+                + "…"
         } else {
             t.nombre.clone()
         };
@@ -420,13 +548,23 @@ pub(crate) fn elementos(f: &mut Fabrica, c: &Cronograma) {
             // Un hito con fecha cae al final de su dia (cuando se entrega).
             let x = x_de(t.inicio + i64::from(c.fechas));
             let lado = (fila * 0.6).min(18.0);
-            f.caja("diamond", [x - lado / 2.0, medio - lado / 2.0, lado, lado], NEGRO, Some(NEGRO));
+            f.caja(
+                "diamond",
+                [x - lado / 2.0, medio - lado / 2.0, lado, lado],
+                NEGRO,
+                Some(NEGRO),
+            );
             liso(f);
             extremos.push(((x - lado / 2.0, medio), (x + lado / 2.0, medio)));
         } else {
             let (xa, xb) = (x_de(t.inicio), x_de(t.fin));
             let alto = fila * 0.56;
-            f.caja("rectangle", [xa, medio - alto / 2.0, (xb - xa).max(3.0), alto], &t.color, Some(&t.color));
+            f.caja(
+                "rectangle",
+                [xa, medio - alto / 2.0, (xb - xa).max(3.0), alto],
+                &t.color,
+                Some(&t.color),
+            );
             liso(f);
             if let Some(e) = f.salida.last_mut() {
                 e["roundness"] = json!({"type": 3});
@@ -450,7 +588,14 @@ pub(crate) fn elementos(f: &mut Fabrica, c: &Cronograma) {
             } else {
                 // La siguiente empieza antes: se baja por detras.
                 let y_pasa = (a.1 + b.1) / 2.0;
-                vec![a, (a.0 + 8.0, a.1), (a.0 + 8.0, y_pasa), (b.0 - 10.0, y_pasa), (b.0 - 10.0, b.1), (b.0 - 1.0, b.1)]
+                vec![
+                    a,
+                    (a.0 + 8.0, a.1),
+                    (a.0 + 8.0, y_pasa),
+                    (b.0 - 10.0, y_pasa),
+                    (b.0 - 10.0, b.1),
+                    (b.0 - 1.0, b.1),
+                ]
             };
             f.trazo("arrow", &puntos, "#495057", None);
             liso(f);
@@ -489,19 +634,31 @@ mod pruebas {
             {"nombre": "Fin de cimientos", "inicio": "2026-11-20", "hito": true, "depende_de": ["Cimientos"]}]}))
         .unwrap();
         assert!(c.fechas);
-        assert_eq!(c.tareas[0].fin - c.tareas[0].inicio, 5, "del 2 al 6, cinco dias");
+        assert_eq!(
+            c.tareas[0].fin - c.tareas[0].inicio,
+            5,
+            "del 2 al 6, cinco dias"
+        );
         assert_eq!(c.tareas[2].depende, vec![1]);
         assert!(c.tareas[3].hito);
         let mut f = Fabrica::nueva((0.0, 0.0), 4);
         elementos(&mut f, &c);
-        let l = pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
+        let l =
+            pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
         assert_eq!(l.cuantos_ajenos(), 0);
-        assert_eq!(f.salida.iter().filter(|e| e["type"] == "diamond").count(), 1);
+        assert_eq!(
+            f.salida.iter().filter(|e| e["type"] == "diamond").count(),
+            1
+        );
         assert_eq!(f.salida.iter().filter(|e| e["type"] == "arrow").count(), 3);
         let textos: Vec<&str> = f.salida.iter().filter_map(|e| e["text"].as_str()).collect();
         assert!(textos.contains(&"Obra") && textos.contains(&"Cimientos"));
         // Todo dentro del lienzo.
-        assert!(f.salida.iter().all(|e| e["x"].as_f64().unwrap() >= 0.0 && e["x"].as_f64().unwrap() <= 800.0));
+        assert!(
+            f.salida
+                .iter()
+                .all(|e| e["x"].as_f64().unwrap() >= 0.0 && e["x"].as_f64().unwrap() <= 800.0)
+        );
     }
 
     #[test]
@@ -517,24 +674,59 @@ mod pruebas {
     #[test]
     fn lo_mal_puesto_se_rechaza() {
         for (v, motivo) in [
-            (json!({"tareas": [{"nombre": "A", "inicio": "2026-11-10", "fin": "2026-11-02"}]}), "al reves"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 5, "fin": 2}]}), "al reves"),
-            (json!({"tareas": [{"nombre": "A", "inicio": "ayer", "fin": 2}]}), "no es una fecha"),
-            (json!({"tareas": [{"nombre": "A", "inicio": "2026-01-01", "fin": 3}]}), "los dos fechas"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3}, {"nombre": "B", "inicio": "2026-01-01", "fin": "2026-01-03"}]}), "todas"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3, "depende_de": ["Z"]}]}), "ninguna tarea"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3, "depende_de": ["A"]}]}), "si misma"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3, "depende_de": ["B"]}, {"nombre": "B", "inicio": 3, "fin": 5, "depende_de": ["A"]}]}), "circulo"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 1}]}), "falta «fin»"),
-            (json!({"tareas": [{"inicio": 1, "fin": 2}]}), "falta «nombre»"),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": "2026-11-10", "fin": "2026-11-02"}]}),
+                "al reves",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 5, "fin": 2}]}),
+                "al reves",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": "ayer", "fin": 2}]}),
+                "no es una fecha",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": "2026-01-01", "fin": 3}]}),
+                "los dos fechas",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3}, {"nombre": "B", "inicio": "2026-01-01", "fin": "2026-01-03"}]}),
+                "todas",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3, "depende_de": ["Z"]}]}),
+                "ninguna tarea",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3, "depende_de": ["A"]}]}),
+                "si misma",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 1, "fin": 3, "depende_de": ["B"]}, {"nombre": "B", "inicio": 3, "fin": 5, "depende_de": ["A"]}]}),
+                "circulo",
+            ),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 1}]}),
+                "falta «fin»",
+            ),
+            (
+                json!({"tareas": [{"inicio": 1, "fin": 2}]}),
+                "falta «nombre»",
+            ),
             (json!({"tareas": []}), "vacia"),
             (json!({}), "falta «tareas»"),
-            (json!({"tareas": [{"nombre": "A", "inicio": 0, "fin": 9000}]}), "como mucho"),
+            (
+                json!({"tareas": [{"nombre": "A", "inicio": 0, "fin": 9000}]}),
+                "como mucho",
+            ),
         ] {
             let e = validar_(v.clone()).unwrap_err().to_string();
             assert!(e.contains(motivo), "{v}: {e}");
         }
-        let muchas: Vec<Value> = (0..=MAX_TAREAS).map(|i| json!({"nombre": format!("t{i}"), "inicio": i, "fin": i + 1})).collect();
+        let muchas: Vec<Value> = (0..=MAX_TAREAS)
+            .map(|i| json!({"nombre": format!("t{i}"), "inicio": i, "fin": i + 1}))
+            .collect();
         assert!(validar_(json!({"tareas": muchas})).is_err());
     }
 }

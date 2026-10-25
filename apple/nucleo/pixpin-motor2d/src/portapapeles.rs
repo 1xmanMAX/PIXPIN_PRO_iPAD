@@ -58,7 +58,14 @@ pub fn pegar(escena: &mut Escena, elementos: &[Elemento], dx: f32, dy: f32) -> V
                     // El mismo criterio que `organizar::agrupar`: el contador
                     // de la escena, que ya garantiza que no se repite, con
                     // prefijo para no confundirlo con un id al mirar el JSON.
-                    let nuevo = format!("g{}", escena.siguiente_id);
+                    // Una parte con nombre lo conserva (`parte:Salida@g…`).
+                    let nuevo = match crate::biblioteca::nombre_de_parte(g) {
+                        Some(n) => crate::biblioteca::grupo_de_parte(
+                            n,
+                            &format!("g{}", escena.siguiente_id),
+                        ),
+                        None => format!("g{}", escena.siguiente_id),
+                    };
                     escena.siguiente_id += 1;
                     equivalente.insert(g.clone(), nuevo.clone());
                     nuevo

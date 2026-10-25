@@ -159,7 +159,7 @@ impl EditorLienzo {
         self.estampar_figura(&figura, centro)
     }
 
-    fn estampar_figura(&self, figura: &FiguraGuardada, centro: Punto2) -> bool {
+    pub(crate) fn estampar_figura(&self, figura: &FiguraGuardada, centro: Punto2) -> bool {
         let mut guarda = self.tomar();
         let st = &mut *guarda;
         if !st.gesto.en_reposo() {
@@ -303,6 +303,30 @@ fn senalar(carpeta: &Path, proyecto: &str, aparato: &str, ahora: i64) -> std::io
     cuaderno::anadir(carpeta, &m)
 }
 
+/// La marca de la version del catalogo de serie puesto (no viaja: cada
+/// aparato las pone en su biblioteca; `biblioteca_figuras.rs` de Windows).
+pub const MARCA_DE_SERIE: &str = "figuras-de-serie.version";
+
+/// **Pone las figuras de serie** (`figuras_de_serie`: las plantillas y los
+/// simbolos) una vez por version del catalogo, apuntada en
+/// `<raiz>/figuras-de-serie.version`, como Windows: los ids son fijos, asi
+/// que dos aparatos que las ponen a la vez dejan lo mismo. `true` si las
+/// puso ahora.
+pub fn instalar_de_serie(raiz: &Path, ruta: &Path) -> bool {
+    use pixpin_motor2d::figuras_de_serie::{VERSION, instalar_en};
+    let marca = raiz.join(MARCA_DE_SERIE);
+    if std::fs::read_to_string(&marca).is_ok_and(|s| s.trim() == VERSION.to_string()) {
+        return false;
+    }
+    let mut lista = biblioteca::cargar(ruta);
+    instalar_en(&mut lista);
+    if biblioteca::guardar(ruta, &lista) {
+        let _ = std::fs::write(&marca, VERSION.to_string());
+        return true;
+    }
+    false
+}
+
 impl Nucleo {
     /// Las figuras de la biblioteca (el asistente: `figuras_guardadas`).
     pub(crate) fn biblioteca_cargar(&self) -> Result<Vec<FiguraGuardada>, ErrorNucleo> {
@@ -322,10 +346,17 @@ impl Nucleo {
     fn biblioteca(&self) -> Result<(PathBuf, String, PathBuf, String), ErrorNucleo> {
         let aparato = self.identidad()?.yo.codigo();
         let (ruta, proyecto, carpeta) = ruta_en(self.ruta(), &aparato, crate::ahora_ms())?;
+        if instalar_de_serie(self.ruta(), &ruta) {
+            senalar(&carpeta, &proyecto, &aparato, crate::ahora_ms())?;
+        }
         Ok((ruta, proyecto, carpeta, aparato))
     }
 
-    fn guardar_biblioteca(&self, figuras: &[FiguraGuardada]) -> Result<bool, ErrorNucleo> {
+    /// Guarda la lista entera y la hace viajar.
+    pub(crate) fn guardar_biblioteca(
+        &self,
+        figuras: &[FiguraGuardada],
+    ) -> Result<bool, ErrorNucleo> {
         let (ruta, proyecto, carpeta, aparato) = self.biblioteca()?;
         if !biblioteca::guardar(&ruta, figuras) {
             return Ok(false);
@@ -486,7 +517,16 @@ mod pruebas {
             nucleo.guardar_figura(ed.clone(), "caja".into()).unwrap(),
             "la del mismo nombre se sustituye"
         );
-        let lista = nucleo.figuras_guardadas().unwrap();
+        // Las de serie entran solas la primera vez; las propias, arriba.
+        let todas = nucleo.figuras_guardadas().unwrap();
+        assert!(todas.len() > 1, "con las de serie");
+        let lista: Vec<_> = todas
+            .into_iter()
+            .filter(|f| {
+                !f.id
+                    .starts_with(pixpin_motor2d::figuras_de_serie::PREFIJO_ID)
+            })
+            .collect();
         assert_eq!(lista.len(), 1);
         // Donde la busca el movil, y senalada para que viaje.
         let (ruta, _, carpeta) =
@@ -507,7 +547,9 @@ mod pruebas {
                 .unwrap()
         );
         assert!(nucleo.quitar_figura(lista[0].id.clone()).unwrap());
-        assert!(nucleo.figuras_guardadas().unwrap().is_empty());
+        assert!(nucleo.figuras_guardadas().unwrap().iter().all(|f| {
+            f.id.starts_with(pixpin_motor2d::figuras_de_serie::PREFIJO_ID)
+        }));
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(raiz);
     }

@@ -42,7 +42,13 @@ impl Tema {
             }
         }
         if let Some(letras) = elems.hijo("fontScheme") {
-            let tipo = |n: &str, que: &str| letras.hijo(n).and_then(|f| f.hijo(que)).map(|l| l.atributo("typeface").to_string()).unwrap_or_default();
+            let tipo = |n: &str, que: &str| {
+                letras
+                    .hijo(n)
+                    .and_then(|f| f.hijo(que))
+                    .map(|l| l.atributo("typeface").to_string())
+                    .unwrap_or_default()
+            };
             t.letra_titulos = tipo("majorFont", "latin");
             t.letra_texto = tipo("minorFont", "latin");
             t.letra_titulos_ea = tipo("majorFont", "ea");
@@ -81,7 +87,9 @@ impl Tema {
             ("hlink", "0563C1"),
             ("folHlink", "954F72"),
         ] {
-            self.colores.entry(k.into()).or_insert_with(|| Color::hex(v).unwrap_or(Color::NEGRO));
+            self.colores
+                .entry(k.into())
+                .or_insert_with(|| Color::hex(v).unwrap_or(Color::NEGRO));
         }
         if self.letra_titulos.is_empty() {
             self.letra_titulos = "Calibri Light".into();
@@ -132,7 +140,12 @@ fn color_base(n: &Nodo) -> Option<Color> {
 /// Resuelve un elemento de color de DrawingML (`a:srgbClr`, `a:schemeClr`...)
 /// con sus modificadores. `ph` es el color que sustituye a `phClr` (el de
 /// la forma que usa un estilo del tema).
-pub fn resolver(n: &Nodo, tema: &Tema, mapa: &HashMap<String, String>, ph: Option<Color>) -> Option<Color> {
+pub fn resolver(
+    n: &Nodo,
+    tema: &Tema,
+    mapa: &HashMap<String, String>,
+    ph: Option<Color>,
+) -> Option<Color> {
     let base = match n.nombre.as_str() {
         "srgbClr" => Color::hex(n.valor())?,
         "sysClr" => Color::hex(n.atributo("lastClr")).or_else(|| match n.valor() {
@@ -168,7 +181,12 @@ pub fn resolver(n: &Nodo, tema: &Tema, mapa: &HashMap<String, String>, ph: Optio
 
 /// Busca el primer color que cuelgue de `padre` (por ejemplo el de un
 /// `a:solidFill`) y lo resuelve.
-pub fn color_hijo(padre: &Nodo, tema: &Tema, mapa: &HashMap<String, String>, ph: Option<Color>) -> Option<Color> {
+pub fn color_hijo(
+    padre: &Nodo,
+    tema: &Tema,
+    mapa: &HashMap<String, String>,
+    ph: Option<Color>,
+) -> Option<Color> {
     padre.elementos().find_map(|e| resolver(e, tema, mapa, ph))
 }
 
@@ -181,7 +199,8 @@ pub fn modificar(c: Color, n: &Nodo) -> Color {
     for m in n.elementos() {
         let v = crate::paquete::numero(m.valor(), 1.0).unwrap_or(0.0) / 100000.0;
         match m.nombre.as_str() {
-            "lumMod" | "lumOff" | "satMod" | "satOff" | "hueMod" | "hueOff" | "sat" | "lum" | "hue" => {
+            "lumMod" | "lumOff" | "satMod" | "satOff" | "hueMod" | "hueOff" | "sat" | "lum"
+            | "hue" => {
                 let (mut h, mut s, mut l) = rgb_a_hsl(r, g, b);
                 match m.nombre.as_str() {
                     "lumMod" => l *= v,
@@ -196,7 +215,8 @@ pub fn modificar(c: Color, n: &Nodo) -> Color {
                     "hue" => h = v * 100000.0 / 60000.0 / 360.0,
                     _ => {}
                 }
-                let (nr, ng, nb) = hsl_a_rgb(h.rem_euclid(1.0), s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
+                let (nr, ng, nb) =
+                    hsl_a_rgb(h.rem_euclid(1.0), s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
                 (r, g, b) = (nr, ng, nb);
             }
             "tint" => {
@@ -224,7 +244,12 @@ pub fn modificar(c: Color, n: &Nodo) -> Color {
         }
     }
     let q = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color { r: q(r), g: q(g), b: q(b), a: q(a) }
+    Color {
+        r: q(r),
+        g: q(g),
+        b: q(b),
+        a: q(a),
+    }
 }
 
 /// El `themeTint`/`themeShade` de Word (00..FF) sobre un color: en HSL, como
@@ -239,15 +264,28 @@ pub fn tinte_word(c: Color, tint: Option<f32>, shade: Option<f32>) -> Color {
     }
     let (r, g, b) = hsl_a_rgb(h, s, l.clamp(0.0, 1.0));
     let q = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color { r: q(r), g: q(g), b: q(b), a: c.a }
+    Color {
+        r: q(r),
+        g: q(g),
+        b: q(b),
+        a: c.a,
+    }
 }
 
 fn srgb_a_lineal(c: f32) -> f32 {
-    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 fn lineal_a_srgb(c: f32) -> f32 {
-    if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+    if c <= 0.0031308 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 pub fn rgb_a_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
@@ -258,7 +296,11 @@ pub fn rgb_a_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
         return (0.0, 0.0, l);
     }
     let d = max - min;
-    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
     let h = if max == r {
         (g - b) / d + if g < b { 6.0 } else { 0.0 }
     } else if max == g {
@@ -273,7 +315,11 @@ pub fn hsl_a_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
     if s <= 0.0 {
         return (l, l, l);
     }
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let f = |mut t: f32| {
         if t < 0.0 {
@@ -336,12 +382,16 @@ mod pruebas {
     #[test]
     fn un_color_del_esquema_con_lummod_se_oscurece() {
         let tema = Tema::leer(&leer(r#"<a:theme><a:themeElements><a:clrScheme><a:accent1><a:srgbClr val="4472C4"/></a:accent1></a:clrScheme></a:themeElements></a:theme>"#).unwrap());
-        let n = leer(r#"<a:schemeClr val="accent1"><a:lumMod val="50000"/></a:schemeClr>"#).unwrap();
+        let n =
+            leer(r#"<a:schemeClr val="accent1"><a:lumMod val="50000"/></a:schemeClr>"#).unwrap();
         let c = resolver(&n, &tema, &HashMap::new(), None).unwrap();
         // El acento a la mitad de luminosidad: mas oscuro que el original.
         assert!(c.r < 0x44 && c.b < 0xC4, "{c:?}");
         let tx = leer(r#"<a:schemeClr val="tx1"/>"#).unwrap();
-        assert_eq!(resolver(&tx, &tema, &HashMap::new(), None), Some(Color::NEGRO));
+        assert_eq!(
+            resolver(&tx, &tema, &HashMap::new(), None),
+            Some(Color::NEGRO)
+        );
     }
 
     #[test]

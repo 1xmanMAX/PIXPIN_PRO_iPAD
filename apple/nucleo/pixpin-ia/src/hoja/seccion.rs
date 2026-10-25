@@ -50,7 +50,12 @@ pub fn seccionar(rgba: &[u8], ancho: u32, alto: u32, mut palabras: Vec<PalabraHo
 }
 
 /// Lo mismo, con la imagen ya analizada.
-pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraHoja>) -> Seccionado {
+pub fn seccionar_con(
+    a: &Analisis,
+    ancho: u32,
+    alto: u32,
+    palabras: Vec<PalabraHoja>,
+) -> Seccionado {
     let (pw, ph) = (ancho as f64, alto as f64);
     let mut palabras: Vec<PalabraHoja> = palabras
         .into_iter()
@@ -60,7 +65,9 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
             p
         })
         .collect();
-    let hm = mediana(palabras.iter().map(|p| p.caja.h).collect()).unwrap_or(ph * 0.012).max(4.0);
+    let hm = mediana(palabras.iter().map(|p| p.caja.h).collect())
+        .unwrap_or(ph * 0.012)
+        .max(4.0);
 
     // 1. Fotos, y lo que el OCR leyo dentro de ellas fuera.
     let mut fotos = imagen::fotos(a, 4.0 * hm);
@@ -69,7 +76,11 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     // tabla), no.
     let brutas = imagen::rayas(a, 0.05);
     for f in imagen::fondos(a, 4.0 * hm) {
-        let texto: f64 = palabras.iter().filter(|p| f.contiene(p.caja.cx(), p.caja.cy())).map(|p| p.caja.area()).sum();
+        let texto: f64 = palabras
+            .iter()
+            .filter(|p| f.contiene(p.caja.cx(), p.caja.cy()))
+            .map(|p| p.caja.area())
+            .sum();
         let rayado = brutas.iter().any(|r| r.caja().comun(&f.crecer(2.0)) > 0.0);
         if texto < f.area() * 0.25 && !rayado && !fotos.iter().any(|x| x.comun(&f) > 0.0) {
             fotos.push(f);
@@ -81,7 +92,7 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     let dens_media = mediana(densidades.clone()).unwrap_or(0.0);
     if dens_media > 0.0 {
         for (p, d) in palabras.iter_mut().zip(&densidades) {
-            if !p.negrita && *d > dens_media * 1.38  {
+            if !p.negrita && *d > dens_media * 1.38 {
                 p.negrita = true;
             }
         }
@@ -90,7 +101,11 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     // 2. Rayas, sin las de dentro de las fotos ni las que tachan texto.
     let mut rayas: Vec<Raya> = brutas
         .into_iter()
-        .filter(|r| !fotos.iter().any(|f| r.caja().crecer(1.0).dentro_de(f) > 0.5))
+        .filter(|r| {
+            !fotos
+                .iter()
+                .any(|f| r.caja().crecer(1.0).dentro_de(f) > 0.5)
+        })
         .filter(|r| {
             let c = r.caja();
             // Una «raya» que cae dentro de las palabras es la propia letra (los
@@ -101,7 +116,11 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
                 .iter()
                 .map(|p| {
                     let q = p.caja.crecer(p.caja.h * 0.15);
-                    if r.vertical { c.solape_y(&q) * (c.solape_x(&q) > 0.0) as u8 as f64 } else { c.solape_x(&q) * (c.solape_y(&q) > 0.0) as u8 as f64 }
+                    if r.vertical {
+                        c.solape_y(&q) * (c.solape_x(&q) > 0.0) as u8 as f64
+                    } else {
+                        c.solape_x(&q) * (c.solape_y(&q) > 0.0) as u8 as f64
+                    }
                 })
                 .sum();
             dentro < largo * 0.4
@@ -114,7 +133,13 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
         let corto = p.texto.trim().chars().count() <= 2;
         let entre = |izq: bool| {
             rayas.iter().any(|r| {
-                !r.vertical && (r.y0 - p.caja.cy()).abs() < hm && if izq { (p.caja.x - r.x1).abs() < hm * 2.0 } else { (r.x0 - p.caja.x1()).abs() < hm * 2.0 }
+                !r.vertical
+                    && (r.y0 - p.caja.cy()).abs() < hm
+                    && if izq {
+                        (p.caja.x - r.x1).abs() < hm * 2.0
+                    } else {
+                        (r.x0 - p.caja.x1()).abs() < hm * 2.0
+                    }
             })
         };
         !(corto && entre(true) && entre(false))
@@ -127,28 +152,59 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     let mut ocupado: Vec<(Caja, usize)> = Vec::new(); // (caja, indice en figuras)
     let mut figuras: Vec<Figura> = Vec::new();
     for f in &fotos {
-        figuras.push(Figura { tipo: Tipo::Foto, caja: *f, confianza: 0.85, rayas: Vec::new(), palabras: Vec::new() });
+        figuras.push(Figura {
+            tipo: Tipo::Foto,
+            caja: *f,
+            confianza: 0.85,
+            rayas: Vec::new(),
+            palabras: Vec::new(),
+        });
     }
     for g in &graficas {
-        figuras.push(Figura { tipo: Tipo::Grafica, caja: g.0, confianza: 0.7, rayas: g.1.clone(), palabras: Vec::new() });
+        figuras.push(Figura {
+            tipo: Tipo::Grafica,
+            caja: g.0,
+            confianza: 0.7,
+            rayas: g.1.clone(),
+            palabras: Vec::new(),
+        });
     }
-    let mut tablas: Vec<TablaR> = tablas_r.iter().map(|t| TablaR { caja: t.0, rayas: t.1.clone(), palabras: Vec::new(), iconos: Vec::new() }).collect();
+    let mut tablas: Vec<TablaR> = tablas_r
+        .iter()
+        .map(|t| TablaR {
+            caja: t.0,
+            rayas: t.1.clone(),
+            palabras: Vec::new(),
+            iconos: Vec::new(),
+        })
+        .collect();
     // Una foto dentro de una tabla es un icono de una celda.
-    figuras.retain(|f| match tablas.iter_mut().find(|t| t.caja.contiene(f.caja.cx(), f.caja.cy())) {
-        Some(t) => {
-            t.iconos.push(f.caja);
-            false
+    figuras.retain(|f| {
+        match tablas
+            .iter_mut()
+            .find(|t| t.caja.contiene(f.caja.cx(), f.caja.cy()))
+        {
+            Some(t) => {
+                t.iconos.push(f.caja);
+                false
+            }
+            None => true,
         }
-        None => true,
     });
     for (i, f) in figuras.iter().enumerate() {
         ocupado.push((f.caja, i));
     }
     let mut libres: Vec<PalabraHoja> = Vec::new();
     for p in palabras {
-        if let Some(t) = tablas.iter_mut().find(|t| t.caja.crecer(hm * 0.3).contiene(p.caja.cx(), p.caja.cy())) {
+        if let Some(t) = tablas
+            .iter_mut()
+            .find(|t| t.caja.crecer(hm * 0.3).contiene(p.caja.cx(), p.caja.cy()))
+        {
             t.palabras.push(p);
-        } else if ocupado.iter().any(|(c, _)| c.crecer(hm).contiene(p.caja.cx(), p.caja.cy())) {
+        } else if ocupado
+            .iter()
+            .any(|(c, _)| c.crecer(hm).contiene(p.caja.cx(), p.caja.cy()))
+        {
             // Los rotulos de una grafica van con ella.
         } else {
             libres.push(p);
@@ -158,8 +214,17 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     // 4. Manchas de tinta sin texto.
     let mut quitar: Vec<Caja> = libres.iter().map(|p| p.caja.crecer(hm * 0.15)).collect();
     quitar.extend(fotos.iter().copied());
-    quitar.extend(tablas.iter().flat_map(|t| t.palabras.iter().map(|p| p.caja.crecer(hm * 0.15))));
-    quitar.extend(figuras.iter().filter(|f| f.tipo == Tipo::Grafica).map(|f| f.caja));
+    quitar.extend(
+        tablas
+            .iter()
+            .flat_map(|t| t.palabras.iter().map(|p| p.caja.crecer(hm * 0.15))),
+    );
+    quitar.extend(
+        figuras
+            .iter()
+            .filter(|f| f.tipo == Tipo::Grafica)
+            .map(|f| f.caja),
+    );
     let manchas = imagen::manchas(a, &quitar, &rayas, hm * 0.8);
     let mut restos: Vec<Caja> = Vec::new();
     for m in manchas {
@@ -184,7 +249,11 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     // como restos; las largas, lineas o separadores.
     let mut lineas: Vec<Raya> = Vec::new();
     for r in sueltas {
-        let largo_rel = if r.vertical { r.largo() / ph } else { r.largo() / pw };
+        let largo_rel = if r.vertical {
+            r.largo() / ph
+        } else {
+            r.largo() / pw
+        };
         if largo_rel >= 0.12 {
             lineas.push(r);
         } else {
@@ -193,14 +262,19 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     }
     unir_figuras(&mut figuras, hm);
     // Los restos dentro de una figura son de ella.
-    restos.retain(|r| !figuras.iter().any(|f| r.dentro_de(&f.caja.crecer(hm * 0.5)) > 0.6));
+    restos.retain(|r| {
+        !figuras
+            .iter()
+            .any(|f| r.dentro_de(&f.caja.crecer(hm * 0.5)) > 0.6)
+    });
     // Los rotulos cortos dentro de un dibujo (A, B, 2a, 45°) son suyos: van
     // con el (sus letras, que un diagrama pone junto a sus puntos), no
     // sueltos como parrafos de una letra (15-oct, la lamina de geometria).
     for f in figuras.iter_mut().filter(|f| f.tipo == Tipo::Dibujo) {
         let caja = f.caja.crecer(hm * 0.3);
-        let (suyas, otras): (Vec<PalabraHoja>, Vec<PalabraHoja>) =
-            libres.drain(..).partition(|p| caja.contiene(p.caja.cx(), p.caja.cy()) && p.texto.chars().count() <= 6);
+        let (suyas, otras): (Vec<PalabraHoja>, Vec<PalabraHoja>) = libres
+            .drain(..)
+            .partition(|p| caja.contiene(p.caja.cx(), p.caja.cy()) && p.texto.chars().count() <= 6);
         libres = otras;
         for p in &suyas {
             f.caja = f.caja.union(&p.caja);
@@ -215,20 +289,37 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     // 6. Orden de lectura.
     let mut atomos: Vec<Atomo> = Vec::new();
     for (i, r) in renglones.iter().enumerate() {
-        atomos.push(Atomo { caja: r.caja, clase: Clase::Texto(i) });
+        atomos.push(Atomo {
+            caja: r.caja,
+            clase: Clase::Texto(i),
+        });
     }
     for (i, f) in figuras.iter().enumerate() {
-        atomos.push(Atomo { caja: f.caja, clase: Clase::Figura(i) });
+        atomos.push(Atomo {
+            caja: f.caja,
+            clase: Clase::Figura(i),
+        });
     }
     for (i, t) in tablas.iter().enumerate() {
-        atomos.push(Atomo { caja: t.caja, clase: Clase::Tabla(i) });
+        atomos.push(Atomo {
+            caja: t.caja,
+            clase: Clase::Tabla(i),
+        });
     }
     for (i, r) in restos.iter().enumerate() {
-        atomos.push(Atomo { caja: *r, clase: Clase::Resto(i) });
+        atomos.push(Atomo {
+            caja: *r,
+            clase: Clase::Resto(i),
+        });
     }
     let ids: Vec<usize> = (0..atomos.len()).collect();
     let mut hojas: Vec<Hoja> = Vec::new();
-    let cx = Corte { atomos: &atomos, renglones: &renglones, separadores: &separadores, hm };
+    let cx = Corte {
+        atomos: &atomos,
+        renglones: &renglones,
+        separadores: &separadores,
+        hm,
+    };
     cx.cortar(&ids, 0, 0, &mut hojas);
 
     // 7. Cada bloque a sus zonas.
@@ -239,7 +330,14 @@ pub fn seccionar_con(a: &Analisis, ancho: u32, alto: u32, palabras: Vec<PalabraH
     let mut zonas: Vec<Zona> = Vec::new();
     for hoja in &hojas {
         let columna = hoja.columna;
-        let bloque = Bloque { atomos: &atomos, renglones: &renglones, figuras: &figuras, tablas: &tablas, restos: &restos, hm: alto_cuerpo };
+        let bloque = Bloque {
+            atomos: &atomos,
+            renglones: &renglones,
+            figuras: &figuras,
+            tablas: &tablas,
+            restos: &restos,
+            hm: alto_cuerpo,
+        };
         for mut z in bloque.zonas(hoja) {
             z.columna = columna;
             zonas.push(z);
@@ -290,16 +388,40 @@ struct Figura {
 fn figura_de_mancha(m: &Mancha, _hm: f64) -> Figura {
     let e = m.est;
     if e.parece_foto() {
-        Figura { tipo: Tipo::Foto, caja: m.caja, confianza: (0.55 + e.medios as f32).min(0.9), rayas: Vec::new(), palabras: Vec::new() }
+        Figura {
+            tipo: Tipo::Foto,
+            caja: m.caja,
+            confianza: (0.55 + e.medios as f32).min(0.9),
+            rayas: Vec::new(),
+            palabras: Vec::new(),
+        }
     } else if e.tinta < 0.01 {
         // Sin tinta de verdad, solo grises claros (una marca de agua, un
         // sombreado): calcarlo lo oscureceria; va como imagen.
-        Figura { tipo: Tipo::Foto, caja: m.caja, confianza: 0.6, rayas: Vec::new(), palabras: Vec::new() }
+        Figura {
+            tipo: Tipo::Foto,
+            caja: m.caja,
+            confianza: 0.6,
+            rayas: Vec::new(),
+            palabras: Vec::new(),
+        }
     } else if e.tinta < 0.22 && e.medios < 0.12 {
         // Trazos finos sobre papel: un dibujo de lineas.
-        Figura { tipo: Tipo::Dibujo, caja: m.caja, confianza: 0.6, rayas: Vec::new(), palabras: Vec::new() }
+        Figura {
+            tipo: Tipo::Dibujo,
+            caja: m.caja,
+            confianza: 0.6,
+            rayas: Vec::new(),
+            palabras: Vec::new(),
+        }
     } else {
-        Figura { tipo: Tipo::Dudosa, caja: m.caja, confianza: 0.35, rayas: Vec::new(), palabras: Vec::new() }
+        Figura {
+            tipo: Tipo::Dudosa,
+            caja: m.caja,
+            confianza: 0.35,
+            rayas: Vec::new(),
+            palabras: Vec::new(),
+        }
     }
 }
 
@@ -316,7 +438,9 @@ fn unir_figuras(f: &mut Vec<Figura>, hm: f64) {
                     a.caja = a.caja.union(&b.caja);
                     a.rayas.extend(b.rayas);
                     a.palabras.extend(b.palabras);
-                    if b.tipo == Tipo::Grafica || (a.tipo != Tipo::Grafica && b.confianza > a.confianza) {
+                    if b.tipo == Tipo::Grafica
+                        || (a.tipo != Tipo::Grafica && b.confianza > a.confianza)
+                    {
                         a.tipo = b.tipo;
                         a.confianza = b.confianza;
                     }
@@ -335,13 +459,17 @@ type ConRayas = (Caja, Vec<[f64; 5]>);
 
 /// Las rayas que se tocan, en grupos: tablas rayadas, ejes de graficas y
 /// las sueltas.
-fn agrupar_rayas(rayas: &[Raya], palabras: &[PalabraHoja], hm: f64) -> (Vec<ConRayas>, Vec<ConRayas>, Vec<Raya>) {
+fn agrupar_rayas(
+    rayas: &[Raya],
+    palabras: &[PalabraHoja],
+    hm: f64,
+) -> (Vec<ConRayas>, Vec<ConRayas>, Vec<Raya>) {
     let n = rayas.len();
     let tol = hm * 0.4;
     let tocan = |a: &Raya, b: &Raya| a.caja().crecer(tol).comun(&b.caja().crecer(tol)) > 0.0;
     // Union-find.
     let mut padre: Vec<usize> = (0..n).collect();
-    fn raiz(p: &mut Vec<usize>, i: usize) -> usize {
+    fn raiz(p: &mut [usize], i: usize) -> usize {
         let mut i = i;
         while p[i] != i {
             p[i] = p[p[i]];
@@ -361,7 +489,11 @@ fn agrupar_rayas(rayas: &[Raya], palabras: &[PalabraHoja], hm: f64) -> (Vec<ConR
     // verticales.
     // Las que ya tocan una vertical son de una tabla rayada (o un recuadro):
     // esas no se juntan por su largo.
-    let con_vertical: Vec<bool> = (0..n).map(|i| !rayas[i].vertical && (0..n).any(|j| rayas[j].vertical && tocan(&rayas[i], &rayas[j]))).collect();
+    let con_vertical: Vec<bool> = (0..n)
+        .map(|i| {
+            !rayas[i].vertical && (0..n).any(|j| rayas[j].vertical && tocan(&rayas[i], &rayas[j]))
+        })
+        .collect();
     for i in 0..n {
         for j in i + 1..n {
             let (a, b) = (&rayas[i], &rayas[j]);
@@ -383,19 +515,49 @@ fn agrupar_rayas(rayas: &[Raya], palabras: &[PalabraHoja], hm: f64) -> (Vec<ConR
     }
     let (mut tablas, mut graficas, mut sueltas) = (Vec::new(), Vec::new(), Vec::new());
     for (_, g) in grupos {
-        let h: Vec<&Raya> = g.iter().map(|&i| &rayas[i]).filter(|r| !r.vertical).collect();
-        let v: Vec<&Raya> = g.iter().map(|&i| &rayas[i]).filter(|r| r.vertical).collect();
-        let caja = g.iter().map(|&i| rayas[i].caja()).reduce(|a, b| a.union(&b)).unwrap_or_default();
-        let lista: Vec<[f64; 5]> = g.iter().map(|&i| rayas[i]).map(|r| [r.x0, r.y0, r.x1, r.y1, r.grosor]).collect();
-        let dentro = palabras.iter().filter(|p| caja.contiene(p.caja.cx(), p.caja.cy())).count();
+        let h: Vec<&Raya> = g
+            .iter()
+            .map(|&i| &rayas[i])
+            .filter(|r| !r.vertical)
+            .collect();
+        let v: Vec<&Raya> = g
+            .iter()
+            .map(|&i| &rayas[i])
+            .filter(|r| r.vertical)
+            .collect();
+        let caja = g
+            .iter()
+            .map(|&i| rayas[i].caja())
+            .reduce(|a, b| a.union(&b))
+            .unwrap_or_default();
+        let lista: Vec<[f64; 5]> = g
+            .iter()
+            .map(|&i| rayas[i])
+            .map(|r| [r.x0, r.y0, r.x1, r.y1, r.grosor])
+            .collect();
+        let dentro = palabras
+            .iter()
+            .filter(|p| caja.contiene(p.caja.cx(), p.caja.cy()))
+            .count();
         if h.len() == 1 && v.len() == 1 && es_esquina(h[0], v[0], hm) {
             // Ejes: lo que esta a su izquierda y debajo (los numeros) va con
             // la grafica.
-            let ejes = Caja::de_esquinas(caja.x - hm * 3.0, caja.y - hm, caja.x1() + hm, caja.y1() + hm * 2.5);
+            let ejes = Caja::de_esquinas(
+                caja.x - hm * 3.0,
+                caja.y - hm,
+                caja.x1() + hm,
+                caja.y1() + hm * 2.5,
+            );
             graficas.push((ejes, lista));
-        } else if (h.len() >= 2 && v.len() >= 2 || h.len() >= 3) && dentro >= 2 && caja.h > hm * 1.5 {
+        } else if (h.len() >= 2 && v.len() >= 2 || h.len() >= 3) && dentro >= 2 && caja.h > hm * 1.5
+        {
             tablas.push((caja, lista));
-        } else if h.len() >= 2 && v.len() >= 2 && dentro < 2 && caja.w > hm * 4.0 && caja.h > hm * 4.0 {
+        } else if h.len() >= 2
+            && v.len() >= 2
+            && dentro < 2
+            && caja.w > hm * 4.0
+            && caja.h > hm * 4.0
+        {
             // Una rejilla sin texto: papel cuadriculado de una grafica o un
             // dibujo; mejor calcarla.
             graficas.push((caja, lista));
@@ -419,18 +581,27 @@ fn es_esquina(h: &Raya, v: &Raya, hm: f64) -> bool {
 /// y por las rayas separadoras.
 pub fn renglones(palabras: &[PalabraHoja], separadores: &[Raya], hm: f64) -> Vec<Renglon> {
     let mut ps: Vec<&PalabraHoja> = palabras.iter().collect();
-    ps.sort_by(|a, b| a.caja.cy().partial_cmp(&b.caja.cy()).unwrap_or(std::cmp::Ordering::Equal));
+    ps.sort_by(|a, b| {
+        a.caja
+            .cy()
+            .partial_cmp(&b.caja.cy())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let mut filas: Vec<Vec<&PalabraHoja>> = Vec::new();
     for p in ps {
         let mut puesta = false;
         // Contra la ultima fila y la anterior (dos columnas con renglones
         // algo desfasados).
         for f in filas.iter_mut().rev().take(3) {
-            let (y0, y1) = f.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(q.caja.y), b.max(q.caja.y1())));
+            let (y0, y1) = f.iter().fold((f64::MAX, f64::MIN), |(a, b), q| {
+                (a.min(q.caja.y), b.max(q.caja.y1()))
+            });
             let alto_f = mediana(f.iter().map(|q| q.caja.h).collect()).unwrap_or(hm);
             let solape = (p.caja.y1().min(y1) - p.caja.y.max(y0)).max(0.0);
             // Y que no choque en horizontal con otra de la fila.
-            let choca = f.iter().any(|q| q.caja.solape_x(&p.caja) > p.caja.w.min(q.caja.w) * 0.5);
+            let choca = f
+                .iter()
+                .any(|q| q.caja.solape_x(&p.caja) > p.caja.w.min(q.caja.w) * 0.5);
             if !choca && solape > p.caja.h.min(alto_f) * 0.5 {
                 f.push(p);
                 puesta = true;
@@ -443,13 +614,25 @@ pub fn renglones(palabras: &[PalabraHoja], separadores: &[Raya], hm: f64) -> Vec
     }
     let mut out = Vec::new();
     for mut f in filas {
-        f.sort_by(|a, b| a.caja.x.partial_cmp(&b.caja.x).unwrap_or(std::cmp::Ordering::Equal));
-        let alto_f = mediana(f.iter().map(|q| q.caja.h).collect()).unwrap_or(hm).max(hm * 0.6);
+        f.sort_by(|a, b| {
+            a.caja
+                .x
+                .partial_cmp(&b.caja.x)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let alto_f = mediana(f.iter().map(|q| q.caja.h).collect())
+            .unwrap_or(hm)
+            .max(hm * 0.6);
         let mut trozo: Vec<&PalabraHoja> = Vec::new();
         for p in f {
             if let Some(u) = trozo.last() {
                 let hueco = p.caja.x - u.caja.x1();
-                let raya_en_medio = separadores.iter().any(|r| r.x0 > u.caja.x1() - 1.0 && r.x0 < p.caja.x + 1.0 && r.y0 <= p.caja.y1() && r.y1 >= p.caja.y);
+                let raya_en_medio = separadores.iter().any(|r| {
+                    r.x0 > u.caja.x1() - 1.0
+                        && r.x0 < p.caja.x + 1.0
+                        && r.y0 <= p.caja.y1()
+                        && r.y1 >= p.caja.y
+                });
                 if hueco > alto_f * HUECO_RENGLON || raya_en_medio {
                     out.push(renglon_de(&trozo));
                     trozo.clear();
@@ -465,10 +648,18 @@ pub fn renglones(palabras: &[PalabraHoja], separadores: &[Raya], hm: f64) -> Vec
 }
 
 fn renglon_de(ps: &[&PalabraHoja]) -> Renglon {
-    let caja = ps.iter().map(|p| p.caja).reduce(|a, b| a.union(&b)).unwrap_or_default();
+    let caja = ps
+        .iter()
+        .map(|p| p.caja)
+        .reduce(|a, b| a.union(&b))
+        .unwrap_or_default();
     let negritas = ps.iter().filter(|p| p.negrita).count();
     Renglon {
-        texto: ps.iter().map(|p| p.texto.trim()).collect::<Vec<_>>().join(" "),
+        texto: ps
+            .iter()
+            .map(|p| p.texto.trim())
+            .collect::<Vec<_>>()
+            .join(" "),
         caja,
         palabras: ps.iter().map(|p| (*p).clone()).collect(),
         negrita: negritas * 2 > ps.len(),
@@ -481,7 +672,10 @@ pub fn color_mayoritario(v: impl Iterator<Item = (Option<[u8; 3]>, usize)>) -> O
     let mut grupos: Vec<([u8; 3], usize)> = Vec::new();
     for (c, n) in v {
         let Some(c) = c else { continue };
-        match grupos.iter_mut().find(|(g, _)| distancia_color(*g, c) < 60.0) {
+        match grupos
+            .iter_mut()
+            .find(|(g, _)| distancia_color(*g, c) < 60.0)
+        {
             Some(g) => g.1 += n,
             None => grupos.push((c, n)),
         }
@@ -560,21 +754,53 @@ fn huecos(cubiertos: &[(f64, f64)], x0: f64, x1: f64) -> Vec<(f64, f64)> {
 
 impl Corte<'_> {
     fn caja(&self, ids: &[usize]) -> Caja {
-        ids.iter().map(|&i| self.atomos[i].caja).reduce(|a, b| a.union(&b)).unwrap_or_default()
+        ids.iter()
+            .map(|&i| self.atomos[i].caja)
+            .reduce(|a, b| a.union(&b))
+            .unwrap_or_default()
     }
 
     fn cortar(&self, ids: &[usize], nivel: usize, col: usize, out: &mut Vec<Hoja>) {
         if ids.len() <= 1 || nivel > 24 {
             if !ids.is_empty() {
-                out.push(Hoja { ids: ids.to_vec(), tabla: false, columna: col });
+                out.push(Hoja {
+                    ids: ids.to_vec(),
+                    tabla: false,
+                    columna: col,
+                });
             }
             return;
         }
         if let Some(partes) = self.en_columnas(ids) {
             if self.parece_tabla(&partes) {
+                if std::env::var_os("PIXPIN_DIAGRAMA_DEPURAR").is_some() {
+                    for (k, p) in partes.iter().enumerate() {
+                        for &i in p {
+                            let a = &self.atomos[i];
+                            let que = match a.clase {
+                                Clase::Texto(r) => format!("texto «{}»", self.renglones[r].texto),
+                                Clase::Figura(f) => format!("figura {f}"),
+                                Clase::Tabla(t) => format!("tabla {t}"),
+                                Clase::Resto(r) => format!("resto {r}"),
+                            };
+                            eprintln!("tabla sin rayas? columna {k}: {que} {:?}", a.caja);
+                        }
+                    }
+                    eprintln!(
+                        "tabla sin rayas? separadores {:?}",
+                        self.separadores
+                            .iter()
+                            .map(|r| r.caja())
+                            .collect::<Vec<_>>()
+                    );
+                }
                 let mut todos: Vec<usize> = partes.concat();
                 todos.sort_unstable();
-                out.push(Hoja { ids: todos, tabla: true, columna: col });
+                out.push(Hoja {
+                    ids: todos,
+                    tabla: true,
+                    columna: col,
+                });
                 return;
             }
             for (k, p) in partes.into_iter().enumerate() {
@@ -584,14 +810,22 @@ impl Corte<'_> {
         }
         let grupos = self.en_franjas(ids);
         if grupos.len() <= 1 {
-            out.push(Hoja { ids: ids.to_vec(), tabla: false, columna: col });
+            out.push(Hoja {
+                ids: ids.to_vec(),
+                tabla: false,
+                columna: col,
+            });
             return;
         }
         for (g, con_pasillo) in grupos {
             if con_pasillo && g.len() < ids.len() {
                 self.cortar(&g, nivel + 1, col, out);
             } else {
-                out.push(Hoja { ids: g, tabla: false, columna: col });
+                out.push(Hoja {
+                    ids: g,
+                    tabla: false,
+                    columna: col,
+                });
             }
         }
     }
@@ -600,7 +834,11 @@ impl Corte<'_> {
     /// el bloque, de izquierda a derecha. `None` si no hay.
     fn en_columnas(&self, ids: &[usize]) -> Option<Vec<Vec<usize>>> {
         let c = self.caja(ids);
-        let cubiertos = unir(ids.iter().map(|&i| (self.atomos[i].caja.x, self.atomos[i].caja.x1())).collect());
+        let cubiertos = unir(
+            ids.iter()
+                .map(|&i| (self.atomos[i].caja.x, self.atomos[i].caja.x1()))
+                .collect(),
+        );
         let mut cortes: Vec<f64> = huecos(&cubiertos, c.x, c.x1())
             .into_iter()
             .filter(|(a, b)| *a > c.x && *b < c.x1() && b - a >= self.hm * PASILLO)
@@ -634,7 +872,40 @@ impl Corte<'_> {
         let trozo_de_formula = partes.iter().any(|p| {
             p.len() == 1 && matches!(self.atomos[p[0]].clase, Clase::Texto(r) if { let t = self.renglones[r].texto.trim(); t.ends_with('=') || t.starts_with('=') })
         });
-        (partes.len() >= 2 && !trozo_de_formula).then_some(partes)
+        // Ni una fraccion (24-oct-2026, el OCR de la CI no leia el «m =» ni
+        // los «=»): dos textos uno encima del otro con su raya en medio no son
+        // una columna de una tabla sin rayas, son numerador y denominador.
+        let fraccion = partes.iter().any(|p| self.es_fraccion(p));
+        (partes.len() >= 2 && !trozo_de_formula && !fraccion).then_some(partes)
+    }
+
+    /// Dos textos, uno sobre otro, con una raya horizontal (un resto fino y
+    /// ancho) entre los dos que pasa por debajo de ambos: una fraccion.
+    fn es_fraccion(&self, ids: &[usize]) -> bool {
+        let textos: Vec<Caja> = ids
+            .iter()
+            .filter(|&&i| matches!(self.atomos[i].clase, Clase::Texto(_)))
+            .map(|&i| self.atomos[i].caja)
+            .collect();
+        let [arriba, abajo] = match textos.as_slice() {
+            [a, b] if a.y <= b.y => [*a, *b],
+            [a, b] => [*b, *a],
+            _ => return false,
+        };
+        ids.iter().any(|&i| {
+            let c = self.atomos[i].caja;
+            // (La raya puede venir fundida con la tinta que el OCR no leyo,
+            // el «m =» de delante y el «=» de detras: una mancha ancha y
+            // baja, no siempre fina.)
+            matches!(self.atomos[i].clase, Clase::Resto(_))
+                && c.h <= self.hm * 1.2
+                && c.w >= c.h * 3.0
+                && c.w >= arriba.w.max(abajo.w) * 0.8
+                && c.cy() >= arriba.y1() - self.hm * 0.3
+                && c.cy() <= abajo.y + self.hm * 0.3
+                && c.solape_x(&arriba) >= arriba.w.min(c.w) * 0.6
+                && c.solape_x(&abajo) >= abajo.w.min(c.w) * 0.6
+        })
     }
 
     /// Columnas de trozos cortos y alineados en filas: una tabla sin rayas,
@@ -658,7 +929,9 @@ impl Corte<'_> {
             }
             textos.push(v);
         }
-        let cortos = textos.iter().all(|v| mediana(v.iter().map(|r| r.n_palabras() as f64).collect()).unwrap_or(9.0) <= 3.0);
+        let cortos = textos.iter().all(|v| {
+            mediana(v.iter().map(|r| r.n_palabras() as f64).collect()).unwrap_or(9.0) <= 3.0
+        });
         if !cortos {
             return false;
         }
@@ -667,7 +940,11 @@ impl Corte<'_> {
         for (k, v) in textos.iter().enumerate() {
             for r in v {
                 total += 1;
-                let par = textos.iter().enumerate().any(|(j, w)| j != k && w.iter().any(|s| s.caja.solape_y(&r.caja) > r.caja.h.min(s.caja.h) * 0.5));
+                let par = textos.iter().enumerate().any(|(j, w)| {
+                    j != k
+                        && w.iter()
+                            .any(|s| s.caja.solape_y(&r.caja) > r.caja.h.min(s.caja.h) * 0.5)
+                });
                 if par {
                     con += 1;
                 }
@@ -681,7 +958,13 @@ impl Corte<'_> {
     fn en_franjas(&self, ids: &[usize]) -> Vec<(Vec<usize>, bool)> {
         let c = self.caja(ids);
         let mut orden: Vec<usize> = ids.to_vec();
-        orden.sort_by(|&a, &b| self.atomos[a].caja.y.partial_cmp(&self.atomos[b].caja.y).unwrap_or(std::cmp::Ordering::Equal));
+        orden.sort_by(|&a, &b| {
+            self.atomos[a]
+                .caja
+                .y
+                .partial_cmp(&self.atomos[b].caja.y)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         // Franjas: se cortan donde ningun atomo cruza.
         let mut franjas: Vec<(Vec<usize>, f64)> = Vec::new(); // (ids, y1)
         for i in orden {
@@ -698,10 +981,18 @@ impl Corte<'_> {
             return vec![(ids.to_vec(), false)];
         }
         let libres = |f: &[usize]| -> Vec<(f64, f64)> {
-            let cub = unir(f.iter().map(|&i| (self.atomos[i].caja.x, self.atomos[i].caja.x1())).collect());
-            huecos(&cub, c.x, c.x1()).into_iter().filter(|(a, b)| b - a >= self.hm * PASILLO).collect()
+            let cub = unir(
+                f.iter()
+                    .map(|&i| (self.atomos[i].caja.x, self.atomos[i].caja.x1()))
+                    .collect(),
+            );
+            huecos(&cub, c.x, c.x1())
+                .into_iter()
+                .filter(|(a, b)| b - a >= self.hm * PASILLO)
+                .collect()
         };
-        let interior = |v: &[(f64, f64)]| v.iter().any(|(a, b)| *a > c.x + 0.5 && *b < c.x1() - 0.5);
+        let interior =
+            |v: &[(f64, f64)]| v.iter().any(|(a, b)| *a > c.x + 0.5 && *b < c.x1() - 0.5);
         let cruzar = |p: &[(f64, f64)], q: &[(f64, f64)]| -> Vec<(f64, f64)> {
             let mut o = Vec::new();
             for &(a, b) in p {
@@ -766,7 +1057,6 @@ impl Corte<'_> {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Cada bloque a sus zonas
 
@@ -797,7 +1087,10 @@ pub fn puntuar_formula(texto: &str, caja: &Caja, bloque: &Caja) -> f64 {
     let mates = t.chars().filter(|c| MATES.contains(*c)).count() as f64;
     let largas = t
         .split_whitespace()
-        .filter(|w| w.chars().filter(|c| c.is_alphabetic()).count() >= 4 && w.chars().all(|c| c.is_alphabetic() || ",.;:()".contains(c)))
+        .filter(|w| {
+            w.chars().filter(|c| c.is_alphabetic()).count() >= 4
+                && w.chars().all(|c| c.is_alphabetic() || ",.;:()".contains(c))
+        })
         .count();
     let mut s = 0.0;
     if t.contains('=') || t.contains('≤') || t.contains('≥') || t.contains('≈') {
@@ -824,7 +1117,9 @@ impl Bloque<'_> {
         let mut ids = h.ids.clone();
         ids.sort_by(|&a, &b| {
             let (ca, cb) = (self.atomos[a].caja, self.atomos[b].caja);
-            ca.y.partial_cmp(&cb.y).unwrap_or(std::cmp::Ordering::Equal).then(ca.x.partial_cmp(&cb.x).unwrap_or(std::cmp::Ordering::Equal))
+            ca.y.partial_cmp(&cb.y)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(ca.x.partial_cmp(&cb.x).unwrap_or(std::cmp::Ordering::Equal))
         });
         let textos: Vec<&Renglon> = ids
             .iter()
@@ -837,12 +1132,31 @@ impl Bloque<'_> {
             let palabras: Vec<tabla_escaneada::Palabra> = textos
                 .iter()
                 .flat_map(|r| r.palabras.iter())
-                .map(|p| tabla_escaneada::Palabra::nueva(&p.texto, p.caja.x, p.caja.y, p.caja.w, p.caja.h))
+                .map(|p| {
+                    tabla_escaneada::Palabra::nueva(
+                        &p.texto, p.caja.x, p.caja.y, p.caja.w, p.caja.h,
+                    )
+                })
                 .collect();
-            let caja = textos.iter().map(|r| r.caja).reduce(|a, b| a.union(&b)).unwrap_or_default();
-            return vec![zona(Tipo::Tabla, caja, 0.65, textos.iter().map(|r| (*r).clone()).collect(), Some(tabla_escaneada::reconstruir(&palabras)), Vec::new())];
+            let caja = textos
+                .iter()
+                .map(|r| r.caja)
+                .reduce(|a, b| a.union(&b))
+                .unwrap_or_default();
+            return vec![zona(
+                Tipo::Tabla,
+                caja,
+                0.65,
+                textos.iter().map(|r| (*r).clone()).collect(),
+                Some(tabla_escaneada::reconstruir(&palabras)),
+                Vec::new(),
+            )];
         }
-        let extension = textos.iter().map(|r| r.caja).reduce(|a, b| a.union(&b)).unwrap_or_default();
+        let extension = textos
+            .iter()
+            .map(|r| r.caja)
+            .reduce(|a, b| a.union(&b))
+            .unwrap_or_default();
         // El interlineado tipico del bloque (de arriba a arriba).
         let paso = {
             let mut v = Vec::new();
@@ -858,7 +1172,10 @@ impl Bloque<'_> {
         let mut actual: Vec<Renglon> = Vec::new();
         let mut tipo_actual = Parece::Texto;
         let mut restos_actual: Vec<Caja> = Vec::new();
-        let cerrar = |actual: &mut Vec<Renglon>, restos: &mut Vec<Caja>, tipo: Parece, out: &mut Vec<Zona>| {
+        let cerrar = |actual: &mut Vec<Renglon>,
+                      restos: &mut Vec<Caja>,
+                      tipo: Parece,
+                      out: &mut Vec<Zona>| {
             if actual.is_empty() {
                 // Restos sueltos: si tienen tamano, al modelo.
                 for r in restos.drain(..) {
@@ -868,7 +1185,11 @@ impl Bloque<'_> {
                 }
                 return;
             }
-            let mut caja = actual.iter().map(|r| r.caja).reduce(|a, b| a.union(&b)).unwrap_or_default();
+            let mut caja = actual
+                .iter()
+                .map(|r| r.caja)
+                .reduce(|a, b| a.union(&b))
+                .unwrap_or_default();
             for r in restos.drain(..) {
                 caja = caja.union(&r);
             }
@@ -887,15 +1208,31 @@ impl Bloque<'_> {
                 Clase::Figura(f) => {
                     cerrar(&mut actual, &mut restos_actual, tipo_actual, &mut out);
                     let fi = &self.figuras[f];
-                    out.push(zona(fi.tipo, fi.caja, fi.confianza, renglones(&fi.palabras, &[], self.hm), None, fi.rayas.clone()));
+                    out.push(zona(
+                        fi.tipo,
+                        fi.caja,
+                        fi.confianza,
+                        renglones(&fi.palabras, &[], self.hm),
+                        None,
+                        fi.rayas.clone(),
+                    ));
                     ultimo = None;
                 }
                 Clase::Tabla(t) => {
                     cerrar(&mut actual, &mut restos_actual, tipo_actual, &mut out);
-                    let TablaR { caja, rayas, palabras, iconos } = &self.tablas[t];
+                    let TablaR {
+                        caja,
+                        rayas,
+                        palabras,
+                        iconos,
+                    } = &self.tablas[t];
                     let ps: Vec<tabla_escaneada::Palabra> = palabras
                         .iter()
-                        .map(|p| tabla_escaneada::Palabra::nueva(&p.texto, p.caja.x, p.caja.y, p.caja.w, p.caja.h))
+                        .map(|p| {
+                            tabla_escaneada::Palabra::nueva(
+                                &p.texto, p.caja.x, p.caja.y, p.caja.w, p.caja.h,
+                            )
+                        })
                         .collect();
                     let rs = renglones(palabras, &[], self.hm);
                     let leida = tabla_escaneada::reconstruir(&ps);
@@ -914,12 +1251,20 @@ impl Bloque<'_> {
                 Clase::Resto(k) => {
                     let r = self.restos[k];
                     // Con la formula de arriba si la toca.
-                    let toca = actual.last().is_some_and(|u| r.y < u.caja.y1() + self.hm * 1.2);
+                    let toca = actual
+                        .last()
+                        .is_some_and(|u| r.y < u.caja.y1() + self.hm * 1.2);
                     // O con los restos que esperan (dos trozos de una raiz).
-                    let junto = actual.is_empty() && restos_actual.iter().any(|c| c.crecer(self.hm).comun(&r) > 0.0);
+                    let junto = actual.is_empty()
+                        && restos_actual
+                            .iter()
+                            .any(|c| c.crecer(self.hm).comun(&r) > 0.0);
                     // Un renglon corto justo encima de una raya (el numerador
                     // de una fraccion): la formula empieza en el.
-                    let numerador = toca && actual.len() == 1 && actual[0].n_palabras() <= 4 && r.w >= actual[0].caja.w * 0.6;
+                    let numerador = toca
+                        && actual.len() == 1
+                        && actual[0].n_palabras() <= 4
+                        && r.w >= actual[0].caja.w * 0.6;
                     if numerador {
                         tipo_actual = Parece::Formula;
                     }
@@ -935,13 +1280,17 @@ impl Bloque<'_> {
                     let r = &self.renglones[k];
                     let parece = self.parece(r, &extension);
                     let sigue = match (ultimo.as_ref(), actual.last()) {
-                        (Some(u), Some(_)) => self.continua(u, r, parece, tipo_actual, paso, &extension),
+                        (Some(u), Some(_)) => {
+                            self.continua(u, r, parece, tipo_actual, paso, &extension)
+                        }
                         _ => false,
                     };
                     // Unos restos que esperaban (la raya de una fraccion
                     // encima): si este renglon es formula, van con el.
                     if actual.is_empty() && !restos_actual.is_empty() {
-                        let cerca = restos_actual.iter().any(|c| (r.caja.y - c.y1()).abs() < self.hm * 1.5 || c.solape_y(&r.caja) > 0.0);
+                        let cerca = restos_actual.iter().any(|c| {
+                            (r.caja.y - c.y1()).abs() < self.hm * 1.5 || c.solape_y(&r.caja) > 0.0
+                        });
                         let corto = r.n_palabras() <= 4;
                         if (parece == Parece::Formula || corto) && cerca {
                             actual.push(r.clone());
@@ -951,7 +1300,11 @@ impl Bloque<'_> {
                         }
                         cerrar(&mut actual, &mut restos_actual, tipo_actual, &mut out);
                     }
-                    let tipo_r = if tipo_actual == Parece::Formula && sigue { Parece::Formula } else { parece };
+                    let tipo_r = if tipo_actual == Parece::Formula && sigue {
+                        Parece::Formula
+                    } else {
+                        parece
+                    };
                     if sigue && tipo_r == tipo_actual {
                         actual.push(r.clone());
                     } else {
@@ -982,7 +1335,15 @@ impl Bloque<'_> {
     }
 
     /// Si `r` sigue el bloque que acaba en `u`.
-    fn continua(&self, u: &Renglon, r: &Renglon, parece: Parece, tipo: Parece, paso: f64, bloque: &Caja) -> bool {
+    fn continua(
+        &self,
+        u: &Renglon,
+        r: &Renglon,
+        parece: Parece,
+        tipo: Parece,
+        paso: f64,
+        bloque: &Caja,
+    ) -> bool {
         // Otro color (un renglon rojo tras uno negro) es otro bloque.
         let negro = [30, 30, 30];
         if distancia_color(u.color.unwrap_or(negro), r.color.unwrap_or(negro)) > 70.0 {
@@ -994,10 +1355,15 @@ impl Bloque<'_> {
             Parece::Formula => {
                 // Un renglon corto y centrado cerca de una formula (el
                 // denominador de una fraccion) sigue en ella.
-                let corto = r.n_palabras() <= 4 && puntuar_formula(&r.texto, &r.caja, bloque) >= 0.3;
+                let corto =
+                    r.n_palabras() <= 4 && puntuar_formula(&r.texto, &r.caja, bloque) >= 0.3;
                 hueco < self.hm * 1.2 && (parece == Parece::Formula || corto)
             }
-            Parece::Titulo => parece == Parece::Titulo && hueco < u.alto().max(r.alto()) * 0.9 && (r.alto() / u.alto() - 1.0).abs() < 0.25,
+            Parece::Titulo => {
+                parece == Parece::Titulo
+                    && hueco < u.alto().max(r.alto()) * 0.9
+                    && (r.alto() / u.alto() - 1.0).abs() < 0.25
+            }
             Parece::Texto => {
                 if parece != Parece::Texto {
                     return false;
@@ -1005,17 +1371,39 @@ impl Bloque<'_> {
                 let alto_parecido = (r.alto() / u.alto().max(1.0) - 1.0).abs() < 0.3;
                 let sin_hueco = de_arriba < paso * 1.45 && hueco < self.hm * 1.2;
                 // Sangria de primera linea: empieza un parrafo.
-                let sangria = r.caja.x - bloque.x > self.hm * 1.2 && u.caja.x - bloque.x < self.hm * 0.6;
+                let sangria =
+                    r.caja.x - bloque.x > self.hm * 1.2 && u.caja.x - bloque.x < self.hm * 0.6;
                 // Un renglon anterior corto que acaba en punto cierra el parrafo.
-                let cerro = u.caja.x1() < bloque.x1() - self.hm * 3.0 && u.texto.trim_end().ends_with(['.', ':', '!', '?']);
+                let cerro = u.caja.x1() < bloque.x1() - self.hm * 3.0
+                    && u.texto.trim_end().ends_with(['.', ':', '!', '?']);
                 alto_parecido && sin_hueco && !sangria && !cerro
             }
         }
     }
 }
 
-fn zona(tipo: Tipo, caja: Caja, confianza: f32, renglones: Vec<Renglon>, tabla: Option<tabla_escaneada::TablaLeida>, rayas: Vec<[f64; 5]>) -> Zona {
-    Zona { id: 0, tipo, caja, orden: 0, columna: 0, confianza, renglones, alineacion: Alineacion::Izquierda, tabla, rayas, dentro: Vec::new(), panel: None }
+fn zona(
+    tipo: Tipo,
+    caja: Caja,
+    confianza: f32,
+    renglones: Vec<Renglon>,
+    tabla: Option<tabla_escaneada::TablaLeida>,
+    rayas: Vec<[f64; 5]>,
+) -> Zona {
+    Zona {
+        id: 0,
+        tipo,
+        caja,
+        orden: 0,
+        columna: 0,
+        confianza,
+        renglones,
+        alineacion: Alineacion::Izquierda,
+        tabla,
+        rayas,
+        dentro: Vec::new(),
+        panel: None,
+    }
 }
 
 /// Como van los renglones dentro del bloque.
@@ -1026,7 +1414,8 @@ fn alineacion(rs: &[Renglon], bloque: &Caja, hm: f64) -> Alineacion {
     let izq: Vec<f64> = rs.iter().map(|r| r.caja.x - bloque.x).collect();
     let der: Vec<f64> = rs.iter().map(|r| bloque.x1() - r.caja.x1()).collect();
     let tol = hm * 0.8;
-    let centrado = izq.iter().zip(&der).all(|(a, b)| (a - b).abs() < hm * 1.5) && izq.iter().any(|a| *a > hm * 2.0);
+    let centrado = izq.iter().zip(&der).all(|(a, b)| (a - b).abs() < hm * 1.5)
+        && izq.iter().any(|a| *a > hm * 2.0);
     if centrado {
         return Alineacion::Centro;
     }
@@ -1056,7 +1445,9 @@ struct TablaR {
 fn juntar_formulas(zonas: &mut Vec<Zona>, hm: f64) {
     let pequena = |z: &Zona| match z.tipo {
         Tipo::Formula | Tipo::Dudosa => true,
-        Tipo::Encabezado | Tipo::Parrafo => z.renglones.len() == 1 && z.renglones[0].n_palabras() <= 4,
+        Tipo::Encabezado | Tipo::Parrafo => {
+            z.renglones.len() == 1 && z.renglones[0].n_palabras() <= 4
+        }
         _ => false,
     };
     loop {
@@ -1074,7 +1465,12 @@ fn juntar_formulas(zonas: &mut Vec<Zona>, hm: f64) {
                 let a = &mut zonas[i];
                 a.caja = a.caja.union(&b.caja);
                 a.renglones.extend(b.renglones);
-                a.renglones.sort_by(|x, y| x.caja.y.partial_cmp(&y.caja.y).unwrap_or(std::cmp::Ordering::Equal));
+                a.renglones.sort_by(|x, y| {
+                    x.caja
+                        .y
+                        .partial_cmp(&y.caja.y)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 a.rayas.extend(b.rayas);
                 a.confianza = a.confianza.max(b.confianza);
                 junto = true;
@@ -1108,7 +1504,11 @@ pub fn unir_dibujos(s: &mut Seccionado, rgba: &[u8]) {
             matches!(z.tipo, Tipo::Dibujo | Tipo::Grafica)
                 || (z.tipo == Tipo::Dudosa && z.caja.w >= 60.0 && z.caja.h >= 60.0 && {
                     let (sub, sw, sh) = imagen::recortar(rgba, w0, h0, &z.caja);
-                    let o = crate::diagrama::Opciones { alto_letra: s.alto_letra, exacta: false, ..Default::default() };
+                    let o = crate::diagrama::Opciones {
+                        alto_letra: s.alto_letra,
+                        exacta: false,
+                        ..Default::default()
+                    };
                     crate::diagrama::vectorizar(&sub, sw, sh, &[], &o, None).es_diagrama()
                 })
         })
@@ -1134,8 +1534,12 @@ pub fn unir_dibujos(s: &mut Seccionado, rgba: &[u8]) {
         for r in &z.renglones {
             for p in &r.palabras {
                 let c = p.caja.crecer(1.0);
-                for y in (c.y / 2.0).floor().max(0.0) as usize..((c.y1() / 2.0).ceil() as usize).min(mh) {
-                    for x in (c.x / 2.0).floor().max(0.0) as usize..((c.x1() / 2.0).ceil() as usize).min(mw) {
+                for y in
+                    (c.y / 2.0).floor().max(0.0) as usize..((c.y1() / 2.0).ceil() as usize).min(mh)
+                {
+                    for x in (c.x / 2.0).floor().max(0.0) as usize
+                        ..((c.x1() / 2.0).ceil() as usize).min(mw)
+                    {
                         tinta[y * mw + x] = false;
                     }
                 }
@@ -1143,7 +1547,18 @@ pub fn unir_dibujos(s: &mut Seccionado, rgba: &[u8]) {
         }
     }
     let comps = crate::diagrama::mascara::componentes(&tinta, mw, mh);
-    let unibles = |t: Tipo| matches!(t, Tipo::Dibujo | Tipo::Grafica | Tipo::Tabla | Tipo::Dudosa | Tipo::Formula | Tipo::Linea | Tipo::Diagrama);
+    let unibles = |t: Tipo| {
+        matches!(
+            t,
+            Tipo::Dibujo
+                | Tipo::Grafica
+                | Tipo::Tabla
+                | Tipo::Dudosa
+                | Tipo::Formula
+                | Tipo::Linea
+                | Tipo::Diagrama
+        )
+    };
     let mut grupos: Vec<Vec<usize>> = Vec::new();
     for comp in comps.iter().filter(|c| c.len() >= 40) {
         // Las zonas que toca la mancha (con al menos 15 de sus pixeles dentro).
@@ -1156,11 +1571,26 @@ pub fn unir_dibujos(s: &mut Seccionado, rgba: &[u8]) {
                 }
             }
         }
-        let mut tocadas: Vec<usize> = (0..s.zonas.len()).filter(|&k| cuenta[k] >= 15 && unibles(s.zonas[k].tipo) && s.zonas[k].tipo != Tipo::Formula).collect();
+        let mut tocadas: Vec<usize> = (0..s.zonas.len())
+            .filter(|&k| {
+                cuenta[k] >= 15 && unibles(s.zonas[k].tipo) && s.zonas[k].tipo != Tipo::Formula
+            })
+            .collect();
         // Una «formula» solo si cae dentro de lo demas (el «Leer N» de su
         // paralelogramo, si; un titulo subrayado que toca la figura, no).
-        if let Some(union) = tocadas.iter().map(|&k| s.zonas[k].caja).reduce(|a, b| Caja::de_esquinas(a.x.min(b.x), a.y.min(b.y), a.x1().max(b.x1()), a.y1().max(b.y1()))) {
-            tocadas.extend((0..s.zonas.len()).filter(|&k| cuenta[k] >= 15 && s.zonas[k].tipo == Tipo::Formula && s.zonas[k].caja.dentro_de(&union) >= 0.6));
+        if let Some(union) = tocadas.iter().map(|&k| s.zonas[k].caja).reduce(|a, b| {
+            Caja::de_esquinas(
+                a.x.min(b.x),
+                a.y.min(b.y),
+                a.x1().max(b.x1()),
+                a.y1().max(b.y1()),
+            )
+        }) {
+            tocadas.extend((0..s.zonas.len()).filter(|&k| {
+                cuenta[k] >= 15
+                    && s.zonas[k].tipo == Tipo::Formula
+                    && s.zonas[k].caja.dentro_de(&union) >= 0.6
+            }));
         }
         if tocadas.len() >= 2 && tocadas.iter().any(|&k| es_dibujo[k]) {
             grupos.push(tocadas);
@@ -1197,18 +1627,38 @@ pub fn unir_dibujos(s: &mut Seccionado, rgba: &[u8]) {
         let mut caja = s.zonas[base].caja;
         for &k in g {
             let c = s.zonas[k].caja;
-            caja = Caja::de_esquinas(caja.x.min(c.x), caja.y.min(c.y), caja.x1().max(c.x1()), caja.y1().max(c.y1()));
+            caja = Caja::de_esquinas(
+                caja.x.min(c.x),
+                caja.y.min(c.y),
+                caja.x1().max(c.x1()),
+                caja.y1().max(c.y1()),
+            );
         }
         // Y el texto que cae dentro del dibujo (el «Fin» del ovalo, «Si» y «No»).
         // (Y los rotulos de alrededor: palabras cortas pegadas al dibujo, como los
         // meses bajo las barras o los valores del eje.)
         let a = s.alto_letra.max(6.0);
-        let rotulos = |z: &Zona| z.renglones.iter().flat_map(|r| r.palabras.iter()).all(|p| p.texto.chars().count() <= 6);
+        let rotulos = |z: &Zona| {
+            z.renglones
+                .iter()
+                .flat_map(|r| r.palabras.iter())
+                .all(|p| p.texto.chars().count() <= 6)
+        };
         let dentro: Vec<usize> = (0..s.zonas.len())
-            .filter(|&k| !g.contains(&k) && matches!(s.zonas[k].tipo, Tipo::Parrafo | Tipo::Encabezado))
-            .filter(|&k| s.zonas[k].caja.dentro_de(&caja) >= 0.8 || (rotulos(&s.zonas[k]) && s.zonas[k].caja.dentro_de(&caja.crecer(2.5 * a)) >= 0.8))
+            .filter(|&k| {
+                !g.contains(&k) && matches!(s.zonas[k].tipo, Tipo::Parrafo | Tipo::Encabezado)
+            })
+            .filter(|&k| {
+                s.zonas[k].caja.dentro_de(&caja) >= 0.8
+                    || (rotulos(&s.zonas[k])
+                        && s.zonas[k].caja.dentro_de(&caja.crecer(2.5 * a)) >= 0.8)
+            })
             .collect();
-        let mut renglones: Vec<Renglon> = g.iter().chain(&dentro).flat_map(|&k| s.zonas[k].renglones.iter().cloned()).collect();
+        let mut renglones: Vec<Renglon> = g
+            .iter()
+            .chain(&dentro)
+            .flat_map(|&k| s.zonas[k].renglones.iter().cloned())
+            .collect();
         renglones.sort_by(|a, b| a.caja.y.total_cmp(&b.caja.y));
         let z = &mut s.zonas[base];
         z.tipo = Tipo::Dibujo;

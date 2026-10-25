@@ -76,7 +76,10 @@ impl<'a> Cfb<'a> {
             b.get(ini..ini.checked_add(tam_sector)?)
         };
         // DIFAT: 109 sectores de FAT en la cabecera y despues encadenados.
-        let mut sectores_fat: Vec<u32> = (0..109).filter_map(|i| u32_en(b, 76 + i * 4)).filter(|&s| s < MAX_SECTOR).collect();
+        let mut sectores_fat: Vec<u32> = (0..109)
+            .filter_map(|i| u32_en(b, 76 + i * 4))
+            .filter(|&s| s < MAX_SECTOR)
+            .collect();
         let mut sig = u32_en(b, 68).ok_or_else(|| mal("cabecera cortada"))?;
         let mut saltos = 0usize;
         while sig < MAX_SECTOR {
@@ -85,7 +88,11 @@ impl<'a> Cfb<'a> {
                 return Err(mal("la cadena DIFAT da vueltas"));
             }
             let s = sector(sig).ok_or_else(|| mal("sector DIFAT fuera del fichero"))?;
-            sectores_fat.extend((0..por - 1).filter_map(|i| u32_en(s, i * 4)).filter(|&x| x < MAX_SECTOR));
+            sectores_fat.extend(
+                (0..por - 1)
+                    .filter_map(|i| u32_en(s, i * 4))
+                    .filter(|&x| x < MAX_SECTOR),
+            );
             sig = u32_en(s, (por - 1) * 4).ok_or_else(|| mal("sector DIFAT cortado"))?;
         }
         if sectores_fat.len() > sectores {
@@ -96,12 +103,21 @@ impl<'a> Cfb<'a> {
             let s = sector(id).ok_or_else(|| mal("sector de FAT fuera del fichero"))?;
             fat.extend((0..por).filter_map(|i| u32_en(s, i * 4)));
         }
-        let mut cf = Cfb { bytes: b, tam_sector, cota_mini: u64::from(u32_en(b, 56).unwrap_or(4096)), fat, mini_fat: Vec::new(), entradas: Vec::new() };
+        let mut cf = Cfb {
+            bytes: b,
+            tam_sector,
+            cota_mini: u64::from(u32_en(b, 56).unwrap_or(4096)),
+            fat,
+            mini_fat: Vec::new(),
+            entradas: Vec::new(),
+        };
         let ini_dir = u32_en(b, 48).ok_or_else(|| mal("cabecera cortada"))?;
         let dir = cf.leer_cadena(ini_dir, u64::MAX)?;
         for e in dir.chunks_exact(128) {
             let largo = usize::from(u16_en(e, 64).unwrap_or(0)).min(64);
-            let unidades: Vec<u16> = (0..largo.saturating_sub(2) / 2).filter_map(|i| u16_en(e, i * 2)).collect();
+            let unidades: Vec<u16> = (0..largo.saturating_sub(2) / 2)
+                .filter_map(|i| u16_en(e, i * 2))
+                .collect();
             let mut tam = u32_en(e, 120).map(u64::from).unwrap_or(0);
             if version >= 4 {
                 tam |= u64::from(u32_en(e, 124).unwrap_or(0)) << 32;
@@ -122,7 +138,9 @@ impl<'a> Cfb<'a> {
         let ini_mini = u32_en(b, 60).ok_or_else(|| mal("cabecera cortada"))?;
         if ini_mini < MAX_SECTOR {
             let crudo = cf.leer_cadena(ini_mini, u64::MAX)?;
-            cf.mini_fat = (0..crudo.len() / 4).filter_map(|i| u32_en(&crudo, i * 4)).collect();
+            cf.mini_fat = (0..crudo.len() / 4)
+                .filter_map(|i| u32_en(&crudo, i * 4))
+                .collect();
         }
         Ok(cf)
     }
@@ -144,12 +162,17 @@ impl<'a> Cfb<'a> {
                 Some(_) => return Err("contenedor dañado: la cadena de sectores da vueltas".into()),
                 None => return Err("contenedor dañado: sector que no esta en la FAT".into()),
             }
-            let ini = (id as usize).checked_add(1).and_then(|i| i.checked_mul(self.tam_sector));
+            let ini = (id as usize)
+                .checked_add(1)
+                .and_then(|i| i.checked_mul(self.tam_sector));
             let s = ini
                 .and_then(|s| self.bytes.get(s..s.checked_add(self.tam_sector)?))
                 .ok_or("contenedor dañado: sector fuera del fichero (¿cortado?)")?;
             sal.extend_from_slice(s);
-            id = *self.fat.get(id as usize).ok_or("contenedor dañado: sector que no esta en la FAT")?;
+            id = *self
+                .fat
+                .get(id as usize)
+                .ok_or("contenedor dañado: sector que no esta en la FAT")?;
         }
         Ok(sal)
     }
@@ -164,13 +187,22 @@ impl<'a> Cfb<'a> {
             }
             match vistos.get_mut(id as usize) {
                 Some(v) if !*v => *v = true,
-                Some(_) => return Err("contenedor dañado: la cadena de minisectores da vueltas".into()),
-                None => return Err("contenedor dañado: minisector que no esta en la mini FAT".into()),
+                Some(_) => {
+                    return Err("contenedor dañado: la cadena de minisectores da vueltas".into());
+                }
+                None => {
+                    return Err("contenedor dañado: minisector que no esta en la mini FAT".into());
+                }
             }
             let en = (id as usize).checked_mul(64);
-            let s = en.and_then(|a| contenedor.get(a..a.checked_add(64)?)).ok_or("contenedor dañado: minisector fuera del contenedor")?;
+            let s = en
+                .and_then(|a| contenedor.get(a..a.checked_add(64)?))
+                .ok_or("contenedor dañado: minisector fuera del contenedor")?;
             sal.extend_from_slice(s);
-            id = *self.mini_fat.get(id as usize).ok_or("contenedor dañado: minisector que no esta en la mini FAT")?;
+            id = *self
+                .mini_fat
+                .get(id as usize)
+                .ok_or("contenedor dañado: minisector que no esta en la mini FAT")?;
         }
         Ok(sal)
     }
@@ -178,7 +210,9 @@ impl<'a> Cfb<'a> {
     /// La entrada de un flujo directamente bajo la raiz (sin mirar
     /// mayusculas). Recorre el arbol de hermanos con una cota.
     fn entrada_raiz(&self, nombre: &str) -> Result<Option<&Entrada>, String> {
-        let Some(raiz) = self.entradas.first() else { return Ok(None) };
+        let Some(raiz) = self.entradas.first() else {
+            return Ok(None);
+        };
         let mut pila = vec![raiz.hijo];
         let mut vistas = 0usize;
         while let Some(i) = pila.pop() {
@@ -189,7 +223,9 @@ impl<'a> Cfb<'a> {
             if vistas > self.entradas.len() {
                 return Err("contenedor dañado: el arbol del directorio da vueltas".into());
             }
-            let Some(e) = self.entradas.get(i as usize) else { continue };
+            let Some(e) = self.entradas.get(i as usize) else {
+                continue;
+            };
             if e.tipo == ES_FLUJO && e.nombre.eq_ignore_ascii_case(nombre) {
                 return Ok(Some(e));
             }
@@ -205,8 +241,12 @@ impl<'a> Cfb<'a> {
 
     /// El contenido de un flujo directamente bajo la raiz, o `None` si no hay.
     pub fn flujo(&self, nombre: &str) -> Result<Option<Vec<u8>>, String> {
-        let Some(raiz) = self.entradas.first() else { return Ok(None) };
-        let Some(e) = self.entrada_raiz(nombre)? else { return Ok(None) };
+        let Some(raiz) = self.entradas.first() else {
+            return Ok(None);
+        };
+        let Some(e) = self.entrada_raiz(nombre)? else {
+            return Ok(None);
+        };
         if e.tam > MAX_FLUJO {
             return Err("el flujo pasa de 1 GiB".into());
         }
@@ -218,7 +258,9 @@ impl<'a> Cfb<'a> {
             self.leer_cadena(e.inicio, e.tam)?
         };
         if datos.len() < tam {
-            return Err("contenedor dañado: un flujo es mas corto de lo que dice (¿cortado?)".into());
+            return Err(
+                "contenedor dañado: un flujo es mas corto de lo que dice (¿cortado?)".into(),
+            );
         }
         datos.truncate(tam);
         Ok(Some(datos))
@@ -242,7 +284,11 @@ pub(crate) fn construir(flujos: &[(&str, &[u8])]) -> Vec<u8> {
             let ini = mini_fat.len() as u32;
             let n = d.len().div_ceil(64).max(1);
             for k in 0..n {
-                mini_fat.push(if k + 1 == n { FIN_DE_CADENA } else { ini + k as u32 + 1 });
+                mini_fat.push(if k + 1 == n {
+                    FIN_DE_CADENA
+                } else {
+                    ini + k as u32 + 1
+                });
             }
             let mut relleno = d.to_vec();
             relleno.resize(n * 64, 0);
@@ -265,8 +311,13 @@ pub(crate) fn construir(flujos: &[(&str, &[u8])]) -> Vec<u8> {
             let _ = tam;
         }
     }
-    let total = 4 + desplazo as usize + grandes.iter().map(|g| g.1.len().div_ceil(512)).sum::<usize>();
-    let mut b = vec![0u8; 512 * (total + 0)];
+    let total = 4
+        + desplazo as usize
+        + grandes
+            .iter()
+            .map(|g| g.1.len().div_ceil(512))
+            .sum::<usize>();
+    let mut b = vec![0u8; 512 * total];
     b.resize(512 * (total + 1), 0);
     b[..8].copy_from_slice(&FIRMA);
     b[24..26].copy_from_slice(&0x3Eu16.to_le_bytes());
@@ -291,14 +342,22 @@ pub(crate) fn construir(flujos: &[(&str, &[u8])]) -> Vec<u8> {
     fat[1] = FIN_DE_CADENA;
     fat[2] = FIN_DE_CADENA;
     for k in 0..n_mini_sectores {
-        fat[3 + k] = if k + 1 == n_mini_sectores { FIN_DE_CADENA } else { 3 + k as u32 + 1 };
+        fat[3 + k] = if k + 1 == n_mini_sectores {
+            FIN_DE_CADENA
+        } else {
+            3 + k as u32 + 1
+        };
     }
     let mut s0 = 3 + n_mini_sectores;
     for (i, d) in &grandes {
         let _ = i;
         let n = d.len().div_ceil(512);
         for k in 0..n {
-            fat[s0 + k] = if k + 1 == n { FIN_DE_CADENA } else { (s0 + k + 1) as u32 };
+            fat[s0 + k] = if k + 1 == n {
+                FIN_DE_CADENA
+            } else {
+                (s0 + k + 1) as u32
+            };
         }
         b[en(s0)..en(s0) + d.len()].copy_from_slice(d);
         s0 += n;
@@ -311,7 +370,14 @@ pub(crate) fn construir(flujos: &[(&str, &[u8])]) -> Vec<u8> {
     }
     b[en(3)..en(3) + mini.len()].copy_from_slice(&mini);
     // Directorio: raiz + flujos como hermanos en cadena por la derecha.
-    let escribir = |b: &mut Vec<u8>, k: usize, nombre: &str, tipo: u8, der: u32, hijo: u32, ini: u32, tam: u64| {
+    let escribir = |b: &mut Vec<u8>,
+                    k: usize,
+                    nombre: &str,
+                    tipo: u8,
+                    der: u32,
+                    hijo: u32,
+                    ini: u32,
+                    tam: u64| {
         let e = en(1) + k * 128;
         let u: Vec<u16> = nombre.encode_utf16().take(31).collect();
         for (j, x) in u.iter().enumerate() {
@@ -325,10 +391,32 @@ pub(crate) fn construir(flujos: &[(&str, &[u8])]) -> Vec<u8> {
         b[e + 116..e + 120].copy_from_slice(&ini.to_le_bytes());
         b[e + 120..e + 124].copy_from_slice(&(tam as u32).to_le_bytes());
     };
-    escribir(&mut b, 0, "Root Entry", 5, SIN_FLUJO, if flujos.is_empty() { SIN_FLUJO } else { 1 }, 3, mini.len() as u64);
+    escribir(
+        &mut b,
+        0,
+        "Root Entry",
+        5,
+        SIN_FLUJO,
+        if flujos.is_empty() { SIN_FLUJO } else { 1 },
+        3,
+        mini.len() as u64,
+    );
     for (k, (nombre, _)) in flujos.iter().enumerate().take(3) {
-        let der = if k + 1 < flujos.len().min(3) { k as u32 + 2 } else { SIN_FLUJO };
-        escribir(&mut b, k + 1, nombre, ES_FLUJO, der, SIN_FLUJO, destino[k].0, destino[k].1);
+        let der = if k + 1 < flujos.len().min(3) {
+            k as u32 + 2
+        } else {
+            SIN_FLUJO
+        };
+        escribir(
+            &mut b,
+            k + 1,
+            nombre,
+            ES_FLUJO,
+            der,
+            SIN_FLUJO,
+            destino[k].0,
+            destino[k].1,
+        );
     }
     b
 }
@@ -340,7 +428,11 @@ mod pruebas {
     #[test]
     fn lee_flujos_chicos_y_grandes() {
         let grande: Vec<u8> = (0..6000u32).map(|i| (i % 251) as u8).collect();
-        let b = construir(&[("Workbook", &grande), ("Chico", b"hola mundo"), ("Otro", &[7u8; 130])]);
+        let b = construir(&[
+            ("Workbook", &grande),
+            ("Chico", b"hola mundo"),
+            ("Otro", &[7u8; 130]),
+        ]);
         let cf = Cfb::abrir(&b).unwrap();
         assert_eq!(cf.flujo("workbook").unwrap().unwrap(), grande);
         assert_eq!(cf.flujo("Chico").unwrap().unwrap(), b"hola mundo");
@@ -374,8 +466,32 @@ mod pruebas {
         let cf = Cfb::abrir(&b).unwrap();
         assert!(cf.flujo("Workbook").is_err());
         // Campos de cabecera con valores raros y ficheros cortados: nunca un panico.
-        for en in [26usize, 30, 32, 44, 48, 56, 60, 68, 76, 512, 516, 1024 + 64, 1024 + 76, 1024 + 116, 1024 + 120] {
-            for v in [0u32, 1, 7, 0xFFFF_FFFA, 0xFFFF_FFFF, 0x7FFF_FFFF, 0xFFFF_FFFE] {
+        for en in [
+            26usize,
+            30,
+            32,
+            44,
+            48,
+            56,
+            60,
+            68,
+            76,
+            512,
+            516,
+            1024 + 64,
+            1024 + 76,
+            1024 + 116,
+            1024 + 120,
+        ] {
+            for v in [
+                0u32,
+                1,
+                7,
+                0xFFFF_FFFA,
+                0xFFFF_FFFF,
+                0x7FFF_FFFF,
+                0xFFFF_FFFE,
+            ] {
                 let mut c = base.clone();
                 c[en..en + 4].copy_from_slice(&v.to_le_bytes());
                 for corte in [0usize, 8, 100, 600, 1100, 3000, c.len()] {

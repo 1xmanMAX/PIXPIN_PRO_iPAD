@@ -36,19 +36,27 @@ use pixpin_motor2d::tinta::Variabilidad;
 
 use crate::propiedades::{self, Propiedad};
 
-const ANCHO_LOGICO: u32 = 200;
-const RELLENO_LOGICO: u32 = 12;
+// **Mas compacto que el de Excalidraw** (24-oct-2026, el usuario: «la barra
+// de propiedades ocupa mucha de la visualizacion, redisenala y pon un boton
+// para mostrarla y quitarla»): 168 de ancho en vez de 200, menos relleno y
+// menos aire entre secciones, botones de 28. Siguen cuatro por fila.
+/// Lo que ocupa a lo ancho una columna del panel.
+pub const ANCHO_LOGICO: u32 = 168;
+const RELLENO_LOGICO: u32 = 8;
 const X_LOGICA: u32 = 16;
-/// Debajo de donde ira el menu de Excalidraw (16 + 36 + 24).
-const Y_LOGICA: u32 = 76;
-const TITULO_LOGICO: u32 = 16;
+/// Debajo del boton de mostrar y quitar el panel ([`boton_plegar`]):
+/// 16 + 36 + 8.
+pub const Y_LOGICA: u32 = 60;
+/// El boton de mostrar y quitar, donde Excalidraw pone su menu.
+const PLEGAR_LOGICO: u32 = 36;
+const TITULO_LOGICO: u32 = 14;
 const TRAS_TITULO_LOGICO: u32 = 4;
-const ENTRE_SECCIONES_LOGICO: u32 = 12;
-const MUESTRA_LOGICA: u32 = 22;
-const MUESTRA_ACTIVA_LOGICA: u32 = 26;
-const OPCION_LOGICA: u32 = 32;
-const HUECO_OPCION_LOGICO: u32 = 8;
-const DESLIZADOR_LOGICO: u32 = 24;
+const ENTRE_SECCIONES_LOGICO: u32 = 8;
+const MUESTRA_LOGICA: u32 = 20;
+const MUESTRA_ACTIVA_LOGICA: u32 = 24;
+const OPCION_LOGICA: u32 = 28;
+const HUECO_OPCION_LOGICO: u32 = 6;
+const DESLIZADOR_LOGICO: u32 = 22;
 /// La paleta del desplegable: casillas de 30 separadas 4
 /// (`ColorPicker.scss:178-182`, `:301-306`).
 const CASILLA_LOGICA: u32 = 30;
@@ -214,6 +222,10 @@ pub enum AccionPanel {
     Borrar,
     Agrupar,
     Desagrupar,
+    /// **Guardar lo elegido en Figuras** (22-oct): pide el nombre y lo pone
+    /// en la biblioteca del menu de figuras. Lo atiende el editor, que es
+    /// quien puede abrir el cajetin del nombre.
+    GuardarFigura,
     /// Empieza a escribir el codigo del color en el campo del desplegable.
     /// Que color (trazo o fondo) lo dice el desplegable abierto.
     EditarHex,
@@ -235,6 +247,10 @@ pub enum AccionPanel {
     /// **Ver o esconder las lineas de referencia** (`referenciasVisibles`):
     /// va a la escena, que lo guarda en el fichero.
     VerGuias(bool),
+    /// **Mostrar o quitar el panel** (24-oct-2026): el boton de arriba a
+    /// la izquierda ([`boton_plegar`]). No es un estilo: lo guarda quien
+    /// llama, que construye el panel [`PanelLateral::plegado`] o entero.
+    Plegar,
 }
 
 /// El titulo de cada seccion. Lo traduce quien pinta.
@@ -704,7 +720,9 @@ impl Mandos {
                 Figura::Mosaico { desenfoque } => m.mosaico = m.mosaico.juntar(*desenfoque),
                 // El arco de lamina: su cierre, o sus arquitos si es la marca
                 // de un angulo (el cuadradito no tiene arquitos que contar).
-                Figura::Arco { barrido: Some(_), .. } => match &e.extras.marca_angulo {
+                Figura::Arco {
+                    barrido: Some(_), ..
+                } => match &e.extras.marca_angulo {
                     Some(marca) => {
                         if !marca.recto {
                             m.arcos_angulo = m.arcos_angulo.juntar(marca.arcos);
@@ -869,6 +887,23 @@ pub struct PanelLateral {
     pub controles: Vec<Control>,
     /// Encima del lienzo y del panel, a su derecha.
     pub emergente: Option<Emergente>,
+    /// El boton de mostrar y quitar el panel ([`AccionPanel::Plegar`]), si
+    /// lo lleva. Va fuera del `marco`, encima.
+    pub plegar: Option<Rect>,
+    /// Quitado: solo queda el boton; `marco` es el suyo y no hay controles.
+    pub plegado: bool,
+}
+
+/// **Donde va el boton de mostrar y quitar el panel**: arriba a la
+/// izquierda del `area`, encima de donde empieza el panel.
+pub fn boton_plegar(area: Rect, escala_por_cien: u32) -> Rect {
+    let e = |v: u32| (v * escala_por_cien / 100) as i32;
+    Rect {
+        x: area.x + e(X_LOGICA),
+        y: area.y + e(X_LOGICA),
+        ancho: e(PLEGAR_LOGICO) as u32,
+        alto: e(PLEGAR_LOGICO) as u32,
+    }
 }
 
 fn casi(a: ColorRgba, b: ColorRgba) -> bool {
@@ -1828,6 +1863,7 @@ impl PanelLateral {
             if m.desagrupar {
                 opciones.push((AccionPanel::Desagrupar, false));
             }
+            opciones.push((AccionPanel::GuardarFigura, false));
             c.fila(&opciones);
             c.separar();
         }
@@ -1892,10 +1928,38 @@ impl PanelLateral {
             marco,
             controles: c.controles,
             emergente,
+            plegar: None,
+            plegado: false,
         })
     }
 
+    /// El mismo panel con su boton de quitarlo ([`boton_plegar`]).
+    pub fn con_plegar(self, area: Rect, escala_por_cien: u32) -> PanelLateral {
+        PanelLateral {
+            plegar: Some(boton_plegar(area, escala_por_cien)),
+            ..self
+        }
+    }
+
+    /// **El panel quitado**: solo su boton, para volver a sacarlo.
+    pub fn plegado(area: Rect, escala_por_cien: u32) -> PanelLateral {
+        let boton = boton_plegar(area, escala_por_cien);
+        PanelLateral {
+            marco: boton,
+            controles: Vec::new(),
+            emergente: None,
+            plegar: Some(boton),
+            plegado: true,
+        }
+    }
+
     pub fn destino(&self, p: Punto) -> DestinoPanel {
+        if self.plegar.is_some_and(|b| b.contiene(p)) {
+            return DestinoPanel::Accion(AccionPanel::Plegar);
+        }
+        if self.plegado {
+            return DestinoPanel::Fuera;
+        }
         // El desplegable va encima de todo: se mira primero.
         if let Some(em) = &self.emergente
             && em.marco.contiene(p)
@@ -2084,8 +2148,38 @@ mod pruebas {
                 Seccion::Opacidad
             ]
         );
-        assert_eq!(p.marco.ancho, 200);
-        assert_eq!((p.marco.x, p.marco.y), (16, 76));
+        assert_eq!(p.marco.ancho, ANCHO_LOGICO);
+        assert_eq!((p.marco.x, p.marco.y), (16, Y_LOGICA as i32));
+    }
+
+    /// 24-oct-2026: el boton de arriba a la izquierda quita el panel y lo
+    /// vuelve a sacar; quitado no se queda ningun clic mas que el suyo.
+    #[test]
+    fn el_boton_de_plegar_quita_y_saca_el_panel() {
+        let props =
+            crate::propiedades::de_herramienta(pixpin_motor2d::gesto::Herramienta::Rectangulo);
+        let entero = PanelLateral::construir(area(), 100, ctx(props, 0))
+            .unwrap()
+            .con_plegar(area(), 100);
+        let b = entero.plegar.expect("lleva su boton");
+        assert!(b.abajo() <= entero.marco.y, "encima del panel, sin pisarlo");
+        let centro = |r: Rect| Punto {
+            x: r.x + r.ancho as i32 / 2,
+            y: r.y + r.alto as i32 / 2,
+        };
+        assert_eq!(
+            entero.destino(centro(b)),
+            DestinoPanel::Accion(AccionPanel::Plegar)
+        );
+        assert_ne!(entero.destino(centro(entero.marco)), DestinoPanel::Fuera);
+        let quitado = PanelLateral::plegado(area(), 100);
+        assert_eq!(
+            quitado.destino(centro(b)),
+            DestinoPanel::Accion(AccionPanel::Plegar)
+        );
+        // Caso negativo: donde estaba el panel, el clic ya es del lienzo.
+        assert_eq!(quitado.destino(centro(entero.marco)), DestinoPanel::Fuera);
+        assert!(quitado.controles.is_empty());
     }
 
     #[test]
@@ -2927,22 +3021,25 @@ mod pruebas {
             .unwrap()
         };
         let alto = monta(2000);
-        assert_eq!(alto.marco.ancho, 200, "con sitio, una sola columna");
-        let bajo = monta(700);
-        assert!(bajo.marco.ancho > 200, "tiene que ensancharse");
-        assert!(bajo.marco.abajo() <= 700 - 16);
+        assert_eq!(
+            alto.marco.ancho, ANCHO_LOGICO,
+            "con sitio, una sola columna"
+        );
+        let bajo = monta(560);
+        assert!(bajo.marco.ancho > ANCHO_LOGICO, "tiene que ensancharse");
+        assert!(bajo.marco.abajo() <= 560 - 16);
         // Caso negativo: ninguna seccion se parte entre dos columnas. Todas
         // las de la segunda empiezan a la altura de la primera.
         let segunda: Vec<Rect> = bajo
             .controles
             .iter()
             .map(Control::rect)
-            .filter(|r| r.x >= bajo.marco.x + 200)
+            .filter(|r| r.x >= bajo.marco.x + ANCHO_LOGICO as i32)
             .collect();
         assert!(!segunda.is_empty());
         assert_eq!(
             segunda.iter().map(|r| r.y).min(),
-            Some(bajo.marco.y + 12),
+            Some(bajo.marco.y + RELLENO_LOGICO as i32),
             "la segunda columna empieza arriba"
         );
         // Y los mismos controles en los dos casos: solo cambia donde van.

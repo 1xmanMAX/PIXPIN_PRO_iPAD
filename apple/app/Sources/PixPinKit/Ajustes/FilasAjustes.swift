@@ -174,11 +174,29 @@ public enum FilasAjustes {
         [
             opcion(.general, "Idioma", "idioma", "Idioma", "Vale desde el próximo arranque. Lo comparte con PixPin para Windows.",
                    \.idioma, [("El del iPad", "sistema"), ("Español", "es"), ("English", "en")]),
-            filaPdfAligerar(), filaPdfNivel(),
+            filaPdfAligerar(), filaPdfNivel(), filaEscala(),
             numero(.general, "Galería", "caducidad", "Días hasta borrar",
                    "Pasado el plazo, las capturas de la galería se van a la Papelera, salvo las conservadas.",
                    \.diasCaducidad, 0 ... 90, paso: 1, texto: dias),
         ]
+    }
+
+    /// **La escala de la interfaz** (Windows c687285: sale del menu ⋮ del
+    /// chat a Ajustes → General → Ventanas). La del chat de ⌘+ / ⌘− / ⌘0
+    /// (`EscalaChat`): es de esta pantalla, no va en el archivo de ajustes,
+    /// y se pone al momento en el chat abierto. Los grupos de ventanas, que
+    /// van al lado en Windows, aun no estan en el Mac.
+    static func filaEscala() -> FilaAjuste {
+        var f = FilaAjuste(
+            id: "escala", seccion: .general, grupo: "Ventanas", titulo: "Escala de la interfaz",
+            ayuda: "El tamaño de todo en el chat. Se aplica al momento; en el chat también con ⌘ + «+», «−» y «0».",
+            control: .vista { _ in AnyView(ControlEscalaInterfaz()) })
+        f.cambiada = { _ in
+            EscalaChat.valida(UserDefaults.standard.object(forKey: EscalaChat.clave) as? Int ?? EscalaChat.porDefecto)
+                != EscalaChat.porDefecto
+        }
+        f.restablecerOtro = { _ in UserDefaults.standard.set(EscalaChat.porDefecto, forKey: EscalaChat.clave) }
+        return f
     }
 
     static func filaPdfAligerar() -> FilaAjuste {
@@ -482,5 +500,22 @@ struct BotonClavesAsistente: View {
                 HojaClaves(almacen: almacen)
             }
         }
+    }
+}
+
+/// La escala de la interfaz en Ajustes → General → Ventanas (la del chat,
+/// `EscalaChat`), como el Mac (`VistaAjustes.swift`).
+struct ControlEscalaInterfaz: View {
+    @AppStorage(EscalaChat.clave) private var escala = EscalaChat.porDefecto
+
+    var body: some View {
+        Picker("", selection: Binding(get: { EscalaChat.valida(escala) }, set: { escala = $0 })) {
+            ForEach(EscalaChat.escalones, id: \.self) { n in
+                Text(verbatim: "\(n) %").tag(n)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .fixedSize()
     }
 }

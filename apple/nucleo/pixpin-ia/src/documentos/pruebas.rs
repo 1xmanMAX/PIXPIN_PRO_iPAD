@@ -83,9 +83,24 @@ fn corpus(dir: &Path) -> Vec<Fuente> {
             relleno(100)
         ),
     );
-    escribir(dir, "obra", "Presupuesto.xlsx", "Partida 01 movimiento de tierras 12000 soles. Partida 02 obras de arte.");
-    escribir(dir, "casa", "Receta.md", "Receta del pan: harina, agua, sal y levadura. Hornear 40 minutos.");
-    escribir(dir, "carretera", "plano cunetas km 12.pdf", "Lamina 3 de 8. Escala 1:500.");
+    escribir(
+        dir,
+        "obra",
+        "Presupuesto.xlsx",
+        "Partida 01 movimiento de tierras 12000 soles. Partida 02 obras de arte.",
+    );
+    escribir(
+        dir,
+        "casa",
+        "Receta.md",
+        "Receta del pan: harina, agua, sal y levadura. Hornear 40 minutos.",
+    );
+    escribir(
+        dir,
+        "carretera",
+        "plano cunetas km 12.pdf",
+        "Lamina 3 de 8. Escala 1:500.",
+    );
     vec![
         fuente(dir, "obra", "Tesis.pdf"),
         fuente(dir, "obra", "Presupuesto.xlsx"),
@@ -131,7 +146,10 @@ fn encuentra_lo_esperado_con_su_pagina() {
     assert_eq!(r[0].proyecto_nombre, "CASA");
 
     // Lo que no esta, no sale.
-    assert!(ix.buscar("helicoptero submarino", &Alcance::Todo, 5).is_empty());
+    assert!(
+        ix.buscar("helicoptero submarino", &Alcance::Todo, 5)
+            .is_empty()
+    );
 }
 
 #[test]
@@ -144,7 +162,11 @@ fn consulta_vacia_no_da_nada() {
     assert!(ix.buscar("   ¿?  ", &Alcance::Todo, 5).is_empty());
     assert!(ix.buscar("de la que", &Alcance::Todo, 5).is_empty());
     // Y un indice vacio tampoco.
-    assert!(Indice::nuevo(None).buscar("cunetas", &Alcance::Todo, 5).is_empty());
+    assert!(
+        Indice::nuevo(None)
+            .buscar("cunetas", &Alcance::Todo, 5)
+            .is_empty()
+    );
 }
 
 #[test]
@@ -193,7 +215,12 @@ fn la_puesta_al_dia_es_incremental_y_se_guarda() {
 
     // Cambia uno: solo se lee ese, y se encuentra lo nuevo y no lo viejo.
     std::thread::sleep(std::time::Duration::from_millis(20));
-    escribir(&dir, "casa", "Receta.md", "Receta de la sopa de quinua con zanahoria. Y una nota mas larga.");
+    escribir(
+        &dir,
+        "casa",
+        "Receta.md",
+        "Receta de la sopa de quinua con zanahoria. Y una nota mas larga.",
+    );
     let fuentes = vec![
         fuente(&dir, "obra", "Tesis.pdf"),
         fuente(&dir, "obra", "Presupuesto.xlsx"),
@@ -204,7 +231,10 @@ fn la_puesta_al_dia_es_incremental_y_se_guarda() {
     assert_eq!(inf.leidas, 1);
     assert_eq!(*lector.leidos.borrow(), vec!["Receta.md".to_string()]);
     assert!(ix.buscar("levadura", &Alcance::Todo, 5).is_empty());
-    assert_eq!(ix.buscar("quinua", &Alcance::Todo, 5)[0].nombre, "Receta.md");
+    assert_eq!(
+        ix.buscar("quinua", &Alcance::Todo, 5)[0].nombre,
+        "Receta.md"
+    );
 
     // Se borra uno: sale del indice y del disco.
     let sin_plano: Vec<Fuente> = fuentes.iter().take(3).cloned().collect();
@@ -214,7 +244,10 @@ fn la_puesta_al_dia_es_incremental_y_se_guarda() {
     let ix = Indice::cargar(&cache);
     assert_eq!(ix.tamano().0, 3);
     assert!(ix.buscar("lamina escala", &Alcance::Todo, 5).is_empty());
-    assert_eq!(ix.buscar("quinua", &Alcance::Todo, 5)[0].nombre, "Receta.md");
+    assert_eq!(
+        ix.buscar("quinua", &Alcance::Todo, 5)[0].nombre,
+        "Receta.md"
+    );
     assert_eq!(std::fs::read_dir(cache.join("f")).unwrap().count(), 3);
 }
 
@@ -257,7 +290,12 @@ fn una_cache_rota_se_rehace() {
     let fuentes = corpus(&dir);
     ix.poner_al_dia(&fuentes, &LectorDePrueba::default());
     // Falta el fichero de trozos de una: se vuelve a leer esa sola.
-    let primero = std::fs::read_dir(cache.join("f")).unwrap().next().unwrap().unwrap().path();
+    let primero = std::fs::read_dir(cache.join("f"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
     std::fs::remove_file(primero).unwrap();
     let lector = LectorDePrueba::default();
     let mut ix = Indice::cargar(&cache);
@@ -324,10 +362,16 @@ fn los_mensajes_abren_su_mensaje_y_las_citas_se_numeran() {
 
     let mut citas = Citas::default();
     let texto = citas.anadir("cemento", r, None);
-    assert!(texto.contains("[1] mensaje del chat «Obra», 3-oct-2026"), "{texto}");
+    assert!(
+        texto.contains("[1] mensaje del chat «Obra», 3-oct-2026"),
+        "{texto}"
+    );
     let r = ix.buscar("plano cunetas", &Alcance::Todo, 5);
     let texto = citas.anadir("plano cunetas", r, None);
-    assert!(texto.contains("[2] El usuario SI mando el archivo «plano cunetas.pdf» al chat «Obra»."), "{texto}");
+    assert!(
+        texto.contains("[2] El usuario SI mando el archivo «plano cunetas.pdf» al chat «Obra»."),
+        "{texto}"
+    );
     assert_eq!(citas.citadas("Lo mandaste ahi [2].")[0].numero, 2);
     assert_eq!(citas.citadas("sin citar")[0].numero, 1);
     // Lo mismo otra vez conserva su numero.
@@ -335,5 +379,9 @@ fn los_mensajes_abren_su_mensaje_y_las_citas_se_numeran() {
     assert!(citas.anadir("cemento", r, None).contains("[1]"));
     assert_eq!(citas.lista.len(), 2);
     // Nada: se dice que no hay, para que no invente.
-    assert!(citas.anadir("helicoptero", vec![], None).contains("No encontre nada"));
+    assert!(
+        citas
+            .anadir("helicoptero", vec![], None)
+            .contains("No encontre nada")
+    );
 }

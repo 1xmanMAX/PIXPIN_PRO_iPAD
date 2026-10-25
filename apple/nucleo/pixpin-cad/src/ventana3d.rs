@@ -26,9 +26,13 @@ use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, ReleaseCapture, VK_CONTROL, VK_SHIFT};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyState, ReleaseCapture, VK_CONTROL, VK_SHIFT,
+};
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{PCWSTR, w};
 
@@ -37,14 +41,15 @@ use crate::gpu::{Gpu, PlanoGpu};
 use crate::gpu3d::{ModeloGpu, Vista3d};
 use crate::modelo::{Constructor, Modelo};
 use crate::modelo3d::Modelo3d;
-use arbol::Arbol;
-use crate::texto::Textos;
 pub use crate::orbita::Orbita;
 use crate::orbita::{ALTURA_MAX, por, punto, sub, suma, unit};
+use crate::texto::Textos;
 use crate::ventana::{
-    ALTO_BARRA, CAPA_ENCIMA, De, ESTADO, Ev, ancho_barra, aviso, barra, botones_barra, colocar_barra, crear_barra, crear_ventana, poner_encima,
-    raya, rect, seguir_barra, vista_pantalla,
+    ALTO_BARRA, CAPA_ENCIMA, De, ESTADO, Ev, ancho_barra, aviso, barra, botones_barra,
+    colocar_barra, crear_barra, crear_ventana, poner_encima, raya, rect, seguir_barra,
+    vista_pantalla,
 };
+use arbol::Arbol;
 
 const INFINITE: u32 = u32::MAX;
 const BOTONES: [&str; 5] = ["asa", "tema", "corte", "capas", "fijar"];
@@ -110,14 +115,32 @@ const M_EXPORTAR: u32 = 10;
 const M_VISTA: u32 = 100;
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
-fn menu(hwnd: HWND, t: &TextosUi3d, corte: bool, aislado: Option<bool>, panel: bool, aristas: bool, fijada: bool, vistas: &[String], exportar: Option<&str>) {
+fn menu(
+    hwnd: HWND,
+    t: &TextosUi3d,
+    corte: bool,
+    aislado: Option<bool>,
+    panel: bool,
+    aristas: bool,
+    fijada: bool,
+    vistas: &[String],
+    exportar: Option<&str>,
+) {
     // SAFETY: menu propio que se destruye antes de salir; cadenas vivas.
     unsafe {
         let Ok(m) = CreatePopupMenu() else { return };
         let poner = |id: u32, texto: &str, marca: bool| {
             let v: Vec<u16> = texto.encode_utf16().chain(std::iter::once(0)).collect();
-            let _ = AppendMenuW(m, if marca { MF_STRING | MF_CHECKED } else { MF_STRING }, id as usize, PCWSTR(v.as_ptr()));
+            let _ = AppendMenuW(
+                m,
+                if marca {
+                    MF_STRING | MF_CHECKED
+                } else {
+                    MF_STRING
+                },
+                id as usize,
+                PCWSTR(v.as_ptr()),
+            );
         };
         poner(M_TODO, &t.todo, false);
         poner(M_PLANTA, &t.planta, false);
@@ -133,7 +156,11 @@ fn menu(hwnd: HWND, t: &TextosUi3d, corte: bool, aislado: Option<bool>, panel: b
         if !vistas.is_empty() {
             let _ = AppendMenuW(m, MF_SEPARATOR, 0, PCWSTR::null());
             for (i, n) in vistas.iter().enumerate() {
-                let texto = if i < 9 { format!("{n}	{}", i + 1) } else { n.clone() };
+                let texto = if i < 9 {
+                    format!("{n}	{}", i + 1)
+                } else {
+                    n.clone()
+                };
                 poner(M_VISTA + i as u32, &texto, false);
             }
         }
@@ -164,14 +191,25 @@ fn unidad_de(metros: f32) -> &'static str {
 /// Un punto del modelo en la pantalla (pixeles); `None` si queda detras del ojo.
 fn en_pantalla(m: &[[f32; 4]; 4], p: [f64; 3], w: u32, h: u32) -> Option<[f64; 2]> {
     let v = [p[0], p[1], p[2], 1.0];
-    let c: Vec<f64> = (0..4).map(|j| (0..4).map(|i| v[i] * m[i][j] as f64).sum()).collect();
-    (c[3] > 1e-9).then(|| [(c[0] / c[3] + 1.0) / 2.0 * w as f64, (1.0 - c[1] / c[3]) / 2.0 * h as f64])
+    let c: Vec<f64> = (0..4)
+        .map(|j| (0..4).map(|i| v[i] * m[i][j] as f64).sum())
+        .collect();
+    (c[3] > 1e-9).then(|| {
+        [
+            (c[0] / c[3] + 1.0) / 2.0 * w as f64,
+            (1.0 - c[1] / c[3]) / 2.0 * h as f64,
+        ]
+    })
 }
 
 /// El centro de la cara `k` de la caja (`k` como en la caja: 0..3 las
 /// caras del minimo x, y, z; 3..6 las del maximo).
 fn centro_de_cara(c: [f32; 6], k: usize) -> [f64; 3] {
-    let mut p = [(c[0] + c[3]) as f64 / 2.0, (c[1] + c[4]) as f64 / 2.0, (c[2] + c[5]) as f64 / 2.0];
+    let mut p = [
+        (c[0] + c[3]) as f64 / 2.0,
+        (c[1] + c[4]) as f64 / 2.0,
+        (c[2] + c[5]) as f64 / 2.0,
+    ];
     p[k % 3] = c[k] as f64;
     p
 }
@@ -191,7 +229,13 @@ fn decimo(c: [f32; 6]) -> f64 {
 
 /// Las 12 aristas de la caja.
 fn aristas_de_caja(c: [f32; 6]) -> Vec<([f64; 3], [f64; 3])> {
-    let esq = |i: usize| [c[if i & 1 == 0 { 0 } else { 3 }] as f64, c[if i & 2 == 0 { 1 } else { 4 }] as f64, c[if i & 4 == 0 { 2 } else { 5 }] as f64];
+    let esq = |i: usize| {
+        [
+            c[if i & 1 == 0 { 0 } else { 3 }] as f64,
+            c[if i & 2 == 0 { 1 } else { 4 }] as f64,
+            c[if i & 4 == 0 { 2 } else { 5 }] as f64,
+        ]
+    };
     let mut v = Vec::new();
     for i in 0..8usize {
         for bit in [1, 2, 4] {
@@ -211,8 +255,17 @@ struct CajaVista {
     encima: Option<usize>,
 }
 
-fn caja_en_pantalla(c: [f32; 6], m: &[[f32; 4]; 4], w: u32, h: u32, encima: Option<usize>) -> CajaVista {
-    let aristas = aristas_de_caja(c).into_iter().filter_map(|(a, b)| Some((en_pantalla(m, a, w, h)?, en_pantalla(m, b, w, h)?))).collect();
+fn caja_en_pantalla(
+    c: [f32; 6],
+    m: &[[f32; 4]; 4],
+    w: u32,
+    h: u32,
+    encima: Option<usize>,
+) -> CajaVista {
+    let aristas = aristas_de_caja(c)
+        .into_iter()
+        .filter_map(|(a, b)| Some((en_pantalla(m, a, w, h)?, en_pantalla(m, b, w, h)?)))
+        .collect();
     let lado = decimo(c);
     let tiradores = (0..6)
         .filter_map(|k| {
@@ -221,10 +274,22 @@ fn caja_en_pantalla(c: [f32; 6], m: &[[f32; 4]; 4], w: u32, h: u32, encima: Opti
             let b = en_pantalla(m, suma(p, por(fuera_de_cara(k), lado)), w, h)?;
             let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
             let l = dx.hypot(dy);
-            Some((k, a, if l > 1e-6 { [dx / l, dy / l] } else { [0.0, 0.0] }))
+            Some((
+                k,
+                a,
+                if l > 1e-6 {
+                    [dx / l, dy / l]
+                } else {
+                    [0.0, 0.0]
+                },
+            ))
         })
         .collect();
-    CajaVista { aristas, tiradores, encima }
+    CajaVista {
+        aristas,
+        tiradores,
+        encima,
+    }
 }
 
 /// El tirador bajo (x, y), si hay uno a mano (el disco o su flecha).
@@ -268,7 +333,11 @@ fn mover_cara(c: [f32; 6], k: usize, valor: f64, limite: [f32; 6]) -> [f32; 6] {
     let a = k % 3;
     let hueco = ((limite[a + 3] - limite[a]) * 0.002).max(1e-6);
     let v = valor as f32;
-    c[k] = if k < 3 { v.clamp(limite[a], (c[a + 3] - hueco).max(limite[a])) } else { v.clamp((c[a] + hueco).min(limite[a + 3]), limite[a + 3]) };
+    c[k] = if k < 3 {
+        v.clamp(limite[a], (c[a + 3] - hueco).max(limite[a]))
+    } else {
+        v.clamp((c[a] + hueco).min(limite[a + 3]), limite[a + 3])
+    };
     c
 }
 
@@ -301,14 +370,34 @@ struct Encima<'a> {
 
 /// Lo que va plano encima del modelo: el nombre de lo elegido, la caja de
 /// seccion con sus tiradores, el pivote del giro y la pista.
-fn encima_del_modelo(textos: &mut Textos, a: &Encima, ui: &TextosUi3d, w: u32, h: u32, e: f64, claro: bool) -> Modelo {
+fn encima_del_modelo(
+    textos: &mut Textos,
+    a: &Encima,
+    ui: &TextosUi3d,
+    w: u32,
+    h: u32,
+    e: f64,
+    claro: bool,
+) -> Modelo {
     let mut c = Constructor::nuevo();
-    let (pildora, letra) = if claro { (0xEE1C1C1Eu32, rgba(255, 255, 255)) } else { (0xEEF5F5F7u32, rgba(0x1C, 0x1C, 0x1E)) };
+    let (pildora, letra) = if claro {
+        (0xEE1C1C1Eu32, rgba(255, 255, 255))
+    } else {
+        (0xEEF5F5F7u32, rgba(0x1C, 0x1C, 0x1E))
+    };
     let tam = 13.0 * e;
     let pastilla = |textos: &mut Textos, c: &mut Constructor, t: &str, x: f64, y: f64| {
         let ancho = textos.medir_pantalla(t, tam);
         rect(c, x, y, x + ancho + 20.0 * e, y + 26.0 * e, pildora);
-        textos.en_pantalla(c, t, x + 10.0 * e, y + 17.5 * e, tam, letra, x + ancho + 40.0 * e);
+        textos.en_pantalla(
+            c,
+            t,
+            x + 10.0 * e,
+            y + 17.5 * e,
+            tam,
+            letra,
+            x + ancho + 40.0 * e,
+        );
     };
     if let Some(t) = &a.elegido {
         pastilla(textos, &mut c, t, 12.0 * e, h as f64 - 38.0 * e);
@@ -330,7 +419,15 @@ fn encima_del_modelo(textos: &mut Textos, a: &Encima, ui: &TextosUi3d, w: u32, h
                 let punta = [p[0] + d[0] * (r + 11.0 * e), p[1] + d[1] * (r + 11.0 * e)];
                 let base = [p[0] + d[0] * (r + 2.0 * e), p[1] + d[1] * (r + 2.0 * e)];
                 let n = [-d[1] * 5.5 * e, d[0] * 5.5 * e];
-                c.triangulos(&[punta, [base[0] + n[0], base[1] + n[1]], [base[0] - n[0], base[1] - n[1]]], azul, Some(CAPA_ENCIMA));
+                c.triangulos(
+                    &[
+                        punta,
+                        [base[0] + n[0], base[1] + n[1]],
+                        [base[0] - n[0], base[1] - n[1]],
+                    ],
+                    azul,
+                    Some(CAPA_ENCIMA),
+                );
             }
             disco(&mut c, *p, r + 1.5 * e, blanco);
             disco(&mut c, *p, r, azul);
@@ -396,8 +493,9 @@ pub struct AlExportar {
 pub fn foto_de_la_ventana(hwnd: HWND) -> Option<Foto> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::Graphics::Gdi::{
-        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, ClientToScreen, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject,
-        GetDC, ReleaseDC, SRCCOPY, SelectObject,
+        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, ClientToScreen, CreateCompatibleDC,
+        CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, ReleaseDC, SRCCOPY,
+        SelectObject,
     };
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
     let mut r = RECT::default();
@@ -452,17 +550,28 @@ pub fn foto_de_la_ventana(hwnd: HWND) -> Option<Foto> {
 
 impl std::fmt::Debug for AlExportar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AlExportar").field("texto", &self.texto).finish()
+        f.debug_struct("AlExportar")
+            .field("texto", &self.texto)
+            .finish()
     }
 }
 
 /// **Abre la ventana del modelo** y no vuelve hasta que se cierra.
-pub fn ver(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: TextosUi3d) -> Result<(), String> {
+pub fn ver(
+    titulo: &str,
+    cargando: Receiver<Result<Modelo3d, String>>,
+    ui: TextosUi3d,
+) -> Result<(), String> {
     ver_con(titulo, cargando, ui, Extras::default())
 }
 
 /// [`ver`], con lo que pide un croquis ([`Extras`]).
-pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: TextosUi3d, extras: Extras) -> Result<(), String> {
+pub fn ver_con(
+    titulo: &str,
+    cargando: Receiver<Result<Modelo3d, String>>,
+    ui: TextosUi3d,
+    extras: Extras,
+) -> Result<(), String> {
     let nombres_de_vistas: Vec<String> = extras.vistas.iter().map(|v| v.nombre.clone()).collect();
     // Encuadrar con la orientacion del croquis, si la trae.
     let encuadre = |caja: [f32; 6], w: u32, h: u32| {
@@ -476,7 +585,8 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
     };
     // El tema se ha tocado: el fondo propio deja de mandar.
     let mut tema_tocado = false;
-    let (hwnd, mut w, mut h) = crear_ventana(w!("PixPinModelo3d"), &format!("{titulo} — PixPin")).map_err(|e| e.to_string())?;
+    let (hwnd, mut w, mut h) = crear_ventana(w!("PixPinModelo3d"), &format!("{titulo} — PixPin"))
+        .map_err(|e| e.to_string())?;
     let mut gpu = match Gpu::nueva(hwnd, w, h) {
         Ok(g) => g,
         Err(e) => {
@@ -488,14 +598,22 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
     // SAFETY: ventana propia.
     let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
     let e = dpi as f64 / 96.0;
-    let (bw, bh) = (ancho_barra(e, BOTONES.len()).ceil() as i32, (ALTO_BARRA * e).ceil() as i32);
+    let (bw, bh) = (
+        ancho_barra(e, BOTONES.len()).ceil() as i32,
+        (ALTO_BARRA * e).ceil() as i32,
+    );
     let hbarra = crear_barra(hwnd, bw, bh).map_err(|e| e.to_string())?;
     let mut gpu_barra = Gpu::nueva(hbarra, bw as u32, bh as u32).map_err(|e| e.to_string())?;
     ESTADO.with(|s| s.borrow_mut().barra = Some((hbarra, (8.0 * e) as i32)));
     let mut textos = Textos::nuevo();
     let mut modelo: Option<(Modelo3d, ModeloGpu)> = None;
     let mut mensaje = ui.abriendo.clone();
-    let mut cam = Orbita { objetivo: [0.0; 3], rumbo: -0.8, altura: 0.5, dist: 10.0 };
+    let mut cam = Orbita {
+        objetivo: [0.0; 3],
+        rumbo: -0.8,
+        altura: 0.5,
+        dist: 10.0,
+    };
     let mut destino = cam;
     let mut radio = 10.0;
     // Lo que se encuadra y se corta: la caja sin los puntos sueltos lejanos.
@@ -534,7 +652,14 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
     // El ultimo punto tocado por la rueda: se reusa mientras se sigue girando.
     let mut rueda: Option<(Instant, i32, i32, [f64; 3])> = None;
     let mut aviso_ui: Option<(Modelo, PlanoGpu)> = None;
-    let vista = |cam: &Orbita, w: u32, h: u32, radio: f64, elegido: Option<u32>, seccion: Option<[f32; 6]>, aislado: Option<u32>, claro: bool| {
+    let vista = |cam: &Orbita,
+                 w: u32,
+                 h: u32,
+                 radio: f64,
+                 elegido: Option<u32>,
+                 seccion: Option<[f32; 6]>,
+                 aislado: Option<u32>,
+                 claro: bool| {
         let (r, u, f) = cam.ejes();
         let luz = unit(suma(suma(por(f, -0.5), por(u, 0.75)), por(r, 0.35)));
         let ojo = cam.ojo();
@@ -542,7 +667,12 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
             mvp: cam.matriz(w, h, radio),
             luz: [luz[0] as f32, luz[1] as f32, luz[2] as f32, 0.0],
             ojo: [ojo[0] as f32, ojo[1] as f32, ojo[2] as f32, 1.0],
-            corte: [if seccion.is_some() { 1.0 } else { 0.0 }, 0.0, (4.5 * e) as f32, 0.0],
+            corte: [
+                if seccion.is_some() { 1.0 } else { 0.0 },
+                0.0,
+                (4.5 * e) as f32,
+                0.0,
+            ],
             sec_min: seccion.map_or([0.0; 4], |c| [c[0], c[1], c[2], 0.0]),
             sec_max: seccion.map_or([0.0; 4], |c| [c[3], c[4], c[5], 0.0]),
             elegido: elegido.map_or(0, |e| e + 1),
@@ -557,7 +687,15 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
         // SAFETY: bucle de mensajes de este hilo.
         unsafe {
             if !animando && !sucio && !barra_sucia {
-                let espera = if modelo.is_none() || barra_visible || fuera_desde.is_some() || pista_hasta.is_some() { 50 } else { INFINITE };
+                let espera = if modelo.is_none()
+                    || barra_visible
+                    || fuera_desde.is_some()
+                    || pista_hasta.is_some()
+                {
+                    50
+                } else {
+                    INFINITE
+                };
                 let _ = MsgWaitForMultipleObjectsEx(None, espera, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             }
             let mut m = MSG::default();
@@ -578,7 +716,9 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                     Ok(m) => match gpu.subir_3d(&m) {
                         Ok(g) => {
                             let c = m.caja;
-                            radio = ((c[3] - c[0]).hypot(c[4] - c[1]).hypot(c[5] - c[2]) as f64 / 2.0).max(1e-3);
+                            radio = ((c[3] - c[0]).hypot(c[4] - c[1]).hypot(c[5] - c[2]) as f64
+                                / 2.0)
+                                .max(1e-3);
                             caja_vista = m.caja_util();
                             if let Some(a) = extras.encuadre {
                                 let o = m.origen;
@@ -602,9 +742,14 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
         }
         let eventos: Vec<(De, Ev)> = ESTADO.with(|s| s.borrow_mut().eventos.drain(..).collect());
         let b_barra = botones_barra(e, BOTONES.len());
-        let boton_en = |x: i32| -> Option<usize> { b_barra.iter().position(|(a, b)| (x as f64) >= *a && (x as f64) < *b) };
+        let boton_en = |x: i32| -> Option<usize> {
+            b_barra
+                .iter()
+                .position(|(a, b)| (x as f64) >= *a && (x as f64) < *b)
+        };
         let caja = caja_vista;
-        let (mut cambiar_tema, mut cambiar_corte, mut cambiar_encima, mut encuadrar, mut planta) = (false, false, false, false, false);
+        let (mut cambiar_tema, mut cambiar_corte, mut cambiar_encima, mut encuadrar, mut planta) =
+            (false, false, false, false, false);
         // Cambio lo que se ve en el panel: hay que rehacer los indices.
         let mut refiltrar = false;
         let mut cambiar_panel = false;
@@ -615,7 +760,9 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
         // Lo que se ve: el aislado o el modelo.
         let caja = aislado.map_or(caja, |a| a.1);
         // Hasta donde puede ir la caja: el modelo entero y algo mas.
-        let limite = modelo.as_ref().map_or([0f32; 6], |(m, _)| caja_inicial(caja_inicial(m.caja)));
+        let limite = modelo
+            .as_ref()
+            .map_or([0f32; 6], |(m, _)| caja_inicial(caja_inicial(m.caja)));
         for (de, ev) in eventos {
             if matches!((de, &ev), (De::Plano, Ev::Tecla(_))) {
                 sin_tocar = false;
@@ -640,7 +787,12 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                         // SAFETY: ventanas propias.
                         unsafe {
                             let _ = ReleaseCapture();
-                            SendMessageW(hwnd, WM_NCLBUTTONDOWN, Some(WPARAM(HTCAPTION as usize)), Some(LPARAM(0)));
+                            SendMessageW(
+                                hwnd,
+                                WM_NCLBUTTONDOWN,
+                                Some(WPARAM(HTCAPTION as usize)),
+                                Some(LPARAM(0)),
+                            );
                         }
                     }
                     Some(1) => cambiar_tema = true,
@@ -671,7 +823,9 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                         if l2 > 1e-9
                             && let Some(c) = seccion
                         {
-                            let d = ((x - x0) as f64 * por_unidad[0] + (y - y0) as f64 * por_unidad[1]) / l2;
+                            let d = ((x - x0) as f64 * por_unidad[0]
+                                + (y - y0) as f64 * por_unidad[1])
+                                / l2;
                             let signo = if k < 3 { -1.0 } else { 1.0 };
                             seccion = Some(mover_cara(c, k, v0 + signo * d, limite));
                             sucio = true;
@@ -686,7 +840,11 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                             // y media vuelta por el lado corto de la ventana,
                             // sea del tamano que sea.
                             let k = std::f64::consts::PI / w.min(h).max(1) as f64;
-                            cam = if b == 0 && !mayus { c0.girar(-dx * k, dy * k, pivote) } else { c0.mover(dx, dy, h) };
+                            cam = if b == 0 && !mayus {
+                                c0.girar(-dx * k, dy * k, pivote)
+                            } else {
+                                c0.mover(dx, dy, h)
+                            };
                             destino = cam;
                             arrastre = Some((x, y, cam, b, pivote, true));
                             sucio = true;
@@ -720,18 +878,31 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                         // SAFETY: ventana propia.
                         unsafe {
                             let _ = ReleaseCapture();
-                            SendMessageW(hwnd, WM_NCLBUTTONDOWN, Some(WPARAM(HTCAPTION as usize)), Some(LPARAM(0)));
+                            SendMessageW(
+                                hwnd,
+                                WM_NCLBUTTONDOWN,
+                                Some(WPARAM(HTCAPTION as usize)),
+                                Some(LPARAM(0)),
+                            );
                         }
                     } else if let Some(c) = seccion
                         && b == 0
-                        && let Some(k) = tirador_en(&caja_en_pantalla(c, &cam.matriz(w, h, radio), w, h, None), x, y, e)
+                        && let Some(k) = tirador_en(
+                            &caja_en_pantalla(c, &cam.matriz(w, h, radio), w, h, None),
+                            x,
+                            y,
+                            e,
+                        )
                     {
                         // Un tirador de la caja: cuantos pixeles por unidad
                         // se mueve su cara, para que siga al raton.
                         let m = cam.matriz(w, h, radio);
                         let p = centro_de_cara(c, k);
                         let lado = decimo(c);
-                        let por_unidad = match (en_pantalla(&m, p, w, h), en_pantalla(&m, suma(p, por(fuera_de_cara(k), lado)), w, h)) {
+                        let por_unidad = match (
+                            en_pantalla(&m, p, w, h),
+                            en_pantalla(&m, suma(p, por(fuera_de_cara(k), lado)), w, h),
+                        ) {
                             (Some(a), Some(b)) => [(b[0] - a[0]) / lado, (b[1] - a[1]) / lado],
                             _ => [0.0, 0.0],
                         };
@@ -742,10 +913,30 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                         // nada, del centro de lo que se ve (la caja, si esta
                         // puesta), para que el modelo no salga disparado.
                         cam = destino;
-                        let v = vista(&cam, w, h, radio, elegido, seccion, aislado.map(|a| a.0), claro);
-                        let pivote = if b == 0 { gpu.elegir(g, &v, x, y).ok().flatten().map(|(_, p)| p.map(|c| c as f64)) } else { None };
+                        let v = vista(
+                            &cam,
+                            w,
+                            h,
+                            radio,
+                            elegido,
+                            seccion,
+                            aislado.map(|a| a.0),
+                            claro,
+                        );
+                        let pivote = if b == 0 {
+                            gpu.elegir(g, &v, x, y)
+                                .ok()
+                                .flatten()
+                                .map(|(_, p)| p.map(|c| c as f64))
+                        } else {
+                            None
+                        };
                         let c = seccion.unwrap_or(caja);
-                        let centro = [(c[0] + c[3]) as f64 / 2.0, (c[1] + c[4]) as f64 / 2.0, (c[2] + c[5]) as f64 / 2.0];
+                        let centro = [
+                            (c[0] + c[3]) as f64 / 2.0,
+                            (c[1] + c[4]) as f64 / 2.0,
+                            (c[2] + c[5]) as f64 / 2.0,
+                        ];
                         // El centro, si queda delante del ojo; si no, el objetivo.
                         let delante = punto(sub(centro, cam.ojo()), cam.adelante()) > 0.0;
                         let pivote = pivote.unwrap_or(if delante { centro } else { cam.objetivo });
@@ -762,14 +953,40 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                         // Fuera el pivote y la medida de la cara.
                         sucio = true;
                     } else if b == 2 {
-                        let a = if aislado.is_some() { Some(true) } else { elegido.map(|_| false) };
-                        menu(hwnd, &ui, seccion.is_some(), a, panel, aristas, fijada, &nombres_de_vistas, extras.exportar.as_ref().map(|x| x.texto.as_str()));
+                        let a = if aislado.is_some() {
+                            Some(true)
+                        } else {
+                            elegido.map(|_| false)
+                        };
+                        menu(
+                            hwnd,
+                            &ui,
+                            seccion.is_some(),
+                            a,
+                            panel,
+                            aristas,
+                            fijada,
+                            &nombres_de_vistas,
+                            extras.exportar.as_ref().map(|x| x.texto.as_str()),
+                        );
                     } else if b == 0
                         && let Some((_, g)) = &modelo
                     {
-                        let v = vista(&cam, w, h, radio, elegido, seccion, aislado.map(|a| a.0), claro);
+                        let v = vista(
+                            &cam,
+                            w,
+                            h,
+                            radio,
+                            elegido,
+                            seccion,
+                            aislado.map(|a| a.0),
+                            claro,
+                        );
                         let nuevo = gpu.elegir(g, &v, x, y).ok().flatten().map(|(e, _)| e);
-                        if nuevo.is_some() && nuevo == elegido && aislado.is_none_or(|a| Some(a.0) != nuevo) {
+                        if nuevo.is_some()
+                            && nuevo == elegido
+                            && aislado.is_none_or(|a| Some(a.0) != nuevo)
+                        {
                             // **Otro clic en el elegido: aislarlo.**
                             aislar = Some(nuevo);
                         } else if nuevo != elegido {
@@ -796,7 +1013,16 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                     // En un elemento lo aisla el clic que sigue (el de soltar);
                     // en el vacio, todo el modelo.
                     let hay = modelo.as_ref().is_some_and(|(_, g)| {
-                        let v = vista(&cam, w, h, radio, elegido, seccion, aislado.map(|a| a.0), claro);
+                        let v = vista(
+                            &cam,
+                            w,
+                            h,
+                            radio,
+                            elegido,
+                            seccion,
+                            aislado.map(|a| a.0),
+                            claro,
+                        );
                         gpu.elegir(g, &v, x, y).ok().flatten().is_some()
                     });
                     if !hay {
@@ -822,16 +1048,38 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                     // El punto bajo el cursor: el tocado (si se sigue girando
                     // la rueda en el mismo sitio, el de antes).
                     let fijo = match rueda {
-                        Some((t, rx, ry, p)) if t.elapsed() < Duration::from_millis(400) && (rx - x).abs() + (ry - y).abs() < 4 => Some(p),
+                        Some((t, rx, ry, p))
+                            if t.elapsed() < Duration::from_millis(400)
+                                && (rx - x).abs() + (ry - y).abs() < 4 =>
+                        {
+                            Some(p)
+                        }
                         _ => None,
                     };
                     let fijo = fijo.or_else(|| {
                         let (_, g) = modelo.as_ref()?;
-                        let v = vista(&destino, w, h, radio, elegido, seccion, aislado.map(|a| a.0), claro);
-                        gpu.elegir(g, &v, x, y).ok().flatten().map(|(_, p)| p.map(|c| c as f64))
+                        let v = vista(
+                            &destino,
+                            w,
+                            h,
+                            radio,
+                            elegido,
+                            seccion,
+                            aislado.map(|a| a.0),
+                            claro,
+                        );
+                        gpu.elegir(g, &v, x, y)
+                            .ok()
+                            .flatten()
+                            .map(|(_, p)| p.map(|c| c as f64))
                     });
                     // Sin nada debajo: el punto del rayo a la distancia del objetivo.
-                    let fijo = fijo.unwrap_or_else(|| suma(destino.ojo(), por(destino.rayo(x as f64, y as f64, w, h), destino.dist)));
+                    let fijo = fijo.unwrap_or_else(|| {
+                        suma(
+                            destino.ojo(),
+                            por(destino.rayo(x as f64, y as f64, w, h), destino.dist),
+                        )
+                    });
                     rueda = Some((Instant::now(), x, y, fijo));
                     destino = destino.zoom(factor, fijo);
                 }
@@ -853,7 +1101,9 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                     }
                     M_ENCIMA => cambiar_encima = true,
                     M_CERRAR => break 'bucle,
-                    n if (M_VISTA..M_VISTA + extras.vistas.len() as u32).contains(&n) => vista_pedida = Some((n - M_VISTA) as usize),
+                    n if (M_VISTA..M_VISTA + extras.vistas.len() as u32).contains(&n) => {
+                        vista_pedida = Some((n - M_VISTA) as usize)
+                    }
                     _ => {}
                 },
                 (De::Plano, Ev::TeclaSoltada(_) | Ev::Caracter(_)) => {}
@@ -925,9 +1175,7 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
             barra_sucia = true;
             sucio = true;
         }
-        if refiltrar
-            && let (Some((m, g)), Some(ar)) = (&mut modelo, &arbol_m)
-        {
+        if refiltrar && let (Some((m, g)), Some(ar)) = (&mut modelo, &arbol_m) {
             let ver = |k: u32| m.elementos.get(k as usize).is_none_or(|el| ar.visible(el));
             if let Err(err) = gpu.filtrar_3d(g, m, &ver) {
                 tracing::warn!(error = %err, "no se pudo ocultar");
@@ -945,7 +1193,11 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
             sucio = true;
         }
         if cambiar_corte && modelo.is_some() {
-            seccion = if seccion.is_some() { None } else { Some(caja_inicial(caja)) };
+            seccion = if seccion.is_some() {
+                None
+            } else {
+                Some(caja_inicial(caja))
+            };
             tirador = None;
             tirador_encima = None;
             barra_sucia = true;
@@ -967,7 +1219,8 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
         } else if barra_visible && fuera_desde.is_none() {
             fuera_desde = Some(Instant::now());
         }
-        let mostrar = quiere || fuera_desde.is_some_and(|t| t.elapsed() < Duration::from_millis(600));
+        let mostrar =
+            quiere || fuera_desde.is_some_and(|t| t.elapsed() < Duration::from_millis(600));
         if !mostrar {
             fuera_desde = None;
         }
@@ -980,10 +1233,21 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                 unsafe {
                     let _ = GetWindowRect(hwnd, &mut r);
                     let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                    let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+                    let mut info = MONITORINFO {
+                        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                        ..Default::default()
+                    };
                     let _ = GetMonitorInfoW(mon, &mut info);
                     let (x, y) = colocar_barra(r, info.rcWork, bw, bh, (8.0 * e) as i32);
-                    let _ = SetWindowPos(hbarra, Some(if fijada { HWND_TOPMOST } else { HWND_NOTOPMOST }), x, y, bw, bh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    let _ = SetWindowPos(
+                        hbarra,
+                        Some(if fijada { HWND_TOPMOST } else { HWND_NOTOPMOST }),
+                        x,
+                        y,
+                        bw,
+                        bh,
+                        SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                    );
                 }
                 barra_visible = true;
                 barra_sucia = true;
@@ -999,10 +1263,20 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
             sucio = true;
         }
         if barra_sucia && barra_visible {
-            let m = barra(e, &BOTONES, boton_encima, claro, &[false, false, seccion.is_some(), panel, fijada]);
+            let m = barra(
+                e,
+                &BOTONES,
+                boton_encima,
+                claro,
+                &[false, false, seccion.is_some(), panel, fijada],
+            );
             if let Ok(p) = gpu_barra.subir(&m) {
                 let (gw, gh) = gpu_barra.tamano();
-                let fondo = if claro { [0.976, 0.976, 0.984, 1.0] } else { [0.118, 0.118, 0.125, 1.0] };
+                let fondo = if claro {
+                    [0.976, 0.976, 0.984, 1.0]
+                } else {
+                    [0.118, 0.118, 0.125, 1.0]
+                };
                 let _ = gpu_barra.dibujar(fondo, &[(&p, vista_pantalla(&m, gw, gh))]);
             }
             barra_sucia = false;
@@ -1025,11 +1299,25 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
                 capas.push((p, vista_pantalla(m, w, h)));
             }
             let datos = Encima {
-                elegido: modelo.as_ref().and_then(|(m, _)| Some(arbol::describir(m.elementos.get(elegido? as usize)?, m, unidad_de(m.metros)))),
+                elegido: modelo.as_ref().and_then(|(m, _)| {
+                    Some(arbol::describir(
+                        m.elementos.get(elegido? as usize)?,
+                        m,
+                        unidad_de(m.metros),
+                    ))
+                }),
                 arbol: arbol_m.as_ref().filter(|_| panel),
-                caja: seccion.map(|c| caja_en_pantalla(c, &cam.matriz(w, h, radio), w, h, tirador_encima)),
-                cara: tirador.and_then(|t| Some((t.0, modelo.as_ref()?.0.origen[t.0 % 3] + seccion?[t.0] as f64))),
-                pivote: arrastre.filter(|a| a.5 && a.3 == 0).and_then(|a| en_pantalla(&cam.matriz(w, h, radio), a.4, w, h)),
+                caja: seccion
+                    .map(|c| caja_en_pantalla(c, &cam.matriz(w, h, radio), w, h, tirador_encima)),
+                cara: tirador.and_then(|t| {
+                    Some((
+                        t.0,
+                        modelo.as_ref()?.0.origen[t.0 % 3] + seccion?[t.0] as f64,
+                    ))
+                }),
+                pivote: arrastre
+                    .filter(|a| a.5 && a.3 == 0)
+                    .and_then(|a| en_pantalla(&cam.matriz(w, h, radio), a.4, w, h)),
                 unidad: modelo.as_ref().map_or("", |(m, _)| unidad_de(m.metros)),
                 pista: pista_hasta.is_some().then_some(ui.pista.as_str()),
             };
@@ -1042,7 +1330,16 @@ pub fn ver_con(titulo: &str, cargando: Receiver<Result<Modelo3d, String>>, ui: T
             if let Some((m, p)) = &encima {
                 capas.push((p, vista_pantalla(m, w, h)));
             }
-            let v = vista(&cam, w, h, radio, elegido, seccion, aislado.map(|a| a.0), claro);
+            let v = vista(
+                &cam,
+                w,
+                h,
+                radio,
+                elegido,
+                seccion,
+                aislado.map(|a| a.0),
+                claro,
+            );
             let r = gpu.dibujar_3d(fondo, modelo.as_ref().map(|(_, g)| (g, v)), aristas, &capas);
             if let Err(err) = r {
                 tracing::warn!(error = %err, "no se pudo dibujar el modelo");
@@ -1076,7 +1373,12 @@ mod pruebas {
 
     #[test]
     fn los_tiradores_miran_hacia_fuera() {
-        let o = Orbita { objetivo: [5.0, 5.0, 5.0], rumbo: -0.8, altura: 0.5, dist: 40.0 };
+        let o = Orbita {
+            objetivo: [5.0, 5.0, 5.0],
+            rumbo: -0.8,
+            altura: 0.5,
+            dist: 40.0,
+        };
         let c = [0.0, 0.0, 0.0, 10.0, 10.0, 10.0];
         let cv = caja_en_pantalla(c, &o.matriz(800, 600, 20.0), 800, 600, None);
         assert_eq!(cv.aristas.len(), 12);
@@ -1084,8 +1386,16 @@ mod pruebas {
         // El de arriba apunta hacia arriba en la pantalla; el de abajo, hacia abajo.
         let arriba = cv.tiradores.iter().find(|t| t.0 == 5).unwrap();
         let abajo = cv.tiradores.iter().find(|t| t.0 == 2).unwrap();
-        assert!(arriba.2[1] < -0.5 && abajo.2[1] > 0.5, "{:?} {:?}", arriba.2, abajo.2);
+        assert!(
+            arriba.2[1] < -0.5 && abajo.2[1] > 0.5,
+            "{:?} {:?}",
+            arriba.2,
+            abajo.2
+        );
         // Y se encuentra al tocarlo.
-        assert_eq!(tirador_en(&cv, arriba.1[0] as i32, arriba.1[1] as i32, 1.0), Some(5));
+        assert_eq!(
+            tirador_en(&cv, arriba.1[0] as i32, arriba.1[1] as i32, 1.0),
+            Some(5)
+        );
     }
 }

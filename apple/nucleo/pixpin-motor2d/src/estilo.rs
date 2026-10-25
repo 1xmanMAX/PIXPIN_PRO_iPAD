@@ -308,9 +308,7 @@ pub fn aplicar_a(escena: &mut Escena, sel: &Seleccion, cambio: CambioEstilo) {
         CambioEstilo::Rugosidad(r) => e.rugosidad != r.clamp(0.0, 2.0),
         CambioEstilo::Opacidad(o) => e.opacidad != o.clamp(0.0, 1.0),
         CambioEstilo::Material(m) => e.material != m,
-        CambioEstilo::Dureza(d) => {
-            e.material.es_grafito() && e.extras.dureza != d.para_guardar()
-        }
+        CambioEstilo::Dureza(d) => e.material.es_grafito() && e.extras.dureza != d.para_guardar(),
     };
     let afectados: Vec<u64> = sel
         .ids()
@@ -454,8 +452,16 @@ impl CambioForma {
             CambioForma::Oscurecer(_) | CambioForma::ZonaFoco(_) => {
                 matches!(figura, Figura::Foco { .. })
             }
-            CambioForma::CierreArco(_) | CambioForma::ArcosAngulo(_) | CambioForma::ModoAngulo(_) => {
-                matches!(figura, Figura::Arco { barrido: Some(_), .. })
+            CambioForma::CierreArco(_)
+            | CambioForma::ArcosAngulo(_)
+            | CambioForma::ModoAngulo(_) => {
+                matches!(
+                    figura,
+                    Figura::Arco {
+                        barrido: Some(_),
+                        ..
+                    }
+                )
             }
             CambioForma::Degradado(_) => matches!(
                 figura,

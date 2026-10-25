@@ -35,6 +35,8 @@ enum MedidasBarraLienzo {
     static let bajoLaBarra: CGFloat = 6
     /// El panel de estilo, debajo de la barra (16 + 40 + 24).
     static let yPanel: CGFloat = 80
+    /// El panel compacto (`panel_lateral::ANCHO_LOGICO`): 168 de ancho.
+    static let anchoPanel: CGFloat = 168
 }
 
 /// Los colores de la barra, del tema claro u oscuro de Excalidraw
@@ -183,10 +185,11 @@ struct BarraHerramientasLienzo: View {
         switch b {
         case let .herramienta(id):
             if let h = HerramientaLienzo.con(id: id) {
-                BotonIslaLienzo(icono: h.icono, tecla: h.tecla, elegido: modelo.herramienta == id,
+                BotonIslaLienzo(icono: h.icono, tecla: h.tecla, elegido: !h.accion && modelo.herramienta == id,
                                 tema: tema, ayuda: Self.ayuda(h)) {
                     modelo.desplegado = nil
-                    modelo.elegir(id)
+                    // Una accion suelta (la imagen) se hace; las demas se cogen.
+                    if h.accion { modelo.hacer(id) } else { modelo.elegir(id) }
                 }
             }
         case let .grupo(g):

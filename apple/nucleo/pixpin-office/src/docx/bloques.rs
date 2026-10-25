@@ -12,7 +12,8 @@ use pixpin_docs::xml::Nodo;
 
 use crate::docx::dibujo::{self, Dibujo, Flotante, Objeto};
 use crate::docx::estilos::{
-    AnchoW, Bordes, ColorW, Estilos, Familia, Interlineado, Margenes, PropCelda, PropCorrida, PropParrafo, PropTabla, Vertical,
+    AnchoW, Bordes, ColorW, Estilos, Familia, Interlineado, Margenes, PropCelda, PropCorrida,
+    PropParrafo, PropTabla, Vertical,
 };
 use crate::docx::numeracion::Numeracion;
 use crate::medidor::Medidor;
@@ -167,7 +168,14 @@ pub fn caja<'n>(ctx: &mut Ctx, nodos: impl Iterator<Item = &'n Nodo>, ancho: f32
     let mut franjas = Vec::new();
     let nodos: Vec<&Nodo> = aplanar(nodos);
     for (i, n) in nodos.iter().enumerate() {
-        bloque(ctx, n, ancho, nodos.get(i.wrapping_sub(1)).copied(), nodos.get(i + 1).copied(), &mut franjas);
+        bloque(
+            ctx,
+            n,
+            ancho,
+            nodos.get(i.wrapping_sub(1)).copied(),
+            nodos.get(i + 1).copied(),
+            &mut franjas,
+        );
     }
     if let Some(f) = franjas.first_mut()
         && f.auto_antes
@@ -184,7 +192,11 @@ pub fn caja<'n>(ctx: &mut Ctx, nodos: impl Iterator<Item = &'n Nodo>, ancho: f32
 
 /// Una caja (celda, cuadro de texto) con sus dibujos anclados ya puestos
 /// dentro: en una celda, «columna» y «parrafo» son los de la celda.
-pub fn caja_con_flotantes<'n>(ctx: &mut Ctx, nodos: impl Iterator<Item = &'n Nodo>, ancho: f32) -> Caja {
+pub fn caja_con_flotantes<'n>(
+    ctx: &mut Ctx,
+    nodos: impl Iterator<Item = &'n Nodo>,
+    ancho: f32,
+) -> Caja {
     let mut c = caja(ctx, nodos, ancho);
     for (y_parrafo, f) in std::mem::take(&mut c.flotantes) {
         use crate::docx::dibujo::Referencia;
@@ -230,7 +242,11 @@ pub type Previa = Option<(Option<String>, bool, f32)>;
 /// espaciado contextual entre parrafos del mismo estilo no deja ninguno.
 pub fn espacio_entre(previa: &Previa, f: &Franja) -> (f32, f32) {
     match previa {
-        Some((est, ctxl, desp)) if f.contextual && *ctxl && *est == f.estilo && f.estilo.is_some() => (*desp, 0.0),
+        Some((est, ctxl, desp))
+            if f.contextual && *ctxl && *est == f.estilo && f.estilo.is_some() =>
+        {
+            (*desp, 0.0)
+        }
         Some((_, _, desp)) => (0.0, (f.antes - desp).max(0.0)),
         None => (0.0, f.antes),
     }
@@ -294,7 +310,14 @@ pub fn aplanar<'n>(nodos: impl Iterator<Item = &'n Nodo>) -> Vec<&'n Nodo> {
 }
 
 /// Un bloque a franjas.
-pub fn bloque(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, siguiente: Option<&Nodo>, salida: &mut Vec<Franja>) {
+pub fn bloque(
+    ctx: &mut Ctx,
+    n: &Nodo,
+    ancho: f32,
+    previo: Option<&Nodo>,
+    siguiente: Option<&Nodo>,
+    salida: &mut Vec<Franja>,
+) {
     let desde = salida.len();
     match n.nombre.as_str() {
         "p" => parrafo(ctx, n, ancho, previo, siguiente, salida),
@@ -318,9 +341,18 @@ pub struct Resuelto {
 }
 
 pub fn resolver_parrafo(ctx: &Ctx, n: &Nodo) -> Resuelto {
-    let directo = n.hijo("pPr").map(|p| PropParrafo::leer(p, ctx.tema)).unwrap_or_default();
-    let estilo = directo.estilo.clone().or_else(|| ctx.estilos.defecto_parrafo.clone());
-    let (sp, sr) = estilo.as_deref().map(|e| ctx.estilos.de_parrafo(e)).unwrap_or_default();
+    let directo = n
+        .hijo("pPr")
+        .map(|p| PropParrafo::leer(p, ctx.tema))
+        .unwrap_or_default();
+    let estilo = directo
+        .estilo
+        .clone()
+        .or_else(|| ctx.estilos.defecto_parrafo.clone());
+    let (sp, sr) = estilo
+        .as_deref()
+        .map(|e| ctx.estilos.de_parrafo(e))
+        .unwrap_or_default();
     let mut p = ctx.estilos.doc_ppr.clone();
     let mut r = ctx.estilos.doc_rpr.clone();
     if let Some((tp, tr)) = &ctx.base_tabla {
@@ -330,7 +362,11 @@ pub fn resolver_parrafo(ctx: &Ctx, n: &Nodo) -> Resuelto {
     let num_directo = directo.num_id.is_some();
     let num_id = directo.num_id.or(sp.num_id).unwrap_or(0);
     let nivel_n = directo.nivel.or(sp.nivel).unwrap_or(0);
-    let nivel = if num_id > 0 { ctx.numeracion.nivel(num_id, nivel_n) } else { None };
+    let nivel = if num_id > 0 {
+        ctx.numeracion.nivel(num_id, nivel_n)
+    } else {
+        None
+    };
     if num_directo {
         p.mezclar(&sp);
         if let Some(l) = &nivel {
@@ -372,7 +408,19 @@ impl Montador<'_> {
         }
         // «Arial Bold», «Verdana-Italic»: la familia con el estilo pegado
         // al nombre (la negrita o cursiva ya va en la corrida).
-        for sufijo in [" Bold", " Italic", " Bold Italic", " Light", " Regular", " Semibold", " Black", "-Bold", "-Italic", "-Regular", ",Bold"] {
+        for sufijo in [
+            " Bold",
+            " Italic",
+            " Bold Italic",
+            " Light",
+            " Regular",
+            " Semibold",
+            " Black",
+            "-Bold",
+            "-Italic",
+            "-Regular",
+            ",Bold",
+        ] {
             if let Some(base) = n.strip_suffix(sufijo)
                 && self.medidor.existe(base)
             {
@@ -390,8 +438,19 @@ impl Montador<'_> {
     }
 
     /// El indice del estilo para unas propiedades (lo crea si no estaba).
-    fn estilo(&mut self, r: &PropCorrida, cjk: bool, enlace: Option<&Arc<str>>, campo: Option<Campo>, escala: f32) -> u32 {
-        let familia = if cjk && r.familia_ea.is_some() { self.familia(&r.familia_ea) } else { self.familia(&r.familia) };
+    fn estilo(
+        &mut self,
+        r: &PropCorrida,
+        cjk: bool,
+        enlace: Option<&Arc<str>>,
+        campo: Option<Campo>,
+        escala: f32,
+    ) -> u32 {
+        let familia = if cjk && r.familia_ea.is_some() {
+            self.familia(&r.familia_ea)
+        } else {
+            self.familia(&r.familia)
+        };
         let mut tam = r.tam.unwrap_or(10.0) * escala;
         let mut subida = r.posicion.unwrap_or(0.0);
         match r.vertical {
@@ -467,7 +526,9 @@ impl Recogida<'_> {
     /// Si lo que llega ahora se ve (no es la instruccion de un campo ni el
     /// resultado de uno que se calcula aqui).
     fn visible(&self) -> bool {
-        self.campos.iter().all(|(_, res, ocultar)| *res && !*ocultar)
+        self.campos
+            .iter()
+            .all(|(_, res, ocultar)| *res && !*ocultar)
     }
 
     fn texto(&mut self, t: &str, r: &PropCorrida, enlace: Option<&Arc<str>>) {
@@ -481,7 +542,8 @@ impl Recogida<'_> {
             let mut minus = false;
             let flush = |s: &mut Self, txt: &mut String, minus: bool| {
                 if !txt.is_empty() {
-                    let e = s.m.estilo(r, cjk, enlace, None, if minus { 0.8 } else { 1.0 });
+                    let e =
+                        s.m.estilo(r, cjk, enlace, None, if minus { 0.8 } else { 1.0 });
                     let texto = std::mem::take(txt);
                     s.piezas().push(Pieza::Texto { texto, estilo: e });
                 }
@@ -497,7 +559,11 @@ impl Recogida<'_> {
             flush(self, &mut actual, minus);
             return;
         }
-        let texto = if r.mayusculas == Some(true) { t.to_uppercase() } else { t.to_string() };
+        let texto = if r.mayusculas == Some(true) {
+            t.to_uppercase()
+        } else {
+            t.to_string()
+        };
         let e = self.m.estilo(r, cjk, enlace, None, 1.0);
         self.piezas().push(Pieza::Texto { texto, estilo: e });
     }
@@ -505,7 +571,11 @@ impl Recogida<'_> {
 
 /// Evalua la instruccion de un campo que depende de la paginacion.
 fn campo_de(instr: &str) -> Option<Campo> {
-    let palabra = instr.split_whitespace().next().unwrap_or("").to_ascii_uppercase();
+    let palabra = instr
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase();
     match palabra.as_str() {
         "PAGE" => Some(Campo::Pagina),
         "NUMPAGES" | "SECTIONPAGES" => Some(Campo::TotalPaginas),
@@ -521,26 +591,41 @@ fn texto_campo(ctx: &Ctx, c: Campo, instr: &str) -> String {
     let up = instr.to_ascii_uppercase();
     if up.contains("ROMAN") {
         let r = crate::docx::numeracion::formatear(n as i64, "upperRoman");
-        if instr.contains("roman") { r.to_lowercase() } else { r }
+        if instr.contains("roman") {
+            r.to_lowercase()
+        } else {
+            r
+        }
     } else if up.contains("ALPHABETIC") {
-        crate::docx::numeracion::formatear(n as i64, if instr.contains("alphabetic") { "lowerLetter" } else { "upperLetter" })
+        crate::docx::numeracion::formatear(
+            n as i64,
+            if instr.contains("alphabetic") {
+                "lowerLetter"
+            } else {
+                "upperLetter"
+            },
+        )
     } else {
         n.to_string()
     }
 }
 
 /// Recorre el contenido de un parrafo (o de un hipervinculo, un campo...).
-fn recorrer(ctx: &mut Ctx, rc: &mut Recogida, n: &Nodo, base: &PropCorrida, enlace: Option<&Arc<str>>) {
+fn recorrer(
+    ctx: &mut Ctx,
+    rc: &mut Recogida,
+    n: &Nodo,
+    base: &PropCorrida,
+    enlace: Option<&Arc<str>>,
+) {
     for e in n.elementos() {
         match e.nombre.as_str() {
             "r" => corrida(ctx, rc, e, base, enlace),
             "hyperlink" => {
                 let rid = e.atributo_con_prefijo("r", "id");
-                let destino = ctx
-                    .rels
-                    .get(rid)
-                    .map(|r| r.destino.clone())
-                    .or_else(|| (!e.atributo("anchor").is_empty()).then(|| format!("#{}", e.atributo("anchor"))));
+                let destino = ctx.rels.get(rid).map(|r| r.destino.clone()).or_else(|| {
+                    (!e.atributo("anchor").is_empty()).then(|| format!("#{}", e.atributo("anchor")))
+                });
                 let destino = destino.map(|d| Arc::from(d.as_str()));
                 recorrer(ctx, rc, e, base, destino.as_ref().or(enlace));
             }
@@ -551,13 +636,18 @@ fn recorrer(ctx: &mut Ctx, rc: &mut Recogida, n: &Nodo, base: &PropCorrida, enla
                     let t = texto_campo(ctx, c, &instr);
                     if rc.visible() {
                         let est = rc.m.estilo(&r, false, enlace, Some(c), 1.0);
-                        rc.piezas().push(Pieza::Texto { texto: t, estilo: est });
+                        rc.piezas().push(Pieza::Texto {
+                            texto: t,
+                            estilo: est,
+                        });
                     }
                 } else {
                     recorrer(ctx, rc, e, base, enlace);
                 }
             }
-            "smartTag" | "customXml" | "ins" | "moveTo" | "bdo" | "dir" => recorrer(ctx, rc, e, base, enlace),
+            "smartTag" | "customXml" | "ins" | "moveTo" | "bdo" | "dir" => {
+                recorrer(ctx, rc, e, base, enlace)
+            }
             "sdt" => {
                 if let Some(c) = e.hijo("sdtContent") {
                     recorrer(ctx, rc, c, base, enlace);
@@ -579,12 +669,17 @@ fn recorrer(ctx: &mut Ctx, rc: &mut Recogida, n: &Nodo, base: &PropCorrida, enla
                     Some(ColorW::Fijo(c)) => c,
                     _ => Color::NEGRO,
                 };
-                let formulas: Vec<&Nodo> = if e.nombre == "oMathPara" { e.elementos().filter(|x| x.nombre == "oMath").collect() } else { vec![e] };
+                let formulas: Vec<&Nodo> = if e.nombre == "oMathPara" {
+                    e.elementos().filter(|x| x.nombre == "oMath").collect()
+                } else {
+                    vec![e]
+                };
                 for (k, f) in formulas.into_iter().enumerate() {
                     if k > 0 {
                         rc.piezas().push(Pieza::Salto);
                     }
-                    let o = crate::docx::mate::formula(f, tam, color, e.nombre == "oMath", ctx.medidor);
+                    let o =
+                        crate::docx::mate::formula(f, tam, color, e.nombre == "oMath", ctx.medidor);
                     poner_dibujo(rc, Dibujo::EnLinea(o));
                 }
             }
@@ -607,14 +702,24 @@ fn primera_rpr(ctx: &Ctx, n: &Nodo, base: &PropCorrida) -> PropCorrida {
     r
 }
 
-fn corrida(ctx: &mut Ctx, rc: &mut Recogida, r: &Nodo, base: &PropCorrida, enlace: Option<&Arc<str>>) {
+fn corrida(
+    ctx: &mut Ctx,
+    rc: &mut Recogida,
+    r: &Nodo,
+    base: &PropCorrida,
+    enlace: Option<&Arc<str>>,
+) {
     let mut props = base.clone();
     if let Some(rpr) = r.hijo("rPr") {
         let d = PropCorrida::leer(rpr, ctx.tema);
-        let mut estilo = d.estilo.clone().or_else(|| ctx.estilos.defecto_caracter.clone());
+        let mut estilo = d
+            .estilo
+            .clone()
+            .or_else(|| ctx.estilos.defecto_caracter.clone());
         // Los vinculos de un indice (`_Toc...`) se ven como texto normal en
         // Word aunque lleven el estilo «Hyperlink».
-        if enlace.is_some_and(|e| e.starts_with("#_Toc")) && estilo.as_deref() == Some("Hyperlink") {
+        if enlace.is_some_and(|e| e.starts_with("#_Toc")) && estilo.as_deref() == Some("Hyperlink")
+        {
             estilo = None;
         }
         if let Some(s) = estilo {
@@ -650,7 +755,11 @@ fn corrida(ctx: &mut Ctx, rc: &mut Recogida, r: &Nodo, base: &PropCorrida, enlac
                         "right" => TipoTope::Derecha,
                         _ => TipoTope::Izquierda,
                     };
-                    rc.topes_extra.push(Tope { pos: f32::NAN, tipo, relleno: None });
+                    rc.topes_extra.push(Tope {
+                        pos: f32::NAN,
+                        tipo,
+                        relleno: None,
+                    });
                     rc.piezas().push(Pieza::Tab { estilo: est });
                 }
             }
@@ -679,7 +788,9 @@ fn corrida(ctx: &mut Ctx, rc: &mut Recogida, r: &Nodo, base: &PropCorrida, enlac
             "noBreakHyphen" => rc.texto("\u{2011}", &props, enlace),
             "softHyphen" => rc.texto("\u{00AD}", &props, enlace),
             "sym" => {
-                let c = u32::from_str_radix(e.atributo("char"), 16).ok().and_then(char::from_u32);
+                let c = u32::from_str_radix(e.atributo("char"), 16)
+                    .ok()
+                    .and_then(char::from_u32);
                 if let Some(c) = c {
                     let mut p2 = props.clone();
                     let f = e.atributo("font");
@@ -687,7 +798,11 @@ fn corrida(ctx: &mut Ctx, rc: &mut Recogida, r: &Nodo, base: &PropCorrida, enlac
                         p2.familia = Some(Familia::Nombre(f.to_string()));
                     }
                     // Los simbolos de Symbol/Wingdings vienen en F0xx.
-                    let c = if (c as u32) < 0x100 && !f.is_empty() { char::from_u32(0xF000 + c as u32).unwrap_or(c) } else { c };
+                    let c = if (c as u32) < 0x100 && !f.is_empty() {
+                        char::from_u32(0xF000 + c as u32).unwrap_or(c)
+                    } else {
+                        c
+                    };
                     rc.texto(&c.to_string(), &p2, enlace);
                 }
             }
@@ -755,11 +870,19 @@ fn corrida(ctx: &mut Ctx, rc: &mut Recogida, r: &Nodo, base: &PropCorrida, enlac
     }
 }
 
-fn campo_char(ctx: &Ctx, rc: &mut Recogida, e: &Nodo, props: &PropCorrida, enlace: Option<&Arc<str>>) {
+fn campo_char(
+    ctx: &Ctx,
+    rc: &mut Recogida,
+    e: &Nodo,
+    props: &PropCorrida,
+    enlace: Option<&Arc<str>>,
+) {
     match e.atributo("fldCharType") {
         "begin" => rc.campos.push((String::new(), false, false)),
         "separate" => {
-            let Some(top) = rc.campos.last().cloned() else { return };
+            let Some(top) = rc.campos.last().cloned() else {
+                return;
+            };
             let calculado = campo_de(&top.0);
             if let Some(c) = rc.campos.last_mut() {
                 c.1 = true;
@@ -772,7 +895,10 @@ fn campo_char(ctx: &Ctx, rc: &mut Recogida, e: &Nodo, props: &PropCorrida, enlac
                 if fuera_visible {
                     let t = texto_campo(ctx, c, &top.0);
                     let est = rc.m.estilo(props, false, enlace, Some(c), 1.0);
-                    rc.piezas().push(Pieza::Texto { texto: t, estilo: est });
+                    rc.piezas().push(Pieza::Texto {
+                        texto: t,
+                        estilo: est,
+                    });
                 }
             }
         }
@@ -784,7 +910,10 @@ fn campo_char(ctx: &Ctx, rc: &mut Recogida, e: &Nodo, props: &PropCorrida, enlac
             {
                 let t = texto_campo(ctx, c, &instr);
                 let est = rc.m.estilo(props, false, enlace, Some(c), 1.0);
-                rc.piezas().push(Pieza::Texto { texto: t, estilo: est });
+                rc.piezas().push(Pieza::Texto {
+                    texto: t,
+                    estilo: est,
+                });
             }
         }
         _ => {}
@@ -797,7 +926,12 @@ fn poner_dibujo(rc: &mut Recogida, d: Dibujo) {
             let id = rc.objetos.len() as u32;
             let (ancho, alto, bajo) = (o.ancho, o.alto, o.bajo);
             rc.objetos.push(o);
-            rc.piezas().push(Pieza::Objeto { ancho, alto, bajo, id });
+            rc.piezas().push(Pieza::Objeto {
+                ancho,
+                alto,
+                bajo,
+                id,
+            });
         }
         Dibujo::Anclado(f) => rc.flotantes.push(f),
         Dibujo::Regla { alto, color } => {
@@ -806,17 +940,33 @@ fn poner_dibujo(rc: &mut Recogida, d: Dibujo) {
                 ancho,
                 alto,
                 bajo: 0.0,
-                elementos: vec![Elemento::Rect { rect: Rect::nuevo(0.0, 0.0, ancho, alto), relleno: Some(Relleno::Solido(color)), borde: None }],
+                elementos: vec![Elemento::Rect {
+                    rect: Rect::nuevo(0.0, 0.0, ancho, alto),
+                    relleno: Some(Relleno::Solido(color)),
+                    borde: None,
+                }],
             };
             let id = rc.objetos.len() as u32;
             rc.objetos.push(o);
-            rc.piezas().push(Pieza::Objeto { ancho, alto, bajo: 0.0, id });
+            rc.piezas().push(Pieza::Objeto {
+                ancho,
+                alto,
+                bajo: 0.0,
+                id,
+            });
         }
     }
 }
 
 /// Un parrafo a franjas (una por renglon).
-pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, siguiente: Option<&Nodo>, salida: &mut Vec<Franja>) {
+pub fn parrafo(
+    ctx: &mut Ctx,
+    n: &Nodo,
+    ancho: f32,
+    previo: Option<&Nodo>,
+    siguiente: Option<&Nodo>,
+    salida: &mut Vec<Franja>,
+) {
     let Resuelto { p, r: base, estilo } = resolver_parrafo(ctx, n);
     let mut marca = base.clone();
     if let Some(m) = &p.marca {
@@ -824,7 +974,12 @@ pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, sigui
     }
     let tema = ctx.tema;
     let mut rc = Recogida {
-        m: Montador { tema, medidor: ctx.medidor, alternas: ctx.alternas, estilos: Vec::new() },
+        m: Montador {
+            tema,
+            medidor: ctx.medidor,
+            alternas: ctx.alternas,
+            estilos: Vec::new(),
+        },
         tramos: Vec::new(),
         objetos: Vec::new(),
         flotantes: Vec::new(),
@@ -845,7 +1000,11 @@ pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, sigui
         rn.subrayado = None;
         rn.mezclar(&nivel.rpr);
         if !texto.is_empty() || nivel.formato == "bullet" {
-            let texto = if nivel.formato == "bullet" { nivel.texto.clone() } else { texto };
+            let texto = if nivel.formato == "bullet" {
+                nivel.texto.clone()
+            } else {
+                texto
+            };
             rc.texto(&texto, &rn, None);
             match nivel.sufijo.as_str() {
                 "space" => rc.texto(" ", &rn, None),
@@ -863,12 +1022,30 @@ pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, sigui
     let izq = p.izq.unwrap_or(0.0);
     let der = p.der.unwrap_or(0.0);
     let primera = p.primera.unwrap_or(0.0);
-    let mut topes: Vec<Tope> =
-        p.topes.iter().filter(|t| !t.quitar).filter_map(|t| t.tipo.map(|tipo| Tope { pos: t.pos, tipo, relleno: t.relleno })).collect();
-    if primera < 0.0 && !topes.iter().any(|t| t.pos > izq + primera + 0.01 && t.pos < izq - 0.01) {
+    let mut topes: Vec<Tope> = p
+        .topes
+        .iter()
+        .filter(|t| !t.quitar)
+        .filter_map(|t| {
+            t.tipo.map(|tipo| Tope {
+                pos: t.pos,
+                tipo,
+                relleno: t.relleno,
+            })
+        })
+        .collect();
+    if primera < 0.0
+        && !topes
+            .iter()
+            .any(|t| t.pos > izq + primera + 0.01 && t.pos < izq - 0.01)
+    {
         // La sangria francesa hace de tope (lo que separa el numero del
         // texto en las listas).
-        topes.push(Tope { pos: izq, tipo: TipoTope::Izquierda, relleno: None });
+        topes.push(Tope {
+            pos: izq,
+            tipo: TipoTope::Izquierda,
+            relleno: None,
+        });
     }
     for t in &rc.topes_extra {
         let pos = match t.tipo {
@@ -889,24 +1066,50 @@ pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, sigui
         alineacion: p.alineacion.unwrap_or_default(),
         partir: true,
         // Word 2013 y posteriores encogen los espacios al justificar.
-        encoger: if p.alineacion == Some(Alineacion::Justificada) && ctx.compat >= 15 { 0.2 } else { 0.0 },
+        encoger: if p.alineacion == Some(Alineacion::Justificada) && ctx.compat >= 15 {
+            0.2
+        } else {
+            0.0
+        },
     };
 
-    let antes = if p.antes_auto == Some(true) { 14.0 } else { p.antes.unwrap_or(0.0) };
-    let despues = if p.despues_auto == Some(true) { 14.0 } else { p.despues.unwrap_or(0.0) };
+    let antes = if p.antes_auto == Some(true) {
+        14.0
+    } else {
+        p.antes.unwrap_or(0.0)
+    };
+    let despues = if p.despues_auto == Some(true) {
+        14.0
+    } else {
+        p.despues.unwrap_or(0.0)
+    };
     let interlineado = p.interlineado.unwrap_or(Interlineado::Auto(1.0));
 
     // Bordes de parrafo; los de un grupo de parrafos con los mismos bordes
     // se juntan (sin el de en medio).
     let mismo = |otro: Option<&Nodo>| -> bool {
-        let Some(o) = otro.filter(|o| o.nombre == "p") else { return false };
+        let Some(o) = otro.filter(|o| o.nombre == "p") else {
+            return false;
+        };
         let r = resolver_parrafo(ctx, o);
         r.p.bordes == p.bordes && r.p.izq == p.izq && r.p.der == p.der
     };
     let hay_bordes = p.bordes != Bordes::default();
-    let (junto_antes, junto_despues) = if hay_bordes { (mismo(previo), mismo(siguiente)) } else { (false, false) };
-    let borde_arriba = if junto_antes { p.bordes.entre.flatten() } else { p.bordes.arriba.flatten() };
-    let borde_abajo = if junto_despues { None } else { p.bordes.abajo.flatten() };
+    let (junto_antes, junto_despues) = if hay_bordes {
+        (mismo(previo), mismo(siguiente))
+    } else {
+        (false, false)
+    };
+    let borde_arriba = if junto_antes {
+        p.bordes.entre.flatten()
+    } else {
+        p.bordes.arriba.flatten()
+    };
+    let borde_abajo = if junto_despues {
+        None
+    } else {
+        p.bordes.abajo.flatten()
+    };
 
     let n_tramos = rc.tramos.len().max(1);
     if rc.tramos.is_empty() {
@@ -946,12 +1149,31 @@ pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, sigui
     for (k, (salto, piezas)) in tramos.into_iter().enumerate() {
         // Un salto de pagina al final del parrafo no deja renglon vacio.
         if k > 0 && k == ultimo_tramo && piezas.is_empty() {
-            salida.push(Franja { salto, salto_manual: true, ..Default::default() });
+            salida.push(Franja {
+                salto,
+                salto_manual: true,
+                ..Default::default()
+            });
             continue;
         }
-        let cfg_k = if k > 0 { Config { primera: 0.0, ..cfg.clone() } } else { cfg.clone() };
+        let cfg_k = if k > 0 {
+            Config {
+                primera: 0.0,
+                ..cfg.clone()
+            }
+        } else {
+            cfg.clone()
+        };
         let mut unidades = renglones::medir(&piezas, &estilos, estilo_marca, ctx.medidor);
-        let renglones = renglones::partir_unidades(&mut unidades, 0, true, &estilos, estilo_marca, &cfg_k, ctx.medidor);
+        let renglones = renglones::partir_unidades(
+            &mut unidades,
+            0,
+            true,
+            &estilos,
+            estilo_marca,
+            &cfg_k,
+            ctx.medidor,
+        );
         let total = renglones.len();
         let rh = Arc::new(Rehacer {
             unidades,
@@ -963,7 +1185,11 @@ pub fn parrafo(ctx: &mut Ctx, n: &Nodo, ancho: f32, previo: Option<&Nodo>, sigui
                 salto_tramo: salto,
                 primer_tramo: k == 0,
                 ultimo_tramo: k == ultimo_tramo,
-                notas: if k == ultimo_tramo { rc.notas.clone() } else { Vec::new() },
+                notas: if k == ultimo_tramo {
+                    rc.notas.clone()
+                } else {
+                    Vec::new()
+                },
                 ..geometria.clone()
             },
         });
@@ -1020,34 +1246,78 @@ fn franja_de_renglon(
     };
     let es_primero = linea == 0 && g.primer_tramo;
     let es_ultimo = linea + 1 == total && g.ultimo_tramo;
-    let arriba = if es_primero { espacio_borde(g.borde_arriba) } else { 0.0 };
-    let abajo = if es_ultimo { espacio_borde(g.borde_abajo) } else { 0.0 };
+    let arriba = if es_primero {
+        espacio_borde(g.borde_arriba)
+    } else {
+        0.0
+    };
+    let abajo = if es_ultimo {
+        espacio_borde(g.borde_abajo)
+    } else {
+        0.0
+    };
     let (izq, der, ancho) = (g.izq, g.der, g.ancho);
     let mut els = Vec::new();
     // Sombreado y bordes del parrafo.
-    let caja_p = Rect::nuevo(izq.min(izq + if es_primero { g.primera } else { 0.0 }), 0.0, ancho - der - izq, alto + arriba + abajo);
+    let caja_p = Rect::nuevo(
+        izq.min(izq + if es_primero { g.primera } else { 0.0 }),
+        0.0,
+        ancho - der - izq,
+        alto + arriba + abajo,
+    );
     if let Some(c) = g.sombreado {
-        els.push(Elemento::Rect { rect: Rect { x: izq, ..caja_p }, relleno: Some(Relleno::Solido(c)), borde: None });
+        els.push(Elemento::Rect {
+            rect: Rect { x: izq, ..caja_p },
+            relleno: Some(Relleno::Solido(c)),
+            borde: None,
+        });
     }
     if g.hay_bordes {
         let (x0, x1) = (izq - 4.0, ancho - der + 4.0);
         if es_primero && let Some(t) = g.borde_arriba {
-            els.push(Elemento::Linea { desde: (x0, t.grosor / 2.0), hasta: (x1, t.grosor / 2.0), trazo: t });
+            els.push(Elemento::Linea {
+                desde: (x0, t.grosor / 2.0),
+                hasta: (x1, t.grosor / 2.0),
+                trazo: t,
+            });
         }
         if es_ultimo && let Some(t) = g.borde_abajo {
             let y = alto + arriba + abajo - t.grosor / 2.0;
-            els.push(Elemento::Linea { desde: (x0, y), hasta: (x1, y), trazo: t });
+            els.push(Elemento::Linea {
+                desde: (x0, y),
+                hasta: (x1, y),
+                trazo: t,
+            });
         }
         if let Some(t) = g.borde_izq {
-            els.push(Elemento::Linea { desde: (x0, 0.0), hasta: (x0, alto + arriba + abajo), trazo: t });
+            els.push(Elemento::Linea {
+                desde: (x0, 0.0),
+                hasta: (x0, alto + arriba + abajo),
+                trazo: t,
+            });
         }
         if let Some(t) = g.borde_der {
-            els.push(Elemento::Linea { desde: (x1, 0.0), hasta: (x1, alto + arriba + abajo), trazo: t });
+            els.push(Elemento::Linea {
+                desde: (x1, 0.0),
+                hasta: (x1, alto + arriba + abajo),
+                trazo: t,
+            });
         }
     }
-    renglon_a_elementos(r, &rh.estilos, &rh.objetos, base_y + arriba, medidor, &mut els);
+    renglon_a_elementos(
+        r,
+        &rh.estilos,
+        &rh.objetos,
+        base_y + arriba,
+        medidor,
+        &mut els,
+    );
     let mut f = Franja {
-        holgura: if let Interlineado::Auto(m) = g.interlineado { (natural_texto * (m - 1.0)).max(0.0) } else { 0.0 },
+        holgura: if let Interlineado::Auto(m) = g.interlineado {
+            (natural_texto * (m - 1.0)).max(0.0)
+        } else {
+            0.0
+        },
         alto: alto + arriba + abajo,
         elementos: els,
         estilo: g.estilo.clone(),
@@ -1096,12 +1366,28 @@ fn marcar_juntas(g: &Geometria, franjas: &mut [Franja], desde: usize, total: usi
 /// la caja, de izquierda a derecha; `None` = a lo ancho) y los que le
 /// siguen a lo ancho de la caja. Las unidades ya estan medidas: no se mide
 /// nada otra vez.
-pub fn rehacer(rh: &Arc<Rehacer>, linea: usize, unidad: usize, tramos: Option<&[(f32, f32)]>, medidor: &dyn Medidor) -> Vec<Franja> {
+pub fn rehacer(
+    rh: &Arc<Rehacer>,
+    linea: usize,
+    unidad: usize,
+    tramos: Option<&[(f32, f32)]>,
+    medidor: &dyn Medidor,
+) -> Vec<Franja> {
     let mut u = rh.unidades.clone();
-    let mut v: Vec<(renglones::Renglon, usize, Vec<(f32, f32)>)> = Vec::new();
+    // Cada renglon rehecho, la unidad donde empieza y sus tramos.
+    type Rehecho = (renglones::Renglon, usize, Vec<(f32, f32)>);
+    let mut v: Vec<Rehecho> = Vec::new();
     let resto = match tramos {
         Some(t) => {
-            let (r, fin, forzado) = renglones::renglon_en_tramos(&mut u, unidad, t, &rh.estilos, rh.marca, &rh.cfg, medidor);
+            let (r, fin, forzado) = renglones::renglon_en_tramos(
+                &mut u,
+                unidad,
+                t,
+                &rh.estilos,
+                rh.marca,
+                &rh.cfg,
+                medidor,
+            );
             v.push((r, unidad, t.to_vec()));
             (fin < u.len() || forzado).then_some(fin)
         }
@@ -1109,13 +1395,24 @@ pub fn rehacer(rh: &Arc<Rehacer>, linea: usize, unidad: usize, tramos: Option<&[
     };
     if let Some(desde) = resto {
         let primero = tramos.is_none() && linea == 0;
-        for (r, i) in renglones::partir_unidades(&mut u, desde, primero, &rh.estilos, rh.marca, &rh.cfg, medidor) {
+        for (r, i) in renglones::partir_unidades(
+            &mut u,
+            desde,
+            primero,
+            &rh.estilos,
+            rh.marca,
+            &rh.cfg,
+            medidor,
+        ) {
             v.push((r, i, Vec::new()));
         }
     }
     let total = linea + v.len();
-    let mut franjas: Vec<Franja> =
-        v.into_iter().enumerate().map(|(k, (r, i, lim))| franja_de_renglon(rh, &r, linea + k, total, i, lim, medidor)).collect();
+    let mut franjas: Vec<Franja> = v
+        .into_iter()
+        .enumerate()
+        .map(|(k, (r, i, lim))| franja_de_renglon(rh, &r, linea + k, total, i, lim, medidor))
+        .collect();
     marcar_juntas(&rh.g, &mut franjas, linea, total);
     if rh.g.ultimo_tramo
         && let Some(f) = franjas.last_mut()
@@ -1138,12 +1435,23 @@ pub fn renglon_a_elementos(
 ) {
     for t in &r.trozos {
         match &t.contenido {
-            Contenido::Texto { texto, estilo, extra_espacio } => {
-                let Some(e) = estilos.get(*estilo as usize) else { continue };
+            Contenido::Texto {
+                texto,
+                estilo,
+                extra_espacio,
+            } => {
+                let Some(e) = estilos.get(*estilo as usize) else {
+                    continue;
+                };
                 if let Some(f) = e.fondo {
                     let m = medidor.metricas(&e.letra);
                     salida.push(Elemento::Rect {
-                        rect: Rect::nuevo(t.x, base_y - e.subida - m.ascenso, t.ancho, m.ascenso + m.descenso),
+                        rect: Rect::nuevo(
+                            t.x,
+                            base_y - e.subida - m.ascenso,
+                            t.ancho,
+                            m.ascenso + m.descenso,
+                        ),
                         relleno: Some(Relleno::Solido(f)),
                         borde: None,
                     });
@@ -1179,7 +1487,9 @@ pub fn renglon_a_elementos(
                 }
             }
             Contenido::Relleno { caracter, estilo } => {
-                let Some(e) = estilos.get(*estilo as usize) else { continue };
+                let Some(e) = estilos.get(*estilo as usize) else {
+                    continue;
+                };
                 let w = medidor.ancho(&caracter.to_string(), &e.letra).max(0.5);
                 // Los puntos alineados a una rejilla, como Word.
                 let n = ((t.ancho - w * 0.5) / w).floor().max(0.0) as usize;
@@ -1253,12 +1563,20 @@ impl FilaMaq {
         let mut v = Vec::new();
         for c in &self.celdas {
             if let Some(f) = c.fondo {
-                v.push(Elemento::Rect { rect: Rect::nuevo(c.x, 0.0, c.ancho, alto), relleno: Some(Relleno::Solido(f)), borde: None });
+                v.push(Elemento::Rect {
+                    rect: Rect::nuevo(c.x, 0.0, c.ancho, alto),
+                    relleno: Some(Relleno::Solido(f)),
+                    borde: None,
+                });
             }
         }
         for c in &self.celdas {
             if c.fusion != Fusion::Sigue {
-                let alto_util = if let Fusion::Inicio(_) = c.fusion { c.alto_fusion.max(alto) } else { alto };
+                let alto_util = if let Fusion::Inicio(_) = c.fusion {
+                    c.alto_fusion.max(alto)
+                } else {
+                    alto
+                };
                 let libre = (alto_util - c.m_arriba - c.m_abajo - c.alto_contenido).max(0.0);
                 let dy = match c.vertical {
                     1 => libre / 2.0,
@@ -1276,7 +1594,11 @@ impl FilaMaq {
             let (x0, x1) = (c.x, c.x + c.ancho);
             let lado = |t: &Option<Trazo>, a: (f32, f32), b: (f32, f32), v: &mut Vec<Elemento>| {
                 if let Some(t) = t {
-                    v.push(Elemento::Linea { desde: a, hasta: b, trazo: *t });
+                    v.push(Elemento::Linea {
+                        desde: a,
+                        hasta: b,
+                        trazo: *t,
+                    });
                 }
             };
             if c.fusion != Fusion::Sigue {
@@ -1317,11 +1639,21 @@ impl FilaMaq {
                 }
                 continue;
             }
-            let corte = c.cortes.iter().copied().filter(|&y| y <= limite + 0.01).fold(0.0f32, f32::max);
+            let corte = c
+                .cortes
+                .iter()
+                .copied()
+                .filter(|&y| y <= limite + 0.01)
+                .fold(0.0f32, f32::max);
             if corte > 0.0 {
                 algo = true;
             }
-            a.celdas[k].contenido = c.contenido.iter().filter(|e| e.y_referencia() < corte).cloned().collect();
+            a.celdas[k].contenido = c
+                .contenido
+                .iter()
+                .filter(|e| e.y_referencia() < corte)
+                .cloned()
+                .collect();
             a.celdas[k].alto_contenido = corte;
             a.celdas[k].vertical = 0;
             b.celdas[k].contenido = c
@@ -1334,7 +1666,12 @@ impl FilaMaq {
                     e
                 })
                 .collect();
-            b.celdas[k].cortes = c.cortes.iter().filter(|&&y| y > corte).map(|y| y - corte).collect();
+            b.celdas[k].cortes = c
+                .cortes
+                .iter()
+                .filter(|&&y| y > corte)
+                .map(|y| y - corte)
+                .collect();
             b.celdas[k].alto_contenido = c.alto_contenido - corte;
             b.celdas[k].vertical = 0;
             alto_b = alto_b.max(b.celdas[k].alto_contenido + c.m_arriba + c.m_abajo);
@@ -1354,19 +1691,40 @@ impl FilaMaq {
 /// Lee una tabla y la deja en franjas (una por fila).
 #[allow(clippy::needless_range_loop)] // las fusiones miran varias filas a la vez
 pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>) {
-    let directo = t.hijo("tblPr").map(|p| PropTabla::leer(p, ctx.tema)).unwrap_or_default();
-    let id_estilo = directo.estilo.clone().or_else(|| ctx.estilos.defecto_tabla.clone());
-    let (mut tp, tc_estilo, pp_estilo, rp_estilo, cond) = id_estilo.as_deref().map(|e| ctx.estilos.de_tabla(e)).unwrap_or_default();
+    let directo = t
+        .hijo("tblPr")
+        .map(|p| PropTabla::leer(p, ctx.tema))
+        .unwrap_or_default();
+    let id_estilo = directo
+        .estilo
+        .clone()
+        .or_else(|| ctx.estilos.defecto_tabla.clone());
+    let (mut tp, tc_estilo, pp_estilo, rp_estilo, cond) = id_estilo
+        .as_deref()
+        .map(|e| ctx.estilos.de_tabla(e))
+        .unwrap_or_default();
     tp.mezclar(&directo);
 
     // La rejilla.
     let mut rejilla: Vec<f32> = t
         .hijo("tblGrid")
-        .map(|g| g.elementos().filter(|c| c.nombre == "gridCol").map(|c| attr_num(c, "w", 20.0).map(twips).unwrap_or(0.0)).collect())
+        .map(|g| {
+            g.elementos()
+                .filter(|c| c.nombre == "gridCol")
+                .map(|c| attr_num(c, "w", 20.0).map(twips).unwrap_or(0.0))
+                .collect()
+        })
         .unwrap_or_default();
     let filas: Vec<&Nodo> = filas_de(t);
-    let max_celdas =
-        filas.iter().map(|f| celdas_de(f).iter().map(|c| tramo_de(c)).sum::<usize>() + rejilla_antes(f) + rejilla_despues(f)).max().unwrap_or(0);
+    let max_celdas = filas
+        .iter()
+        .map(|f| {
+            celdas_de(f).iter().map(|c| tramo_de(c)).sum::<usize>()
+                + rejilla_antes(f)
+                + rejilla_despues(f)
+        })
+        .max()
+        .unwrap_or(0);
     if rejilla.len() < max_celdas {
         let falta = max_celdas - rejilla.len();
         let usado: f32 = rejilla.iter().sum();
@@ -1381,7 +1739,11 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
     let suma: f32 = rejilla.iter().sum();
     let objetivo = match tp.ancho {
         Some(AnchoW::Porcentaje(p)) => Some(p * ancho_disp),
-        Some(AnchoW::Puntos(w)) if w > 0.0 && suma > 0.0 && (w - suma).abs() > 2.0 && suma < w * 0.5 => Some(w),
+        Some(AnchoW::Puntos(w))
+            if w > 0.0 && suma > 0.0 && (w - suma).abs() > 2.0 && suma < w * 0.5 =>
+        {
+            Some(w)
+        }
         _ => None,
     };
     if let Some(obj) = objetivo
@@ -1397,7 +1759,12 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
     }
 
     // Margenes de celda por defecto: 5,4 pt a los lados.
-    let mut m_tabla = Margenes { arriba: Some(0.0), abajo: Some(0.0), izq: Some(5.4), der: Some(5.4) };
+    let mut m_tabla = Margenes {
+        arriba: Some(0.0),
+        abajo: Some(0.0),
+        izq: Some(5.4),
+        der: Some(5.4),
+    };
     m_tabla.mezclar(&tp.margenes);
 
     let mut x0 = tp.sangria.unwrap_or(0.0);
@@ -1434,9 +1801,17 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
         let mut col = rejilla_antes(f);
         let mut v = Vec::new();
         for c in celdas_de(f) {
-            let tcpr = c.hijo("tcPr").map(|p| PropCelda::leer(p, ctx.tema)).unwrap_or_default();
+            let tcpr = c
+                .hijo("tcPr")
+                .map(|p| PropCelda::leer(p, ctx.tema))
+                .unwrap_or_default();
             let tramo = tcpr.tramo.unwrap_or(1).max(1) as usize;
-            v.push(CeldaLeida { nodo: c, col, tramo, tcpr });
+            v.push(CeldaLeida {
+                nodo: c,
+                col,
+                tramo,
+                tcpr,
+            });
             col += tramo;
         }
         estructura.push(v);
@@ -1457,14 +1832,24 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
     let mut cabecera_continua = true;
     for (fi, fila_nodo) in filas.iter().enumerate() {
         let trpr = fila_nodo.hijo("trPr");
-        let es_cabecera = trpr.and_then(|p| p.hijo("tblHeader")).is_some_and(crate::paquete::interruptor) && cabecera_continua;
+        let es_cabecera = trpr
+            .and_then(|p| p.hijo("tblHeader"))
+            .is_some_and(crate::paquete::interruptor)
+            && cabecera_continua;
         if !es_cabecera {
             cabecera_continua = false;
         }
-        let no_partir = trpr.and_then(|p| p.hijo("cantSplit")).is_some_and(crate::paquete::interruptor);
+        let no_partir = trpr
+            .and_then(|p| p.hijo("cantSplit"))
+            .is_some_and(crate::paquete::interruptor);
         let (alto_fila, regla) = trpr
             .and_then(|p| p.hijo("trHeight"))
-            .map(|h| (attr_num(h, "val", 20.0).map(twips).unwrap_or(0.0), h.atributo("hRule").to_string()))
+            .map(|h| {
+                (
+                    attr_num(h, "val", 20.0).map(twips).unwrap_or(0.0),
+                    h.atributo("hRule").to_string(),
+                )
+            })
             .unwrap_or((0.0, String::new()));
         let exacta = regla == "exact";
         let mut celdas = Vec::new();
@@ -1478,12 +1863,24 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
             // Las partes condicionales que tocan a esta celda.
             let mut tipos: Vec<&str> = Vec::new();
             let fila_dato = if primera_fila { fi.wrapping_sub(1) } else { fi };
-            let col_dato = if primera_col { cl.col.wrapping_sub(1) } else { cl.col };
+            let col_dato = if primera_col {
+                cl.col.wrapping_sub(1)
+            } else {
+                cl.col
+            };
             if bandas_v && !(primera_col && cl.col == 0) {
-                tipos.push(if col_dato % 2 == 0 { "band1Vert" } else { "band2Vert" });
+                tipos.push(if col_dato % 2 == 0 {
+                    "band1Vert"
+                } else {
+                    "band2Vert"
+                });
             }
             if bandas_h && !(primera_fila && fi == 0) {
-                tipos.push(if fila_dato % 2 == 0 { "band1Horz" } else { "band2Horz" });
+                tipos.push(if fila_dato % 2 == 0 {
+                    "band1Horz"
+                } else {
+                    "band2Horz"
+                });
             }
             if primera_col && cl.col == 0 {
                 tipos.push("firstCol");
@@ -1529,8 +1926,15 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
             tcpr.mezclar(&cl.tcpr);
             // Los bordes: los de la celda, y si no, los de la tabla segun
             // donde caiga.
-            let borde_t = |b: &Option<Option<Trazo>>, interior: &Option<Option<Trazo>>, exterior: bool| -> Option<Trazo> {
-                if exterior { b.flatten() } else { interior.flatten() }
+            let borde_t = |b: &Option<Option<Trazo>>,
+                           interior: &Option<Option<Trazo>>,
+                           exterior: bool|
+             -> Option<Trazo> {
+                if exterior {
+                    b.flatten()
+                } else {
+                    interior.flatten()
+                }
             };
             let primera_f = fi == 0;
             let fusion = match cl.tcpr.fusion_v {
@@ -1549,18 +1953,30 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
                 borde_t(&bordes_t.izq, &bordes_t.dentro_v, cl.col == 0),
             ];
             let b = &tcpr.bordes;
-            for (k, propio) in [&b.arriba, &b.der, &b.abajo, &b.izq].into_iter().enumerate() {
+            for (k, propio) in [&b.arriba, &b.der, &b.abajo, &b.izq]
+                .into_iter()
+                .enumerate()
+            {
                 if let Some(p) = propio {
                     bordes[k] = *p;
                 }
             }
             let mut m = m_tabla;
             m.mezclar(&tcpr.margenes);
-            let (mi, md, ma, mb) = (m.izq.unwrap_or(5.4), m.der.unwrap_or(5.4), m.arriba.unwrap_or(0.0), m.abajo.unwrap_or(0.0));
+            let (mi, md, ma, mb) = (
+                m.izq.unwrap_or(5.4),
+                m.der.unwrap_or(5.4),
+                m.arriba.unwrap_or(0.0),
+                m.abajo.unwrap_or(0.0),
+            );
             // El contenido.
             let previa = ctx.base_tabla.replace((pp, rp));
             let ancho_util = (ancho - mi - md).max(1.0);
-            let contenido = if fusion == Fusion::Sigue { Caja::default() } else { caja_con_flotantes(ctx, cl.nodo.elementos(), ancho_util) };
+            let contenido = if fusion == Fusion::Sigue {
+                Caja::default()
+            } else {
+                caja_con_flotantes(ctx, cl.nodo.elementos(), ancho_util)
+            };
             ctx.base_tabla = previa;
             let fondo = tcpr.sombreado.flatten().or(tp.sombreado.flatten());
             let _ = (ci, n_celdas);
@@ -1582,8 +1998,18 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
         }
         // Word suma el grueso del borde de arriba de la fila (y el de abajo en
         // la ultima) al alto de la fila: el texto empieza debajo del borde.
-        let b_arriba = celdas.iter().filter_map(|c| c.bordes[0].map(|t| t.grosor)).fold(0.0f32, f32::max);
-        let b_abajo = if fi + 1 == n_filas { celdas.iter().filter_map(|c| c.bordes[2].map(|t| t.grosor)).fold(0.0f32, f32::max) } else { 0.0 };
+        let b_arriba = celdas
+            .iter()
+            .filter_map(|c| c.bordes[0].map(|t| t.grosor))
+            .fold(0.0f32, f32::max);
+        let b_abajo = if fi + 1 == n_filas {
+            celdas
+                .iter()
+                .filter_map(|c| c.bordes[2].map(|t| t.grosor))
+                .fold(0.0f32, f32::max)
+        } else {
+            0.0
+        };
         for c in &mut celdas {
             c.m_arriba += b_arriba;
             c.m_abajo += b_abajo;
@@ -1593,8 +2019,22 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
             .filter(|c| c.fusion == Fusion::Nada || c.fusion == Fusion::Inicio(1))
             .map(|c| c.alto_contenido + c.m_arriba + c.m_abajo)
             .fold(0.0f32, f32::max);
-        let alto = if exacta { alto_fila } else { alto_contenido.max(alto_fila) };
-        filas_maq.push((FilaMaq { celdas, no_partir: no_partir || exacta, exacta }, alto.max(1.0), es_cabecera, alto_fila, exacta));
+        let alto = if exacta {
+            alto_fila
+        } else {
+            alto_contenido.max(alto_fila)
+        };
+        filas_maq.push((
+            FilaMaq {
+                celdas,
+                no_partir: no_partir || exacta,
+                exacta,
+            },
+            alto.max(1.0),
+            es_cabecera,
+            alto_fila,
+            exacta,
+        ));
     }
 
     // Las fusiones verticales: el inicio sabe el alto total; si su
@@ -1613,10 +2053,18 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
                 filas_maq[fi].0.celdas[ci].alto_fusion = total;
                 // Las celdas que siguen la fusion copian fondo y bordes de
                 // los lados.
-                let (fondo, bordes) = (filas_maq[fi].0.celdas[ci].fondo, filas_maq[fi].0.celdas[ci].bordes);
+                let (fondo, bordes) = (
+                    filas_maq[fi].0.celdas[ci].fondo,
+                    filas_maq[fi].0.celdas[ci].bordes,
+                );
                 let x = filas_maq[fi].0.celdas[ci].x;
                 for k in fi + 1..fi + n {
-                    if let Some(s) = filas_maq[k].0.celdas.iter_mut().find(|s| (s.x - x).abs() < 0.5 && s.fusion == Fusion::Sigue) {
+                    if let Some(s) = filas_maq[k]
+                        .0
+                        .celdas
+                        .iter_mut()
+                        .find(|s| (s.x - x).abs() < 0.5 && s.fusion == Fusion::Sigue)
+                    {
                         if s.fondo.is_none() {
                             s.fondo = fondo;
                         }
@@ -1632,7 +2080,12 @@ pub fn tabla(ctx: &mut Ctx, t: &Nodo, ancho_disp: f32, salida: &mut Vec<Franja>)
     let cabeceras: Vec<Franja> = filas_maq
         .iter()
         .filter(|f| f.2)
-        .map(|(fila, alto, _, _, _)| Franja { alto: *alto, fila: Some(Box::new(fila.clone())), es_cabecera: true, ..Default::default() })
+        .map(|(fila, alto, _, _, _)| Franja {
+            alto: *alto,
+            fila: Some(Box::new(fila.clone())),
+            es_cabecera: true,
+            ..Default::default()
+        })
         .collect();
     let cabeceras = (!cabeceras.is_empty()).then(|| Arc::new(cabeceras));
     let n = filas_maq.len();
@@ -1687,15 +2140,25 @@ fn celdas_de(f: &Nodo) -> Vec<&Nodo> {
 }
 
 fn tramo_de(c: &Nodo) -> usize {
-    c.hijo("tcPr").and_then(|p| p.hijo("gridSpan")).and_then(|g| g.valor().parse().ok()).unwrap_or(1usize).max(1)
+    c.hijo("tcPr")
+        .and_then(|p| p.hijo("gridSpan"))
+        .and_then(|g| g.valor().parse().ok())
+        .unwrap_or(1usize)
+        .max(1)
 }
 
 fn rejilla_antes(f: &Nodo) -> usize {
-    f.hijo("trPr").and_then(|p| p.hijo("gridBefore")).and_then(|g| g.valor().parse().ok()).unwrap_or(0)
+    f.hijo("trPr")
+        .and_then(|p| p.hijo("gridBefore"))
+        .and_then(|g| g.valor().parse().ok())
+        .unwrap_or(0)
 }
 
 fn rejilla_despues(f: &Nodo) -> usize {
-    f.hijo("trPr").and_then(|p| p.hijo("gridAfter")).and_then(|g| g.valor().parse().ok()).unwrap_or(0)
+    f.hijo("trPr")
+        .and_then(|p| p.hijo("gridAfter"))
+        .and_then(|g| g.valor().parse().ok())
+        .unwrap_or(0)
 }
 
 /// Lo que se ve de un mapa vacio: para los colores de DrawingML en Word.

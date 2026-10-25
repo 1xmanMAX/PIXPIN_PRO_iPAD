@@ -32,12 +32,16 @@ fn tablas_y_formato_condicional() {
     assert_eq!(crate::tablas::formato_en(t, &e, 0, 0).negrita, Some(true));
     let alto = l.efecto_condicional(&h, 2, h.celda(2, 1).unwrap()).unwrap();
     assert_eq!(alto.dxf.color_fuente, Some(Rgb { r: 255, g: 0, b: 0 }));
-    assert!(l.efecto_condicional(&h, 1, h.celda(1, 1).unwrap()).is_none());
+    assert!(
+        l.efecto_condicional(&h, 1, h.celda(1, 1).unwrap())
+            .is_none()
+    );
 }
 
 pub(crate) fn zip_de(partes: &[(&str, &[u8])]) -> Vec<u8> {
     let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    let op = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let op = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
     for (n, d) in partes {
         w.start_file(*n, op).unwrap();
         w.write_all(d).unwrap();
@@ -68,7 +72,9 @@ const HOJA1_RELS: &[u8] =
 fn hoja_grande(filas: u32) -> Vec<u8> {
     let mut s = String::from("<worksheet><sheetData>");
     for r in 1..=filas {
-        s.push_str(&format!("<row r=\"{r}\"><c r=\"A{r}\"><v>{r}</v></c><c r=\"B{r}\" t=\"s\"><v>0</v></c></row>"));
+        s.push_str(&format!(
+            "<row r=\"{r}\"><c r=\"A{r}\"><v>{r}</v></c><c r=\"B{r}\" t=\"s\"><v>0</v></c></row>"
+        ));
     }
     s.push_str("</sheetData><mergeCells><mergeCell ref=\"C1:D1\"/></mergeCells></worksheet>");
     s.into_bytes()
@@ -84,13 +90,19 @@ fn libro_de_prueba(grande: u32) -> Vec<u8> {
         ("xl/sharedStrings.xml", SST),
         ("xl/worksheets/sheet1.xml", HOJA1),
         ("xl/worksheets/_rels/sheet1.xml.rels", HOJA1_RELS),
-        ("xl/worksheets/sheet2.xml", b"<worksheet><sheetData/></worksheet>"),
+        (
+            "xl/worksheets/sheet2.xml",
+            b"<worksheet><sheetData/></worksheet>",
+        ),
         ("xl/worksheets/sheet3.xml", &g),
     ])
 }
 
 fn texto(l: &Libro, h: &Hoja, f: u32, c: u32) -> String {
-    h.celda(f, c).and_then(|x| l.contenido(h, x)).map(|x| x.mostrado.texto).unwrap_or_default()
+    h.celda(f, c)
+        .and_then(|x| l.contenido(h, x))
+        .map(|x| x.mostrado.texto)
+        .unwrap_or_default()
 }
 
 #[test]
@@ -106,7 +118,15 @@ fn abre_un_libro_completo() {
     let v = h.vista().clone();
     assert!(!v.cuadricula);
     assert_eq!(v.zoom, 125);
-    assert_eq!((v.filas_fijas, v.columnas_fijas, v.primera_fila, v.primera_columna), (2, 1, 2, 1));
+    assert_eq!(
+        (
+            v.filas_fijas,
+            v.columnas_fijas,
+            v.primera_fila,
+            v.primera_columna
+        ),
+        (2, 1, 2, 1)
+    );
     h.cargar_todo();
     assert!(h.completa);
     assert_eq!(texto(&l, &h, 0, 0), "Nombre");
@@ -120,8 +140,19 @@ fn abre_un_libro_completo() {
     assert_eq!(texto(&l, &h, 3, 2), "8");
     let c = l.contenido(&h, h.celda(3, 1).unwrap()).unwrap();
     assert_eq!(c.tramos.as_ref().map(|t| t.len()), Some(2));
-    assert_eq!(l.contenido(&h, h.celda(1, 1).unwrap()).unwrap().horizontal, Horizontal::Derecha);
-    assert_eq!(h.cola.combinadas, vec![Rango { fila0: 0, col0: 0, fila1: 1, col1: 0 }]);
+    assert_eq!(
+        l.contenido(&h, h.celda(1, 1).unwrap()).unwrap().horizontal,
+        Horizontal::Derecha
+    );
+    assert_eq!(
+        h.cola.combinadas,
+        vec![Rango {
+            fila0: 0,
+            col0: 0,
+            fila1: 1,
+            col1: 0
+        }]
+    );
     assert_eq!(h.combinada_en(1, 0).map(|r| r.fila0), Some(0));
     let hv = h.hipervinculo_en(0, 1).unwrap();
     assert!(hv.externo && hv.destino == "https://example.com/");
@@ -138,7 +169,13 @@ fn abre_un_libro_completo() {
     assert_eq!(r.alto(2), 0.0);
     assert_eq!(r.y(10), 40.0 + 20.0 + 0.0 + r.alto(3) + 6.0 * 20.0);
     // Con paneles: 4 trozos, y el punto (10, 10) es A1.
-    let vista = Vista { ancho: 800.0, alto: 600.0, escala: 1.0, x: 0.0, y: 0.0 };
+    let vista = Vista {
+        ancho: 800.0,
+        alto: 600.0,
+        escala: 1.0,
+        x: 0.0,
+        y: 0.0,
+    };
     let ps = r.paneles(&vista);
     assert_eq!(ps.len(), 4);
     assert_eq!(r.celda_en(&vista, 10.0, 10.0), Some((0, 0)));
@@ -152,7 +189,11 @@ fn la_hoja_grande_llega_por_tandas() {
     let mut h = l.abrir_hoja(2);
     assert!(h.filas.is_empty());
     h.cargar_hasta_fila(99);
-    assert!(h.filas.len() >= 100 && h.filas.len() < 20_000, "{}", h.filas.len());
+    assert!(
+        h.filas.len() >= 100 && h.filas.len() < 20_000,
+        "{}",
+        h.filas.len()
+    );
     assert_eq!(texto(&l, &h, 99, 0), "100");
     assert!(h.cola.combinadas.is_empty());
     // El resto, en otro hilo.
@@ -180,7 +221,10 @@ fn la_hoja_grande_llega_por_tandas() {
 
 #[test]
 fn lo_roto_no_revienta() {
-    assert_eq!(Libro::desde_bytes(Vec::new(), Regional::en_us()).err(), Some(ErrorHojas::NoEsZip));
+    assert_eq!(
+        Libro::desde_bytes(Vec::new(), Regional::en_us()).err(),
+        Some(ErrorHojas::NoEsZip)
+    );
     assert!(Libro::desde_bytes(b"PK\x03\x04basura".to_vec(), Regional::en_us()).is_err());
     let bueno = libro_de_prueba(300);
     // ZIP cortado por cualquier sitio: error o libro, nunca panico.
@@ -215,8 +259,24 @@ fn lo_roto_no_revienta() {
             }
         }
         let r = Rejilla::nueva(&h, &l.estilos.fuente_normal);
-        let _ = r.paneles(&Vista { ancho: 100.0, alto: 100.0, escala: 2.0, x: 1e12, y: 1e12 });
-        let _ = r.celda_en(&Vista { ancho: 100.0, alto: 100.0, escala: 0.0, x: -5.0, y: f64::NAN }, 5.0, 5.0);
+        let _ = r.paneles(&Vista {
+            ancho: 100.0,
+            alto: 100.0,
+            escala: 2.0,
+            x: 1e12,
+            y: 1e12,
+        });
+        let _ = r.celda_en(
+            &Vista {
+                ancho: 100.0,
+                alto: 100.0,
+                escala: 0.0,
+                x: -5.0,
+                y: f64::NAN,
+            },
+            5.0,
+            5.0,
+        );
     }
     // Una hoja que no existe.
     let l = Libro::desde_bytes(libro_de_prueba(1), Regional::en_us()).unwrap();
@@ -255,12 +315,22 @@ fn dibujos_anclados() {
     assert_eq!(h.cola.dibujos.len(), 2);
     let r = Rejilla::nueva(&h, &l.estilos.fuente_normal);
     match &h.cola.dibujos[0].contenido {
-        ContenidoDibujo::Imagen { ruta, .. } => assert_eq!(l.parte(ruta).as_deref(), Some(&b"no es un png"[..])),
+        ContenidoDibujo::Imagen { ruta, .. } => {
+            assert_eq!(l.parte(ruta).as_deref(), Some(&b"no es un png"[..]))
+        }
         o => panic!("{o:?}"),
     }
-    assert_eq!(r.caja_dibujo(&h.cola.dibujos[0]), [64.0 + 10.0, 40.0, 118.0, 60.0]);
+    assert_eq!(
+        r.caja_dibujo(&h.cola.dibujos[0]),
+        [64.0 + 10.0, 40.0, 118.0, 60.0]
+    );
     match &h.cola.dibujos[1].contenido {
-        ContenidoDibujo::Grafico { titulo, series, categorias, tipo } => {
+        ContenidoDibujo::Grafico {
+            titulo,
+            series,
+            categorias,
+            tipo,
+        } => {
             assert_eq!(titulo, "Ventas");
             assert_eq!(tipo, "barChart");
             assert_eq!(categorias, &["Ene", "Feb"]);
@@ -313,7 +383,13 @@ const XLS_PEQUENO: &[u8] = include_bytes!("../tests/muestras/pequeno.xls");
 #[test]
 fn un_xls_de_verdad_se_abre_como_un_libro_normal() {
     let l = Libro::desde_bytes(XLS_PEQUENO.to_vec(), Regional::en_us()).unwrap();
-    assert_eq!(l.hojas.iter().map(|h| h.nombre.as_str()).collect::<Vec<_>>(), vec!["Ventas", "Notas"]);
+    assert_eq!(
+        l.hojas
+            .iter()
+            .map(|h| h.nombre.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Ventas", "Notas"]
+    );
     let mut h = l.abrir_hoja(0);
     h.cargar_todo();
     assert!(h.completa);
@@ -322,12 +398,23 @@ fn un_xls_de_verdad_se_abre_como_un_libro_normal() {
     assert_eq!(texto(&l, &h, 1, 1), "1,234.50");
     assert_eq!(texto(&l, &h, 2, 1), "9.99");
     assert_eq!(texto(&l, &h, 3, 0), "15/03/2026");
-    assert_eq!(h.cola.combinadas, vec![Rango { fila0: 5, col0: 0, fila1: 5, col1: 2 }]);
+    assert_eq!(
+        h.cola.combinadas,
+        vec![Rango {
+            fila0: 5,
+            col0: 0,
+            fila1: 5,
+            col1: 2
+        }]
+    );
     // Negrita y relleno de los estilos del archivo.
     let c = h.celda(1, 1).unwrap();
     let xf = l.xf(c);
     assert!(l.estilos.fuente(xf).negrita);
-    assert!(matches!(l.estilos.relleno(xf), crate::estilos::Relleno::Liso(_)));
+    assert!(matches!(
+        l.estilos.relleno(xf),
+        crate::estilos::Relleno::Liso(_)
+    ));
     // La segunda hoja se lee al pedirla, y pedirla otra vez da lo mismo.
     let h2 = l.abrir_hoja(1);
     assert_eq!(texto(&l, &h2, 0, 0), "otra hoja");
@@ -383,7 +470,10 @@ fn comentarios_autofiltro_minigraficos_y_condicionales_x14_de_punta_a_punta() {
     h.cargar_todo();
     // Comentarios: la nota de B3 y el hilo de A1 (que manda sobre su nota de compatibilidad).
     assert_eq!(h.cola.comentarios.len(), 2);
-    assert_eq!(h.comentario_en(2, 1).map(|c| c.texto.as_str()), Some("Revisar"));
+    assert_eq!(
+        h.comentario_en(2, 1).map(|c| c.texto.as_str()),
+        Some("Revisar")
+    );
     let hilo = h.comentario_en(0, 0).unwrap();
     assert!(hilo.encadenado && hilo.autor == "Ana" && hilo.texto == "Hilo real");
     assert!(h.comentario_en(1, 1).is_none());
@@ -398,10 +488,19 @@ fn comentarios_autofiltro_minigraficos_y_condicionales_x14_de_punta_a_punta() {
     assert_eq!((m.fila, m.col), (2, 2));
     assert_eq!(l.valores_mini(&h, m), vec![Some(1.0), Some(5.0)]);
     let g = &h.cola.grupos_mini[0];
-    let eje = l.eje_mini(&h, m, &crate::minigraficos::puntos_de(g, &l.valores_mini(&h, m))).unwrap();
+    let eje = l
+        .eje_mini(
+            &h,
+            m,
+            &crate::minigraficos::puntos_de(g, &l.valores_mini(&h, m)),
+        )
+        .unwrap();
     assert_eq!(eje, (0.0, 5.0), "columnas desde cero");
     // Formato condicional de iconos: el 1 es el peor, el 5 el mejor.
-    let ef = |fila: u32| l.efecto_condicional(&h, fila, h.celda(fila, 1).unwrap()).and_then(|e| e.icono);
+    let ef = |fila: u32| {
+        l.efecto_condicional(&h, fila, h.celda(fila, 1).unwrap())
+            .and_then(|e| e.icono)
+    };
     assert_eq!(ef(1), Some((crate::condicional::Conjunto::Flechas3, 0)));
     assert_eq!(ef(2), Some((crate::condicional::Conjunto::Flechas3, 2)));
 }

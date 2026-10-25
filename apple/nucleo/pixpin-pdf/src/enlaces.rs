@@ -75,22 +75,32 @@ pub(crate) fn de_la_hoja_en(archivo: &Archivo, paginas: &[u32], i: usize) -> Vec
     let Some(Valor::Lista(anotaciones)) = archivo.resolver(en(&hoja, b"Annots")) else {
         return Vec::new();
     };
-    let por_numero: HashMap<u32, usize> = paginas.iter().enumerate().map(|(k, n)| (*n, k)).collect();
+    let por_numero: HashMap<u32, usize> =
+        paginas.iter().enumerate().map(|(k, n)| (*n, k)).collect();
     let mut nombres = Nombres::default();
     let mut salida = Vec::new();
     for a in anotaciones.iter().take(MAX_ENLACES) {
-        let Some(d) = archivo.dicc_de(Some(a)) else { continue };
+        let Some(d) = archivo.dicc_de(Some(a)) else {
+            continue;
+        };
         if !matches!(en(&d, b"Subtype"), Some(Valor::Nombre(s)) if s == b"Link") {
             continue;
         }
-        let Some(rect) = caja_de(archivo.resolver(en(&d, b"Rect"))) else { continue };
-        let Some(destino) = destino_del_enlace(archivo, &d, &por_numero, &mut nombres) else { continue };
+        let Some(rect) = caja_de(archivo.resolver(en(&d, b"Rect"))) else {
+            continue;
+        };
+        let Some(destino) = destino_del_enlace(archivo, &d, &por_numero, &mut nombres) else {
+            continue;
+        };
         let f = a_fraccion(caja, giro, rect);
         // Lo que cae del todo fuera del papel no se puede pulsar.
         if f[2] <= 0.0 || f[0] >= 1.0 || f[3] <= 0.0 || f[1] >= 1.0 {
             continue;
         }
-        salida.push(Enlace { caja: f.map(|v| v.clamp(0.0, 1.0)), destino });
+        salida.push(Enlace {
+            caja: f.map(|v| v.clamp(0.0, 1.0)),
+            destino,
+        });
     }
     salida
 }
@@ -143,7 +153,11 @@ fn a_la_hoja(
     lista_a_hoja(archivo, &lista, por_numero)
 }
 
-fn lista_a_hoja(archivo: &Archivo, lista: &[Valor], por_numero: &HashMap<u32, usize>) -> Option<Destino> {
+fn lista_a_hoja(
+    archivo: &Archivo,
+    lista: &[Valor],
+    por_numero: &HashMap<u32, usize>,
+) -> Option<Destino> {
     let hoja = match lista.first()? {
         Valor::Ref(n, _) => *por_numero.get(n)?,
         // Un numero de hoja (lo que escriben algunos generadores).
@@ -168,7 +182,8 @@ fn lista_a_hoja(archivo: &Archivo, lista: &[Valor], por_numero: &HashMap<u32, us
     let alto = arriba.and_then(|a| {
         let n = *por_numero.iter().find(|(_, k)| **k == hoja)?.0;
         let d = archivo.dicc_de(Some(&Valor::Ref(n, 0)))?;
-        let caja = caja_de(heredado(archivo, &d, b"CropBox")).or_else(|| caja_de(heredado(archivo, &d, b"MediaBox")))?;
+        let caja = caja_de(heredado(archivo, &d, b"CropBox"))
+            .or_else(|| caja_de(heredado(archivo, &d, b"MediaBox")))?;
         if giro_de_la_hoja(archivo, &d) != 0 {
             return None;
         }
@@ -185,7 +200,9 @@ struct Nombres {
 
 impl Nombres {
     fn buscar(&mut self, archivo: &Archivo, nombre: &[u8]) -> Option<Vec<Valor>> {
-        let tabla = self.leidos.get_or_insert_with(|| todos_los_nombres(archivo));
+        let tabla = self
+            .leidos
+            .get_or_insert_with(|| todos_los_nombres(archivo));
         tabla.get(nombre).cloned()
     }
 }
@@ -282,12 +299,33 @@ mod pruebas {
         ]);
         let e = de_la_hoja(&b, 0);
         assert_eq!(e.len(), 4, "{e:?}");
-        assert_eq!(e[0].destino, Destino::Hoja { hoja: 1, alto: Some(0.25) });
+        assert_eq!(
+            e[0].destino,
+            Destino::Hoja {
+                hoja: 1,
+                alto: Some(0.25)
+            }
+        );
         let c = e[0].caja;
-        assert!((c[0] - 0.1).abs() < 1e-6 && (c[1] - 0.05).abs() < 1e-6 && (c[3] - 0.1).abs() < 1e-6, "{c:?}");
+        assert!(
+            (c[0] - 0.1).abs() < 1e-6 && (c[1] - 0.05).abs() < 1e-6 && (c[3] - 0.1).abs() < 1e-6,
+            "{c:?}"
+        );
         assert_eq!(e[1].destino, Destino::Web("https://example.org/a b".into()));
-        assert_eq!(e[2].destino, Destino::Hoja { hoja: 0, alto: Some(0.5) });
-        assert_eq!(e[3].destino, Destino::Hoja { hoja: 1, alto: None });
+        assert_eq!(
+            e[2].destino,
+            Destino::Hoja {
+                hoja: 0,
+                alto: Some(0.5)
+            }
+        );
+        assert_eq!(
+            e[3].destino,
+            Destino::Hoja {
+                hoja: 1,
+                alto: None
+            }
+        );
         // Casos negativos: una hoja sin enlaces, una que no existe, y un PDF
         // que no lo es.
         assert!(de_la_hoja(&b, 1).is_empty());
@@ -321,6 +359,9 @@ mod pruebas {
         // Abajo a la izquierda sin girar es arriba a la izquierda girada 90.
         let c = e[0].caja;
         assert!(c[0] < 0.01 && c[1] < 0.01, "{c:?}");
-        assert!((c[2] - 0.1).abs() < 1e-6 && (c[3] - 0.1).abs() < 1e-6, "{c:?}");
+        assert!(
+            (c[2] - 0.1).abs() < 1e-6 && (c[3] - 0.1).abs() < 1e-6,
+            "{c:?}"
+        );
     }
 }

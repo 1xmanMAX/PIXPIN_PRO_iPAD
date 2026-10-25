@@ -96,7 +96,10 @@ fn si() -> bool {
 /// caja de seccion, lo mismo aislado y lo mismo oculto. El tema y las
 /// aristas no cuentan: cambian como se ve, no lo que se ve.
 pub fn coincide(a: &Estado3d, b: &Estado3d) -> bool {
-    let d = (0..3).map(|k| (a.objetivo[k] - b.objetivo[k]).powi(2)).sum::<f64>().sqrt();
+    let d = (0..3)
+        .map(|k| (a.objetivo[k] - b.objetivo[k]).powi(2))
+        .sum::<f64>()
+        .sqrt();
     let escala = b.dist.abs().max(1e-6);
     let mut dr = (a.rumbo - b.rumbo) % std::f64::consts::TAU;
     if dr > std::f64::consts::PI {
@@ -104,10 +107,16 @@ pub fn coincide(a: &Estado3d, b: &Estado3d) -> bool {
     } else if dr < -std::f64::consts::PI {
         dr += std::f64::consts::TAU;
     }
-    let camara = d < escala * 2e-3 && dr.abs() < 2e-3 && (a.altura - b.altura).abs() < 2e-3 && (a.dist / escala - 1.0).abs() < 2e-3;
+    let camara = d < escala * 2e-3
+        && dr.abs() < 2e-3
+        && (a.altura - b.altura).abs() < 2e-3
+        && (a.dist / escala - 1.0).abs() < 2e-3;
     let seccion = match (a.seccion, b.seccion) {
         (None, None) => true,
-        (Some(p), Some(q)) => p.iter().zip(q.iter()).all(|(x, y)| (x - y).abs() <= escala * 1e-3 + 1e-6),
+        (Some(p), Some(q)) => p
+            .iter()
+            .zip(q.iter())
+            .all(|(x, y)| (x - y).abs() <= escala * 1e-3 + 1e-6),
         _ => false,
     };
     let aislado = match (&a.aislado_clave, &b.aislado_clave) {
@@ -155,7 +164,12 @@ pub fn de_normal(p: [f64; 2], w: u32, h: u32) -> [f64; 2] {
 pub fn caja_en_pixeles(caja: [f64; 4], w: u32, h: u32) -> [f64; 4] {
     let a = de_normal([caja[0], caja[1]], w, h);
     let b = de_normal([caja[2], caja[3]], w, h);
-    [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])]
+    [
+        a[0].min(b[0]),
+        a[1].min(b[1]),
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+    ]
 }
 
 /// **Un id nuevo** para un marcador: la hora en nanosegundos y un contador
@@ -163,7 +177,9 @@ pub fn caja_en_pixeles(caja: [f64; 4], w: u32, h: u32) -> [f64; 4] {
 pub fn nuevo_id() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static CUENTA: AtomicU64 = AtomicU64::new(0);
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64);
     format!("m{:x}{:x}", t, CUENTA.fetch_add(1, Ordering::Relaxed))
 }
 
@@ -235,7 +251,10 @@ pub struct FicheroDeMarcos {
 /// `anot-<uid>.vistas.json` → `anot-<uid>.marcos.json`, `vistas.json` →
 /// `marcos.json`; otro nombre, `<nombre>.marcos.json` a su lado.
 pub fn marcos_junto_a(vistas: &Path) -> PathBuf {
-    let nombre = vistas.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let nombre = vistas
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let nuevo = match nombre.strip_suffix("vistas.json") {
         Some(base) => format!("{base}marcos.json"),
         None => format!("{nombre}.marcos.json"),
@@ -304,7 +323,9 @@ fn juntar(base: &Contenido, mio: &Contenido, suyo: &Contenido) -> Contenido {
 type Sello = Option<(std::time::SystemTime, u64)>;
 
 fn sello_de(f: &Path) -> Sello {
-    std::fs::metadata(f).ok().and_then(|m| Some((m.modified().ok()?, m.len())))
+    std::fs::metadata(f)
+        .ok()
+        .and_then(|m| Some((m.modified().ok()?, m.len())))
 }
 
 /// Cada cuanto se mira si el disco cambio ([`Guardados::mirar_el_disco`]).
@@ -356,10 +377,18 @@ struct Leido {
 
 fn leer_ficheros(vistas: &Path) -> Leido {
     let marcos = marcos_junto_a(vistas);
-    let textos = [std::fs::read_to_string(vistas).ok(), std::fs::read_to_string(&marcos).ok()];
+    let textos = [
+        std::fs::read_to_string(vistas).ok(),
+        std::fs::read_to_string(&marcos).ok(),
+    ];
     // Uno roto no tumba nada: como si no hubiera.
-    let v: FicheroDeVistas = textos[0].as_deref().and_then(|t| serde_json::from_str(t).ok()).unwrap_or_default();
-    let m: Option<FicheroDeMarcos> = textos[1].as_deref().and_then(|t| serde_json::from_str(t).ok());
+    let v: FicheroDeVistas = textos[0]
+        .as_deref()
+        .and_then(|t| serde_json::from_str(t).ok())
+        .unwrap_or_default();
+    let m: Option<FicheroDeMarcos> = textos[1]
+        .as_deref()
+        .and_then(|t| serde_json::from_str(t).ok());
     let mut lista = match &m {
         Some(m) => m.marcos.clone(),
         // Aun sin su fichero: los que traia el de los marcadores.
@@ -371,7 +400,11 @@ fn leer_ficheros(vistas: &Path) -> Leido {
         sin_id = true;
     }
     Leido {
-        c: Contenido { plano: v.plano, modelo: v.modelo, marcos: lista },
+        c: Contenido {
+            plano: v.plano,
+            modelo: v.modelo,
+            marcos: lista,
+        },
         textos,
         restos: [v.resto, m.map(|m| m.resto).unwrap_or_default()],
         sin_id,
@@ -386,7 +419,9 @@ pub fn leer(vistas: &Path) -> Contenido {
 
 impl Guardados {
     pub fn de(fichero: Option<&Path>) -> Guardados {
-        let Some(f) = fichero else { return Guardados::default() };
+        let Some(f) = fichero else {
+            return Guardados::default();
+        };
         let l = leer_ficheros(f);
         let mut g = Guardados {
             c: l.c.clone(),
@@ -419,9 +454,19 @@ impl Guardados {
             marcos: Vec::new(),
             resto: self.restos[0].clone(),
         };
-        let m = FicheroDeMarcos { version: VERSION, marcos: self.c.marcos.clone(), resto: self.restos[1].clone() };
-        let vacios = [self.c.plano.is_empty() && self.c.modelo.is_empty(), self.c.marcos.is_empty()];
-        let t = [serde_json::to_string_pretty(&v).ok(), serde_json::to_string_pretty(&m).ok()];
+        let m = FicheroDeMarcos {
+            version: VERSION,
+            marcos: self.c.marcos.clone(),
+            resto: self.restos[1].clone(),
+        };
+        let vacios = [
+            self.c.plano.is_empty() && self.c.modelo.is_empty(),
+            self.c.marcos.is_empty(),
+        ];
+        let t = [
+            serde_json::to_string_pretty(&v).ok(),
+            serde_json::to_string_pretty(&m).ok(),
+        ];
         let mut salida: [Option<String>; 2] = [None, None];
         for k in 0..2 {
             // Vacio y sin fichero: nada que escribir (el plano en 2D no
@@ -436,7 +481,9 @@ impl Guardados {
     /// Lo escribe: si el disco cambio desde la ultima vez, junta antes; y
     /// solo el fichero que cambia. Sin nada, las listas vacias.
     pub fn guardar(&mut self) {
-        let Some(f) = self.fichero.clone() else { return };
+        let Some(f) = self.fichero.clone() else {
+            return;
+        };
         let disco = leer_ficheros(&f);
         if disco.textos != self.textos {
             self.c = juntar(&self.base, &self.c, &disco.c);
@@ -452,7 +499,9 @@ impl Guardados {
             }
             match escribir_atomico(&rutas[k], t) {
                 Ok(()) => self.textos[k] = Some(t.clone()),
-                Err(e) => tracing::warn!(?e, fichero = %rutas[k].display(), "marcadores: no se pudieron guardar"),
+                Err(e) => {
+                    tracing::warn!(?e, fichero = %rutas[k].display(), "marcadores: no se pudieron guardar")
+                }
             }
         }
         self.base = self.c.clone();
@@ -462,7 +511,9 @@ impl Guardados {
     /// **Lo que trajo la sincronizacion, a la vista**: si un fichero cambio
     /// en el disco, se junta con lo de aqui. Dice si cambio lo que se ve.
     pub fn al_dia(&mut self) -> bool {
-        let Some(f) = self.fichero.clone() else { return false };
+        let Some(f) = self.fichero.clone() else {
+            return false;
+        };
         let sellos = [sello_de(&f), sello_de(&marcos_junto_a(&f))];
         if sellos == self.sellos {
             return false;
@@ -498,7 +549,11 @@ impl Guardados {
     /// algo: la migracion de los marcadores de antes. No guarda.
     pub fn sumar(&mut self, otro: &Contenido) -> bool {
         fn sumar_lista<T: ConId + Clone>(aqui: &mut Vec<T>, de: &[T]) -> bool {
-            let nuevos: Vec<T> = de.iter().filter(|x| !aqui.iter().any(|y| y.id() == x.id())).cloned().collect();
+            let nuevos: Vec<T> = de
+                .iter()
+                .filter(|x| !aqui.iter().any(|y| y.id() == x.id()))
+                .cloned()
+                .collect();
             let hay = !nuevos.is_empty();
             aqui.extend(nuevos);
             hay
@@ -529,19 +584,26 @@ pub fn puntos(isla: [f64; 4], n: usize, alto: u32, e: f64) -> Vec<[f64; 2]> {
     let hueco = (alto as f64 - arriba - 16.0 * e).max(0.0);
     let paso = (PASO * e).min(hueco / n as f64).max(1.0);
     let x = (isla[0] + isla[2]) / 2.0;
-    (0..n).map(|i| [x, arriba + paso * i as f64 + paso / 2.0]).collect()
+    (0..n)
+        .map(|i| [x, arriba + paso * i as f64 + paso / 2.0])
+        .collect()
 }
 
 /// El punto bajo (x, y): dentro de la columna, el mas cercano a lo alto.
 pub fn punto_en(isla: [f64; 4], n: usize, alto: u32, e: f64, x: i32, y: i32) -> Option<usize> {
     let p = puntos(isla, n, alto, e);
-    let (Some(a), Some(b)) = (p.first(), p.last()) else { return None };
+    let (Some(a), Some(b)) = (p.first(), p.last()) else {
+        return None;
+    };
     let medio = (p.get(1).map_or(PASO * e, |q| q[1] - a[1])) / 2.0;
     let (x, y) = (x as f64, y as f64);
     if x < isla[0] || x >= isla[2] || y < a[1] - medio || y >= b[1] + medio {
         return None;
     }
-    p.iter().enumerate().min_by(|(_, u), (_, v)| (u[1] - y).abs().total_cmp(&(v[1] - y).abs())).map(|(i, _)| i)
+    p.iter()
+        .enumerate()
+        .min_by(|(_, u), (_, v)| (u[1] - y).abs().total_cmp(&(v[1] - y).abs()))
+        .map(|(i, _)| i)
 }
 
 fn disco_en(c: &mut Constructor, centro: [f64; 2], r: f64, color: u32, capa: f64) {
@@ -550,7 +612,11 @@ fn disco_en(c: &mut Constructor, centro: [f64; 2], r: f64, color: u32, capa: f64
     for i in 0..n {
         let a0 = i as f64 / n as f64 * std::f64::consts::TAU;
         let a1 = (i + 1) as f64 / n as f64 * std::f64::consts::TAU;
-        t.extend_from_slice(&[centro, [centro[0] + r * a0.cos(), centro[1] + r * a0.sin()], [centro[0] + r * a1.cos(), centro[1] + r * a1.sin()]]);
+        t.extend_from_slice(&[
+            centro,
+            [centro[0] + r * a0.cos(), centro[1] + r * a0.sin()],
+            [centro[0] + r * a1.cos(), centro[1] + r * a1.sin()],
+        ]);
     }
     c.triangulos(&t, color, Some(capa));
 }
@@ -559,19 +625,46 @@ fn disco_en(c: &mut Constructor, centro: [f64; 2], r: f64, color: u32, capa: f64
 /// oscuro del riel; el que tiene el raton encima, mas grande, y el de la
 /// vista de ahora en el azul de lo pulsado.
 #[allow(clippy::too_many_arguments)]
-pub fn pintar_puntos(c: &mut Constructor, textos: &mut Textos, isla: [f64; 4], n: usize, alto: u32, e: f64, encima: Option<usize>, actual: Option<usize>) {
+pub fn pintar_puntos(
+    c: &mut Constructor,
+    textos: &mut Textos,
+    isla: [f64; 4],
+    n: usize,
+    alto: u32,
+    e: f64,
+    encima: Option<usize>,
+    actual: Option<usize>,
+) {
     let cristal = (crate::convertir::rgba(0x26, 0x26, 0x2c) & 0x00ff_ffff) | 0xEB00_0000;
     let azul = crate::convertir::rgba(0x00, 0x60, 0xDF);
     let blanco = crate::convertir::rgba(255, 255, 255);
     let capa = 1e7 * 10.0; // `ventana::CAPA_RAYAS` (la ventana es solo de Windows);
     for (i, p) in puntos(isla, n, alto, e).into_iter().enumerate() {
-        let d = if encima == Some(i) { PUNTO_CERCA } else { PUNTO } * e;
+        let d = if encima == Some(i) {
+            PUNTO_CERCA
+        } else {
+            PUNTO
+        } * e;
         disco_en(c, p, d / 2.0 + 1.0 * e, 0x60ff_ffff, capa * 2.0);
-        disco_en(c, p, d / 2.0, if actual == Some(i) { azul } else { cristal }, capa);
+        disco_en(
+            c,
+            p,
+            d / 2.0,
+            if actual == Some(i) { azul } else { cristal },
+            capa,
+        );
         let t = (i + 1).to_string();
         let tam = 11.0 * e;
         let w = textos.medir_pantalla(&t, tam);
-        textos.en_pantalla(c, &t, p[0] - w / 2.0, p[1] + tam * 0.36, tam, blanco, p[0] + d);
+        textos.en_pantalla(
+            c,
+            &t,
+            p[0] - w / 2.0,
+            p[1] + tam * 0.36,
+            tam,
+            blanco,
+            p[0] + d,
+        );
     }
 }
 
@@ -603,23 +696,42 @@ mod pruebas {
         assert_eq!(fm, d.join("anot-x.marcos.json"));
         let mut g = Guardados::de(Some(&f));
         assert_eq!(g.c, Contenido::default());
-        g.c.modelo.push(Marcador3d { id: nuevo_id(), nombre: "Muro norte".into(), estado: estado() });
-        g.c.plano.push(Marcador2d { id: nuevo_id(), nombre: String::new(), x: 1.5, y: -2.0, ancho: 300.0, alto: 200.0 });
-        g.c.marcos.push(Marco3d { id: nuevo_id(), caja: [-0.2, -0.1, 0.3, 0.2], estado: estado() });
+        g.c.modelo.push(Marcador3d {
+            id: nuevo_id(),
+            nombre: "Muro norte".into(),
+            estado: estado(),
+        });
+        g.c.plano.push(Marcador2d {
+            id: nuevo_id(),
+            nombre: String::new(),
+            x: 1.5,
+            y: -2.0,
+            ancho: 300.0,
+            alto: 200.0,
+        });
+        g.c.marcos.push(Marco3d {
+            id: nuevo_id(),
+            caja: [-0.2, -0.1, 0.3, 0.2],
+            estado: estado(),
+        });
         g.guardar();
         let otra = Guardados::de(Some(&f));
         assert_eq!(otra.c, g.c);
         assert!(coincide(&otra.c.modelo[0].estado, &estado()));
         // Los marcos en su fichero, no en el de los marcadores; los dos con su version.
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
-        let m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&fm).unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&fm).unwrap()).unwrap();
         assert!(v.get("marcos").is_none() && v["version"] == 1 && m["version"] == 1);
         assert_eq!(m["marcos"][0]["caja"][2], 0.3);
         // Sin nada, **no se borra**: las listas vacias (la sincronizacion no lleva borrados).
         g.c = Contenido::default();
         g.guardar();
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
-        let m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&fm).unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&fm).unwrap()).unwrap();
         assert_eq!(v["plano"], serde_json::json!([]));
         assert_eq!(v["modelo"], serde_json::json!([]));
         assert_eq!(m["marcos"], serde_json::json!([]));
@@ -634,13 +746,21 @@ mod pruebas {
     /// no se reescribe (una fecha nueva seria un envio mas).
     #[test]
     fn sin_cambios_no_se_escribe() {
-        let d = std::env::temp_dir().join(format!("pixpin-marcadores-igual-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("pixpin-marcadores-igual-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let f = d.join("vistas.json");
         let mut g = Guardados::de(Some(&f));
         g.guardar();
         assert!(!f.exists() && !marcos_junto_a(&f).exists());
-        g.c.plano.push(Marcador2d { id: "a".into(), nombre: String::new(), x: 0.0, y: 0.0, ancho: 1.0, alto: 1.0 });
+        g.c.plano.push(Marcador2d {
+            id: "a".into(),
+            nombre: String::new(),
+            x: 0.0,
+            y: 0.0,
+            ancho: 1.0,
+            alto: 1.0,
+        });
         g.guardar();
         // El plano en 2D no tiene marcos del modelo: ese fichero no hace falta.
         assert!(f.exists() && !marcos_junto_a(&f).exists());
@@ -655,10 +775,18 @@ mod pruebas {
     /// puso uno y quito otro mientras aqui se ponia un tercero.
     #[test]
     fn al_guardar_se_junta_con_lo_del_disco() {
-        let d = std::env::temp_dir().join(format!("pixpin-marcadores-juntar-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("pixpin-marcadores-juntar-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let f = d.join("anot-x.vistas.json");
-        let m2 = |id: &str| Marcador2d { id: id.into(), nombre: String::new(), x: 0.0, y: 0.0, ancho: 1.0, alto: 1.0 };
+        let m2 = |id: &str| Marcador2d {
+            id: id.into(),
+            nombre: String::new(),
+            x: 0.0,
+            y: 0.0,
+            ancho: 1.0,
+            alto: 1.0,
+        };
         let mut g = Guardados::de(Some(&f));
         g.c.plano = vec![m2("a"), m2("b")];
         g.guardar();
@@ -671,10 +799,13 @@ mod pruebas {
         let ids: Vec<&str> = g.c.plano.iter().map(|m| m.id.as_str()).collect();
         assert_eq!(ids, ["b", "d", "c"]);
         assert_eq!(g.c.plano[0].nombre, "Muro");
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
         assert_eq!(v["delMovil"], 7, "lo que no se conoce se deja");
         // Y con la ventana abierta, lo que llega se ve.
-        let suyo = std::fs::read_to_string(&f).unwrap().replace(r#""id": "d""#, r#""id": "e""#);
+        let suyo = std::fs::read_to_string(&f)
+            .unwrap()
+            .replace(r#""id": "d""#, r#""id": "e""#);
         std::thread::sleep(std::time::Duration::from_millis(30));
         std::fs::write(&f, suyo).unwrap();
         assert!(g.al_dia());
@@ -689,7 +820,8 @@ mod pruebas {
     /// los marcos pasan a su fichero con su `id`, una vez.
     #[test]
     fn el_fichero_de_antes_pasa_al_de_ahora() {
-        let d = std::env::temp_dir().join(format!("pixpin-marcadores-antes-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("pixpin-marcadores-antes-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let f = d.join("vistas.json");
@@ -700,9 +832,11 @@ mod pruebas {
         assert_eq!(g.c.modelo.len(), 1);
         assert_eq!(g.c.marcos.len(), 1);
         assert!(!g.c.marcos[0].id.is_empty());
-        let m: FicheroDeMarcos = serde_json::from_str(&std::fs::read_to_string(marcos_junto_a(&f)).unwrap()).unwrap();
+        let m: FicheroDeMarcos =
+            serde_json::from_str(&std::fs::read_to_string(marcos_junto_a(&f)).unwrap()).unwrap();
         assert_eq!(m.marcos, g.c.marcos);
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
         assert!(v.get("marcos").is_none());
         // Otra vez: los mismos ids (ya escritos).
         assert_eq!(Guardados::de(Some(&f)).c, g.c);
@@ -712,11 +846,24 @@ mod pruebas {
     #[test]
     fn sumar_no_repite_lo_que_ya_esta() {
         let mut g = Guardados::default();
-        let m2 = |id: &str| Marcador2d { id: id.into(), nombre: String::new(), x: 0.0, y: 0.0, ancho: 1.0, alto: 1.0 };
+        let m2 = |id: &str| Marcador2d {
+            id: id.into(),
+            nombre: String::new(),
+            x: 0.0,
+            y: 0.0,
+            ancho: 1.0,
+            alto: 1.0,
+        };
         g.c.plano = vec![m2("a")];
-        assert!(g.sumar(&Contenido { plano: vec![m2("a"), m2("b")], ..Default::default() }));
+        assert!(g.sumar(&Contenido {
+            plano: vec![m2("a"), m2("b")],
+            ..Default::default()
+        }));
         assert_eq!(g.c.plano.len(), 2);
-        assert!(!g.sumar(&Contenido { plano: vec![m2("b")], ..Default::default() }));
+        assert!(!g.sumar(&Contenido {
+            plano: vec![m2("b")],
+            ..Default::default()
+        }));
     }
 
     #[test]
@@ -737,7 +884,8 @@ mod pruebas {
         casi.aristas = false;
         assert!(coincide(&casi, &a), "el tema y las aristas no cuentan");
         // Casos negativos: girar, acercar, mover el corte, aislar u ocultar es otra.
-        let cambios: Vec<Box<dyn Fn(&mut Estado3d)>> = vec![
+        type Cambio = Box<dyn Fn(&mut Estado3d)>;
+        let cambios: Vec<Cambio> = vec![
             Box::new(|e| e.rumbo += 0.05),
             Box::new(|e| e.altura -= 0.05),
             Box::new(|e| e.dist *= 1.1),
@@ -768,12 +916,23 @@ mod pruebas {
 
     #[test]
     fn el_marcador_del_plano_ve_lo_mismo_en_otra_ventana() {
-        let m = Marcador2d { id: "a".into(), nombre: String::new(), x: 0.0, y: 0.0, ancho: 1000.0, alto: 500.0 };
+        let m = Marcador2d {
+            id: "a".into(),
+            nombre: String::new(),
+            x: 0.0,
+            y: 0.0,
+            ancho: 1000.0,
+            alto: 500.0,
+        };
         assert_eq!(m.px_en(1000, 500), 1.0);
         // Mas estrecha: manda el ancho.
         assert_eq!(m.px_en(500, 500), 2.0);
         // Caso negativo: medidas imposibles no dan un zoom imposible.
-        let roto = Marcador2d { ancho: f64::NAN, alto: 0.0, ..m };
+        let roto = Marcador2d {
+            ancho: f64::NAN,
+            alto: 0.0,
+            ..m
+        };
         assert_eq!(roto.px_en(100, 100), 1.0);
     }
 
@@ -784,7 +943,10 @@ mod pruebas {
         assert_eq!(p.len(), 3);
         assert!(p[0][1] > isla[3] && (p[1][1] - p[0][1] - 30.0).abs() < 1e-9);
         assert_eq!(punto_en(isla, 3, 800, 1.0, 962, p[1][1] as i32), Some(1));
-        assert_eq!(punto_en(isla, 3, 800, 1.0, 962, p[2][1] as i32 + 4), Some(2));
+        assert_eq!(
+            punto_en(isla, 3, 800, 1.0, 962, p[2][1] as i32 + 4),
+            Some(2)
+        );
         // Fuera de la columna, ninguno.
         assert_eq!(punto_en(isla, 3, 800, 1.0, 500, p[1][1] as i32), None);
         assert_eq!(punto_en(isla, 3, 800, 1.0, 962, 700), None);

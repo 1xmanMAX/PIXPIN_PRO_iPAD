@@ -239,7 +239,14 @@ pub fn elementos_de_tabla_con_juntas(
     medir: Medir<'_>,
     con_cabecera: bool,
 ) -> Vec<Elemento> {
-    elementos_de_tabla_con_aspecto(celdas, estilo, origen, medir, con_cabecera, &Aspecto::default())
+    elementos_de_tabla_con_aspecto(
+        celdas,
+        estilo,
+        origen,
+        medir,
+        con_cabecera,
+        &Aspecto::default(),
+    )
 }
 
 /// **Lo que se midio de una tabla de una foto** (16-oct, «que quede casi
@@ -388,7 +395,10 @@ pub fn elementos_de_tabla_con_aspecto(
     let mut out = Vec::new();
     // Los fondos medidos, celda a celda (debajo de todo); sin ellos, el gris
     // de la cabecera de siempre.
-    let fondos = aspecto.fondos.as_ref().filter(|f| f.len() == n_filas && f.iter().all(|x| x.len() == columnas));
+    let fondos = aspecto
+        .fondos
+        .as_ref()
+        .filter(|f| f.len() == n_filas && f.iter().all(|x| x.len() == columnas));
     if let Some(fondos) = fondos {
         for &(f, c) in &visibles {
             let Some(color) = fondos[f][c] else { continue };
@@ -397,7 +407,12 @@ pub fn elementos_de_tabla_con_aspecto(
                 relleno: Some(color),
                 estilo_relleno: EstiloRelleno::Solido,
                 trazo: ColorRgba { a: 0.0, ..color },
-                ..caja(izquierdas[c], arribas[f], izquierdas[c + ancho] - izquierdas[c], arribas[f + alto] - arribas[f])
+                ..caja(
+                    izquierdas[c],
+                    arribas[f],
+                    izquierdas[c + ancho] - izquierdas[c],
+                    arribas[f + alto] - arribas[f],
+                )
             });
         }
     } else if con_cabecera && n_filas > 1 {
@@ -412,7 +427,10 @@ pub fn elementos_de_tabla_con_aspecto(
         });
     }
     out.push(caja(origen.x, origen.y, ancho_total, alto_total));
-    let estilo_borde = Estilo { color: color_borde, ..estilo.clone() };
+    let estilo_borde = Estilo {
+        color: color_borde,
+        ..estilo.clone()
+    };
     let raya = |a: (f32, f32), b: (f32, f32)| {
         elemento_linea(
             vec![Punto2::nuevo(a.0, a.1), Punto2::nuevo(b.0, b.1)],

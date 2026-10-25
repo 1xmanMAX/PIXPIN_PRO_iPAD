@@ -15,10 +15,23 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitiva {
     /// Una polilinea (cerrada si el ultimo punto repite el primero).
-    Raya { puntos: Vec<[f64; 3]>, color: Option<u32> },
+    Raya {
+        puntos: Vec<[f64; 3]>,
+        color: Option<u32>,
+    },
     /// Triangulos, de tres en tres puntos.
-    Caras { puntos: Vec<[f64; 3]>, color: Option<u32> },
-    Texto { pos: [f64; 3], dir: [f64; 3], alto: f64, ancho: f64, texto: String, color: Option<u32> },
+    Caras {
+        puntos: Vec<[f64; 3]>,
+        color: Option<u32>,
+    },
+    Texto {
+        pos: [f64; 3],
+        dir: [f64; 3],
+        alto: f64,
+        ancho: f64,
+        texto: String,
+        color: Option<u32>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,7 +71,12 @@ impl Lector<'_> {
 /// Una matriz 4x4 por filas (la de `PUSH_MODEL_XFORM`).
 type Matriz = [[f64; 4]; 4];
 
-const IDENTIDAD: Matriz = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]];
+const IDENTIDAD: Matriz = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+];
 
 fn aplicar(m: &Matriz, p: [f64; 3]) -> [f64; 3] {
     let w = m[3][0] * p[0] + m[3][1] * p[1] + m[3][2] * p[2] + m[3][3];
@@ -81,12 +99,20 @@ fn por(a: &Matriz, b: &Matriz) -> Matriz {
 }
 
 fn cruz(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 fn unit(a: [f64; 3]) -> [f64; 3] {
     let l = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
-    if l < 1e-300 { [0.0, 0.0, 1.0] } else { [a[0] / l, a[1] / l, a[2] / l] }
+    if l < 1e-300 {
+        [0.0, 0.0, 1.0]
+    } else {
+        [a[0] / l, a[1] / l, a[2] / l]
+    }
 }
 
 /// Un arco en 3D: centro, radio, normal, vector al inicio y barrido.
@@ -99,7 +125,11 @@ fn arco(c: [f64; 3], r: f64, n: [f64; 3], inicio: [f64; 3], barrido: f64) -> Vec
         .map(|k| {
             let t = barrido * k as f64 / pasos as f64;
             let (s, co) = t.sin_cos();
-            [c[0] + r * (u[0] * co + v[0] * s), c[1] + r * (u[1] * co + v[1] * s), c[2] + r * (u[2] * co + v[2] * s)]
+            [
+                c[0] + r * (u[0] * co + v[0] * s),
+                c[1] + r * (u[1] * co + v[1] * s),
+                c[2] + r * (u[2] * co + v[2] * s),
+            ]
         })
         .collect()
 }
@@ -160,7 +190,10 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
             return None;
         }
         let fin = pos + tam;
-        let mut l = Lector { b: &datos[..fin], i: pos + 8 };
+        let mut l = Lector {
+            b: &datos[..fin],
+            i: pos + 8,
+        };
         let m = *pila.last().unwrap_or(&IDENTIDAD);
         let t = |p: [f64; 3]| aplicar(&m, p);
         tipos.push(tipo);
@@ -168,8 +201,15 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
             2 => {
                 // Circulo: centro, radio, normal.
                 if let (Some(c), Some(rad), Some(nor)) = (l.p(), l.d(), l.p()) {
-                    let u = if nor[2].abs() < 0.9 { cruz(nor, [0.0, 0.0, 1.0]) } else { cruz(nor, [1.0, 0.0, 0.0]) };
-                    let pts = arco(c, rad, nor, u, std::f64::consts::TAU).into_iter().map(t).collect();
+                    let u = if nor[2].abs() < 0.9 {
+                        cruz(nor, [0.0, 0.0, 1.0])
+                    } else {
+                        cruz(nor, [1.0, 0.0, 0.0])
+                    };
+                    let pts = arco(c, rad, nor, u, std::f64::consts::TAU)
+                        .into_iter()
+                        .map(t)
+                        .collect();
                     out.push(Primitiva::Raya { puntos: pts, color });
                 }
             }
@@ -178,13 +218,18 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                     && let Some((o, rad, nor)) = circunferencia_3p(a, b, c)
                 {
                     let u = [a[0] - o[0], a[1] - o[1], a[2] - o[2]];
-                    let pts = arco(o, rad, nor, u, std::f64::consts::TAU).into_iter().map(t).collect();
+                    let pts = arco(o, rad, nor, u, std::f64::consts::TAU)
+                        .into_iter()
+                        .map(t)
+                        .collect();
                     out.push(Primitiva::Raya { puntos: pts, color });
                 }
             }
             4 => {
                 // Arco: centro, radio, normal, vector de inicio, barrido.
-                if let (Some(c), Some(rad), Some(nor), Some(u), Some(b)) = (l.p(), l.d(), l.p(), l.p(), l.d()) {
+                if let (Some(c), Some(rad), Some(nor), Some(u), Some(b)) =
+                    (l.p(), l.d(), l.p(), l.p(), l.d())
+                {
                     let pts = arco(c, rad, nor, u, b).into_iter().map(t).collect();
                     out.push(Primitiva::Raya { puntos: pts, color });
                 }
@@ -195,7 +240,8 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                 {
                     let ang = |p: [f64; 3], u: [f64; 3], v: [f64; 3]| {
                         let d = [p[0] - o[0], p[1] - o[1], p[2] - o[2]];
-                        (d[0] * v[0] + d[1] * v[1] + d[2] * v[2]).atan2(d[0] * u[0] + d[1] * u[1] + d[2] * u[2])
+                        (d[0] * v[0] + d[1] * v[1] + d[2] * v[2])
+                            .atan2(d[0] * u[0] + d[1] * u[1] + d[2] * u[2])
                     };
                     let u = unit([a[0] - o[0], a[1] - o[1], a[2] - o[2]]);
                     let v = cruz(nor, u);
@@ -215,7 +261,10 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                     if tipo == 7 && pts.len() > 2 {
                         pts.push(pts[0]);
                     }
-                    out.push(Primitiva::Raya { puntos: pts.into_iter().map(t).collect(), color });
+                    out.push(Primitiva::Raya {
+                        puntos: pts.into_iter().map(t).collect(),
+                        color,
+                    });
                 }
             }
             8 => {
@@ -228,7 +277,12 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                     let mut tri = Vec::new();
                     for i in 0..f.saturating_sub(1) {
                         for j in 0..c.saturating_sub(1) {
-                            let (a, b, cc, d) = (pts[i * c + j], pts[i * c + j + 1], pts[(i + 1) * c + j + 1], pts[(i + 1) * c + j]);
+                            let (a, b, cc, d) = (
+                                pts[i * c + j],
+                                pts[i * c + j + 1],
+                                pts[(i + 1) * c + j + 1],
+                                pts[(i + 1) * c + j],
+                            );
                             tri.extend([a, b, cc, a, cc, d]);
                         }
                     }
@@ -255,9 +309,14 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                         while i < lista.len() {
                             let k = lista[i];
                             let cuantos = k.unsigned_abs() as usize;
-                            let cara = &lista[(i + 1).min(lista.len())..(i + 1 + cuantos).min(lista.len())];
+                            let cara = &lista
+                                [(i + 1).min(lista.len())..(i + 1 + cuantos).min(lista.len())];
                             if k > 2 {
-                                let v: Vec<usize> = cara.iter().map(|&x| x as usize).filter(|&x| x < pts.len()).collect();
+                                let v: Vec<usize> = cara
+                                    .iter()
+                                    .map(|&x| x as usize)
+                                    .filter(|&x| x < pts.len())
+                                    .collect();
                                 if v.len() == cuantos {
                                     for j in 1..v.len() - 1 {
                                         tri.extend([pts[v[0]], pts[v[j]], pts[v[j + 1]]]);
@@ -276,7 +335,11 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                 if let Some(v) = l.u() {
                     let metodo = v >> 24;
                     color = match metodo {
-                        0xC2 => Some(crate::convertir::rgba((v >> 16) as u8, (v >> 8) as u8, v as u8)),
+                        0xC2 => Some(crate::convertir::rgba(
+                            (v >> 16) as u8,
+                            (v >> 8) as u8,
+                            v as u8,
+                        )),
                         0xC3 => color_aci(v & 0xff),
                         _ => None,
                     };
@@ -303,16 +366,31 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
             }
             10 | 11 => {
                 // Texto ANSI: posicion, normal, direccion, alto, ancho, oblicuo y la cadena.
-                if let (Some(p), Some(_n), Some(d), Some(h), Some(w), Some(_o)) = (l.p(), l.p(), l.p(), l.d(), l.d(), l.d()) {
+                if let (Some(p), Some(_n), Some(d), Some(h), Some(w), Some(_o)) =
+                    (l.p(), l.p(), l.p(), l.d(), l.d(), l.d())
+                {
                     let resto = &datos[l.i.min(fin)..fin];
-                    let txt: String = resto.iter().take_while(|&&b| b != 0).map(|&b| b as char).collect();
+                    let txt: String = resto
+                        .iter()
+                        .take_while(|&&b| b != 0)
+                        .map(|&b| b as char)
+                        .collect();
                     if !txt.trim().is_empty() {
-                        out.push(Primitiva::Texto { pos: t(p), dir: d, alto: h, ancho: w, texto: txt, color });
+                        out.push(Primitiva::Texto {
+                            pos: t(p),
+                            dir: d,
+                            alto: h,
+                            ancho: w,
+                            texto: txt,
+                            color,
+                        });
                     }
                 }
             }
             36 | 38 => {
-                if let (Some(p), Some(_n), Some(d), Some(h), Some(w), Some(_o)) = (l.p(), l.p(), l.p(), l.d(), l.d(), l.d()) {
+                if let (Some(p), Some(_n), Some(d), Some(h), Some(w), Some(_o)) =
+                    (l.p(), l.p(), l.p(), l.d(), l.d(), l.d())
+                {
                     // Despues de los numeros, la cadena UTF-16 hasta su cero.
                     let mut i = l.i;
                     let mut u16s = Vec::new();
@@ -327,7 +405,14 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
                     let txt = String::from_utf16_lossy(&u16s);
                     textos.push(txt.clone());
                     if !txt.trim().is_empty() {
-                        out.push(Primitiva::Texto { pos: t(p), dir: d, alto: h, ancho: w, texto: txt, color });
+                        out.push(Primitiva::Texto {
+                            pos: t(p),
+                            dir: d,
+                            alto: h,
+                            ancho: w,
+                            texto: txt,
+                            color,
+                        });
                     }
                 }
             }
@@ -336,13 +421,18 @@ pub fn leer(datos: &[u8]) -> Option<Reserva> {
         pos = fin;
     }
     // Solo la caja: un texto «Clase (Aplicacion)» y unas rayas.
-    let solo_caja = textos.len() == 1
-        && tipos.iter().all(|t| matches!(t, 36 | 38 | 6 | 21 | 1))
-        && {
+    let solo_caja =
+        textos.len() == 1 && tipos.iter().all(|t| matches!(t, 36 | 38 | 6 | 21 | 1)) && {
             let t = textos[0].trim();
-            t.ends_with(')') && t.contains(" (") && !t.split(" (").next().unwrap_or(" ").contains(' ')
+            t.ends_with(')')
+                && t.contains(" (")
+                && !t.split(" (").next().unwrap_or(" ").contains(' ')
         };
-    Some(if solo_caja { Reserva::SoloCaja(textos[0].clone()) } else { Reserva::Dibujo(out) })
+    Some(if solo_caja {
+        Reserva::SoloCaja(textos[0].clone())
+    } else {
+        Reserva::Dibujo(out)
+    })
 }
 
 #[cfg(test)]
@@ -385,13 +475,21 @@ mod pruebas {
         let mut pl = 2u32.to_le_bytes().to_vec();
         pl.extend(d(&[0.0, 0.0, 5.0, 10.0, 0.0, 6.0]));
         let mut sh = 4u32.to_le_bytes().to_vec();
-        sh.extend(d(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]));
+        sh.extend(d(&[
+            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+        ]));
         sh.extend(5u32.to_le_bytes());
         for x in [4i32, 0, 1, 2, 3] {
             sh.extend(x.to_le_bytes());
         }
-        let m = metafile(&[registro(14, &1u32.to_le_bytes()), registro(6, &pl), registro(9, &sh)]);
-        let Some(Reserva::Dibujo(p)) = leer(&m) else { panic!("no se leyo") };
+        let m = metafile(&[
+            registro(14, &1u32.to_le_bytes()),
+            registro(6, &pl),
+            registro(9, &sh),
+        ]);
+        let Some(Reserva::Dibujo(p)) = leer(&m) else {
+            panic!("no se leyo")
+        };
         assert_eq!(p.len(), 2);
         match &p[0] {
             Primitiva::Raya { puntos, color } => {
@@ -410,8 +508,15 @@ mod pruebas {
     fn la_caja_de_civil_sin_dibujo_se_reconoce() {
         let mut pl = 2u32.to_le_bytes().to_vec();
         pl.extend(d(&[0.0, 0.0, 0.0, 10.0, 0.0, 0.0]));
-        let m = metafile(&[registro(36, &texto("AeccDbSurfaceTin (AeccLand130)")), registro(6, &pl), registro(21, &[])]);
-        assert_eq!(leer(&m), Some(Reserva::SoloCaja("AeccDbSurfaceTin (AeccLand130)".into())));
+        let m = metafile(&[
+            registro(36, &texto("AeccDbSurfaceTin (AeccLand130)")),
+            registro(6, &pl),
+            registro(21, &[]),
+        ]);
+        assert_eq!(
+            leer(&m),
+            Some(Reserva::SoloCaja("AeccDbSurfaceTin (AeccLand130)".into()))
+        );
         // Caso negativo: un texto normal con rayas es dibujo de verdad.
         let m = metafile(&[registro(36, &texto("PK 0+120")), registro(6, &pl)]);
         assert!(matches!(leer(&m), Some(Reserva::Dibujo(_))));
@@ -421,12 +526,21 @@ mod pruebas {
 
     #[test]
     fn la_transformacion_se_aplica_y_se_quita() {
-        let mut mx = d(&[1.0, 0.0, 0.0, 100.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
+        let mut mx = d(&[
+            1.0, 0.0, 0.0, 100.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ]);
         mx.truncate(128);
         let mut pl = 2u32.to_le_bytes().to_vec();
         pl.extend(d(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
-        let m = metafile(&[registro(29, &mx), registro(6, &pl), registro(31, &[]), registro(6, &pl)]);
-        let Some(Reserva::Dibujo(p)) = leer(&m) else { panic!() };
+        let m = metafile(&[
+            registro(29, &mx),
+            registro(6, &pl),
+            registro(31, &[]),
+            registro(6, &pl),
+        ]);
+        let Some(Reserva::Dibujo(p)) = leer(&m) else {
+            panic!()
+        };
         let x0 = |p: &Primitiva| match p {
             Primitiva::Raya { puntos, .. } => puntos[0][0],
             _ => f64::NAN,

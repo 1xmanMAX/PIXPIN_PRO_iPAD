@@ -29,7 +29,19 @@ pub enum Valor {
     Error(u8),
 }
 
-pub const ERRORES: [&str; 11] = ["#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A", "#GETTING_DATA", "#SPILL!", "#CALC!", "#FIELD!"];
+pub const ERRORES: [&str; 11] = [
+    "#NULL!",
+    "#DIV/0!",
+    "#VALUE!",
+    "#REF!",
+    "#NAME?",
+    "#NUM!",
+    "#N/A",
+    "#GETTING_DATA",
+    "#SPILL!",
+    "#CALC!",
+    "#FIELD!",
+];
 
 /// Una celda: 24 bytes. Dos millones caben en 48 MB.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -100,7 +112,12 @@ impl Rango {
         let (a, b) = s.split_once(':').unwrap_or((s, s));
         let (f0, c0) = referencia(a.as_bytes())?;
         let (f1, c1) = referencia(b.as_bytes())?;
-        Some(Rango { fila0: f0.min(f1), col0: c0.min(c1), fila1: f0.max(f1), col1: c0.max(c1) })
+        Some(Rango {
+            fila0: f0.min(f1),
+            col0: c0.min(c1),
+            fila1: f0.max(f1),
+            col1: c0.max(c1),
+        })
     }
 }
 
@@ -114,7 +131,9 @@ pub fn referencia(s: &[u8]) -> Option<(u32, u32)> {
     }
     let ini = i;
     while i < s.len() && s[i].is_ascii_alphabetic() {
-        col = col.checked_mul(26)?.checked_add((s[i].to_ascii_uppercase() - b'A' + 1) as u32)?;
+        col = col
+            .checked_mul(26)?
+            .checked_add((s[i].to_ascii_uppercase() - b'A' + 1) as u32)?;
         i += 1;
     }
     if i == ini || col > 16384 {
@@ -144,13 +163,19 @@ fn columna_de(s: &[u8]) -> Option<u32> {
             continue;
         }
         if b.is_ascii_alphabetic() {
-            col = col.checked_mul(26)?.checked_add((b.to_ascii_uppercase() - b'A' + 1) as u32)?;
+            col = col
+                .checked_mul(26)?
+                .checked_add((b.to_ascii_uppercase() - b'A' + 1) as u32)?;
             vista = true;
         } else {
             break;
         }
     }
-    if !vista || col > 16384 { None } else { Some(col - 1) }
+    if !vista || col > 16384 {
+        None
+    } else {
+        Some(col - 1)
+    }
 }
 
 /// El nombre de una columna: 0 -> `A`, 27 -> `AB`.
@@ -323,7 +348,11 @@ impl LectorHoja {
         paleta: Arc<[u32]>,
     ) -> Option<LectorHoja> {
         // Una hoja grande se descomprime en otro hilo mientras esta lee.
-        let fuente = if paquete.comprimido(ruta).unwrap_or(0) > 512 * 1024 { paquete.lector_en_hilo(ruta)? } else { paquete.lector(ruta)? };
+        let fuente = if paquete.comprimido(ruta).unwrap_or(0) > 512 * 1024 {
+            paquete.lector_en_hilo(ruta)?
+        } else {
+            paquete.lector(ruta)?
+        };
         Some(LectorHoja {
             fuente,
             buf: Vec::with_capacity(PEDAZO * 2),
@@ -337,11 +366,23 @@ impl LectorHoja {
                 estado: Estado::Cabecera,
                 tanda: Tanda::default(),
                 fila_abierta: false,
-                fila: Fila { indice: 0, alto: f32::NAN, oculta: false, xf: None, sin_alto: true, inicio: 0, fin: 0 },
+                fila: Fila {
+                    indice: 0,
+                    alto: f32::NAN,
+                    oculta: false,
+                    xf: None,
+                    sin_alto: true,
+                    inicio: 0,
+                    fin: 0,
+                },
                 ultima_fila: -1,
                 max_tam_fila: 0.0,
                 celda_abierta: false,
-                celda: Celda { col: 0, xf: 0, valor: Valor::Vacio },
+                celda: Celda {
+                    col: 0,
+                    xf: 0,
+                    valor: Valor::Vacio,
+                },
                 tipo: [0; 9],
                 tipo_len: 0,
                 ultima_col: -1,
@@ -369,14 +410,23 @@ impl LectorHoja {
             if self.p.estado == Estado::Cola {
                 // El resto entero, sin mirar dentro: es poco.
                 self.leer_hasta_el_final();
-                let cola = self.p.leer_cola(&self.buf[self.pos..], &self.paquete, &self.ruta, &self.tema, &self.paleta);
+                let cola = self.p.leer_cola(
+                    &self.buf[self.pos..],
+                    &self.paquete,
+                    &self.ruta,
+                    &self.tema,
+                    &self.paleta,
+                );
                 self.p.tanda.cola = Some(cola);
                 self.p.estado = Estado::Fin;
                 break;
             }
             // El camino rapido de la celda corriente (`<c ...><v>..</v></c>`):
             // casi todo el XML de una hoja grande es eso.
-            if self.p.estado == Estado::Datos && self.p.fila_abierta && self.buf[self.pos..].starts_with(b"<c ") {
+            if self.p.estado == Estado::Datos
+                && self.p.fila_abierta
+                && self.buf[self.pos..].starts_with(b"<c ")
+            {
                 if let Some(n) = self.p.celda_rapida(&self.buf[self.pos..]) {
                     self.pos += n;
                     continue;
@@ -386,7 +436,9 @@ impl LectorHoja {
             match paso {
                 Paso::Evento(e) => {
                     let antes_de_la_etiqueta = self.pos;
-                    let parar = self.p.evento(e, &self.buf, antes_de_la_etiqueta, hasta_fila, max_celdas);
+                    let parar =
+                        self.p
+                            .evento(e, &self.buf, antes_de_la_etiqueta, hasta_fila, max_celdas);
                     if parar {
                         break;
                     }
@@ -485,12 +537,27 @@ fn num<T: std::str::FromStr>(v: &[u8]) -> Option<T> {
 
 impl Proceso {
     /// Atiende un evento. Devuelve `true` si hay que entregar la tanda.
-    fn evento(&mut self, e: Evento<'_>, buf: &[u8], pos_tras: usize, hasta_fila: u32, max_celdas: usize) -> bool {
+    fn evento(
+        &mut self,
+        e: Evento<'_>,
+        buf: &[u8],
+        pos_tras: usize,
+        hasta_fila: u32,
+        max_celdas: usize,
+    ) -> bool {
         match self.estado {
             Estado::Cabecera => {
-                if let Evento::Abre { nombre: b"sheetData", vacia, .. } = e {
+                if let Evento::Abre {
+                    nombre: b"sheetData",
+                    vacia,
+                    ..
+                } = e
+                {
                     // Lo de antes de `<sheetData` se lee como arbol.
-                    let ini = buf[..pos_tras].iter().rposition(|&b| b == b'<').unwrap_or(0);
+                    let ini = buf[..pos_tras]
+                        .iter()
+                        .rposition(|&b| b == b'<')
+                        .unwrap_or(0);
                     let cab = cabecera_de(&xml::arbol(&buf[..ini]));
                     self.tanda.cabecera = Some(cab);
                     self.estado = if vacia { Estado::Cola } else { Estado::Datos };
@@ -505,7 +572,11 @@ impl Proceso {
 
     fn dato(&mut self, e: Evento<'_>, hasta_fila: u32, max_celdas: usize) -> bool {
         match e {
-            Evento::Abre { nombre, attrs, vacia } => match nombre {
+            Evento::Abre {
+                nombre,
+                attrs,
+                vacia,
+            } => match nombre {
                 b"c" => {
                     if !self.fila_abierta {
                         self.abrir_fila(b"");
@@ -530,7 +601,11 @@ impl Proceso {
                     }
                     let col = col.unwrap_or((self.ultima_col + 1).clamp(0, 16383) as u32);
                     self.ultima_col = col as i64;
-                    self.celda = Celda { col, xf, valor: Valor::Vacio };
+                    self.celda = Celda {
+                        col,
+                        xf,
+                        valor: Valor::Vacio,
+                    };
                     if vacia {
                         self.cerrar_celda();
                     }
@@ -602,13 +677,25 @@ impl Proceso {
     }
 
     fn abrir_fila(&mut self, attrs: &[u8]) {
-        let mut f = Fila { indice: 0, alto: f32::NAN, oculta: false, xf: None, sin_alto: true, inicio: 0, fin: 0 };
+        let mut f = Fila {
+            indice: 0,
+            alto: f32::NAN,
+            oculta: false,
+            xf: None,
+            sin_alto: true,
+            inicio: 0,
+            fin: 0,
+        };
         let mut r: Option<u32> = None;
         let mut s: Option<u32> = None;
         let mut formato_propio = false;
         for (n, v) in xml::atributos(attrs) {
             match n {
-                b"r" => r = num::<u32>(v).filter(|&x| (1..=1_048_576).contains(&x)).map(|x| x - 1),
+                b"r" => {
+                    r = num::<u32>(v)
+                        .filter(|&x| (1..=1_048_576).contains(&x))
+                        .map(|x| x - 1)
+                }
                 b"ht" => {
                     if let Some(h) = num::<f32>(v) {
                         if h.is_finite() && (0.0..=409.5).contains(&h) {
@@ -649,7 +736,8 @@ impl Proceso {
         }
         // Sin `ht`, Excel ajusta la fila a la letra mas grande que tenga.
         if f.alto.is_nan() && self.max_tam_fila > self.tam_normal + 0.01 {
-            f.alto = (self.alto_normal * self.max_tam_fila / self.tam_normal * 4.0 / 3.0).round() * 0.75;
+            f.alto =
+                (self.alto_normal * self.max_tam_fila / self.tam_normal * 4.0 / 3.0).round() * 0.75;
         }
         if f.fin > f.inicio || f.xf.is_some() || f.oculta || !f.alto.is_nan() {
             self.tanda.filas.push(f);
@@ -703,7 +791,15 @@ impl Proceso {
             i += 4;
         }
         // Todo bien: ahora si, como el camino general.
-        self.dato(Evento::Abre { nombre: b"c", attrs, vacia: false }, u32::MAX, usize::MAX);
+        self.dato(
+            Evento::Abre {
+                nombre: b"c",
+                attrs,
+                vacia: false,
+            },
+            u32::MAX,
+            usize::MAX,
+        );
         if let Some(v) = valor {
             self.tiene_v = true;
             self.texto.extend_from_slice(v);
@@ -721,7 +817,9 @@ impl Proceso {
             Valor::Vacio
         } else {
             match tipo {
-                b"s" => num::<u32>(texto).map(Valor::Compartido).unwrap_or(Valor::Vacio),
+                b"s" => num::<u32>(texto)
+                    .map(Valor::Compartido)
+                    .unwrap_or(Valor::Vacio),
                 b"str" | b"inlineStr" => {
                     let s = xml::desescapar(texto);
                     let s = xml::sin_escapes_ooxml(&s).into_owned();
@@ -733,11 +831,16 @@ impl Proceso {
                     let s = String::from_utf8_lossy(texto.trim_ascii());
                     Valor::Error(ERRORES.iter().position(|e| *e == s).unwrap_or(2) as u8)
                 }
-                b"d" => serie_de_iso(&String::from_utf8_lossy(texto)).map(Valor::Numero).unwrap_or(Valor::Vacio),
+                b"d" => serie_de_iso(&String::from_utf8_lossy(texto))
+                    .map(Valor::Numero)
+                    .unwrap_or(Valor::Vacio),
                 _ => num::<f64>(texto).map(Valor::Numero).unwrap_or(Valor::Vacio),
             }
         };
-        let c = Celda { valor, ..self.celda };
+        let c = Celda {
+            valor,
+            ..self.celda
+        };
         if c.valor != Valor::Vacio || c.xf != 0 {
             if let Some(&t) = self.tam_por_xf.get(c.xf as usize) {
                 if c.valor != Valor::Vacio && t > self.max_tam_fila {
@@ -754,12 +857,23 @@ impl Proceso {
         }
     }
 
-    fn leer_cola(&mut self, resto: &[u8], paquete: &Paquete, ruta: &str, tema: &crate::estilos::Tema, paleta: &[u32]) -> Cola {
+    fn leer_cola(
+        &mut self,
+        resto: &[u8],
+        paquete: &Paquete,
+        ruta: &str,
+        tema: &crate::estilos::Tema,
+        paleta: &[u32],
+    ) -> Cola {
         let raiz = xml::arbol(resto);
         let mut cola = Cola::default();
         let mut v = Vec::new();
         raiz.todos("mergeCell", &mut v);
-        cola.combinadas = v.iter().filter_map(|m| Rango::leer(m.attr("ref")?)).filter(|r| r.fila0 != r.fila1 || r.col0 != r.col1).collect();
+        cola.combinadas = v
+            .iter()
+            .filter_map(|m| Rango::leer(m.attr("ref")?))
+            .filter(|r| r.fila0 != r.fila1 || r.col0 != r.col1)
+            .collect();
         cola.combinadas.sort_by_key(|r| (r.fila0, r.col0));
         let rels = paquete.relaciones(ruta);
         let mut v = Vec::new();
@@ -768,24 +882,34 @@ impl Proceso {
             let Some(rango) = h.attr("ref").and_then(Rango::leer) else {
                 continue;
             };
-            let (destino, externo) = match h.attr("id").and_then(|id| rels.iter().find(|r| r.id == id)) {
-                Some(r) => (r.destino.clone(), r.externa),
-                None => (h.attr("location").unwrap_or_default().to_string(), false),
-            };
-            cola.hipervinculos.push(Hipervinculo { rango, destino, externo, ayuda: h.attr("tooltip").map(str::to_string) });
+            let (destino, externo) =
+                match h.attr("id").and_then(|id| rels.iter().find(|r| r.id == id)) {
+                    Some(r) => (r.destino.clone(), r.externa),
+                    None => (h.attr("location").unwrap_or_default().to_string(), false),
+                };
+            cola.hipervinculos.push(Hipervinculo {
+                rango,
+                destino,
+                externo,
+                ayuda: h.attr("tooltip").map(str::to_string),
+            });
         }
         let mut v = Vec::new();
         raiz.todos("drawing", &mut v);
         for d in v {
             if let Some(r) = d.attr("id").and_then(|id| rels.iter().find(|r| r.id == id)) {
-                cola.dibujos.extend(dibujos::leer(paquete, &r.destino, tema, paleta));
+                cola.dibujos
+                    .extend(dibujos::leer(paquete, &r.destino, tema, paleta));
             }
         }
         let mut v = Vec::new();
         raiz.todos("tablePart", &mut v);
         for d in v {
             if let Some(r) = d.attr("id").and_then(|id| rels.iter().find(|r| r.id == id)) {
-                if let Some(t) = paquete.leer(&r.destino).and_then(|b| crate::tablas::leer(&xml::arbol(&b))) {
+                if let Some(t) = paquete
+                    .leer(&r.destino)
+                    .and_then(|b| crate::tablas::leer(&xml::arbol(&b)))
+                {
                     cola.tablas.push(t);
                 }
             }
@@ -794,7 +918,9 @@ impl Proceso {
         cola.validaciones = crate::validacion::leer(&raiz);
         (cola.grupos_mini, cola.minigraficos) = crate::minigraficos::leer(&raiz, tema, paleta);
         cola.comentarios = crate::comentarios::leer(paquete, &rels);
-        cola.autofiltro = raiz.hijo("autoFilter").and_then(|a| crate::filtros::AutoFiltro::leer(a, None));
+        cola.autofiltro = raiz
+            .hijo("autoFilter")
+            .and_then(|a| crate::filtros::AutoFiltro::leer(a, None));
         cola
     }
 }
@@ -827,7 +953,11 @@ fn cabecera_de(raiz: &Nodo) -> Cabecera {
     }
     if let Some(sp) = ws.hijo("sheetPr") {
         if let Some(col) = sp.hijo("tabColor") {
-            c.color_pestana = crate::estilos::color_de(col, &crate::estilos::Tema::default(), &crate::estilos::PALETA);
+            c.color_pestana = crate::estilos::color_de(
+                col,
+                &crate::estilos::Tema::default(),
+                &crate::estilos::PALETA,
+            );
         }
     }
     if let Some(sv) = ws.hijo("sheetViews").and_then(|s| s.hijo("sheetView")) {
@@ -837,18 +967,31 @@ fn cabecera_de(raiz: &Nodo) -> Cabecera {
         v.cuadricula = !no("showGridLines");
         v.encabezados = !no("showRowColHeaders");
         v.derecha_a_izquierda = si("rightToLeft");
-        v.zoom = sv.attr("zoomScale").and_then(|z| z.parse().ok()).filter(|z| (10..=400).contains(z)).unwrap_or(100);
-        if let Some((f, col)) = sv.attr("topLeftCell").and_then(|t| referencia(t.as_bytes())) {
+        v.zoom = sv
+            .attr("zoomScale")
+            .and_then(|z| z.parse().ok())
+            .filter(|z| (10..=400).contains(z))
+            .unwrap_or(100);
+        if let Some((f, col)) = sv
+            .attr("topLeftCell")
+            .and_then(|t| referencia(t.as_bytes()))
+        {
             v.primera_fila = f;
             v.primera_columna = col;
         }
         if let Some(p) = sv.hijo("pane") {
             let estado = p.attr("state").unwrap_or("split");
             if estado == "frozen" || estado == "frozenSplit" {
-                let n = |a: &str| p.attr(a).and_then(|x| x.parse::<f64>().ok()).unwrap_or(0.0).max(0.0) as u32;
+                let n = |a: &str| {
+                    p.attr(a)
+                        .and_then(|x| x.parse::<f64>().ok())
+                        .unwrap_or(0.0)
+                        .max(0.0) as u32
+                };
                 v.columnas_fijas = n("xSplit").min(16384);
                 v.filas_fijas = n("ySplit").min(1_048_576);
-                if let Some((f, col)) = p.attr("topLeftCell").and_then(|t| referencia(t.as_bytes())) {
+                if let Some((f, col)) = p.attr("topLeftCell").and_then(|t| referencia(t.as_bytes()))
+                {
                     v.primera_fila = f.max(v.filas_fijas);
                     v.primera_columna = col.max(v.columnas_fijas);
                 } else {
@@ -857,15 +1000,30 @@ fn cabecera_de(raiz: &Nodo) -> Cabecera {
                 }
             }
         }
-        if let Some(sel) = sv.hijos_de("selection").last().and_then(|s| s.attr("activeCell")) {
+        if let Some(sel) = sv
+            .hijos_de("selection")
+            .last()
+            .and_then(|s| s.attr("activeCell"))
+        {
             v.celda_activa = referencia(sel.as_bytes());
         }
     }
     if let Some(f) = ws.hijo("sheetFormatPr") {
-        c.ancho_defecto = f.attr("defaultColWidth").and_then(|x| x.parse().ok()).filter(|x: &f64| x.is_finite() && *x >= 0.0);
-        c.ancho_base = f.attr("baseColWidth").and_then(|x| x.parse().ok()).filter(|x: &f64| x.is_finite() && *x >= 0.0);
-        c.alto_defecto = f.attr("defaultRowHeight").and_then(|x| x.parse().ok()).filter(|x: &f32| x.is_finite() && *x > 0.0 && *x < 410.0);
-        c.filas_ocultas_por_defecto = f.attr("zeroHeight").is_some_and(|x| x == "1" || x == "true");
+        c.ancho_defecto = f
+            .attr("defaultColWidth")
+            .and_then(|x| x.parse().ok())
+            .filter(|x: &f64| x.is_finite() && *x >= 0.0);
+        c.ancho_base = f
+            .attr("baseColWidth")
+            .and_then(|x| x.parse().ok())
+            .filter(|x: &f64| x.is_finite() && *x >= 0.0);
+        c.alto_defecto = f
+            .attr("defaultRowHeight")
+            .and_then(|x| x.parse().ok())
+            .filter(|x: &f32| x.is_finite() && *x > 0.0 && *x < 410.0);
+        c.filas_ocultas_por_defecto = f
+            .attr("zeroHeight")
+            .is_some_and(|x| x == "1" || x == "true");
     }
     if let Some(cols) = ws.hijo("cols") {
         for col in cols.hijos_de("col") {
@@ -880,7 +1038,10 @@ fn cabecera_de(raiz: &Nodo) -> Cabecera {
             c.columnas.push(Columnas {
                 min: (min - 1).min(16383),
                 max: (max - 1).min(16383),
-                ancho: col.attr("width").and_then(|x| x.parse().ok()).filter(|x: &f64| x.is_finite() && *x >= 0.0 && *x <= 255.0),
+                ancho: col
+                    .attr("width")
+                    .and_then(|x| x.parse().ok())
+                    .filter(|x: &f64| x.is_finite() && *x >= 0.0 && *x <= 255.0),
                 oculta: si("hidden"),
                 xf: n("style").unwrap_or(0),
             });
@@ -929,7 +1090,13 @@ impl Hoja {
 
     /// Una hoja ya entera, armada fila a fila (los `.xls` antiguos, que se
     /// leen de una vez, y las pruebas). Las filas deben venir ordenadas.
-    pub fn desde_filas(nombre: String, cabecera: Cabecera, cola: Cola, textos: Vec<String>, filas: Vec<FilaNueva>) -> Hoja {
+    pub fn desde_filas(
+        nombre: String,
+        cabecera: Cabecera,
+        cola: Cola,
+        textos: Vec<String>,
+        filas: Vec<FilaNueva>,
+    ) -> Hoja {
         let mut h = Hoja::nueva(nombre, None);
         h.cabecera = cabecera;
         h.cola = cola;
@@ -999,10 +1166,20 @@ impl Hoja {
                 oculta: false,
                 xf: None,
                 sin_alto: false,
-                celdas: vec![Celda { col: 0, xf: 0, valor: Valor::Numero(x) }],
+                celdas: vec![Celda {
+                    col: 0,
+                    xf: 0,
+                    valor: Valor::Numero(x),
+                }],
             })
             .collect();
-        *self = Hoja::desde_filas(self.nombre.clone(), Cabecera::default(), Cola::default(), Vec::new(), filas);
+        *self = Hoja::desde_filas(
+            self.nombre.clone(),
+            Cabecera::default(),
+            Cola::default(),
+            Vec::new(),
+            filas,
+        );
     }
 
     /// La vista guardada (paneles, cuadricula, zoom).
@@ -1026,7 +1203,9 @@ impl Hoja {
             f.inicio += base_celda;
             f.fin += base_celda;
             let previa = if k == 0 { ultima } else { None };
-            if previa.is_some_and(|u| f.indice <= u) || self.filas.last().is_some_and(|u| f.indice <= u.indice) {
+            if previa.is_some_and(|u| f.indice <= u)
+                || self.filas.last().is_some_and(|u| f.indice <= u.indice)
+            {
                 self.desordenada = true;
             }
             self.filas.push(f);
@@ -1118,24 +1297,34 @@ impl Hoja {
 
     /// Las celdas de una fila (ordenadas por columna).
     pub fn celdas_de(&self, f: &Fila) -> &[Celda] {
-        self.celdas.get(f.inicio as usize..f.fin as usize).unwrap_or(&[])
+        self.celdas
+            .get(f.inicio as usize..f.fin as usize)
+            .unwrap_or(&[])
     }
 
     /// El comentario de la celda, si lo tiene.
     pub fn comentario_en(&self, fila: u32, col: u32) -> Option<&crate::comentarios::Comentario> {
-        let i = self.cola.comentarios.binary_search_by_key(&(fila, col), |c| (c.fila, c.col)).ok()?;
+        let i = self
+            .cola
+            .comentarios
+            .binary_search_by_key(&(fila, col), |c| (c.fila, c.col))
+            .ok()?;
         self.cola.comentarios.get(i)
     }
 
     /// La regla de validacion de lista (con flecha) que afecta a la celda.
     pub fn lista_en(&self, fila: u32, col: u32) -> Option<&crate::validacion::Validacion> {
-        self.cola.validaciones.iter().find(|v| v.tipo == crate::validacion::TipoValidacion::Lista && v.flecha && v.afecta(fila, col))
+        self.cola.validaciones.iter().find(|v| {
+            v.tipo == crate::validacion::TipoValidacion::Lista && v.flecha && v.afecta(fila, col)
+        })
     }
 
     pub fn celda(&self, fila: u32, col: u32) -> Option<&Celda> {
         let f = self.fila(fila)?;
         let cs = self.celdas_de(f);
-        cs.binary_search_by_key(&col, |c| c.col).ok().map(|i| &cs[i])
+        cs.binary_search_by_key(&col, |c| c.col)
+            .ok()
+            .map(|i| &cs[i])
     }
 
     /// Las filas con indice en `desde..=hasta`.
@@ -1164,28 +1353,53 @@ impl Hoja {
     }
 
     pub fn xf_columna(&self, col: u32) -> u32 {
-        self.cabecera.columnas.iter().find(|c| col >= c.min && col <= c.max).map_or(0, |c| c.xf)
+        self.cabecera
+            .columnas
+            .iter()
+            .find(|c| col >= c.min && col <= c.max)
+            .map_or(0, |c| c.xf)
     }
 
     /// La combinacion que contiene la celda, si la hay.
     pub fn combinada_en(&self, fila: u32, col: u32) -> Option<Rango> {
         let k = self.cola.combinadas.partition_point(|r| r.fila0 <= fila);
-        self.cola.combinadas[..k].iter().rev().find(|r| r.contiene(fila, col)).copied()
+        self.cola.combinadas[..k]
+            .iter()
+            .rev()
+            .find(|r| r.contiene(fila, col))
+            .copied()
     }
 
     /// Las combinaciones que tocan las filas `f0..=f1` y columnas `c0..=c1`.
-    pub fn combinadas_en(&self, f0: u32, f1: u32, c0: u32, c1: u32) -> impl Iterator<Item = &Rango> {
+    pub fn combinadas_en(
+        &self,
+        f0: u32,
+        f1: u32,
+        c0: u32,
+        c1: u32,
+    ) -> impl Iterator<Item = &Rango> {
         let k = self.cola.combinadas.partition_point(|r| r.fila0 <= f1);
-        self.cola.combinadas[..k].iter().filter(move |r| r.fila1 >= f0 && r.col1 >= c0 && r.col0 <= c1)
+        self.cola.combinadas[..k]
+            .iter()
+            .filter(move |r| r.fila1 >= f0 && r.col1 >= c0 && r.col0 <= c1)
     }
 
     pub fn hipervinculo_en(&self, fila: u32, col: u32) -> Option<&Hipervinculo> {
-        self.cola.hipervinculos.iter().find(|h| h.rango.contiene(fila, col))
+        self.cola
+            .hipervinculos
+            .iter()
+            .find(|h| h.rango.contiene(fila, col))
     }
 
     /// La ultima fila con algo (base 0).
     pub fn max_fila(&self) -> u32 {
-        self.filas.iter().rev().take(64).map(|f| f.indice).max().unwrap_or(0)
+        self.filas
+            .iter()
+            .rev()
+            .take(64)
+            .map(|f| f.indice)
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -1205,7 +1419,15 @@ mod pruebas {
         assert_eq!(nombre_columna(25), "Z");
         assert_eq!(nombre_columna(26), "AA");
         assert_eq!(nombre_columna(16383), "XFD");
-        assert_eq!(Rango::leer("C3:A1"), Some(Rango { fila0: 0, col0: 0, fila1: 2, col1: 2 }));
+        assert_eq!(
+            Rango::leer("C3:A1"),
+            Some(Rango {
+                fila0: 0,
+                col0: 0,
+                fila1: 2,
+                col1: 2
+            })
+        );
     }
 
     #[test]

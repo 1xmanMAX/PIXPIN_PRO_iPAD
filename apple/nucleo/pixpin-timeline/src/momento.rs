@@ -38,7 +38,11 @@ pub struct Momento {
     /// La leccion que tuvo y se desvinculo (desmarcar no la borra). Si se
     /// vuelve a marcar, se reutiliza esa en vez de crear otra: un revisor
     /// vio que marcar, desmarcar y marcar dejaba dos lecciones iguales.
-    #[serde(default, rename = "leccionPrevia", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "leccionPrevia",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub leccion_previa: Option<String>,
     /// Mandado a «Momentos» (8-oct-2026, el usuario: «que vaya a momentos
     /// solo lo de hoy que me parecio relevante y decida mandar a momentos»).

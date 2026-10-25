@@ -131,10 +131,28 @@ pub struct Parametros {
 pub fn ajustar_al_pedido(p: &mut Parametros, pedido: &str) {
     let q = crate::acciones::normalizar(pedido);
     let dice = |raices: &[&str]| raices.iter().any(|r| q.contains(r));
-    if p.solo_contornos && !dice(&["contorno", "borde", "linea", "silueta", "trazo", "perfil", "solo las rayas"]) {
+    if p.solo_contornos
+        && !dice(&[
+            "contorno",
+            "borde",
+            "linea",
+            "silueta",
+            "trazo",
+            "perfil",
+            "solo las rayas",
+        ])
+    {
         p.solo_contornos = false;
     }
-    if !p.colores && !dice(&["blanco y negro", "sin color", "en negro", "monocrom", "gris"]) {
+    if !p.colores
+        && !dice(&[
+            "blanco y negro",
+            "sin color",
+            "en negro",
+            "monocrom",
+            "gris",
+        ])
+    {
         p.colores = true;
     }
 }
@@ -170,7 +188,11 @@ pub enum Trazo {
     Fondo { caja: [f64; 4], color: String },
     /// Una raya fina del dibujo, por su linea central, con su grosor (en
     /// el lienzo).
-    Raya { puntos: Vec<(f64, f64)>, color: String, grosor: f64 },
+    Raya {
+        puntos: Vec<(f64, f64)>,
+        color: String,
+        grosor: f64,
+    },
 }
 
 /// El resultado y como volver a la imagen original (para las pruebas y para
@@ -202,7 +224,12 @@ pub fn calcar(rgba: &[u8], ancho: u32, alto: u32, p: &Parametros) -> Calcado {
             let y0 = (y.clamp(0.0, 1.0) * alto as f64) as u32;
             let x1 = (((x + w).clamp(0.0, 1.0)) * ancho as f64).ceil() as u32;
             let y1 = (((y + h).clamp(0.0, 1.0)) * alto as f64).ceil() as u32;
-            (x0, y0, x1.saturating_sub(x0).max(1), y1.saturating_sub(y0).max(1))
+            (
+                x0,
+                y0,
+                x1.saturating_sub(x0).max(1),
+                y1.saturating_sub(y0).max(1),
+            )
         }
         _ => (0, 0, ancho, alto),
     };
@@ -210,17 +237,35 @@ pub fn calcar(rgba: &[u8], ancho: u32, alto: u32, p: &Parametros) -> Calcado {
     let zh = zh.min(alto - zy.min(alto - 1));
     let lado = p.detalle.lado();
     let f = (lado as f64 / zw.max(zh) as f64).min(1.0);
-    let (w, h) = (((zw as f64 * f).round() as usize).max(1), ((zh as f64 * f).round() as usize).max(1));
+    let (w, h) = (
+        ((zw as f64 * f).round() as usize).max(1),
+        ((zh as f64 * f).round() as usize).max(1),
+    );
     // Las rayas finas (1-3 px) se sacan antes, a toda resolucion, por su
     // linea central: reducida, una raya de un pixel se volvia una mancha
     // borrosa o desaparecia (15-oct, la lamina de geometria). Lo que queda
     // (rellenos, manchas) se calca como siempre, sin ellas.
-    let (limpia, finas) = if p.solo_contornos { (None, Vec::new()) } else { rayas_finas(rgba, ancho as usize, (zx as usize, zy as usize, zw as usize, zh as usize)) };
-    let img = reducir(limpia.as_deref().unwrap_or(rgba), ancho as usize, (zx as usize, zy as usize, zw as usize, zh as usize), w, h);
+    let (limpia, finas) = if p.solo_contornos {
+        (None, Vec::new())
+    } else {
+        rayas_finas(
+            rgba,
+            ancho as usize,
+            (zx as usize, zy as usize, zw as usize, zh as usize),
+        )
+    };
+    let img = reducir(
+        limpia.as_deref().unwrap_or(rgba),
+        ancho as usize,
+        (zx as usize, zy as usize, zw as usize, zh as usize),
+        w,
+        h,
+    );
 
     // 2. A coordenadas del lienzo: cabe en 800x600 con margen y centrada.
     let margen = 20.0;
-    let esc_red = ((ANCHO_LIENZO - 2.0 * margen) / w as f64).min((ALTO_LIENZO - 2.0 * margen) / h as f64);
+    let esc_red =
+        ((ANCHO_LIENZO - 2.0 * margen) / w as f64).min((ALTO_LIENZO - 2.0 * margen) / h as f64);
     let dx = (ANCHO_LIENZO - w as f64 * esc_red) / 2.0;
     let dy = (ALTO_LIENZO - h as f64 * esc_red) / 2.0;
     let a_lienzo = |(x, y): (f64, f64)| (x * esc_red + dx, y * esc_red + dy);
@@ -242,7 +287,11 @@ pub fn calcar(rgba: &[u8], ancho: u32, alto: u32, p: &Parametros) -> Calcado {
     let tope = p.detalle.tope();
     if trazos.len() > tope {
         let fondo = matches!(trazos.first(), Some(Trazo::Fondo { .. }));
-        let resto = if fondo { trazos.split_off(1) } else { std::mem::take(&mut trazos) };
+        let resto = if fondo {
+            trazos.split_off(1)
+        } else {
+            std::mem::take(&mut trazos)
+        };
         let mut con_tam: Vec<(f64, Trazo)> = resto.into_iter().map(|t| (tamano(&t), t)).collect();
         con_tam.sort_by(|a, b| b.0.total_cmp(&a.0));
         con_tam.truncate(tope - usize::from(fondo));
@@ -251,7 +300,9 @@ pub fn calcar(rgba: &[u8], ancho: u32, alto: u32, p: &Parametros) -> Calcado {
     }
     for t in &mut trazos {
         match t {
-            Trazo::Mancha { contorno, huecos, .. } => {
+            Trazo::Mancha {
+                contorno, huecos, ..
+            } => {
                 contorno.iter_mut().for_each(|q| *q = a_lienzo(*q));
                 huecos.iter_mut().flatten().for_each(|q| *q = a_lienzo(*q));
             }
@@ -265,8 +316,15 @@ pub fn calcar(rgba: &[u8], ancho: u32, alto: u32, p: &Parametros) -> Calcado {
     }
     // Las rayas finas, encima de todo y ya en el lienzo.
     for (puntos, color, grosor) in finas {
-        let puntos: Vec<(f64, f64)> = puntos.iter().map(|&(x, y)| (x * escala + desplazamiento.0, y * escala + desplazamiento.1)).collect();
-        trazos.push(Trazo::Raya { puntos, color, grosor: (grosor * escala).max(0.5) });
+        let puntos: Vec<(f64, f64)> = puntos
+            .iter()
+            .map(|&(x, y)| (x * escala + desplazamiento.0, y * escala + desplazamiento.1))
+            .collect();
+        trazos.push(Trazo::Raya {
+            puntos,
+            color,
+            grosor: (grosor * escala).max(0.5),
+        });
     }
     Calcado {
         trazos,
@@ -279,7 +337,9 @@ pub fn calcar(rgba: &[u8], ancho: u32, alto: u32, p: &Parametros) -> Calcado {
 fn tamano(t: &Trazo) -> f64 {
     match t {
         Trazo::Mancha { contorno, .. } => area(contorno).abs(),
-        Trazo::Linea { puntos, .. } | Trazo::Raya { puntos, .. } => puntos.windows(2).map(|p| dist(p[0], p[1])).sum::<f64>() * 3.0,
+        Trazo::Linea { puntos, .. } | Trazo::Raya { puntos, .. } => {
+            puntos.windows(2).map(|p| dist(p[0], p[1])).sum::<f64>() * 3.0
+        }
         Trazo::Fondo { .. } => f64::MAX,
     }
 }
@@ -289,7 +349,13 @@ fn tamano(t: &Trazo) -> f64 {
 /// pixeles de su borde pesados por la fraccion que caen dentro. Con cajas
 /// enteras (de 2 o de 3 pixeles, segun cayera) un borde recto salia con un
 /// vaiven de un cuarto de pixel, y el calco lo seguia.
-fn reducir(rgba: &[u8], ancho: usize, (zx, zy, zw, zh): (usize, usize, usize, usize), w: usize, h: usize) -> Vec<[f32; 3]> {
+fn reducir(
+    rgba: &[u8],
+    ancho: usize,
+    (zx, zy, zw, zh): (usize, usize, usize, usize),
+    w: usize,
+    h: usize,
+) -> Vec<[f32; 3]> {
     // Para cada pixel de salida, de que pixeles de la zona sale y con que
     // peso (en una direccion).
     let pesos = |n_fuera: usize, n: usize| -> Vec<Vec<(usize, f32)>> {
@@ -319,7 +385,9 @@ fn reducir(rgba: &[u8], ancho: usize, (zx, zy, zw, zh): (usize, usize, usize, us
             for &(yy, wy) in &py[y] {
                 for &(xx, wx) in &px[x] {
                     let i = ((zy + yy) * ancho + zx + xx) * 4;
-                    let Some(q) = rgba.get(i..i + 4) else { continue };
+                    let Some(q) = rgba.get(i..i + 4) else {
+                        continue;
+                    };
                     let a = q[3] as f32 / 255.0;
                     let p = wx * wy;
                     for c in 0..3 {
@@ -364,7 +432,13 @@ fn k_medias(img: &[[f32; 3]], k: usize) -> (Vec<[f32; 3]>, Vec<u8>) {
     // son muchos pero repartidos en cubos de pocos pixeles cada uno.
     let mut cubos: HashMap<[u8; 3], [f64; 4]> = HashMap::new();
     for c in &muestra {
-        let e = cubos.entry([(c[0] / 16.0) as u8, (c[1] / 16.0) as u8, (c[2] / 16.0) as u8]).or_default();
+        let e = cubos
+            .entry([
+                (c[0] / 16.0) as u8,
+                (c[1] / 16.0) as u8,
+                (c[2] / 16.0) as u8,
+            ])
+            .or_default();
         for j in 0..3 {
             e[j] += c[j] as f64;
         }
@@ -373,15 +447,33 @@ fn k_medias(img: &[[f32; 3]], k: usize) -> (Vec<[f32; 3]>, Vec<u8>) {
     let minimo = (muestra.len() as f64 / 400.0).max(3.0);
     let mut candidatos: Vec<([f32; 3], f64)> = cubos
         .values()
-        .map(|s| ([(s[0] / s[3]) as f32, (s[1] / s[3]) as f32, (s[2] / s[3]) as f32], s[3]))
+        .map(|s| {
+            (
+                [
+                    (s[0] / s[3]) as f32,
+                    (s[1] / s[3]) as f32,
+                    (s[2] / s[3]) as f32,
+                ],
+                s[3],
+            )
+        })
         .collect();
     candidatos.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0[0].total_cmp(&b.0[0])));
     let mut centros = vec![candidatos.first().map(|c| c.0).unwrap_or([255.0; 3])];
-    let fuertes: Vec<[f32; 3]> = candidatos.iter().filter(|c| c.1 >= minimo).map(|c| c.0).collect();
+    let fuertes: Vec<[f32; 3]> = candidatos
+        .iter()
+        .filter(|c| c.1 >= minimo)
+        .map(|c| c.0)
+        .collect();
     while centros.len() < k {
         let Some((mejor, dist)) = fuertes
             .iter()
-            .map(|c| (c, centros.iter().map(|z| d2(*c, *z)).fold(f32::MAX, f32::min)))
+            .map(|c| {
+                (
+                    c,
+                    centros.iter().map(|z| d2(*c, *z)).fold(f32::MAX, f32::min),
+                )
+            })
             .max_by(|a, b| a.1.total_cmp(&b.1))
         else {
             break;
@@ -403,7 +495,11 @@ fn k_medias(img: &[[f32; 3]], k: usize) -> (Vec<[f32; 3]>, Vec<u8>) {
         }
         for (z, s) in centros.iter_mut().zip(&suma) {
             if s[3] > 0.0 {
-                *z = [(s[0] / s[3]) as f32, (s[1] / s[3]) as f32, (s[2] / s[3]) as f32];
+                *z = [
+                    (s[0] / s[3]) as f32,
+                    (s[1] / s[3]) as f32,
+                    (s[2] / s[3]) as f32,
+                ];
             }
         }
     }
@@ -438,7 +534,12 @@ fn mayoria(et: &[u8], w: usize, h: usize, k: usize) -> Vec<u8> {
                 }
             }
             let propio = et[y * w + x] as usize;
-            let (mejor, n) = cuenta.iter().enumerate().max_by_key(|(_, n)| **n).map(|(i, n)| (i, *n)).unwrap();
+            let (mejor, n) = cuenta
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, n)| **n)
+                .map(|(i, n)| (i, *n))
+                .unwrap();
             if n >= 6 && mejor != propio {
                 out[y * w + x] = mejor as u8;
             }
@@ -489,7 +590,10 @@ fn fusionar_mezclas(centros: &[[f32; 3]], et: &mut [u8], w: usize, h: usize) {
                     if l2 <= 0.0 {
                         continue;
                     }
-                    let t = ((pc[0] - pa[0]) * ab[0] + (pc[1] - pa[1]) * ab[1] + (pc[2] - pa[2]) * ab[2]) / l2;
+                    let t = ((pc[0] - pa[0]) * ab[0]
+                        + (pc[1] - pa[1]) * ab[1]
+                        + (pc[2] - pa[2]) * ab[2])
+                        / l2;
                     if !(0.05..=0.95).contains(&t) {
                         continue;
                     }
@@ -540,9 +644,12 @@ fn fusionar_mezclas(centros: &[[f32; 3]], et: &mut [u8], w: usize, h: usize) {
     }
 }
 
+/// La caja de una mancha en pixeles: `(x0, y0, x1, y1)`, incluidos.
+type CajaPx = (usize, usize, usize, usize);
+
 /// Las manchas conexas (4-vecindad) de la etiqueta `l`: sus pixeles y su
 /// caja `(x0, y0, x1, y1)` (x1, y1 incluidos).
-fn componentes(et: &[u8], w: usize, h: usize, l: u8) -> Vec<(Vec<usize>, (usize, usize, usize, usize))> {
+fn componentes(et: &[u8], w: usize, h: usize, l: u8) -> Vec<(Vec<usize>, CajaPx)> {
     let mut visto = vec![false; w * h];
     let mut salida = Vec::new();
     for inicio in 0..w * h {
@@ -593,7 +700,12 @@ fn manchas(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -> 
         borde[et[y * w] as usize] += 1;
         borde[et[y * w + w - 1] as usize] += 1;
     }
-    let fondo = borde.iter().enumerate().max_by_key(|(_, n)| **n).map(|(i, _)| i).unwrap_or(0);
+    let fondo = borde
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, n)| **n)
+        .map(|(i, _)| i)
+        .unwrap_or(0);
     let mut trazos = Vec::new();
     let blanco = centros[fondo].iter().all(|c| *c > 225.0);
     if p.colores && !blanco {
@@ -606,13 +718,17 @@ fn manchas(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -> 
     let tol = p.detalle.tolerancia();
     // Todas las manchas de todos los colores (menos el fondo) y su turno de
     // pintado: la grande debajo.
-    let mut lista: Vec<(usize, Vec<usize>, (usize, usize, usize, usize))> = Vec::new();
+    let mut lista: Vec<(usize, Vec<usize>, CajaPx)> = Vec::new();
     for l in 0..centros.len() {
         if l != fondo {
-            lista.extend(componentes(&et, w, h, l as u8).into_iter().map(|(px, caja)| (l, px, caja)));
+            lista.extend(
+                componentes(&et, w, h, l as u8)
+                    .into_iter()
+                    .map(|(px, caja)| (l, px, caja)),
+            );
         }
     }
-    lista.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    lista.sort_by_key(|l| std::cmp::Reverse(l.1.len()));
     let mut turno = vec![usize::MAX; w * h];
     for (k, (_, pixeles, _)) in lista.iter().enumerate() {
         for &i in pixeles {
@@ -654,8 +770,21 @@ fn manchas(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -> 
                     })
                 })
         });
-        let mover = |v: &[(f64, f64)]| -> Vec<(f64, f64)> { v.iter().map(|&(x, y)| (x + x0 as f64, y + y0 as f64)).collect() };
-        let (campo, gw, gh) = campo_de_color(img, w, &et, &centros, l, (x0, y0, bw, bh), &mascara, &debajo);
+        let mover = |v: &[(f64, f64)]| -> Vec<(f64, f64)> {
+            v.iter()
+                .map(|&(x, y)| (x + x0 as f64, y + y0 as f64))
+                .collect()
+        };
+        let (campo, gw, gh) = campo_de_color(
+            img,
+            w,
+            &et,
+            &centros,
+            l,
+            (x0, y0, bw, bh),
+            &mascara,
+            &debajo,
+        );
         let entera: Vec<bool> = mascara.iter().zip(&debajo).map(|(a, b)| *a || *b).collect();
         for (contorno, huecos) in regiones_de_campo(&campo, gw, gh, area_min) {
             let contorno = curva(&mover(&contorno), true, tol, plano);
@@ -667,7 +796,11 @@ fn manchas(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -> 
             // dejaban rendijas blancas entre los dos colores.
             let huecos = huecos
                 .iter()
-                .filter(|hq| hueco_de_fondo(hq, &entera, bw, bh, |x, y| et[(y + y0) * w + (x + x0)] as usize == fondo))
+                .filter(|hq| {
+                    hueco_de_fondo(hq, &entera, bw, bh, |x, y| {
+                        et[(y + y0) * w + (x + x0)] as usize == fondo
+                    })
+                })
                 .map(|hq| curva(&mover(hq), true, tol, plano))
                 .filter(|hq| hq.len() >= 3)
                 .collect();
@@ -696,7 +829,12 @@ const SOLAPE: usize = 2;
 /// de la grande a la pequena, la de debajo se alarga [`SOLAPE`] pixeles por
 /// dentro de las que van encima (`encima(x, y)`): su borde con ellas queda
 /// tapado y el que se ve es el de la de encima. Con el fondo no se solapa.
-fn solape(mascara: &[bool], bw: usize, bh: usize, encima: impl Fn(usize, usize) -> bool) -> Vec<bool> {
+fn solape(
+    mascara: &[bool],
+    bw: usize,
+    bh: usize,
+    encima: impl Fn(usize, usize) -> bool,
+) -> Vec<bool> {
     // Dilatacion cuadrada de SOLAPE (en x y luego en y).
     let mut fila = vec![false; bw * bh];
     for y in 0..bh {
@@ -719,12 +857,15 @@ fn solape(mascara: &[bool], bw: usize, bh: usize, encima: impl Fn(usize, usize) 
     salida
 }
 
+/// Una region: su borde exterior y sus agujeros, en coordenadas continuas.
+pub type Region = (Vec<(f64, f64)>, Vec<Vec<(f64, f64)>>);
+
 /// Los contornos **sub-pixel** de una mascara (`trazado`: la mascara
 /// suavizada y *marching squares* interpolado en 0,5): cada anillo es el
 /// borde exterior de una mancha o el de uno de sus agujeros. Devuelve
 /// (contorno, agujeros) de las manchas de al menos `area_min` pixeles, en
 /// coordenadas continuas (el pixel (x, y) ocupa [x, x+1] x [y, y+1]).
-pub fn regiones(mascara: &[bool], w: usize, h: usize, area_min: f64) -> Vec<(Vec<(f64, f64)>, Vec<Vec<(f64, f64)>>)> {
+pub fn regiones(mascara: &[bool], w: usize, h: usize, area_min: f64) -> Vec<Region> {
     if w == 0 || h == 0 || mascara.len() < w * h {
         return Vec::new();
     }
@@ -737,13 +878,16 @@ const BORDE: usize = 2;
 
 /// Como [`regiones`], de un campo ya hecho (con [`BORDE`] alrededor):
 /// isolineas de 0,5, separadas en bordes exteriores y agujeros.
-fn regiones_de_campo(campo: &[f32], gw: usize, gh: usize, area_min: f64) -> Vec<(Vec<(f64, f64)>, Vec<Vec<(f64, f64)>>)> {
+fn regiones_de_campo(campo: &[f32], gw: usize, gh: usize, area_min: f64) -> Vec<Region> {
     // El nodo (i, j) de la rejilla es el centro del pixel (i - 2, j - 2).
     let a_pixel = BORDE as f64 - 0.5;
     let mut exteriores = Vec::new();
     let mut agujeros = Vec::new();
     for anillo in trazado::isolineas(campo, gw, gh, 0.5) {
-        let anillo: Vec<(f64, f64)> = anillo.into_iter().map(|(x, y)| (x - a_pixel, y - a_pixel)).collect();
+        let anillo: Vec<(f64, f64)> = anillo
+            .into_iter()
+            .map(|(x, y)| (x - a_pixel, y - a_pixel))
+            .collect();
         let a = area(&anillo);
         if a.abs() < area_min {
             continue;
@@ -754,7 +898,7 @@ fn regiones_de_campo(campo: &[f32], gw: usize, gh: usize, area_min: f64) -> Vec<
             agujeros.push(anillo);
         }
     }
-    let mut salida: Vec<(Vec<(f64, f64)>, Vec<Vec<(f64, f64)>>)> = exteriores.into_iter().map(|e| (e, Vec::new())).collect();
+    let mut salida: Vec<Region> = exteriores.into_iter().map(|e| (e, Vec::new())).collect();
     for a in agujeros {
         // Al exterior mas pequeno que lo contiene.
         let p = a[0];
@@ -783,6 +927,7 @@ fn regiones_de_campo(campo: &[f32], gw: usize, gh: usize, area_min: f64) -> Vec<
 /// mueve el borde dentro del pixel. Luego un suavizado `[1 2 1]` quita el
 /// temblor de pixel a pixel (en una foto, el color tiembla), y con el se
 /// van los salientes de un pixel que dejan las etiquetas.
+#[allow(clippy::too_many_arguments)]
 fn campo_de_color(
     img: &[[f32; 3]],
     w: usize,
@@ -797,14 +942,25 @@ fn campo_de_color(
     let (gw, gh) = (bw + 2 * BORDE, bh + 2 * BORDE);
     let mut campo = vec![0f32; gw * gh];
     let proyeccion = |c: [f32; 3], fuera: [f32; 3]| -> f32 {
-        let d = [centros[l][0] - fuera[0], centros[l][1] - fuera[1], centros[l][2] - fuera[2]];
+        let d = [
+            centros[l][0] - fuera[0],
+            centros[l][1] - fuera[1],
+            centros[l][2] - fuera[2],
+        ];
         let n = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
         if n < 1e-3 {
             return 0.5;
         }
-        (((c[0] - fuera[0]) * d[0] + (c[1] - fuera[1]) * d[1] + (c[2] - fuera[2]) * d[2]) / n).clamp(0.0, 1.0)
+        (((c[0] - fuera[0]) * d[0] + (c[1] - fuera[1]) * d[1] + (c[2] - fuera[2]) * d[2]) / n)
+            .clamp(0.0, 1.0)
     };
-    let dentro_de = |m: &[bool], x: isize, y: isize| x >= 0 && y >= 0 && (x as usize) < bw && (y as usize) < bh && m[y as usize * bw + x as usize];
+    let dentro_de = |m: &[bool], x: isize, y: isize| {
+        x >= 0
+            && y >= 0
+            && (x as usize) < bw
+            && (y as usize) < bh
+            && m[y as usize * bw + x as usize]
+    };
     let en_mascara = |x: isize, y: isize| dentro_de(mascara, x, y);
     let en_debajo = |x: isize, y: isize| dentro_de(debajo, x, y);
     let lados = [(1isize, 0isize), (-1, 0), (0, 1), (0, -1)];
@@ -827,7 +983,8 @@ fn campo_de_color(
                 let fuera = lados.iter().find_map(|&(dx, dy)| {
                     let (nx, ny) = (ix + dx, iy + dy);
                     let fuera = !en_mascara(bx + dx, by + dy) && !en_debajo(bx + dx, by + dy);
-                    (fuera && nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h).then(|| et[ny as usize * w + nx as usize] as usize)
+                    (fuera && nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h)
+                        .then(|| et[ny as usize * w + nx as usize] as usize)
                 });
                 match fuera {
                     Some(k) if k != l => proyeccion(img[i], centros[k]).max(0.5 + CASI),
@@ -838,7 +995,11 @@ fn campo_de_color(
                 // Junto a lo solapado, vacio sin mas: ese borde lo tapa la
                 // mancha de encima.
                 let junto_al_solape = lados.iter().any(|&(dx, dy)| en_debajo(bx + dx, by + dy));
-                if k == l || junto_al_solape { 0.0 } else { proyeccion(img[i], centros[k]).min(0.5 - CASI) }
+                if k == l || junto_al_solape {
+                    0.0
+                } else {
+                    proyeccion(img[i], centros[k]).min(0.5 - CASI)
+                }
             };
             campo[(y + BORDE - 1) * gw + x + BORDE - 1] = v;
         }
@@ -913,7 +1074,6 @@ fn dentro(pol: &[(f64, f64)], (px, py): (f64, f64)) -> bool {
     c
 }
 
-
 fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
@@ -936,14 +1096,19 @@ fn contornos(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -
     if w < 3 || h < 3 {
         return Vec::new();
     }
-    let gris: Vec<f32> = img.iter().map(|c| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]).collect();
+    let gris: Vec<f32> = img
+        .iter()
+        .map(|c| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2])
+        .collect();
     let suave = gauss(&gris, w, h);
     // Sobel.
     let mut mag = vec![0f32; w * h];
     let mut dir = vec![0u8; w * h];
     for y in 1..h - 1 {
         for x in 1..w - 1 {
-            let g = |dx: isize, dy: isize| suave[((y as isize + dy) as usize) * w + (x as isize + dx) as usize];
+            let g = |dx: isize, dy: isize| {
+                suave[((y as isize + dy) as usize) * w + (x as isize + dx) as usize]
+            };
             let gx = g(1, -1) + 2.0 * g(1, 0) + g(1, 1) - g(-1, -1) - 2.0 * g(-1, 0) - g(-1, 1);
             let gy = g(-1, 1) + 2.0 * g(0, 1) + g(1, 1) - g(-1, -1) - 2.0 * g(0, -1) - g(1, -1);
             mag[y * w + x] = (gx * gx + gy * gy).sqrt();
@@ -979,7 +1144,11 @@ fn contornos(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -
             if mag[i] >= mag[a] && mag[i] >= mag[b] {
                 nms[i] = mag[i];
                 let den = mag[a] - 2.0 * mag[i] + mag[b];
-                let eta = if den < -1e-6 { ((mag[a] - mag[b]) / (2.0 * den)).clamp(-0.5, 0.5) } else { 0.0 };
+                let eta = if den < -1e-6 {
+                    ((mag[a] - mag[b]) / (2.0 * den)).clamp(-0.5, 0.5)
+                } else {
+                    0.0
+                };
                 fino[i] = (eta * paso.0, eta * paso.1);
             }
         }
@@ -1081,7 +1250,11 @@ fn contornos(img: &[[f32; 3]], w: usize, h: usize, p: &Parametros, plano: f64) -
             puntos.push(puntos[0]);
         }
         if puntos.len() >= 2 {
-            salida.push(Trazo::Linea { puntos, cerrada, color });
+            salida.push(Trazo::Linea {
+                puntos,
+                cerrada,
+                color,
+            });
         }
     }
     salida
@@ -1120,9 +1293,23 @@ fn cadenas(borde: &mut [bool], w: usize, h: usize) -> Vec<Vec<(usize, usize)>> {
     let vecinos = |borde: &[bool], x: usize, y: usize| -> Vec<(usize, usize)> {
         let mut v = Vec::with_capacity(8);
         // Primero los 4 de lado: la cadena sale mas fiel.
-        for (dx, dy) in [(1i64, 0i64), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)] {
+        for (dx, dy) in [
+            (1i64, 0i64),
+            (0, 1),
+            (-1, 0),
+            (0, -1),
+            (1, 1),
+            (-1, 1),
+            (-1, -1),
+            (1, -1),
+        ] {
             let (xx, yy) = (x as i64 + dx, y as i64 + dy);
-            if xx >= 0 && yy >= 0 && (xx as usize) < w && (yy as usize) < h && borde[yy as usize * w + xx as usize] {
+            if xx >= 0
+                && yy >= 0
+                && (xx as usize) < w
+                && (yy as usize) < h
+                && borde[yy as usize * w + xx as usize]
+            {
                 v.push((xx as usize, yy as usize));
             }
         }
@@ -1153,13 +1340,199 @@ fn cadenas(borde: &mut [bool], w: usize, h: usize) -> Vec<Vec<(usize, usize)>> {
     salida
 }
 
+// ---------------------------------------------------------------------------
+// Rayas finas, a toda resolucion
+
+/// Lo mas grande (en pixeles) que se mira a toda resolucion buscando rayas
+/// finas; por encima, se reduce primero a esto.
+const LADO_FINAS: usize = 1600;
+
+/// **Las rayas finas** de la zona `(zx, zy, zw, zh)`: la tinta que no
+/// aguanta una erosion de 2 px (lo de 1-4 px de ancho), por su linea
+/// central (el esqueleto, alisado con las curvas de `trazado`), con su color
+/// y su grosor. Devuelve tambien la imagen sin ellas (pintadas del color
+/// del papel) para calcar el resto. En coordenadas de la imagen original.
+#[allow(clippy::type_complexity)]
+fn rayas_finas(
+    rgba: &[u8],
+    ancho: usize,
+    (zx, zy, zw, zh): (usize, usize, usize, usize),
+) -> (Option<Vec<u8>>, Vec<(Vec<(f64, f64)>, String, f64)>) {
+    use crate::diagrama::mascara;
+    if zw.max(zh) > LADO_FINAS || zw < 8 || zh < 8 {
+        return (None, Vec::new());
+    }
+    let mut sub = vec![0u8; zw * zh * 4];
+    for y in 0..zh {
+        let o = ((zy + y) * ancho + zx) * 4;
+        let Some(fila) = rgba.get(o..o + zw * 4) else {
+            return (None, Vec::new());
+        };
+        sub[y * zw * 4..(y + 1) * zw * 4].copy_from_slice(fila);
+    }
+    let img = mascara::Img::de_rgba(&sub, zw, zh);
+    let papel = mascara::fondo(&img);
+    let dpap: Vec<f32> = img
+        .px
+        .iter()
+        .map(|&c| mascara::dist_color(c, papel))
+        .collect();
+    let tinta: Vec<bool> = dpap.iter().map(|&d| d > 40.0).collect();
+    // Una foto (sin papel liso) no tiene «rayas» que sacar: su textura son
+    // mil rayitas.
+    let lisas = dpap.iter().filter(|&&d| d < 12.0).count();
+    if (lisas as f64) < 0.3 * (zw * zh) as f64 {
+        return (None, Vec::new());
+    }
+    let nucleo = mascara::erosionar(&tinta, zw, zh, 2.0);
+    let grueso = mascara::dilatar(&nucleo, zw, zh, 2.6);
+    let fino: Vec<bool> = (0..zw * zh).map(|i| tinta[i] && !grueso[i]).collect();
+    let minimo = 12f64.max(0.02 * zw.max(zh) as f64);
+    let mut salida: Vec<(Vec<(f64, f64)>, String, f64)> = Vec::new();
+    let mut quitar = vec![false; zw * zh];
+    for comp in mascara::componentes(&fino, zw, zh) {
+        if comp.len() < 10 {
+            continue;
+        }
+        let (x0, y0, x1, y1) = mascara::caja_de(&comp, zw);
+        let (ox, oy) = (x0.saturating_sub(2), y0.saturating_sub(2));
+        let (gw, gh) = ((x1 + 3).min(zw) - ox, (y1 + 3).min(zh) - oy);
+        let mut m = vec![false; gw * gh];
+        for &i in &comp {
+            m[(i / zw - oy) * gw + (i % zw - ox)] = true;
+        }
+        let esq = mascara::esqueleto(&m, gw, gh);
+        let cadenas: Vec<Vec<(f64, f64)>> = mascara::cadenas(&esq, gw, gh)
+            .into_iter()
+            .filter(|c| c.len() >= 3)
+            .collect();
+        let largo: f64 = cadenas
+            .iter()
+            .map(|c| c.windows(2).map(|w| dist(w[0], w[1])).sum::<f64>())
+            .sum();
+        if largo < minimo {
+            continue;
+        }
+        // Fina de verdad: lo que pesa entre lo que mide.
+        let peso: f64 = comp
+            .iter()
+            .map(|&i| (dpap[i] as f64 / 180.0).min(1.0))
+            .sum();
+        let grosor = peso / largo.max(1.0);
+        if grosor > 4.0 {
+            continue;
+        }
+        let mut cs: Vec<(f32, [f32; 3])> = comp.iter().map(|&i| (dpap[i], img.px[i])).collect();
+        cs.sort_by(|a, b| b.0.total_cmp(&a.0));
+        cs.truncate((cs.len() / 2).max(1));
+        let media = mascara::media(cs.iter().map(|c| c.1));
+        let color = hex(media);
+        for c in cadenas {
+            let puntos: Vec<(f64, f64)> = c
+                .iter()
+                .map(|&(x, y)| (x + (ox + zx) as f64, y + (oy + zy) as f64))
+                .collect();
+            let lisa = curva(&puntos, false, 0.6, 0.3);
+            if lisa.len() >= 2 {
+                salida.push((lisa, color.clone(), grosor.max(1.0)));
+            }
+        }
+        for &i in &comp {
+            quitar[i] = true;
+        }
+    }
+    if salida.is_empty() {
+        return (None, Vec::new());
+    }
+    // Lo que se quito, del color del papel (y su halo de antialias).
+    let quitar = mascara::dilatar(&quitar, zw, zh, 1.0);
+    let mut limpia = rgba.to_vec();
+    for y in 0..zh {
+        for x in 0..zw {
+            if quitar[y * zw + x] && !grueso[y * zw + x] {
+                let o = ((zy + y) * ancho + zx + x) * 4;
+                limpia[o] = papel[0] as u8;
+                limpia[o + 1] = papel[1] as u8;
+                limpia[o + 2] = papel[2] as u8;
+                limpia[o + 3] = 255;
+            }
+        }
+    }
+    salida.sort_by_key(|s| std::cmp::Reverse(s.0.len()));
+    salida.truncate(400);
+    (Some(limpia), salida)
+}
+
+/// **El texto de una imagen que se calca, como texto** (15-oct): lo que
+/// leyo el OCR (palabras con caja en pixeles de la imagen) se tapa con el
+/// color del papel antes de calcar ([`tapar_texto`]) y va al lienzo como
+/// texto editable, en su sitio, con su tamano y su color.
+pub fn tapar_texto(rgba: &mut [u8], ancho: u32, alto: u32, palabras: &[crate::hoja::PalabraHoja]) {
+    let (w, h) = (ancho as usize, alto as usize);
+    let img = crate::diagrama::mascara::Img::de_rgba(rgba, w, h);
+    let papel = crate::diagrama::mascara::fondo(&img);
+    for p in palabras {
+        let c = p.caja.crecer(2.0).dentro(w as f64, h as f64);
+        for y in c.y.floor() as usize..(c.y1().ceil() as usize).min(h) {
+            for x in c.x.floor() as usize..(c.x1().ceil() as usize).min(w) {
+                let i = (y * w + x) * 4;
+                rgba[i] = papel[0] as u8;
+                rgba[i + 1] = papel[1] as u8;
+                rgba[i + 2] = papel[2] as u8;
+                rgba[i + 3] = 255;
+            }
+        }
+    }
+}
+
+/// Las palabras como textos del lienzo, colocadas como el calco.
+pub fn textos_del_calco(
+    c: &Calcado,
+    palabras: &[crate::hoja::PalabraHoja],
+    semilla: u64,
+) -> Vec<serde_json::Value> {
+    let familia = "Work Sans";
+    let k = pixpin_motor2d::texto::interlineado_de(familia)
+        .unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
+    let piezas: Vec<pixpin_motor2d::Elemento> = palabras
+        .iter()
+        .map(|p| {
+            let (x, y) = (
+                p.caja.x * c.escala + c.desplazamiento.0,
+                p.caja.y * c.escala + c.desplazamiento.1,
+            );
+            let alto = p.caja.h * c.escala;
+            let tam = ((alto * 1.05 * 2.0).round() / 2.0).max(5.0);
+            crate::hoja::montaje::un_texto(
+                &p.texto,
+                x,
+                y + alto / 2.0 - tam * k / 2.0,
+                tam,
+                familia,
+                p.negrita,
+                crate::hoja::Alineacion::Izquierda,
+                p.color,
+            )
+        })
+        .collect();
+    let mut f = crate::lienzo::Fabrica::nueva((0.0, 0.0), semilla ^ 0x7e57);
+    f.grupo = Some(format!("ia-{semilla:x}-calco"));
+    f.de_motor(&piezas);
+    f.salida
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
 
     /// Lienzo blanco de `w x h` con un circulo rojo (centro, radio) y un
     /// cuadrado azul (x, y, lado).
-    pub(super) fn circulo_y_cuadrado(w: u32, h: u32, (cx, cy, r): (f64, f64, f64), (qx, qy, ql): (f64, f64, f64)) -> Vec<u8> {
+    pub(super) fn circulo_y_cuadrado(
+        w: u32,
+        h: u32,
+        (cx, cy, r): (f64, f64, f64),
+        (qx, qy, ql): (f64, f64, f64),
+    ) -> Vec<u8> {
         let mut px = vec![255u8; (w * h * 4) as usize];
         for y in 0..h {
             for x in 0..w {
@@ -1178,7 +1551,10 @@ mod pruebas {
 
     /// Del lienzo a la imagen original.
     fn a_imagen(c: &Calcado, (x, y): (f64, f64)) -> (f64, f64) {
-        ((x - c.desplazamiento.0) / c.escala, (y - c.desplazamiento.1) / c.escala)
+        (
+            (x - c.desplazamiento.0) / c.escala,
+            (y - c.desplazamiento.1) / c.escala,
+        )
     }
 
     fn error_circulo(c: &Calcado, pts: &[(f64, f64)], (cx, cy, r): (f64, f64, f64)) -> f64 {
@@ -1203,30 +1579,50 @@ mod pruebas {
             .trazos
             .iter()
             .filter_map(|t| match t {
-                Trazo::Mancha { contorno, color, .. } => Some((contorno, color)),
+                Trazo::Mancha {
+                    contorno, color, ..
+                } => Some((contorno, color)),
                 _ => None,
             })
             .collect();
         assert_eq!(manchas.len(), 2, "{:?}", c.trazos.len());
-        let rojo = manchas.iter().find(|(_, col)| col.starts_with("#d") || col.starts_with("#e")).expect("mancha roja");
-        let azul = manchas.iter().find(|(_, col)| col.ends_with("d2") || col.ends_with("d1") || col.ends_with("d3")).expect("mancha azul");
+        let rojo = manchas
+            .iter()
+            .find(|(_, col)| col.starts_with("#d") || col.starts_with("#e"))
+            .expect("mancha roja");
+        let azul = manchas
+            .iter()
+            .find(|(_, col)| col.ends_with("d2") || col.ends_with("d1") || col.ends_with("d3"))
+            .expect("mancha azul");
         // El circulo: radio medio con error de menos de 1,5 px (de 70).
         let e = error_circulo(&c, rojo.0, circ);
         assert!(e < 1.5, "error del circulo {e}");
-        assert!(rojo.0.len() >= 12, "un circulo de pocos puntos: {}", rojo.0.len());
+        assert!(
+            rojo.0.len() >= 12,
+            "un circulo de pocos puntos: {}",
+            rojo.0.len()
+        );
         // El cuadrado: 4 esquinas bien puestas (se conservan, no se redondean).
         let pts: Vec<_> = azul.0.iter().map(|p| a_imagen(&c, *p)).collect();
         for esquina in [(230.0, 80.0), (350.0, 80.0), (350.0, 200.0), (230.0, 200.0)] {
-            let d = pts.iter().map(|p| dist(*p, esquina)).fold(f64::MAX, f64::min);
+            let d = pts
+                .iter()
+                .map(|p| dist(*p, esquina))
+                .fold(f64::MAX, f64::min);
             // La esquina, en su sitio: ni achaflanada ni redondeada.
             assert!(d < 1.5, "esquina {esquina:?} a {d}");
         }
         assert!(azul.0.len() <= 5, "un cuadrado con {} puntos", azul.0.len());
         // Y cada vertice, pegado al borde del cuadrado.
         for p in &pts {
-            let al_borde = [(p.0 - 230.0).abs(), (p.0 - 350.0).abs(), (p.1 - 80.0).abs(), (p.1 - 200.0).abs()]
-                .into_iter()
-                .fold(f64::MAX, f64::min);
+            let al_borde = [
+                (p.0 - 230.0).abs(),
+                (p.0 - 350.0).abs(),
+                (p.1 - 80.0).abs(),
+                (p.1 - 200.0).abs(),
+            ]
+            .into_iter()
+            .fold(f64::MAX, f64::min);
             assert!(al_borde < 2.0, "vertice {p:?} a {al_borde} del borde");
         }
     }
@@ -1249,11 +1645,19 @@ mod pruebas {
             .trazos
             .iter()
             .filter_map(|t| match t {
-                Trazo::Linea { puntos, cerrada, color } => Some((puntos, *cerrada, color)),
+                Trazo::Linea {
+                    puntos,
+                    cerrada,
+                    color,
+                } => Some((puntos, *cerrada, color)),
                 _ => None,
             })
             .collect();
-        assert!(lineas.len() >= 2 && lineas.len() <= 4, "{} lineas", lineas.len());
+        assert!(
+            lineas.len() >= 2 && lineas.len() <= 4,
+            "{} lineas",
+            lineas.len()
+        );
         let cerradas: Vec<_> = lineas.iter().filter(|l| l.1).collect();
         assert!(cerradas.len() >= 2, "contornos sin cerrar");
         // La del circulo: la de centro cerca de (110,150).
@@ -1268,7 +1672,11 @@ mod pruebas {
         let e = error_circulo(&c, del_circulo.0, circ);
         assert!(e < 2.0, "error del contorno del circulo {e}");
         // Con colores: la linea del circulo es roja.
-        assert!(del_circulo.2.starts_with("#d") || del_circulo.2.starts_with("#e"), "{}", del_circulo.2);
+        assert!(
+            del_circulo.2.starts_with("#d") || del_circulo.2.starts_with("#e"),
+            "{}",
+            del_circulo.2
+        );
     }
 
     #[test]
@@ -1291,18 +1699,42 @@ mod pruebas {
     fn imagen_vacia_o_rara_no_cuelga_ni_dibuja_de_mas() {
         // Blanca entera.
         let blanco = vec![255u8; 300 * 200 * 4];
-        assert!(calcar(&blanco, 300, 200, &Parametros::default()).trazos.is_empty());
         assert!(
-            calcar(&blanco, 300, 200, &Parametros { solo_contornos: true, ..Default::default() })
+            calcar(&blanco, 300, 200, &Parametros::default())
                 .trazos
                 .is_empty()
         );
+        assert!(
+            calcar(
+                &blanco,
+                300,
+                200,
+                &Parametros {
+                    solo_contornos: true,
+                    ..Default::default()
+                }
+            )
+            .trazos
+            .is_empty()
+        );
         // Sin pixeles, de tamano cero o con menos bytes de los que dice.
         assert!(calcar(&[], 0, 0, &Parametros::default()).trazos.is_empty());
-        assert!(calcar(&[1, 2, 3], 10, 10, &Parametros::default()).trazos.is_empty());
+        assert!(
+            calcar(&[1, 2, 3], 10, 10, &Parametros::default())
+                .trazos
+                .is_empty()
+        );
         // Un pixel.
         let _ = calcar(&[0, 0, 0, 255], 1, 1, &Parametros::default());
-        let _ = calcar(&[0, 0, 0, 255], 1, 1, &Parametros { solo_contornos: true, ..Default::default() });
+        let _ = calcar(
+            &[0, 0, 0, 255],
+            1,
+            1,
+            &Parametros {
+                solo_contornos: true,
+                ..Default::default()
+            },
+        );
         // Ruido puro: termina rapido y respeta el tope.
         let mut s = 12345u32;
         let ruido: Vec<u8> = (0..768 * 576 * 4)
@@ -1313,8 +1745,14 @@ mod pruebas {
             .collect();
         for p in [
             Parametros::default(),
-            Parametros { solo_contornos: true, ..Default::default() },
-            Parametros { detalle: Detalle::Alto, ..Default::default() },
+            Parametros {
+                solo_contornos: true,
+                ..Default::default()
+            },
+            Parametros {
+                detalle: Detalle::Alto,
+                ..Default::default()
+            },
         ] {
             let t0 = std::time::Instant::now();
             let c = calcar(&ruido, 768, 576, &p);
@@ -1329,9 +1767,19 @@ mod pruebas {
         let (w, h) = (400, 300);
         let px = circulo_y_cuadrado(w, h, (110.0, 150.0, 70.0), (230.0, 80.0, 120.0));
         // La mitad derecha: solo el cuadrado.
-        let c = calcar(&px, w, h, &Parametros { zona: Some([0.5, 0.0, 0.5, 1.0]), ..Default::default() });
+        let c = calcar(
+            &px,
+            w,
+            h,
+            &Parametros {
+                zona: Some([0.5, 0.0, 0.5, 1.0]),
+                ..Default::default()
+            },
+        );
         assert_eq!(c.trazos.len(), 1, "{:?}", c.trazos);
-        let Trazo::Mancha { contorno, .. } = &c.trazos[0] else { panic!() };
+        let Trazo::Mancha { contorno, .. } = &c.trazos[0] else {
+            panic!()
+        };
         let esquina = a_imagen(&c, contorno[0]);
         assert!(esquina.0 > 200.0, "{esquina:?}");
     }
@@ -1353,12 +1801,14 @@ mod pruebas {
                     col = Some([250.0 - 50.0 * d, 200.0 - 70.0 * d, 160.0 - 70.0 * d]);
                 }
                 for ox in [0.2, 0.8] {
-                    let e = ((fx - ox * w as f64) / (w as f64 * 0.1)).powi(2) + ((fy - 0.3 * w as f64) / (w as f64 * 0.18)).powi(2);
+                    let e = ((fx - ox * w as f64) / (w as f64 * 0.1)).powi(2)
+                        + ((fy - 0.3 * w as f64) / (w as f64 * 0.18)).powi(2);
                     if e <= 1.0 {
                         col = Some([110.0 - 20.0 * e, 70.0 - 15.0 * e, 60.0 - 10.0 * e]);
                     }
                 }
-                let lengua = ((fx - c) / (w as f64 * 0.07)).powi(2) + ((fy - 0.75 * w as f64) / (w as f64 * 0.09)).powi(2);
+                let lengua = ((fx - c) / (w as f64 * 0.07)).powi(2)
+                    + ((fy - 0.75 * w as f64) / (w as f64 * 0.09)).powi(2);
                 if lengua <= 1.0 {
                     col = Some([215.0, 50.0 + 20.0 * lengua, 120.0]);
                 }
@@ -1375,41 +1825,82 @@ mod pruebas {
         let w = 384;
         let px = emoji_con_degradados(w);
         for detalle in [Detalle::Medio, Detalle::Alto] {
-            let c = calcar(&px, w, w, &Parametros { detalle, ..Default::default() });
+            let c = calcar(
+                &px,
+                w,
+                w,
+                &Parametros {
+                    detalle,
+                    ..Default::default()
+                },
+            );
             // El fondo transparente (blanco) no se dibuja.
             assert!(!c.trazos.iter().any(|t| matches!(t, Trazo::Fondo { .. })));
             let manchas: Vec<(&Vec<(f64, f64)>, &String)> = c
                 .trazos
                 .iter()
                 .filter_map(|t| match t {
-                    Trazo::Mancha { contorno, color, .. } => Some((contorno, color)),
+                    Trazo::Mancha {
+                        contorno, color, ..
+                    } => Some((contorno, color)),
                     _ => None,
                 })
                 .collect();
             // Unas pocas bandas de color, no cientos de manchitas.
-            assert!(manchas.len() >= 4 && manchas.len() <= detalle.tope(), "{detalle:?}: {}", manchas.len());
+            assert!(
+                manchas.len() >= 4 && manchas.len() <= detalle.tope(),
+                "{detalle:?}: {}",
+                manchas.len()
+            );
             // Lo calcado ocupa lo mismo que el emoji: de la oreja izquierda a
             // la derecha y de arriba de la cara a abajo.
             let pts: Vec<(f64, f64)> = manchas
                 .iter()
                 .flat_map(|m| m.0.iter())
-                .map(|p| ((p.0 - c.desplazamiento.0) / c.escala, (p.1 - c.desplazamiento.1) / c.escala))
+                .map(|p| {
+                    (
+                        (p.0 - c.desplazamiento.0) / c.escala,
+                        (p.1 - c.desplazamiento.1) / c.escala,
+                    )
+                })
                 .collect();
-            let caja = pts.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| [b[0].min(p.0), b[1].min(p.1), b[2].max(p.0), b[3].max(p.1)]);
+            let caja = pts
+                .iter()
+                .fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| {
+                    [b[0].min(p.0), b[1].min(p.1), b[2].max(p.0), b[3].max(p.1)]
+                });
             let esperada = [0.1, 0.12, 0.9, 0.88].map(|f| f * w as f64);
             for (a, b) in caja.iter().zip(esperada) {
-                assert!((a - b).abs() < 0.04 * w as f64, "{detalle:?}: caja {caja:?} y no {esperada:?}");
+                assert!(
+                    (a - b).abs() < 0.04 * w as f64,
+                    "{detalle:?}: caja {caja:?} y no {esperada:?}"
+                );
             }
             let rgb = |h: &str| {
                 let v = |i| u8::from_str_radix(&h[i..i + 2], 16).unwrap() as i32;
                 (v(1), v(3), v(5))
             };
-            assert!(manchas.iter().any(|m| { let (r, g, b) = rgb(m.1); r > 180 && g < 110 && b > 90 }), "sin la lengua rosa");
-            assert!(manchas.iter().any(|m| { let (r, g, b) = rgb(m.1); r < 130 && g < 90 && b < 80 }), "sin las orejas oscuras");
+            assert!(
+                manchas.iter().any(|m| {
+                    let (r, g, b) = rgb(m.1);
+                    r > 180 && g < 110 && b > 90
+                }),
+                "sin la lengua rosa"
+            );
+            assert!(
+                manchas.iter().any(|m| {
+                    let (r, g, b) = rgb(m.1);
+                    r < 130 && g < 90 && b < 80
+                }),
+                "sin las orejas oscuras"
+            );
             // Ningun agujero tapado por otra mancha (dejaria una rendija).
             for t in &c.trazos {
                 if let Trazo::Mancha { huecos, .. } = t {
-                    assert!(huecos.is_empty(), "{detalle:?}: un agujero sobre otra mancha");
+                    assert!(
+                        huecos.is_empty(),
+                        "{detalle:?}: un agujero sobre otra mancha"
+                    );
                 }
             }
         }
@@ -1417,9 +1908,16 @@ mod pruebas {
 
     #[test]
     fn lo_que_no_se_pidio_se_corrige_con_el_pedido() {
-        let mal = Parametros { solo_contornos: true, colores: false, ..Default::default() };
+        let mal = Parametros {
+            solo_contornos: true,
+            colores: false,
+            ..Default::default()
+        };
         let mut p = mal.clone();
-        ajustar_al_pedido(&mut p, "Dibuja este perrito de la imagen adjunta dentro del lienzo.");
+        ajustar_al_pedido(
+            &mut p,
+            "Dibuja este perrito de la imagen adjunta dentro del lienzo.",
+        );
         assert!(!p.solo_contornos && p.colores);
         let mut p = mal.clone();
         ajustar_al_pedido(&mut p, "Calca solo los contornos, en blanco y negro");
@@ -1434,7 +1932,10 @@ mod pruebas {
             for x in 0..w {
                 let mut s = [0.0; 3];
                 for k in 0..16 {
-                    let (fx, fy) = (x as f64 + (k % 4) as f64 / 4.0 + 0.125, y as f64 + (k / 4) as f64 / 4.0 + 0.125);
+                    let (fx, fy) = (
+                        x as f64 + (k % 4) as f64 / 4.0 + 0.125,
+                        y as f64 + (k / 4) as f64 / 4.0 + 0.125,
+                    );
                     let c = color(fx, fy).unwrap_or([255.0; 3]);
                     (0..3).for_each(|j| s[j] += c[j] / 16.0);
                 }
@@ -1450,13 +1951,20 @@ mod pruebas {
     /// El mayor giro de un vertice (grados), en un anillo o una polilinea.
     fn giro_maximo(p: &[(f64, f64)], cerrado: bool) -> f64 {
         let n = p.len();
-        let rango: Vec<usize> = if cerrado { (0..n).collect() } else { (1..n.saturating_sub(1)).collect() };
+        let rango: Vec<usize> = if cerrado {
+            (0..n).collect()
+        } else {
+            (1..n.saturating_sub(1)).collect()
+        };
         rango
             .into_iter()
             .map(|i| {
                 let (a, b, c) = (p[(i + n - 1) % n], p[i], p[(i + 1) % n]);
                 let (u, v) = ((b.0 - a.0, b.1 - a.1), (c.0 - b.0, c.1 - b.1));
-                (u.0 * v.1 - u.1 * v.0).atan2(u.0 * v.0 + u.1 * v.1).abs().to_degrees()
+                (u.0 * v.1 - u.1 * v.0)
+                    .atan2(u.0 * v.0 + u.1 * v.1)
+                    .abs()
+                    .to_degrees()
             })
             .fold(0.0, f64::max)
     }
@@ -1469,9 +1977,19 @@ mod pruebas {
     fn un_circulo_calcado_es_una_curva_y_no_una_escalera() {
         let (w, h) = (768u32, 576u32);
         let (cx, cy, r) = (384.0, 288.0, 200.0);
-        let px = con_antialias(w, h, |x, y| ((x - cx).powi(2) + (y - cy).powi(2) <= r * r).then_some([30.0, 60.0, 160.0]));
+        let px = con_antialias(w, h, |x, y| {
+            ((x - cx).powi(2) + (y - cy).powi(2) <= r * r).then_some([30.0, 60.0, 160.0])
+        });
         for solo_contornos in [false, true] {
-            let c = calcar(&px, w, h, &Parametros { solo_contornos, ..Default::default() });
+            let c = calcar(
+                &px,
+                w,
+                h,
+                &Parametros {
+                    solo_contornos,
+                    ..Default::default()
+                },
+            );
             assert_eq!(c.trazos.len(), 1, "{solo_contornos}: {:?}", c.trazos.len());
             let (pts, cerrado) = match &c.trazos[0] {
                 Trazo::Mancha { contorno, .. } => (contorno.clone(), true),
@@ -1483,7 +2001,11 @@ mod pruebas {
             let e = error_circulo(&c, &pts, (cx, cy, r));
             assert!(e < 0.6, "{solo_contornos}: error medio {e}");
             // Ni pocos puntos (poligono a la vista) ni miles.
-            assert!(pts.len() >= 40 && pts.len() <= 200, "{solo_contornos}: {} puntos", pts.len());
+            assert!(
+                pts.len() >= 40 && pts.len() <= 200,
+                "{solo_contornos}: {} puntos",
+                pts.len()
+            );
         }
     }
 
@@ -1503,11 +2025,22 @@ mod pruebas {
             .iter()
             .map(|(a, b)| {
                 let (u, v) = (a * l / 2.0, b * l / 2.0);
-                (cx + u * g.cos() - v * g.sin(), cy + u * g.sin() + v * g.cos())
+                (
+                    cx + u * g.cos() - v * g.sin(),
+                    cy + u * g.sin() + v * g.cos(),
+                )
             })
             .collect();
         for solo_contornos in [false, true] {
-            let c = calcar(&px, w, h, &Parametros { solo_contornos, ..Default::default() });
+            let c = calcar(
+                &px,
+                w,
+                h,
+                &Parametros {
+                    solo_contornos,
+                    ..Default::default()
+                },
+            );
             let pts: Vec<(f64, f64)> = match &c.trazos[0] {
                 Trazo::Mancha { contorno, .. } => contorno.clone(),
                 Trazo::Linea { puntos, .. } => puntos[..puntos.len() - 1].to_vec(),
@@ -1516,7 +2049,11 @@ mod pruebas {
             let pts: Vec<(f64, f64)> = pts.iter().map(|p| a_imagen(&c, *p)).collect();
             // Cuatro lados rectos: cuatro vertices (y si acaso alguno de mas
             // en Canny, que corta las esquinas), cada uno en una esquina.
-            assert!(pts.len() >= 4 && pts.len() <= 6, "{solo_contornos}: {} puntos: {pts:?}", pts.len());
+            assert!(
+                pts.len() >= 4 && pts.len() <= 6,
+                "{solo_contornos}: {} puntos: {pts:?}",
+                pts.len()
+            );
             for e in &esquinas {
                 let d = pts.iter().map(|p| dist(*p, *e)).fold(f64::MAX, f64::min);
                 let tope = if solo_contornos { 3.5 } else { 1.5 };
@@ -1556,15 +2093,23 @@ mod pruebas {
         let roja: Vec<(f64, f64)> = manchas[0].iter().map(|p| a_imagen(&c, *p)).collect();
         for y in [80.0, 150.0, 220.0] {
             let frontera = 230.0 + (y - 150.0) * 0.3;
-            assert!(dentro(&roja, (frontera + 1.5, y)), "la roja no se mete bajo la azul en y={y}");
+            assert!(
+                dentro(&roja, (frontera + 1.5, y)),
+                "la roja no se mete bajo la azul en y={y}"
+            );
             // Pero no asoma por el otro lado de la azul.
-            assert!(!dentro(&roja, (frontera + 30.0, y)), "la roja tapa la azul en y={y}");
+            assert!(
+                !dentro(&roja, (frontera + 30.0, y)),
+                "la roja tapa la azul en y={y}"
+            );
         }
     }
 
     #[test]
     fn una_recta_queda_recta_y_un_cuadrado_con_sus_esquinas() {
-        let linea: Vec<(f64, f64)> = (0..50).map(|i| (i as f64, (i as f64 * 0.01).sin() * 0.1)).collect();
+        let linea: Vec<(f64, f64)> = (0..50)
+            .map(|i| (i as f64, (i as f64 * 0.01).sin() * 0.1))
+            .collect();
         assert_eq!(curva(&linea, false, 0.5, 0.1).len(), 2);
         let mut cuadrado = Vec::new();
         for i in 0..40 {
@@ -1583,146 +2128,4 @@ mod pruebas {
         assert_eq!(c.len(), 4, "{c:?}");
         assert!((area(&c).abs() - 100.0).abs() < 1e-6);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Rayas finas, a toda resolucion
-
-/// Lo mas grande (en pixeles) que se mira a toda resolucion buscando rayas
-/// finas; por encima, se reduce primero a esto.
-const LADO_FINAS: usize = 1600;
-
-/// **Las rayas finas** de la zona `(zx, zy, zw, zh)`: la tinta que no
-/// aguanta una erosion de 2 px (lo de 1-4 px de ancho), por su linea
-/// central (el esqueleto, alisado con las curvas de `trazado`), con su color
-/// y su grosor. Devuelve tambien la imagen sin ellas (pintadas del color
-/// del papel) para calcar el resto. En coordenadas de la imagen original.
-#[allow(clippy::type_complexity)]
-fn rayas_finas(rgba: &[u8], ancho: usize, (zx, zy, zw, zh): (usize, usize, usize, usize)) -> (Option<Vec<u8>>, Vec<(Vec<(f64, f64)>, String, f64)>) {
-    use crate::diagrama::mascara;
-    if zw.max(zh) > LADO_FINAS || zw < 8 || zh < 8 {
-        return (None, Vec::new());
-    }
-    let mut sub = vec![0u8; zw * zh * 4];
-    for y in 0..zh {
-        let o = ((zy + y) * ancho + zx) * 4;
-        let Some(fila) = rgba.get(o..o + zw * 4) else { return (None, Vec::new()) };
-        sub[y * zw * 4..(y + 1) * zw * 4].copy_from_slice(fila);
-    }
-    let img = mascara::Img::de_rgba(&sub, zw, zh);
-    let papel = mascara::fondo(&img);
-    let dpap: Vec<f32> = img.px.iter().map(|&c| mascara::dist_color(c, papel)).collect();
-    let tinta: Vec<bool> = dpap.iter().map(|&d| d > 40.0).collect();
-    // Una foto (sin papel liso) no tiene «rayas» que sacar: su textura son
-    // mil rayitas.
-    let lisas = dpap.iter().filter(|&&d| d < 12.0).count();
-    if (lisas as f64) < 0.3 * (zw * zh) as f64 {
-        return (None, Vec::new());
-    }
-    let nucleo = mascara::erosionar(&tinta, zw, zh, 2.0);
-    let grueso = mascara::dilatar(&nucleo, zw, zh, 2.6);
-    let fino: Vec<bool> = (0..zw * zh).map(|i| tinta[i] && !grueso[i]).collect();
-    let minimo = 12f64.max(0.02 * zw.max(zh) as f64);
-    let mut salida: Vec<(Vec<(f64, f64)>, String, f64)> = Vec::new();
-    let mut quitar = vec![false; zw * zh];
-    for comp in mascara::componentes(&fino, zw, zh) {
-        if comp.len() < 10 {
-            continue;
-        }
-        let (x0, y0, x1, y1) = mascara::caja_de(&comp, zw);
-        let (ox, oy) = (x0.saturating_sub(2), y0.saturating_sub(2));
-        let (gw, gh) = ((x1 + 3).min(zw) - ox, (y1 + 3).min(zh) - oy);
-        let mut m = vec![false; gw * gh];
-        for &i in &comp {
-            m[(i / zw - oy) * gw + (i % zw - ox)] = true;
-        }
-        let esq = mascara::esqueleto(&m, gw, gh);
-        let cadenas: Vec<Vec<(f64, f64)>> = mascara::cadenas(&esq, gw, gh).into_iter().filter(|c| c.len() >= 3).collect();
-        let largo: f64 = cadenas.iter().map(|c| c.windows(2).map(|w| dist(w[0], w[1])).sum::<f64>()).sum();
-        if largo < minimo {
-            continue;
-        }
-        // Fina de verdad: lo que pesa entre lo que mide.
-        let peso: f64 = comp.iter().map(|&i| (dpap[i] as f64 / 180.0).min(1.0)).sum();
-        let grosor = peso / largo.max(1.0);
-        if grosor > 4.0 {
-            continue;
-        }
-        let mut cs: Vec<(f32, [f32; 3])> = comp.iter().map(|&i| (dpap[i], img.px[i])).collect();
-        cs.sort_by(|a, b| b.0.total_cmp(&a.0));
-        cs.truncate((cs.len() / 2).max(1));
-        let media = mascara::media(cs.iter().map(|c| c.1));
-        let color = hex(media);
-        for c in cadenas {
-            let puntos: Vec<(f64, f64)> = c.iter().map(|&(x, y)| (x + (ox + zx) as f64, y + (oy + zy) as f64)).collect();
-            let lisa = curva(&puntos, false, 0.6, 0.3);
-            if lisa.len() >= 2 {
-                salida.push((lisa, color.clone(), grosor.max(1.0)));
-            }
-        }
-        for &i in &comp {
-            quitar[i] = true;
-        }
-    }
-    if salida.is_empty() {
-        return (None, Vec::new());
-    }
-    // Lo que se quito, del color del papel (y su halo de antialias).
-    let quitar = mascara::dilatar(&quitar, zw, zh, 1.0);
-    let mut limpia = rgba.to_vec();
-    for y in 0..zh {
-        for x in 0..zw {
-            if quitar[y * zw + x] && !grueso[y * zw + x] {
-                let o = ((zy + y) * ancho + zx + x) * 4;
-                limpia[o] = papel[0] as u8;
-                limpia[o + 1] = papel[1] as u8;
-                limpia[o + 2] = papel[2] as u8;
-                limpia[o + 3] = 255;
-            }
-        }
-    }
-    salida.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
-    salida.truncate(400);
-    (Some(limpia), salida)
-}
-
-/// **El texto de una imagen que se calca, como texto** (15-oct): lo que
-/// leyo el OCR (palabras con caja en pixeles de la imagen) se tapa con el
-/// color del papel antes de calcar ([`tapar_texto`]) y va al lienzo como
-/// texto editable, en su sitio, con su tamano y su color.
-pub fn tapar_texto(rgba: &mut [u8], ancho: u32, alto: u32, palabras: &[crate::hoja::PalabraHoja]) {
-    let (w, h) = (ancho as usize, alto as usize);
-    let img = crate::diagrama::mascara::Img::de_rgba(rgba, w, h);
-    let papel = crate::diagrama::mascara::fondo(&img);
-    for p in palabras {
-        let c = p.caja.crecer(2.0).dentro(w as f64, h as f64);
-        for y in c.y.floor() as usize..(c.y1().ceil() as usize).min(h) {
-            for x in c.x.floor() as usize..(c.x1().ceil() as usize).min(w) {
-                let i = (y * w + x) * 4;
-                rgba[i] = papel[0] as u8;
-                rgba[i + 1] = papel[1] as u8;
-                rgba[i + 2] = papel[2] as u8;
-                rgba[i + 3] = 255;
-            }
-        }
-    }
-}
-
-/// Las palabras como textos del lienzo, colocadas como el calco.
-pub fn textos_del_calco(c: &Calcado, palabras: &[crate::hoja::PalabraHoja], semilla: u64) -> Vec<serde_json::Value> {
-    let familia = "Work Sans";
-    let k = pixpin_motor2d::texto::interlineado_de(familia).unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
-    let piezas: Vec<pixpin_motor2d::Elemento> = palabras
-        .iter()
-        .map(|p| {
-            let (x, y) = (p.caja.x * c.escala + c.desplazamiento.0, p.caja.y * c.escala + c.desplazamiento.1);
-            let alto = p.caja.h * c.escala;
-            let tam = ((alto * 1.05 * 2.0).round() / 2.0).max(5.0);
-            crate::hoja::montaje::un_texto(&p.texto, x, y + alto / 2.0 - tam * k / 2.0, tam, familia, p.negrita, crate::hoja::Alineacion::Izquierda, p.color)
-        })
-        .collect();
-    let mut f = crate::lienzo::Fabrica::nueva((0.0, 0.0), semilla ^ 0x7e57);
-    f.grupo = Some(format!("ia-{semilla:x}-calco"));
-    f.de_motor(&piezas);
-    f.salida
 }

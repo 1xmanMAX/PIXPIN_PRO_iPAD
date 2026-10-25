@@ -183,7 +183,8 @@ pub fn pagina(
     let sobre: serde_json::Map<String, serde_json::Value> = por_mes
         .iter()
         .filter_map(|(mes, v)| {
-            lo_mas_repetido(v).map(|l| (format!("{:04}-{:02}", mes.anio, mes.mes), json!(l.texto())))
+            lo_mas_repetido(v)
+                .map(|l| (format!("{:04}-{:02}", mes.anio, mes.mes), json!(l.texto())))
         })
         .collect();
     let meses: Vec<&str> = (1..=12).map(|n| solo_el_mes(n, op.ingles)).collect();
@@ -214,7 +215,13 @@ fn con_punto(d: &str) -> String {
 /// numeros y guiones. Los de la app ya son asi (`tl-<ms>-<n>`).
 fn id_html(id: &str) -> String {
     id.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -705,9 +712,16 @@ mod pruebas {
             &|n| Some(data_uri(n, b"voz")),
         );
         assert!(html.contains("<time>14:05</time>"));
-        assert!(html.contains("Llegó &lt;el&gt; pedido"), "lo escrito se escapa");
+        assert!(
+            html.contains("Llegó &lt;el&gt; pedido"),
+            "lo escrito se escapa"
+        );
         assert!(html.contains("venía<br>roto"));
-        assert_eq!(html.matches("<img ").count(), 1, "la foto que falta se omite");
+        assert_eq!(
+            html.matches("<img ").count(),
+            1,
+            "la foto que falta se omite"
+        );
         assert!(html.contains("data:image/png;base64,eA=="));
         assert!(html.contains("Nota de voz · 0:42"));
         // El audio va dentro, como MP4, una sola vez.
@@ -717,7 +731,10 @@ mod pruebas {
         assert_eq!(m0["audio"], "a0");
         assert_eq!(m0["fotos"][0], "f0");
         assert_eq!(m0["dur"], "0:42");
-        assert!(html.contains("break-inside: avoid"), "un momento no se parte al imprimir");
+        assert!(
+            html.contains("break-inside: avoid"),
+            "un momento no se parte al imprimir"
+        );
     }
 
     #[test]
@@ -752,7 +769,10 @@ mod pruebas {
         assert!(!html.contains("class=\"voz\""));
         assert!(!html.contains("class=\"fotos\""));
         assert!(!html.contains("<audio"));
-        assert_eq!(datos(&html)["momentos"][0]["audio"], serde_json::Value::Null);
+        assert_eq!(
+            datos(&html)["momentos"][0]["audio"],
+            serde_json::Value::Null
+        );
     }
 
     #[test]

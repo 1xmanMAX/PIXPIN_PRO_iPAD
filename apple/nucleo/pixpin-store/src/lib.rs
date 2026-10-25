@@ -16,8 +16,8 @@ pub mod regiones;
 pub mod rutas;
 
 pub use ajustes::{
-    Ajustes, Atajos, Capturas, ErrorAjustes, EsquinaPila, FormatoColor, ModoDeIdiomas,
-    PreferenciaIdioma, Rendimiento, Sincro, Suavizado, Tinta, Voz, Asistente, cargar, guardar,
+    Ajustes, Asistente, Atajos, Capturas, ErrorAjustes, EsquinaPila, FormatoColor, ModoDeIdiomas,
+    PreferenciaIdioma, Rendimiento, Sincro, Suavizado, Tinta, Voz, cargar, guardar,
 };
 pub use comandos::{CATALOGO, Comando, Descriptor, Enlaces};
 pub use idioma::{Catalogo, Idioma, resolver_idioma};

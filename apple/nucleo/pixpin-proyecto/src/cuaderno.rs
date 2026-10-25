@@ -74,19 +74,67 @@ pub enum Seccion {
     Galeria,
     Todo,
     Fotos,
+    /// Los videos, aparte de las fotos (25-oct-2026, la ficha del chat al
+    /// estilo de Telegram: «chat, fotos, videos, archivos, enlaces»). Son
+    /// los ficheros con extension de video, lleguen como foto o como archivo.
+    Videos,
     Archivos,
+    /// Lo que lleva una direccion web en su texto (`http://`, `https://` o
+    /// `www.`), como «Enlaces» de Telegram.
+    Enlaces,
     Voz,
     Dibujos,
     Fijados,
     Buzon,
 }
 
+/// Las extensiones de video: las mismas que la familia «video» de los
+/// colores por extension (`pixpin_ui::color_de_extension`).
+const EXTENSIONES_DE_VIDEO: [&str; 9] = [
+    "mp4", "mov", "avi", "mkv", "webm", "3gp", "m4v", "wmv", "flv",
+];
+
+/// Si un mensaje es un video: una foto o un archivo con extension de video.
+pub fn es_video(m: &Mensaje) -> bool {
+    matches!(m.clase, Some(Clase::Imagen | Clase::Archivo))
+        && std::path::Path::new(&m.nombre)
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| {
+                EXTENSIONES_DE_VIDEO
+                    .iter()
+                    .any(|v| v.eq_ignore_ascii_case(e))
+            })
+}
+
+/// Si el texto lleva una direccion web: una palabra que empieza por
+/// `http://`, `https://` o `www.` y tiene un punto en el servidor. Lo justo
+/// para la seccion «Enlaces»; sacar cada enlace con su sitio es cosa de quien
+/// los pinta.
+pub fn tiene_enlace(texto: &str) -> bool {
+    texto.split_whitespace().any(|palabra| {
+        let p = palabra
+            .trim_start_matches(['(', '[', '<', '«', '"', '\''])
+            .to_ascii_lowercase();
+        let sin = ["https://", "http://", "www."]
+            .iter()
+            .find_map(|i| p.strip_prefix(i));
+        sin.is_some_and(|resto| {
+            let servidor = resto.split(['/', '?', '#']).next().unwrap_or("");
+            let servidor = servidor.trim_end_matches(['.', ',', ';', ':', ')', ']', '>', '»', '"']);
+            servidor.contains('.') && !servidor.starts_with('.')
+        })
+    })
+}
+
 impl Seccion {
-    pub const TODAS: [Seccion; 8] = [
+    pub const TODAS: [Seccion; 10] = [
         Seccion::Galeria,
         Seccion::Todo,
         Seccion::Fotos,
+        Seccion::Videos,
         Seccion::Archivos,
+        Seccion::Enlaces,
         Seccion::Voz,
         Seccion::Dibujos,
         Seccion::Fijados,
@@ -99,7 +147,9 @@ impl Seccion {
             Seccion::Galeria => "info-galeria",
             Seccion::Todo => "info-todo",
             Seccion::Fotos => "info-fotos",
+            Seccion::Videos => "info-videos",
             Seccion::Archivos => "info-archivos",
+            Seccion::Enlaces => "info-enlaces",
             Seccion::Voz => "info-voz",
             Seccion::Dibujos => "info-dibujos",
             Seccion::Fijados => "info-fijados",
@@ -110,7 +160,10 @@ impl Seccion {
     /// Si se ensena como cuadricula. Lo que se mira va en cuadricula; lo que
     /// se lee, en filas.
     pub fn es_cuadricula(self) -> bool {
-        matches!(self, Seccion::Galeria | Seccion::Fotos | Seccion::Dibujos)
+        matches!(
+            self,
+            Seccion::Galeria | Seccion::Fotos | Seccion::Videos | Seccion::Dibujos
+        )
     }
 }
 
@@ -209,13 +262,46 @@ impl Mensaje {
             return t.clone();
         }
         if !self.texto.trim().is_empty() {
-            return self.texto.clone();
+            return sin_rutas_de_fotos(&self.texto);
         }
         if !self.nombre.trim().is_empty() {
             return self.nombre.clone();
         }
         String::new()
     }
+}
+
+/// El texto de una nota con sus fotos (`![alt](pixpin:files/…)`, la nota
+/// rica del chat) dichas como «🖼 alt»: en una linea la ruta no le dice
+/// nada a nadie y se comeria todo el sitio. Lo demas, tal cual.
+pub fn sin_rutas_de_fotos(texto: &str) -> String {
+    if !texto.contains("![") {
+        return texto.to_string();
+    }
+    let mut salida = String::with_capacity(texto.len());
+    let mut resto = texto;
+    while let Some(i) = resto.find("![") {
+        salida.push_str(&resto[..i]);
+        let tras = &resto[i + 2..];
+        let cierre = tras
+            .find("](")
+            .filter(|&c| !tras[..c].contains('\n'))
+            .and_then(|c| Some((c, tras[c + 2..].find(')')?)));
+        match cierre {
+            Some((c, f)) => {
+                let alt = tras[..c].split('|').next().unwrap_or_default().trim();
+                salida.push_str(if alt.is_empty() { "🖼" } else { "🖼 " });
+                salida.push_str(alt);
+                resto = &tras[c + 2 + f + 1..];
+            }
+            None => {
+                salida.push_str("![");
+                resto = tras;
+            }
+        }
+    }
+    salida.push_str(resto);
+    salida
 }
 
 /// Quien escribe, cuando y en que conversacion: lo que sella un mensaje
@@ -601,16 +687,20 @@ pub fn indices_de_seccion(mensajes: &[Mensaje], seccion: Seccion) -> Vec<usize> 
                 Seccion::Todo => true,
                 Seccion::Buzon => false,
                 Seccion::Fijados => m.fijado,
-                Seccion::Fotos => m.clase == Some(Clase::Imagen),
+                Seccion::Fotos => m.clase == Some(Clase::Imagen) && !es_video(m),
+                Seccion::Videos => es_video(m),
+                Seccion::Enlaces => tiene_enlace(&m.texto),
                 // Las cuatro que pone Android en esta seccion
                 // (`Seccion.ARCHIVOS` en `Mensajes.kt`): lo que se abre
                 // aparte. Una pagina de plano, un acceso a otro proyecto y
                 // una mini-aplicacion se buscan aqui, y quien las busca no
                 // piensa en de que clase son por dentro.
-                Seccion::Archivos => matches!(
-                    m.clase,
-                    Some(Clase::Archivo | Clase::Pagina | Clase::Proyecto | Clase::MiniApp)
-                ),
+                Seccion::Archivos => {
+                    matches!(
+                        m.clase,
+                        Some(Clase::Archivo | Clase::Pagina | Clase::Proyecto | Clase::MiniApp)
+                    ) && !es_video(m)
+                }
                 Seccion::Voz => m.clase == Some(Clase::Voz),
                 Seccion::Dibujos => m.clase == Some(Clase::Dibujo),
             }
@@ -865,6 +955,17 @@ mod pruebas {
     }
 
     #[test]
+    fn de_una_nota_con_fotos_no_se_ensena_la_ruta() {
+        let m = Mensaje {
+            texto: "hola\n![](pixpin:files/guardados/pc/c/notas/1-a.png)\n![planta|300](notas/2.png) fin".into(),
+            ..Default::default()
+        };
+        assert_eq!(m.resumen(), "hola\n🖼\n🖼 planta fin");
+        // Caso negativo: un `![` sin cerrar se queda como se escribio.
+        assert_eq!(sin_rutas_de_fotos("mira ![esto"), "mira ![esto");
+    }
+
+    #[test]
     fn cada_conversacion_tiene_lo_suyo() {
         let c = Cuaderno::leer(cuaderno_de_prueba());
         // La general son los que no llevan proyecto, y `None` no es lo mismo
@@ -1036,6 +1137,35 @@ mod pruebas {
     }
 
     #[test]
+    fn los_videos_y_los_enlaces_tienen_su_seccion() {
+        let c = Cuaderno::leer(concat!(
+            r#"{"id":"f","clase":"IMAGEN","nombre":"a.jpg"}"#,
+            "\n",
+            r#"{"id":"v1","clase":"IMAGEN","nombre":"clip.MP4"}"#,
+            "\n",
+            r#"{"id":"v2","clase":"ARCHIVO","nombre":"obra.mov"}"#,
+            "\n",
+            r#"{"id":"a","clase":"ARCHIVO","nombre":"plano.pdf"}"#,
+            "\n",
+            r#"{"id":"e","clase":"NOTA","texto":"mira (https://ejemplo.com/x)"}"#,
+            "\n",
+            r#"{"id":"w","clase":"NOTA","texto":"en www.pixpin.app hoy"}"#,
+            "\n",
+            r#"{"id":"n","clase":"NOTA","texto":"sin enlace: http:// ni www."}"#,
+            "\n"
+        ));
+        let ids =
+            |s: Seccion| -> Vec<&str> { c.de_seccion(s).iter().map(|m| m.id.as_str()).collect() };
+        assert_eq!(ids(Seccion::Videos), ["v1", "v2"]);
+        // Caso negativo: un video no es una foto ni un archivo mas.
+        assert_eq!(ids(Seccion::Fotos), ["f"]);
+        assert_eq!(ids(Seccion::Archivos), ["a"]);
+        assert_eq!(ids(Seccion::Enlaces), ["e", "w"]);
+        assert!(Seccion::Videos.es_cuadricula());
+        assert!(!Seccion::Enlaces.es_cuadricula());
+    }
+
+    #[test]
     fn una_mini_aplicacion_lleva_su_documento_dentro_del_mensaje() {
         let m = Mensaje::miniapp("tabla", "Mediciones", r#"{"nombre":"x"}"#, &sello(10, 1));
         assert_eq!(m.clase, Some(Clase::MiniApp));
@@ -1119,7 +1249,8 @@ mod pruebas {
         assert!(es_de_sistema(&c.mensajes[0]) && es_de_sistema(&c.mensajes[1]));
         // Caso negativo: por el id, nunca por lo que dice o como se llama.
         assert!(!es_de_sistema(&c.mensajes[2]) && !es_de_sistema(&c.mensajes[3]));
-        let ids = |s: Seccion| -> Vec<&str> { c.de_seccion(s).iter().map(|m| m.id.as_str()).collect() };
+        let ids =
+            |s: Seccion| -> Vec<&str> { c.de_seccion(s).iter().map(|m| m.id.as_str()).collect() };
         assert_eq!(ids(Seccion::Todo), ["n1", "a1"]);
         assert_eq!(ids(Seccion::Archivos), ["a1"]);
         assert!(ids(Seccion::Fijados).is_empty());

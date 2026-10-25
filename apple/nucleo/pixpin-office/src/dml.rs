@@ -45,14 +45,22 @@ pub fn relleno_de(n: &Nodo, ctx: Contexto, ph: Option<Color>) -> Option<Option<R
             if n.hijo("path").is_some() {
                 return Some(Some(Relleno::Radial { paradas }));
             }
-            let angulo = n.hijo("lin").and_then(|l| attr_num(l, "ang", 1.0)).unwrap_or(0.0) / 60000.0;
+            let angulo = n
+                .hijo("lin")
+                .and_then(|l| attr_num(l, "ang", 1.0))
+                .unwrap_or(0.0)
+                / 60000.0;
             Some(Some(Relleno::Lineal { paradas, angulo }))
         }
         "pattFill" => {
             // Una trama se resume en su color de fondo mezclado con el de
             // delante.
-            let fg = n.hijo("fgClr").and_then(|c| tema::color_hijo(c, ctx.tema, ctx.mapa, ph));
-            let bg = n.hijo("bgClr").and_then(|c| tema::color_hijo(c, ctx.tema, ctx.mapa, ph));
+            let fg = n
+                .hijo("fgClr")
+                .and_then(|c| tema::color_hijo(c, ctx.tema, ctx.mapa, ph));
+            let bg = n
+                .hijo("bgClr")
+                .and_then(|c| tema::color_hijo(c, ctx.tema, ctx.mapa, ph));
             Some(match (fg, bg) {
                 (Some(f), Some(b)) => Some(Relleno::Solido(Color::rgb(
                     ((f.r as u16 + 3 * b.r as u16) / 4) as u8,
@@ -85,11 +93,17 @@ pub fn linea(ln: &Nodo, ctx: Contexto, ph: Option<Color>) -> Option<Option<Trazo
     let discontinuo = ln.hijo("prstDash").map(|d| match d.valor() {
         "dot" | "sysDot" => Discontinuo::Puntos,
         "dash" | "sysDash" | "lgDash" => Discontinuo::Rayas,
-        "dashDot" | "lgDashDot" | "lgDashDotDot" | "sysDashDot" | "sysDashDotDot" => Discontinuo::RayaPunto,
+        "dashDot" | "lgDashDot" | "lgDashDotDot" | "sysDashDot" | "sysDashDotDot" => {
+            Discontinuo::RayaPunto
+        }
         _ => Discontinuo::Solida,
     });
     let c = color?;
-    Some(Some(Trazo { color: c, grosor: grosor.unwrap_or(0.75).max(0.25), discontinuo: discontinuo.unwrap_or_default() }))
+    Some(Some(Trazo {
+        color: c,
+        grosor: grosor.unwrap_or(0.75).max(0.25),
+        discontinuo: discontinuo.unwrap_or_default(),
+    }))
 }
 
 /// Los efectos de un `a:effectLst` (o de lo que tenga los efectos como
@@ -134,19 +148,35 @@ pub fn efectos(lst: &Nodo, ctx: Contexto, ph: Option<Color>, giro: f32) -> Vec<E
                     desenfoque: if preset { 0.0 } else { pt("blurRad") },
                     dx,
                     dy,
-                    escala: if preset { (1.0, 1.0) } else { (fraccion("sx"), fraccion("sy")) },
-                    sesgo: if preset { (0.0, 0.0) } else { (grados("kx"), grados("ky")) },
+                    escala: if preset {
+                        (1.0, 1.0)
+                    } else {
+                        (fraccion("sx"), fraccion("sy"))
+                    },
+                    sesgo: if preset {
+                        (0.0, 0.0)
+                    } else {
+                        (grados("kx"), grados("ky"))
+                    },
                     ancla,
                 });
             }
             "innerShdw" => {
                 let (dx, dy) = desplazamiento();
-                v.push(Efecto::SombraInterior { color: color(), desenfoque: pt("blurRad"), dx, dy });
+                v.push(Efecto::SombraInterior {
+                    color: color(),
+                    desenfoque: pt("blurRad"),
+                    dx,
+                    dy,
+                });
             }
             "glow" => {
                 let radio = pt("rad");
                 if radio > 0.0 {
-                    v.push(Efecto::Brillo { color: color(), radio });
+                    v.push(Efecto::Brillo {
+                        color: color(),
+                        radio,
+                    });
                 }
             }
             "softEdge" => {
@@ -169,14 +199,25 @@ pub fn efectos_ref(r: &Nodo, ctx: Contexto) -> Vec<Efecto> {
         return Vec::new();
     }
     let ph = tema::color_hijo(r, ctx.tema, ctx.mapa, None);
-    ctx.tema.efectos.get(idx - 1).and_then(|st| st.hijo("effectLst")).map(|l| efectos(l, ctx, ph, 0.0)).unwrap_or_default()
+    ctx.tema
+        .efectos
+        .get(idx - 1)
+        .and_then(|st| st.hijo("effectLst"))
+        .map(|l| efectos(l, ctx, ph, 0.0))
+        .unwrap_or_default()
 }
 
 /// Los efectos de una forma: los de su `spPr` si los dice (un
 /// `effectLst` vacio o un `effectDag` = ninguno), si no los de su estilo
 /// (`effectRef`), y si no tiene estilo los heredados (`spPr` de sus
 /// marcadores, del mas lejano al mas cercano).
-pub fn efectos_forma(sppr: Option<&Nodo>, estilo: Option<&Nodo>, heredados: &[&Nodo], ctx: Contexto, giro: f32) -> Vec<Efecto> {
+pub fn efectos_forma(
+    sppr: Option<&Nodo>,
+    estilo: Option<&Nodo>,
+    heredados: &[&Nodo],
+    ctx: Contexto,
+    giro: f32,
+) -> Vec<Efecto> {
     if let Some(s) = sppr {
         if let Some(l) = s.hijo("effectLst") {
             return efectos(l, ctx, None, giro);
@@ -186,9 +227,17 @@ pub fn efectos_forma(sppr: Option<&Nodo>, estilo: Option<&Nodo>, heredados: &[&N
         }
     }
     if let Some(st) = estilo {
-        return st.hijo("effectRef").map(|r| efectos_ref(r, ctx)).unwrap_or_default();
+        return st
+            .hijo("effectRef")
+            .map(|r| efectos_ref(r, ctx))
+            .unwrap_or_default();
     }
-    heredados.iter().rev().find_map(|s| s.hijo("effectLst")).map(|l| efectos(l, ctx, None, giro)).unwrap_or_default()
+    heredados
+        .iter()
+        .rev()
+        .find_map(|s| s.hijo("effectLst"))
+        .map(|l| efectos(l, ctx, None, giro))
+        .unwrap_or_default()
 }
 
 /// Lo que aporta `p:style`/`wps:style` (referencias al tema).
@@ -205,8 +254,16 @@ pub fn estilo_forma(st: &Nodo, ctx: Contexto) -> EstiloForma {
         let idx = f.atributo("idx").parse::<usize>().unwrap_or(0);
         let ph = tema::color_hijo(f, ctx.tema, ctx.mapa, None);
         // idx 1..3 = fillStyleLst; 1001.. = bgFillStyleLst; 0 = sin relleno.
-        let lista = if idx >= 1000 { &ctx.tema.rellenos_fondo } else { &ctx.tema.rellenos };
-        let i = if idx >= 1000 { idx - 1001 } else { idx.wrapping_sub(1) };
+        let lista = if idx >= 1000 {
+            &ctx.tema.rellenos_fondo
+        } else {
+            &ctx.tema.rellenos
+        };
+        let i = if idx >= 1000 {
+            idx - 1001
+        } else {
+            idx.wrapping_sub(1)
+        };
         e.relleno = if idx == 0 {
             None
         } else {
@@ -281,7 +338,10 @@ pub fn figuras(sppr: &Nodo, w: f32, h: f32) -> (Vec<Figura>, bool) {
     if let Some(p) = sppr.hijo("prstGeom") {
         let nombre = p.atributo("prst");
         let adj = geometria::ajustes(Some(p));
-        return (geometria::predefinida(nombre, w, h, &adj), geometria::es_linea(nombre));
+        return (
+            geometria::predefinida(nombre, w, h, &adj),
+            geometria::es_linea(nombre),
+        );
     }
     if let Some(c) = sppr.hijo("custGeom") {
         let f = geometria::propia(c, w, h);
@@ -293,7 +353,13 @@ pub fn figuras(sppr: &Nodo, w: f32, h: f32) -> (Vec<Figura>, bool) {
 
 /// Envuelve elementos dibujados en (0,0)-(w,h) para ponerlos en `caja` con
 /// el giro y los volteos de la forma.
-pub fn colocar(elementos: Vec<Elemento>, caja: Rect, giro: f32, voltear_h: bool, voltear_v: bool) -> Elemento {
+pub fn colocar(
+    elementos: Vec<Elemento>,
+    caja: Rect,
+    giro: f32,
+    voltear_h: bool,
+    voltear_v: bool,
+) -> Elemento {
     let (cx, cy) = (caja.ancho / 2.0, caja.alto / 2.0);
     let (s, c) = giro.to_radians().sin_cos();
     let fx = if voltear_h { -1.0 } else { 1.0 };
@@ -305,7 +371,11 @@ pub fn colocar(elementos: Vec<Elemento>, caja: Rect, giro: f32, voltear_h: bool,
     let d = c * fy;
     let e = caja.x + cx - (a * cx + cc * cy);
     let f = caja.y + cy - (b * cx + d * cy);
-    Elemento::Grupo { transformada: [a, b, cc, d, e, f], recorte: None, elementos }
+    Elemento::Grupo {
+        transformada: [a, b, cc, d, e, f],
+        recorte: None,
+        elementos,
+    }
 }
 
 /// La caja de recorte de una imagen (`a:srcRect`), en fracciones.
@@ -313,7 +383,11 @@ pub fn recorte(blip_fill: &Nodo) -> Option<[f32; 4]> {
     let s = blip_fill.hijo("srcRect")?;
     let v = |k: &str| attr_num(s, k, 1.0).unwrap_or(0.0) / 100000.0;
     let r = [v("l"), v("t"), v("r"), v("b")];
-    if r.iter().all(|x| x.abs() < 1e-6) { None } else { Some(r) }
+    if r.iter().all(|x| x.abs() < 1e-6) {
+        None
+    } else {
+        Some(r)
+    }
 }
 
 #[cfg(test)]
@@ -329,7 +403,9 @@ mod pruebas {
         .unwrap();
         let t = Tema::default();
         let m = HashMap::new();
-        let r = relleno_de(&n, Contexto { tema: &t, mapa: &m }, None).unwrap().unwrap();
+        let r = relleno_de(&n, Contexto { tema: &t, mapa: &m }, None)
+            .unwrap()
+            .unwrap();
         match r {
             Relleno::Lineal { paradas, angulo } => {
                 assert_eq!(paradas[0].1, Color::rgb(255, 0, 0));
@@ -362,7 +438,20 @@ mod pruebas {
         )
         .unwrap();
         let v = efectos(&n, ctx, None, 30.0);
-        let [Efecto::SombraExterior { color, desenfoque, dx, dy, escala, sesgo, ancla }] = v.as_slice() else { panic!("{v:?}") };
+        let [
+            Efecto::SombraExterior {
+                color,
+                desenfoque,
+                dx,
+                dy,
+                escala,
+                sesgo,
+                ancla,
+            },
+        ] = v.as_slice()
+        else {
+            panic!("{v:?}")
+        };
         assert_eq!((color.r, color.a), (0, 102));
         assert!((desenfoque - 4.0).abs() < 1e-4);
         // 3 pt a 45 grados: hacia abajo a la derecha. Sin rotWithShape el
@@ -388,7 +477,9 @@ mod pruebas {
         let m = HashMap::new();
         let n = leer(r#"<a:effectLst><a:outerShdw dist="127000" dir="0"/></a:effectLst>"#).unwrap();
         let v = efectos(&n, Contexto { tema: &t, mapa: &m }, None, 90.0);
-        let [Efecto::SombraExterior { dx, dy, .. }] = v.as_slice() else { panic!() };
+        let [Efecto::SombraExterior { dx, dy, .. }] = v.as_slice() else {
+            panic!()
+        };
         assert!(dx.abs() < 1e-4 && (dy - 10.0).abs() < 1e-4, "{dx} {dy}");
     }
 
@@ -402,8 +493,22 @@ mod pruebas {
         .unwrap();
         let v = efectos(&n, Contexto { tema: &t, mapa: &m }, None, 0.0);
         assert_eq!(v.len(), 3, "{v:?}");
-        assert_eq!(v[0], Efecto::Brillo { color: Color::rgb(0xFF, 0xC0, 0), radio: 8.0 });
-        let Efecto::SombraInterior { color, desenfoque, dx, dy } = v[1] else { panic!() };
+        assert_eq!(
+            v[0],
+            Efecto::Brillo {
+                color: Color::rgb(0xFF, 0xC0, 0),
+                radio: 8.0
+            }
+        );
+        let Efecto::SombraInterior {
+            color,
+            desenfoque,
+            dx,
+            dy,
+        } = v[1]
+        else {
+            panic!()
+        };
         assert_eq!(color, Color::NEGRO);
         assert!((desenfoque - 5.0).abs() < 1e-4 && dx < 0.0 && dy < 0.0);
         assert_eq!(v[2], Efecto::BordeSuave { radio: 10.0 });
@@ -421,11 +526,19 @@ mod pruebas {
         // Sin effectLst propio: los del tema.
         let sppr = leer(r#"<p:spPr><a:prstGeom prst="rect"/></p:spPr>"#).unwrap();
         let v = efectos_forma(Some(&sppr), Some(&estilo), &[], ctx, 0.0);
-        assert!(matches!(v.as_slice(), [Efecto::SombraExterior { .. }]), "{v:?}");
+        assert!(
+            matches!(v.as_slice(), [Efecto::SombraExterior { .. }]),
+            "{v:?}"
+        );
         // El color de la referencia sustituye a phClr.
-        let brillo = leer(r#"<p:style><a:effectRef idx="3"><a:srgbClr val="FF0000"/></a:effectRef></p:style>"#).unwrap();
+        let brillo = leer(
+            r#"<p:style><a:effectRef idx="3"><a:srgbClr val="FF0000"/></a:effectRef></p:style>"#,
+        )
+        .unwrap();
         let v = efectos_forma(None, Some(&brillo), &[], ctx, 0.0);
-        let [Efecto::Brillo { color, .. }] = v.as_slice() else { panic!("{v:?}") };
+        let [Efecto::Brillo { color, .. }] = v.as_slice() else {
+            panic!("{v:?}")
+        };
         assert_eq!((color.r, color.g, color.a), (255, 0, 102));
         // Casos negativos: un effectLst vacio propio manda sobre el tema; el
         // idx 0 y el primer estilo (vacio) no ponen nada.
@@ -436,7 +549,9 @@ mod pruebas {
         let uno = leer(r#"<p:style><a:effectRef idx="1"/></p:style>"#).unwrap();
         assert!(efectos_forma(None, Some(&uno), &[], ctx, 0.0).is_empty());
         // Sin estilo: lo heredado del marcador.
-        let heredado = leer(r#"<p:spPr><a:effectLst><a:softEdge rad="12700"/></a:effectLst></p:spPr>"#).unwrap();
+        let heredado =
+            leer(r#"<p:spPr><a:effectLst><a:softEdge rad="12700"/></a:effectLst></p:spPr>"#)
+                .unwrap();
         let v = efectos_forma(Some(&sppr), None, &[&heredado], ctx, 0.0);
         assert_eq!(v, vec![Efecto::BordeSuave { radio: 1.0 }]);
     }
@@ -444,7 +559,9 @@ mod pruebas {
     #[test]
     fn colocar_sin_giro_solo_traslada() {
         let e = colocar(vec![], Rect::nuevo(10.0, 20.0, 4.0, 2.0), 0.0, false, false);
-        let Elemento::Grupo { transformada, .. } = e else { panic!() };
+        let Elemento::Grupo { transformada, .. } = e else {
+            panic!()
+        };
         assert_eq!(transformada, [1.0, 0.0, 0.0, 1.0, 10.0, 20.0]);
     }
 }

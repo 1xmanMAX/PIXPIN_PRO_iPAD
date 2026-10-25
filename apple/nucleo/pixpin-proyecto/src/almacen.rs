@@ -464,11 +464,16 @@ pub fn renovar(paquete: &crate::Paquete, ahora: i64) -> crate::Paquete {
     // por el codigo de su mensaje (`anot-<uid>…`): el mensaje que lo tiene
     // estrena su codigo ya aqui y sus ficheros se llaman con el nuevo, o la
     // copia se quedaria sin nada de lo anotado.
-    let anotados: std::collections::HashSet<String> =
-        paquete.nombres().filter_map(|n| uid_de_lo_anotado(n).map(str::to_string)).collect();
+    let anotados: std::collections::HashSet<String> = paquete
+        .nombres()
+        .filter_map(|n| uid_de_lo_anotado(n).map(str::to_string))
+        .collect();
     let mut cambiados = std::collections::HashMap::new();
     if let Some(bytes) = paquete.entrada("guardados.jsonl") {
-        nuevo.poner_entrada("guardados.jsonl", renovar_cuaderno(bytes, ahora, &anotados, &mut cambiados).into_bytes());
+        nuevo.poner_entrada(
+            "guardados.jsonl",
+            renovar_cuaderno(bytes, ahora, &anotados, &mut cambiados).into_bytes(),
+        );
     }
     for nombre in paquete.nombres() {
         if nombre == "manifest.json" || nombre == "proyecto.json" || nombre == "guardados.jsonl" {
@@ -477,11 +482,17 @@ pub fn renovar(paquete: &crate::Paquete, ahora: i64) -> crate::Paquete {
         let Some(bytes) = paquete.entrada(nombre) else {
             continue;
         };
-        let puesto = match uid_de_lo_anotado(nombre).and_then(|u| cambiados.get(u).map(|n: &String| (u, n))) {
+        let puesto = match uid_de_lo_anotado(nombre)
+            .and_then(|u| cambiados.get(u).map(|n: &String| (u, n)))
+        {
             Some((viejo, estrenado)) => {
                 let (carpeta, fichero) = nombre.rsplit_once('/').unwrap_or(("", nombre));
                 let fichero = fichero.replacen(viejo, estrenado, 1);
-                if carpeta.is_empty() { fichero } else { format!("{carpeta}/{fichero}") }
+                if carpeta.is_empty() {
+                    fichero
+                } else {
+                    format!("{carpeta}/{fichero}")
+                }
             }
             None => nombre.to_string(),
         };
@@ -524,9 +535,16 @@ fn renovar_cuaderno(
     for (i, linea) in texto.lines().filter(|l| !l.trim().is_empty()).enumerate() {
         match serde_json::from_str::<Mensaje>(linea) {
             Ok(m) => {
-                let uid = m.uid.as_ref().filter(|u| anotados.contains(*u)).map(|viejo| {
-                    cambiados.entry(viejo.clone()).or_insert_with(codigos::nuevo).clone()
-                });
+                let uid = m
+                    .uid
+                    .as_ref()
+                    .filter(|u| anotados.contains(*u))
+                    .map(|viejo| {
+                        cambiados
+                            .entry(viejo.clone())
+                            .or_insert_with(codigos::nuevo)
+                            .clone()
+                    });
                 let puesto = Mensaje {
                     id: (ahora + i as i64).to_string(),
                     cuando: ahora + i as i64,
@@ -1128,6 +1146,17 @@ impl Ficha {
     pub fn es_asistente(&self) -> bool {
         self.resto.get(MARCA_ASISTENTE).and_then(|v| v.as_bool()) == Some(true)
     }
+}
+
+/// Le pone la marca del chat del asistente (el que queda al juntar los de
+/// varios aparatos: `vista::asistente_unico`).
+pub fn poner_marca_asistente(f: &mut Ficha) {
+    f.resto
+        .insert(MARCA_ASISTENTE.to_string(), serde_json::Value::Bool(true));
+}
+
+pub fn quitar_marca_asistente(f: &mut Ficha) {
+    f.resto.remove(MARCA_ASISTENTE);
 }
 
 /// El chat «Asistente», creandolo si no esta. Nace sin nada dentro: la
@@ -1810,8 +1839,14 @@ mod pruebas {
         std::fs::create_dir_all(&lado).unwrap();
         let ficheros = [
             ("lienzos/anot-MMMMMMMMMM-p0.excalidraw", "tinta"),
-            ("android/pins/draw/anot-MMMMMMMMMM.marcos.json", "[{\"n\":1}]"),
-            ("android/pins/draw/anot-MMMMMMMMMM.vistas.json", "{\"m1\":\"2 0 0\"}"),
+            (
+                "android/pins/draw/anot-MMMMMMMMMM.marcos.json",
+                "[{\"n\":1}]",
+            ),
+            (
+                "android/pins/draw/anot-MMMMMMMMMM.vistas.json",
+                "{\"m1\":\"2 0 0\"}",
+            ),
             ("android/pins/draw/anot-MMMMMMMMMM-mm1.hoja", "marco"),
         ];
         for (rel, texto) in ficheros {
@@ -1826,7 +1861,11 @@ mod pruebas {
         let otra_raiz = carpeta_temporal("todo-lo-anotado-otro-pc");
         let puesta = importar_paquete(&otra_raiz, &llegado, "YYYY").unwrap();
         for (rel, texto) in ficheros {
-            assert_eq!(std::fs::read_to_string(carpeta(&otra_raiz, &puesta.id).join(rel)).unwrap(), texto, "{rel}");
+            assert_eq!(
+                std::fs::read_to_string(carpeta(&otra_raiz, &puesta.id).join(rel)).unwrap(),
+                texto,
+                "{rel}"
+            );
         }
 
         // Crear como nuevo: el mensaje anotado estrena codigo y lo suyo se
@@ -1840,9 +1879,16 @@ mod pruebas {
         assert!(ms.iter().find(|m| m.texto == "otro").unwrap().uid.is_none());
         for (rel, texto) in ficheros {
             let rel = rel.replace("MMMMMMMMMM", &uid);
-            assert_eq!(std::fs::read_to_string(carpeta(&otra_raiz, &copia.id).join(&rel)).unwrap(), texto, "{rel}");
+            assert_eq!(
+                std::fs::read_to_string(carpeta(&otra_raiz, &copia.id).join(&rel)).unwrap(),
+                texto,
+                "{rel}"
+            );
         }
-        assert!(nuevo.nombres().all(|n| !n.contains("MMMMMMMMMM")), "nada con el codigo viejo");
+        assert!(
+            nuevo.nombres().all(|n| !n.contains("MMMMMMMMMM")),
+            "nada con el codigo viejo"
+        );
     }
 
     #[test]

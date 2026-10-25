@@ -68,7 +68,9 @@ use pixpin_ia::agente::{self, Ejecutor, Evento};
 use pixpin_ia::herramientas::Llamada;
 use pixpin_ia::lienzo;
 use pixpin_ia::motor::{Mensaje, Motor, Seguir};
-use pixpin_ia::servidor::{Config, Dispositivo, MotorLlama, elegir_dispositivo, listar_dispositivos};
+use pixpin_ia::servidor::{
+    Config, Dispositivo, MotorLlama, elegir_dispositivo, listar_dispositivos,
+};
 
 /// **Sin pintor de PDF** (solo en Apple): en Windows lo dibujado se pasa a
 /// pixeles abriendo su PDF con `pixpin_pdf::Documento` (`Windows.Data.Pdf`,
@@ -83,7 +85,11 @@ mod sin_pintor {
             Err(())
         }
 
-        pub fn renderizar(&self, _indice: u32, _ancho: u32) -> Result<pixpin_codec::ImagenRgba, ()> {
+        pub fn renderizar(
+            &self,
+            _indice: u32,
+            _ancho: u32,
+        ) -> Result<pixpin_codec::ImagenRgba, ()> {
             Err(())
         }
 
@@ -128,10 +134,16 @@ impl Resultado {
         self.ediciones.iter().any(|(n, r)| n == nombre && r.is_ok())
     }
     fn llamo(&self, nombre: &str) -> Option<&Value> {
-        self.llamadas.iter().find(|(n, _)| n == nombre).map(|(_, v)| v)
+        self.llamadas
+            .iter()
+            .find(|(n, _)| n == nombre)
+            .map(|(_, v)| v)
     }
     fn tipos(&self, tipo: &str) -> Vec<&Value> {
-        self.elementos.iter().filter(|e| e["type"] == tipo).collect()
+        self.elementos
+            .iter()
+            .filter(|e| e["type"] == tipo)
+            .collect()
     }
     fn textos(&self) -> String {
         self.tipos("text")
@@ -167,7 +179,10 @@ impl Resultado {
     }
     /// Elementos con ese `material` (`cuadritos` es el grafito).
     fn con_material(&self, material: &str) -> usize {
-        self.elementos.iter().filter(|e| e["material"] == material).count()
+        self.elementos
+            .iter()
+            .filter(|e| e["material"] == material)
+            .count()
     }
     fn llamo_alguna(&self, nombres: &[&str]) -> bool {
         nombres.iter().any(|n| self.llamo(n).is_some())
@@ -264,7 +279,8 @@ fn casos() -> Vec<Caso> {
             pedido: "Copia este perrito en el lienzo.",
             imagen: Some(el_perrito),
             comprobar: |r| {
-                r.llamo(pixpin_ia::herramientas::CALCAR).ok_or("no llamo a calcar_imagen")?;
+                r.llamo(pixpin_ia::herramientas::CALCAR)
+                    .ok_or("no llamo a calcar_imagen")?;
                 si(r.elementos.len() >= 3, "menos de 3 elementos calcados")
             },
         });
@@ -306,17 +322,38 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
                      de verdad; y al final «∴ X = 45°» en rojo.",
             imagen: None,
             comprobar: |r| {
-                let ricos: Vec<&str> = r.elementos.iter().filter_map(|e| e["textoRico"].as_str()).collect();
+                let ricos: Vec<&str> = r
+                    .elementos
+                    .iter()
+                    .filter_map(|e| e["textoRico"].as_str())
+                    .collect();
                 si(!ricos.is_empty(), "ningun texto rico")?;
                 let todo = ricos.join("\n");
                 si(todo.contains('$'), "sin formulas en linea")?;
-                si(todo.contains("\\overline") || todo.contains("\\bar"), "sin la raya encima de AB")?;
-                si(todo.contains("frown") || todo.contains("wideparen") || todo.contains("arc"), "sin el arco de AC")?;
-                si(todo.contains("\\frac") || todo.contains("\\dfrac"), "sin la fraccion")?;
+                si(
+                    todo.contains("\\overline") || todo.contains("\\bar"),
+                    "sin la raya encima de AB",
+                )?;
+                si(
+                    todo.contains("frown") || todo.contains("wideparen") || todo.contains("arc"),
+                    "sin el arco de AC",
+                )?;
+                si(
+                    todo.contains("\\frac") || todo.contains("\\dfrac"),
+                    "sin la fraccion",
+                )?;
                 si(todo.contains("\\color"), "sin colores")?;
                 // Lo que vera quien no entiende el formato: legible.
-                let planos: String = r.elementos.iter().filter(|e| e.get("textoRico").is_some()).filter_map(|e| e["text"].as_str()).collect();
-                si(!planos.contains('\\') && !planos.contains('$'), "el texto plano lleva la fuente")
+                let planos: String = r
+                    .elementos
+                    .iter()
+                    .filter(|e| e.get("textoRico").is_some())
+                    .filter_map(|e| e["text"].as_str())
+                    .collect();
+                si(
+                    !planos.contains('\\') && !planos.contains('$'),
+                    "el texto plano lleva la fuente",
+                )
             },
         },
         Caso {
@@ -360,8 +397,13 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             pedido: "Estoy manejando, ¿me puedes leer en voz alta el informe de la obra?",
             imagen: None,
             comprobar: |r| {
-                let p = r.llamo("leer_en_voz_alta").ok_or("no llamo a leer_en_voz_alta")?;
-                si(archivo_de(p, "informe") || p.get("texto").is_some(), "no dice que leer")
+                let p = r
+                    .llamo("leer_en_voz_alta")
+                    .ok_or("no llamo a leer_en_voz_alta")?;
+                si(
+                    archivo_de(p, "informe") || p.get("texto").is_some(),
+                    "no dice que leer",
+                )
             },
         },
         Caso {
@@ -379,7 +421,10 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.llamo("comprimir_pdf").ok_or("no llamo a comprimir_pdf")?;
-                si(archivo_de(p, "tesis") || p.get("archivo").is_none(), "otro archivo")
+                si(
+                    archivo_de(p, "tesis") || p.get("archivo").is_none(),
+                    "otro archivo",
+                )
             },
         },
         Caso {
@@ -387,8 +432,13 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             pedido: "No pude oír el audio de la reunión de ayer, ¿me lo pasas a texto?",
             imagen: None,
             comprobar: |r| {
-                let p = r.llamo("transcribir_audio").ok_or("no llamo a transcribir_audio")?;
-                si(p.get("archivo").is_none() || archivo_de(p, "reunion"), "otro audio")
+                let p = r
+                    .llamo("transcribir_audio")
+                    .ok_or("no llamo a transcribir_audio")?;
+                si(
+                    p.get("archivo").is_none() || archivo_de(p, "reunion"),
+                    "otro audio",
+                )
             },
         },
         Caso {
@@ -397,7 +447,10 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.llamo("leer_excel").ok_or("no llamo a leer_excel")?;
-                si(p.get("archivo").is_none() || archivo_de(p, "presupuesto"), "otro excel")
+                si(
+                    p.get("archivo").is_none() || archivo_de(p, "presupuesto"),
+                    "otro excel",
+                )
             },
         },
         Caso {
@@ -406,7 +459,12 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("timeline").ok_or("no pidio timeline")?;
-                si(p["texto"].as_str().is_some_and(|t| sin_tildes(&t.to_lowercase()).contains("camion")), "sin el texto")
+                si(
+                    p["texto"]
+                        .as_str()
+                        .is_some_and(|t| sin_tildes(&t.to_lowercase()).contains("camion")),
+                    "sin el texto",
+                )
             },
         },
         Caso {
@@ -414,7 +472,9 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             pedido: "Dame un resumen de mi actividad de esta semana en PixPin.",
             imagen: None,
             comprobar: |r| {
-                let p = r.llamo("resumen_de_actividad").ok_or("no llamo a resumen_de_actividad")?;
+                let p = r
+                    .llamo("resumen_de_actividad")
+                    .ok_or("no llamo a resumen_de_actividad")?;
                 si(p["periodo"] == "semana", "otro periodo")
             },
         },
@@ -432,7 +492,9 @@ fn casos_de_la_app_15_oct() -> Vec<Caso> {
             pedido: "Llévame al chat de Casa Lima.",
             imagen: None,
             comprobar: |r| {
-                let p = r.pedido("ventana_principal").ok_or("no pidio ventana_principal")?;
+                let p = r
+                    .pedido("ventana_principal")
+                    .ok_or("no pidio ventana_principal")?;
                 si(p["proyecto"] == "casa", "otro chat")
             },
         },
@@ -462,9 +524,18 @@ fn foto_de_problema() -> Vec<u8> {
         "isDeleted": false, "groupIds": [], "angle": 0
     })];
     let ec = r#"{"ecuacion": "R = \\frac{v_0^2 \\sin(2 \\cdot 45)}{g}", "x": 40, "y": 140, "tam_letra": 30}"#;
-    let v = validar(&LlamadaCruda { id: "1".into(), nombre: ECUACION.into(), argumentos: ec.into() }, &catalogo()).unwrap();
+    let v = validar(
+        &LlamadaCruda {
+            id: "1".into(),
+            nombre: ECUACION.into(),
+            argumentos: ec.into(),
+        },
+        &catalogo(),
+    )
+    .unwrap();
     els.extend(lienzo::elementos(&v.llamada, (0.0, 0.0), 3));
-    let ruta = std::env::temp_dir().join(format!("pixpin-banco-problema-{}.png", std::process::id()));
+    let ruta =
+        std::env::temp_dir().join(format!("pixpin-banco-problema-{}.png", std::process::id()));
     pintar::elementos_a_png(&els, &ruta);
     let b = std::fs::read(&ruta).expect("no se pinto la foto del problema");
     let _ = std::fs::remove_file(&ruta);
@@ -473,7 +544,11 @@ fn foto_de_problema() -> Vec<u8> {
 
 /// Los textos de todo lo dibujado (tambien los rotulos de los puntos).
 fn todos_los_textos(r: &Resultado) -> String {
-    r.elementos.iter().filter_map(|e| e["text"].as_str()).collect::<Vec<_>>().join(" | ")
+    r.elementos
+        .iter()
+        .filter_map(|e| e["text"].as_str())
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 
 /// **Los casos de estudiantes** (14-oct): la foto de un problema en limpio,
@@ -488,16 +563,24 @@ fn casos_de_estudiantes() -> Vec<Caso> {
             comprobar: |r| {
                 r.llamo(PROBLEMA).ok_or("no llamo a problema_en_limpio")?;
                 let t = sin_tildes(&todos_los_textos(r).to_lowercase());
-                si(t.contains("proyectil") && t.contains("20"), "el enunciado no esta copiado")?;
+                si(
+                    t.contains("proyectil") && t.contains("20"),
+                    "el enunciado no esta copiado",
+                )?;
                 si(t.contains("solucion"), "sin recuadro de solucion")?;
-                si(r.tipos("line").len() >= 1, "sin la ecuacion compuesta")
+                si(!r.tipos("line").is_empty(), "sin la ecuacion compuesta")
             },
         },
         Caso {
             nombre: "estudiante-foto-sin-texto",
             pedido: "Pasa en limpio el problema de esta foto.",
             imagen: Some(la_casa),
-            comprobar: |r| si(r.llamo(PROBLEMA).is_none(), "invento un problema que la foto no tiene"),
+            comprobar: |r| {
+                si(
+                    r.llamo(PROBLEMA).is_none(),
+                    "invento un problema que la foto no tiene",
+                )
+            },
         },
         Caso {
             nombre: "estudiante-polar",
@@ -524,7 +607,10 @@ fn casos_de_estudiantes() -> Vec<Caso> {
             comprobar: |r| {
                 r.llamo(FUNCION).ok_or("no llamo a graficar_funcion")?;
                 let t = todos_los_textos(r);
-                si(t.contains("(-2, 0)") && t.contains("(2, 0)"), "sin las raices marcadas")
+                si(
+                    t.contains("(-2, 0)") && t.contains("(2, 0)"),
+                    "sin las raices marcadas",
+                )
             },
         },
         Caso {
@@ -533,9 +619,18 @@ fn casos_de_estudiantes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let v = r.llamo(FISICA).ok_or("no llamo a diagrama_fisica")?;
-                si(v["tipo"] == "plano_inclinado", "no uso la plantilla del plano inclinado")?;
-                si(v["numeros"]["angulo"].as_f64() == Some(30.0), "el angulo no es 30")?;
-                si(v["numeros"]["mu"].as_f64().is_some_and(|m| m > 0.0), "sin rozamiento")
+                si(
+                    v["tipo"] == "plano_inclinado",
+                    "no uso la plantilla del plano inclinado",
+                )?;
+                si(
+                    v["numeros"]["angulo"].as_f64() == Some(30.0),
+                    "el angulo no es 30",
+                )?;
+                si(
+                    v["numeros"]["mu"].as_f64().is_some_and(|m| m > 0.0),
+                    "sin rozamiento",
+                )
             },
         },
         Caso {
@@ -544,11 +639,20 @@ fn casos_de_estudiantes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let v = r.llamo(FISICA).ok_or("no llamo a diagrama_fisica")?;
-                si(v["tipo"] == "tiro_parabolico", "no uso la plantilla del tiro")?;
-                si(v["resultados"].to_string().contains("alcance = 40.816 m"), "el alcance no es 40.816 m")?;
+                si(
+                    v["tipo"] == "tiro_parabolico",
+                    "no uso la plantilla del tiro",
+                )?;
+                si(
+                    v["resultados"].to_string().contains("alcance = 40.816 m"),
+                    "el alcance no es 40.816 m",
+                )?;
                 // Lo calculado se ve en el lienzo (que el modelo lo repita es aparte:
                 // el 2B no lo hace).
-                si(todos_los_textos(r).contains("40.816"), "el lienzo no ensena el alcance calculado")
+                si(
+                    todos_los_textos(r).contains("40.816"),
+                    "el lienzo no ensena el alcance calculado",
+                )
             },
         },
         Caso {
@@ -558,8 +662,16 @@ fn casos_de_estudiantes() -> Vec<Caso> {
             comprobar: |r| {
                 let v = r.llamo(FISICA).ok_or("no llamo a diagrama_fisica")?;
                 si(v["tipo"] == "circuito", "no uso la plantilla del circuito")?;
-                si(v["opciones"]["conexion"] == "paralelo", "no esta en paralelo")?;
-                si(v["listas"]["resistencias"].as_array().is_some_and(|l| l.len() == 2), "no son dos resistencias")
+                si(
+                    v["opciones"]["conexion"] == "paralelo",
+                    "no esta en paralelo",
+                )?;
+                si(
+                    v["listas"]["resistencias"]
+                        .as_array()
+                        .is_some_and(|l| l.len() == 2),
+                    "no son dos resistencias",
+                )
             },
         },
     ]
@@ -574,7 +686,9 @@ mod edicion_banco {
 
     pub fn raya(a: (f32, f32), b: (f32, f32), c: ColorRgba) -> Elemento {
         Elemento {
-            figura: Figura::Linea { puntos: vec![Punto2::nuevo(a.0, a.1), Punto2::nuevo(b.0, b.1)] },
+            figura: Figura::Linea {
+                puntos: vec![Punto2::nuevo(a.0, a.1), Punto2::nuevo(b.0, b.1)],
+            },
             x: a.0.min(b.0),
             y: a.1.min(b.1),
             ancho: (a.0 - b.0).abs(),
@@ -585,7 +699,11 @@ mod edicion_banco {
     }
     pub fn texto(t: &str, x: f32, y: f32, tam: f32) -> Elemento {
         Elemento {
-            figura: Figura::Texto { texto: t.into(), tam, familia: "Segoe UI".into() },
+            figura: Figura::Texto {
+                texto: t.into(),
+                tam,
+                familia: "Segoe UI".into(),
+            },
             x,
             y,
             ancho: t.chars().count() as f32 * tam * 0.55,
@@ -595,7 +713,15 @@ mod edicion_banco {
         }
     }
     pub fn ovalo(cx: f32, cy: f32, r: f32, c: ColorRgba) -> Elemento {
-        Elemento { figura: Figura::Elipse, x: cx - r, y: cy - r, ancho: 2.0 * r, alto: 2.0 * r, trazo: c, ..Default::default() }
+        Elemento {
+            figura: Figura::Elipse,
+            x: cx - r,
+            y: cy - r,
+            ancho: 2.0 * r,
+            alto: 2.0 * r,
+            trazo: c,
+            ..Default::default()
+        }
     }
     pub const ROJO: ColorRgba = ColorRgba::opaco(0.88, 0.19, 0.19);
     pub const AZUL: ColorRgba = ColorRgba::opaco(0.10, 0.44, 0.76);
@@ -616,7 +742,14 @@ mod edicion_banco {
             }
             "editar-mover-y-colorear" => {
                 s.anadir(ovalo(150.0, 150.0, 50.0, ROJO));
-                s.anadir(Elemento { x: 300.0, y: 100.0, ancho: 120.0, alto: 80.0, trazo: AZUL, ..Default::default() });
+                s.anadir(Elemento {
+                    x: 300.0,
+                    y: 100.0,
+                    ancho: 120.0,
+                    alto: 80.0,
+                    trazo: AZUL,
+                    ..Default::default()
+                });
             }
             "editar-extender-hasta" => {
                 s.anadir(raya((50.0, 200.0), (150.0, 200.0), NEGRO));
@@ -626,11 +759,32 @@ mod edicion_banco {
                 s.anadir(raya((100.0, 300.0), (500.0, 300.0), NEGRO));
             }
             "editar-rodear-grafito" => {
-                s.anadir(Elemento { x: 200.0, y: 150.0, ancho: 160.0, alto: 100.0, trazo: NEGRO, ..Default::default() });
+                s.anadir(Elemento {
+                    x: 200.0,
+                    y: 150.0,
+                    ancho: 160.0,
+                    alto: 100.0,
+                    trazo: NEGRO,
+                    ..Default::default()
+                });
             }
             "editar-ambiguo" => {
                 s.anadir(ovalo(100.0, 100.0, 30.0, ROJO));
                 s.anadir(ovalo(300.0, 100.0, 30.0, ROJO));
+            }
+            // El caso del usuario (25-oct-2026): el cronograma de serie
+            // puesto, tal cual sale del menu.
+            "editar-agrandar-plantilla-sin-duplicar" | "editar-agrandar-sin-inventar" => {
+                if let Some(f) = pixpin_motor2d::figuras_de_serie::catalogo()
+                    .into_iter()
+                    .find(|f| f.id == "serie-cronograma")
+                {
+                    pixpin_motor2d::biblioteca::estampar_en_escena(
+                        &mut s,
+                        &f,
+                        Punto2::nuevo(600.0, 400.0),
+                    );
+                }
             }
             _ => {}
         }
@@ -639,20 +793,24 @@ mod edicion_banco {
 }
 
 fn casos_de_edicion() -> Vec<Caso> {
-
     use pixpin_ia::edicion::{CORTAR, IMAGEN, nombre_de_color};
     use pixpin_motor2d::elemento::Figura;
     fn rectas(r: &Resultado) -> Vec<(pixpin_motor2d::Punto2, pixpin_motor2d::Punto2)> {
         r.vivos()
             .iter()
             .filter_map(|e| match &e.figura {
-                Figura::Linea { puntos } if puntos.len() >= 2 => Some((puntos[0], puntos[puntos.len() - 1])),
+                Figura::Linea { puntos } if puntos.len() >= 2 => {
+                    Some((puntos[0], puntos[puntos.len() - 1]))
+                }
                 _ => None,
             })
             .collect()
     }
     fn caja_de_texto(r: &Resultado, que: &str) -> Option<(f32, f32, f32, f32)> {
-        r.vivos().iter().find(|e| matches!(&e.figura, Figura::Texto { texto, .. } if texto.contains(que))).map(|e| e.caja())
+        r.vivos()
+            .iter()
+            .find(|e| matches!(&e.figura, Figura::Texto { texto, .. } if texto.contains(que)))
+            .map(|e| e.caja())
     }
     vec![
         Caso {
@@ -666,7 +824,10 @@ fn casos_de_edicion() -> Vec<Caso> {
                 // Alguna acaba en otra: el corte quedo en el cruce.
                 let toca = rs.iter().enumerate().any(|(i, (a, b))| {
                     rs.iter().enumerate().any(|(j, (c, d))| {
-                        i != j && [*a, *b].iter().any(|p| pixpin_motor2d::distancia_a_segmento(*p, *c, *d) < 3.0)
+                        i != j
+                            && [*a, *b]
+                                .iter()
+                                .any(|p| pixpin_motor2d::distancia_a_segmento(*p, *c, *d) < 3.0)
                     })
                 });
                 si(toca, "ninguna recta acaba en el cruce")
@@ -678,9 +839,16 @@ fn casos_de_edicion() -> Vec<Caso> {
             imagen: Some(la_casa),
             comprobar: |r| {
                 si(r.edito_bien(IMAGEN), "no uso imagen_en_lienzo")?;
-                let foto = r.vivos().into_iter().find(|e| matches!(e.figura, Figura::Imagen { .. })).ok_or("no pego la foto")?;
+                let foto = r
+                    .vivos()
+                    .into_iter()
+                    .find(|e| matches!(e.figura, Figura::Imagen { .. }))
+                    .ok_or("no pego la foto")?;
                 let c = foto.extras.recorte.ok_or("la foto no esta recortada")?;
-                si((c.ancho / c.ancho_natural - 0.5).abs() < 0.1, "no quedo la mitad del ancho")?;
+                si(
+                    (c.ancho / c.ancho_natural - 0.5).abs() < 0.1,
+                    "no quedo la mitad del ancho",
+                )?;
                 si(c.alto / c.alto_natural > 0.9, "recorto tambien a lo alto")
             },
         },
@@ -693,7 +861,11 @@ fn casos_de_edicion() -> Vec<Caso> {
                 let ok = r.vivos().iter().any(|e| {
                     let (a0, b0, a1, b1) = e.caja();
                     matches!(e.figura, Figura::Resaltador { .. })
-                        && b0 < y1 && b1 > y0 && a0 < x0 + 20.0 && a1 > x1 - 20.0 && (b0 + b1) / 2.0 < y1 + 5.0
+                        && b0 < y1
+                        && b1 > y0
+                        && a0 < x0 + 20.0
+                        && a1 > x1 - 20.0
+                        && (b0 + b1) / 2.0 < y1 + 5.0
                 });
                 si(ok, "no hay un resaltado sobre el titulo")
             },
@@ -703,12 +875,16 @@ fn casos_de_edicion() -> Vec<Caso> {
             pedido: "Subraya el resultado en rojo.",
             imagen: None,
             comprobar: |r| {
-                let (x0, _, x1, y1) = caja_de_texto(r, "Resultado").ok_or("se perdio el resultado")?;
+                let (x0, _, x1, y1) =
+                    caja_de_texto(r, "Resultado").ok_or("se perdio el resultado")?;
                 let ok = r.vivos().iter().any(|e| {
                     let (a0, b0, a1, _) = e.caja();
                     !matches!(e.figura, Figura::Texto { .. })
                         && nombre_de_color(e.trazo) == "rojo"
-                        && b0 > y1 - 10.0 && b0 < y1 + 25.0 && a0 < x1 && a1 > x0
+                        && b0 > y1 - 10.0
+                        && b0 < y1 + 25.0
+                        && a0 < x1
+                        && a1 > x0
                 });
                 si(ok, "no hay una raya roja bajo el resultado")
             },
@@ -718,9 +894,16 @@ fn casos_de_edicion() -> Vec<Caso> {
             pedido: "Mueve el circulo rojo 100 px a la derecha y pintalo de verde.",
             imagen: None,
             comprobar: |r| {
-                let c = r.vivos().into_iter().find(|e| matches!(e.figura, Figura::Elipse)).ok_or("se perdio el circulo")?;
+                let c = r
+                    .vivos()
+                    .into_iter()
+                    .find(|e| matches!(e.figura, Figura::Elipse))
+                    .ok_or("se perdio el circulo")?;
                 let (x0, _, x1, _) = c.caja();
-                si(((x0 + x1) / 2.0 - 250.0).abs() < 6.0, "no se movio 100 a la derecha")?;
+                si(
+                    ((x0 + x1) / 2.0 - 250.0).abs() < 6.0,
+                    "no se movio 100 a la derecha",
+                )?;
                 si(nombre_de_color(c.trazo) == "verde", "no es verde")
             },
         },
@@ -729,7 +912,10 @@ fn casos_de_edicion() -> Vec<Caso> {
             pedido: "Alarga la recta negra hasta que toque la azul.",
             imagen: None,
             comprobar: |r| {
-                let ok = rectas(r).iter().any(|(a, b)| (a.y - 200.0).abs() < 1.0 && ((b.x - 400.0).abs() < 2.0 || (a.x - 400.0).abs() < 2.0));
+                let ok = rectas(r).iter().any(|(a, b)| {
+                    (a.y - 200.0).abs() < 1.0
+                        && ((b.x - 400.0).abs() < 2.0 || (a.x - 400.0).abs() < 2.0)
+                });
                 si(ok, "la negra no llega a la azul")
             },
         },
@@ -739,7 +925,9 @@ fn casos_de_edicion() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let ok = rectas(r).iter().any(|(a, b)| {
-                    (a.x - b.x).abs() < 3.0 && (a.x - 300.0).abs() < 4.0 && ((a.y - b.y).abs() - 200.0).abs() < 25.0
+                    (a.x - b.x).abs() < 3.0
+                        && (a.x - 300.0).abs() < 4.0
+                        && ((a.y - b.y).abs() - 200.0).abs() < 25.0
                 });
                 si(ok, "no hay una vertical de 200 por x=300")
             },
@@ -769,7 +957,10 @@ fn casos_de_edicion() -> Vec<Caso> {
                     matches!(e.figura, Figura::Lapiz { .. })
                         && e.material.es_grafito()
                         && e.extras.dureza.map(|d| d.rotulo()) == Some("8B")
-                        && a0 < 205.0 && b0 < 155.0 && a1 > 355.0 && b1 > 245.0
+                        && a0 < 205.0
+                        && b0 < 155.0
+                        && a1 > 355.0
+                        && b1 > 245.0
                 });
                 si(ok, "no hay un trazo de grafito 8B alrededor del rectangulo")
             },
@@ -781,10 +972,45 @@ fn casos_de_edicion() -> Vec<Caso> {
             comprobar: |r| {
                 // Hay dos rojos: lo correcto es preguntar cual, no borrar uno
                 // al azar (ni los dos).
-                let quedan = r.vivos().iter().filter(|e| matches!(e.figura, Figura::Elipse)).count();
+                let quedan = r
+                    .vivos()
+                    .iter()
+                    .filter(|e| matches!(e.figura, Figura::Elipse))
+                    .count();
                 si(quedan == 2, "borro sin preguntar cual")?;
                 let t = r.todo_el_texto();
                 si(t.contains('?') || t.contains("cual"), "no pregunto cual")
+            },
+        },
+        // 25-oct-2026, el caso del usuario: agrandar la plantilla que hay es
+        // alargarla en su sitio, no dibujar otros cronogramas al lado.
+        Caso {
+            nombre: "editar-agrandar-plantilla-sin-duplicar",
+            pedido: "Agrándalo a 30 actividades y 30 semanas.",
+            imagen: None,
+            comprobar: |r| {
+                use pixpin_ia::herramientas::{CRONOGRAMA, DIBUJAR, FIGURAS, SVG};
+                si(
+                    !r.llamo_alguna(&[DIBUJAR, CRONOGRAMA, SVG]),
+                    "dibujo otro al lado en vez de agrandar el que hay",
+                )?;
+                let f = r.llamo(FIGURAS).ok_or("no uso figuras_guardadas")?;
+                let pedido = f["figuras"].as_str().unwrap_or_default();
+                si(pedido.contains("Alargar"), "no lo alargo")?;
+                si(pedido.contains("30"), "no pidio hasta 30")
+            },
+        },
+        // Y agrandar no es rellenar: nada de actividades que nadie dio.
+        Caso {
+            nombre: "editar-agrandar-sin-inventar",
+            pedido: "Agranda el cronograma a 30 actividades.",
+            imagen: None,
+            comprobar: |r| {
+                si(r.elementos.is_empty(), "anadio contenido nuevo al lienzo")?;
+                si(
+                    !r.edito_bien(pixpin_ia::edicion::EDITAR_TEXTO),
+                    "escribio actividades que nadie dio",
+                )
             },
         },
     ]
@@ -800,7 +1026,10 @@ fn casos_del_lienzo() -> Vec<Caso> {
             pedido: "Dibuja esta persona con figuras en el lienzo (interpretala, no la calques).",
             imagen: Some(la_persona),
             comprobar: |r| {
-                si(r.llamo(pixpin_ia::herramientas::CALCAR).is_none(), "la calco en vez de interpretarla")?;
+                si(
+                    r.llamo(pixpin_ia::herramientas::CALCAR).is_none(),
+                    "la calco en vez de interpretarla",
+                )?;
                 si(r.llamo_alguna(&[DIBUJAR, SVG]), "no dibujo")?;
                 si(r.elementos.len() >= 5, "menos de 5 figuras")
             },
@@ -810,7 +1039,10 @@ fn casos_del_lienzo() -> Vec<Caso> {
             pedido: "Dibuja este perro a lapiz, con grafito 6B.",
             imagen: Some(el_perrito),
             comprobar: |r| {
-                si(r.llamo(pixpin_ia::herramientas::CALCAR).is_none(), "lo calco en vez de dibujarlo")?;
+                si(
+                    r.llamo(pixpin_ia::herramientas::CALCAR).is_none(),
+                    "lo calco en vez de dibujarlo",
+                )?;
                 si(r.elementos.len() >= 4, "menos de 4 trazos")?;
                 si(r.con_material("cuadritos") >= 2, "sin trazos de grafito")
             },
@@ -821,7 +1053,10 @@ fn casos_del_lienzo() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 si(r.llamo_alguna(&[SVG, DIBUJAR]), "no dibujo")?;
-                si(r.elementos.len() >= 9, "menos de 9 figuras para tres arboles")?;
+                si(
+                    r.elementos.len() >= 9,
+                    "menos de 9 figuras para tres arboles",
+                )?;
                 si(r.con_color(verde), "sin verde de copa")
             },
         },
@@ -854,7 +1089,10 @@ fn casos_del_lienzo() -> Vec<Caso> {
                 r.llamo(CRONOGRAMA).ok_or("no llamo a cronograma")?;
                 si(!r.tipos("diamond").is_empty(), "sin el hito")?;
                 si(r.tipos("arrow").len() >= 2, "sin dependencias")?;
-                si(r.textos().contains("cimientos"), "sin el nombre de las tareas")
+                si(
+                    r.textos().contains("cimientos"),
+                    "sin el nombre de las tareas",
+                )
             },
         },
         Caso {
@@ -871,9 +1109,16 @@ fn casos_del_lienzo() -> Vec<Caso> {
             pedido: "Dibuja tres trazos ondulados a mano alzada con grafito: uno 4H, uno HB y uno 8B, uno debajo de otro.",
             imagen: None,
             comprobar: |r| {
-                si(r.tipos("freedraw").len() >= 3, "menos de 3 trazos a mano alzada")?;
+                si(
+                    r.tipos("freedraw").len() >= 3,
+                    "menos de 3 trazos a mano alzada",
+                )?;
                 si(r.con_material("cuadritos") >= 3, "no son de grafito")?;
-                let d: Vec<&str> = r.elementos.iter().filter_map(|e| e["dureza"].as_str()).collect();
+                let d: Vec<&str> = r
+                    .elementos
+                    .iter()
+                    .filter_map(|e| e["dureza"].as_str())
+                    .collect();
                 si(d.contains(&"4H") && d.contains(&"8B"), "sin las durezas")
             },
         },
@@ -911,7 +1156,10 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 si(r.elementos.len() >= 3, "menos de 3 figuras")?;
                 si(!r.tipos("rectangle").is_empty(), "sin rectangulo")?;
-                si(r.con_puntos(3) > 0 || r.tipos("line").len() >= 2, "sin techo")
+                si(
+                    r.con_puntos(3) > 0 || r.tipos("line").len() >= 2,
+                    "sin techo",
+                )
             },
         },
         Caso {
@@ -920,7 +1168,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let t = r.textos();
-                si(t.contains("inicio") && t.contains("proceso") && t.contains("fin"), "faltan rotulos")?;
+                si(
+                    t.contains("inicio") && t.contains("proceso") && t.contains("fin"),
+                    "faltan rotulos",
+                )?;
                 si(r.tipos("arrow").len() >= 2, "menos de 2 flechas")
             },
         },
@@ -982,7 +1233,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: Some(la_de_prueba),
             comprobar: |r| {
                 si(r.elementos.len() >= 3, "menos de 3 elementos")?;
-                si(r.con_color(rojo) && r.con_color(azul), "sin el rojo y el azul de la foto")
+                si(
+                    r.con_color(rojo) && r.con_color(azul),
+                    "sin el rojo y el azul de la foto",
+                )
             },
         },
         Caso {
@@ -1013,7 +1267,10 @@ fn casos_de_antes() -> Vec<Caso> {
                 si(r.llamo("calcar_imagen").is_some(), "no lo calco")?;
                 si(r.llamo("dibujar_en_lienzo").is_none(), "lo dibujo a mano")?;
                 si(r.elementos.len() >= 4, "menos de 4 elementos")?;
-                si(r.con_color(|(r, g, b)| r > 180 && g < 110 && b > 90), "falta la lengua rosa")
+                si(
+                    r.con_color(|(r, g, b)| r > 180 && g < 110 && b > 90),
+                    "falta la lengua rosa",
+                )
             },
         },
         // --- Graficas -------------------------------------------------------
@@ -1024,7 +1281,10 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 let g = r.llamo("grafica").ok_or("no llamo a grafica")?;
                 si(g["tipo"] == "barras", "no es de barras")?;
-                si(g["valores"] == serde_json::json!([120.0, 95.0, 140.0]), "valores mal")
+                si(
+                    g["valores"] == serde_json::json!([120.0, 95.0, 140.0]),
+                    "valores mal",
+                )
             },
         },
         Caso {
@@ -1043,7 +1303,10 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 let g = r.llamo("grafica").ok_or("no llamo a grafica")?;
                 si(g["tipo"] == "lineas", "no es de lineas")?;
-                si(g["valores"].as_array().is_some_and(|v| v.len() == 4), "no son 4 valores")
+                si(
+                    g["valores"].as_array().is_some_and(|v| v.len() == 4),
+                    "no son 4 valores",
+                )
             },
         },
         // --- La app ---------------------------------------------------------
@@ -1053,7 +1316,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("nota_nueva").ok_or("no pidio nota_nueva")?;
-                si(p["texto"].as_str().is_some_and(|t| t.contains("cemento")), "sin el texto")
+                si(
+                    p["texto"].as_str().is_some_and(|t| t.contains("cemento")),
+                    "sin el texto",
+                )
             },
         },
         Caso {
@@ -1062,7 +1328,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("anadir_tarea").ok_or("no pidio anadir_tarea")?;
-                si(p["texto"].as_str().is_some_and(|t| t.contains("ingeniero")), "sin el texto")
+                si(
+                    p["texto"].as_str().is_some_and(|t| t.contains("ingeniero")),
+                    "sin el texto",
+                )
             },
         },
         Caso {
@@ -1071,7 +1340,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("lista_nueva").ok_or("no pidio lista_nueva")?;
-                si(p["titulo"].as_str().is_some_and(|t| t.contains("Obra")), "sin el titulo")
+                si(
+                    p["titulo"].as_str().is_some_and(|t| t.contains("Obra")),
+                    "sin el titulo",
+                )
             },
         },
         Caso {
@@ -1102,7 +1374,12 @@ fn casos_de_antes() -> Vec<Caso> {
             nombre: "app-pinear-ultima",
             pedido: "Saca como pin la ultima captura.",
             imagen: None,
-            comprobar: |r| si(r.pedido("pinear_ultima").is_some(), "no pidio pinear_ultima"),
+            comprobar: |r| {
+                si(
+                    r.pedido("pinear_ultima").is_some(),
+                    "no pidio pinear_ultima",
+                )
+            },
         },
         Caso {
             nombre: "app-lienzo-nuevo",
@@ -1110,7 +1387,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("lienzo_nuevo").ok_or("no pidio lienzo_nuevo")?;
-                si(p["nombre"].as_str().is_some_and(|t| t.contains("Croquis")), "sin el nombre")
+                si(
+                    p["nombre"].as_str().is_some_and(|t| t.contains("Croquis")),
+                    "sin el nombre",
+                )
             },
         },
         Caso {
@@ -1119,7 +1399,12 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("grabar").ok_or("no pidio grabar")?;
-                si(p["nombre"].as_str().is_some_and(|t| t.to_lowercase().contains("reunion")), "sin el nombre")
+                si(
+                    p["nombre"]
+                        .as_str()
+                        .is_some_and(|t| t.to_lowercase().contains("reunion")),
+                    "sin el nombre",
+                )
             },
         },
         Caso {
@@ -1129,7 +1414,12 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 let p = r.pedido("abrir").ok_or("no pidio abrir")?;
                 si(p["que"]["tipo"] == "fichero", "no es un fichero")?;
-                si(p["que"]["ruta"].as_str().is_some_and(|t| t.ends_with("plano.pdf")), "otra ruta")
+                si(
+                    p["que"]["ruta"]
+                        .as_str()
+                        .is_some_and(|t| t.ends_with("plano.pdf")),
+                    "otra ruta",
+                )
             },
         },
         Caso {
@@ -1138,7 +1428,12 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("lecciones").ok_or("no pidio lecciones")?;
-                si(p["consulta"].as_str().is_some_and(|t| t.contains("encofrado")), "sin la consulta")
+                si(
+                    p["consulta"]
+                        .as_str()
+                        .is_some_and(|t| t.contains("encofrado")),
+                    "sin la consulta",
+                )
             },
         },
         // --- Tareas (14-oct): por su nombre, con fecha, consultas y negativos.
@@ -1151,7 +1446,10 @@ fn casos_de_antes() -> Vec<Caso> {
                 let p = r.pedido("anadir_tarea").ok_or("no apunto la tarea")?;
                 let t = p["texto"].as_str().unwrap_or_default();
                 si(t.contains("revisar planos"), "sin el texto")?;
-                si(t.contains("⏰ 2026-10-15 10:00"), "sin la fecha de mañana a las 10")
+                si(
+                    t.contains("⏰ 2026-10-15 10:00"),
+                    "sin la fecha de mañana a las 10",
+                )
             },
         },
         Caso {
@@ -1160,7 +1458,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("anadir_tarea").ok_or("no apunto la tarea")?;
-                si(p["codigo"] == "compras" && p["proyecto"] == "norte", "no fue a la lista Compras")
+                si(
+                    p["codigo"] == "compras" && p["proyecto"] == "norte",
+                    "no fue a la lista Compras",
+                )
             },
         },
         Caso {
@@ -1169,7 +1470,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("marcar_tarea").ok_or("no marco")?;
-                si(p["codigo"] == "obra" && p["indice"] == 0 && p["hecha"] == true, "otra tarea u otro estado")
+                si(
+                    p["codigo"] == "obra" && p["indice"] == 0 && p["hecha"] == true,
+                    "otra tarea u otro estado",
+                )
             },
         },
         Caso {
@@ -1178,7 +1482,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("marcar_tarea").ok_or("no marco")?;
-                si(p["codigo"] == "obra" && p["indice"] == 0 && p["hecha"] == true, "otra tarea u otro estado")
+                si(
+                    p["codigo"] == "obra" && p["indice"] == 0 && p["hecha"] == true,
+                    "otra tarea u otro estado",
+                )
             },
         },
         Caso {
@@ -1187,7 +1494,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("marcar_tarea").ok_or("no la desmarco")?;
-                si(p["codigo"] == "obra" && p["indice"] == 1 && p["hecha"] == false, "otra tarea u otro estado")
+                si(
+                    p["codigo"] == "obra" && p["indice"] == 1 && p["hecha"] == false,
+                    "otra tarea u otro estado",
+                )
             },
         },
         Caso {
@@ -1196,7 +1506,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("mover_tarea").ok_or("no la movio")?;
-                si(p["codigo"] == "inbox" && p["indice"] == 0 && p["a_codigo"] == "compras", "otra tarea u otro destino")
+                si(
+                    p["codigo"] == "inbox" && p["indice"] == 0 && p["a_codigo"] == "compras",
+                    "otra tarea u otro destino",
+                )
             },
         },
         Caso {
@@ -1205,7 +1518,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("corregir_tarea").ok_or("no la cambio")?;
-                si(p["indice"] == 0 && p["texto"].as_str().is_some_and(|t| t.contains("integral")), "otro texto")
+                si(
+                    p["indice"] == 0 && p["texto"].as_str().is_some_and(|t| t.contains("integral")),
+                    "otro texto",
+                )
             },
         },
         Caso {
@@ -1214,7 +1530,12 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let p = r.pedido("corregir_tarea").ok_or("no le cambio la fecha")?;
-                si(p["texto"].as_str().is_some_and(|t| t.contains("⏰ 2026-10-16")), "no es el viernes 16")
+                si(
+                    p["texto"]
+                        .as_str()
+                        .is_some_and(|t| t.contains("⏰ 2026-10-16")),
+                    "no es el viernes 16",
+                )
             },
         },
         Caso {
@@ -1242,7 +1563,10 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 si(r.pedido("(consulta)").is_some(), "no consulto las tareas")?;
                 let t = r.todo_el_texto();
-                si(t.contains("revisar encofrado") && t.contains("comprar pan"), "no las dice")
+                si(
+                    t.contains("revisar encofrado") && t.contains("comprar pan"),
+                    "no las dice",
+                )
             },
         },
         Caso {
@@ -1277,8 +1601,15 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let nueva = r.pedido("lista_nueva").ok_or("no creo la lista")?;
-                si(nueva["titulo"].as_str().is_some_and(|t| t.contains("Acta")), "otra lista")?;
-                let n = r.llamadas.iter().filter(|(_, v)| v["accion"] == "anadir_tarea" && v["__confirmar"] == false).count();
+                si(
+                    nueva["titulo"].as_str().is_some_and(|t| t.contains("Acta")),
+                    "otra lista",
+                )?;
+                let n = r
+                    .llamadas
+                    .iter()
+                    .filter(|(_, v)| v["accion"] == "anadir_tarea" && v["__confirmar"] == false)
+                    .count();
                 si(n >= 3, "menos de 3 tareas")
             },
         },
@@ -1299,8 +1630,14 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 let t = r.todo_el_texto();
                 let apunto = r.pedido("anadir_tarea").is_some();
-                si(!apunto || t.contains("febrero") || t.contains("fecha"), "la apunto sin decir nada de la fecha")?;
-                si(t.contains("febrero") || t.contains("fecha") || t.contains("existe"), "no explica lo de la fecha")
+                si(
+                    !apunto || t.contains("febrero") || t.contains("fecha"),
+                    "la apunto sin decir nada de la fecha",
+                )?;
+                si(
+                    t.contains("febrero") || t.contains("fecha") || t.contains("existe"),
+                    "no explica lo de la fecha",
+                )
             },
         },
         Caso {
@@ -1309,7 +1646,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 let t = r.todo_el_texto();
-                si(r.pedido("anadir_tarea").is_none() || t.contains("obra norte"), "la apunto en otro sitio sin decirlo")
+                si(
+                    r.pedido("anadir_tarea").is_none() || t.contains("obra norte"),
+                    "la apunto en otro sitio sin decirlo",
+                )
             },
         },
         Caso {
@@ -1318,7 +1658,10 @@ fn casos_de_antes() -> Vec<Caso> {
             imagen: None,
             comprobar: |r| {
                 si(r.pedido("anadir_tarea").is_some(), "no apunto la tarea")?;
-                si(r.llamo(pixpin_ia::herramientas::DIBUJAR).is_some(), "no dibujo")
+                si(
+                    r.llamo(pixpin_ia::herramientas::DIBUJAR).is_some(),
+                    "no dibujo",
+                )
             },
         },
         // --- Preguntas sobre la app ----------------------------------------
@@ -1326,7 +1669,12 @@ fn casos_de_antes() -> Vec<Caso> {
             nombre: "ayuda-ajustes",
             pedido: "¿Donde estan los ajustes de PixPin?",
             imagen: None,
-            comprobar: |r| si(r.todo_el_texto().contains("bandeja"), "no dice que estan en la bandeja"),
+            comprobar: |r| {
+                si(
+                    r.todo_el_texto().contains("bandeja"),
+                    "no dice que estan en la bandeja",
+                )
+            },
         },
         Caso {
             nombre: "ayuda-como-capturar",
@@ -1335,14 +1683,22 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 si(r.pedido("capturar").is_none(), "capturo en vez de explicar")?;
                 let t = r.todo_el_texto();
-                si(t.contains("ctrl+alt+x") || t.contains("atajo"), "no dice el atajo")
+                si(
+                    t.contains("ctrl+alt+x") || t.contains("atajo"),
+                    "no dice el atajo",
+                )
             },
         },
         Caso {
             nombre: "ayuda-sincronizar",
             pedido: "¿Como paso mis cosas al movil?",
             imagen: None,
-            comprobar: |r| si(r.todo_el_texto().contains("sincroniz"), "no habla de sincronizar"),
+            comprobar: |r| {
+                si(
+                    r.todo_el_texto().contains("sincroniz"),
+                    "no habla de sincronizar",
+                )
+            },
         },
         Caso {
             nombre: "ayuda-tareas",
@@ -1351,7 +1707,10 @@ fn casos_de_antes() -> Vec<Caso> {
             comprobar: |r| {
                 let t = r.todo_el_texto();
                 let abrio = r.pedido("ventana").is_some_and(|p| p["cual"] == "tareas");
-                si(abrio || t.contains("ventana de tareas") || t.contains("inbox"), "no lo dice")
+                si(
+                    abrio || t.contains("ventana de tareas") || t.contains("inbox"),
+                    "no lo dice",
+                )
             },
         },
         // --- Sin herramientas ------------------------------------------------
@@ -1383,16 +1742,33 @@ struct Apunta<'a> {
 /// Las fotos del banco: la adjunta del caso, decodificada.
 impl pixpin_ia::edicion::Anfitrion for Apunta<'_> {
     fn imagen_nueva(&mut self, _fuente: &str) -> Result<pixpin_motor2d::Elemento, String> {
-        let bytes = self.imagen.as_deref().ok_or("no hay ninguna imagen adjunta")?;
-        let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?.to_rgba8();
+        let bytes = self
+            .imagen
+            .as_deref()
+            .ok_or("no hay ninguna imagen adjunta")?;
+        let img = image::load_from_memory(bytes)
+            .map_err(|e| e.to_string())?
+            .to_rgba8();
         let id_objeto = self.fotos.len() as u64 + 1;
         let (w, h) = (img.width(), img.height());
-        self.fotos.insert(id_objeto, pixpin_pdf::escribir::Pixeles { ancho: w, alto: h, rgba: img.into_raw() });
+        self.fotos.insert(
+            id_objeto,
+            pixpin_pdf::escribir::Pixeles {
+                ancho: w,
+                alto: h,
+                rgba: img.into_raw(),
+            },
+        );
         Ok(pixpin_motor2d::Elemento {
             figura: pixpin_motor2d::elemento::Figura::Imagen { id_objeto },
             ancho: w as f32,
             alto: h as f32,
-            trazo: pixpin_motor2d::ColorRgba { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            trazo: pixpin_motor2d::ColorRgba {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.0,
+            },
             ..Default::default()
         })
     }
@@ -1417,8 +1793,13 @@ impl Ejecutor for Apunta<'_> {
             if self.r.t_dibujo.is_none() && r.is_ok() {
                 self.r.t_dibujo = Some(self.t0.elapsed().as_secs_f32());
             }
-            self.r.llamadas.push((e.herramienta.to_string(), Value::Object(e.args.clone())));
-            self.r.ediciones.push((e.herramienta.to_string(), r.as_ref().map(|h| h.texto.clone()).map_err(Clone::clone)));
+            self.r
+                .llamadas
+                .push((e.herramienta.to_string(), Value::Object(e.args.clone())));
+            self.r.ediciones.push((
+                e.herramienta.to_string(),
+                r.as_ref().map(|h| h.texto.clone()).map_err(Clone::clone),
+            ));
             return r.map(|h| {
                 if !h.ids.is_empty() {
                     self.ctx.ultimos = h.ids;
@@ -1435,7 +1816,9 @@ impl Ejecutor for Apunta<'_> {
         if let Llamada::App(a) = llamada
             && pixpin_ia::acciones::es_en_el_chat(a.herramienta)
         {
-            self.r.llamadas.push((a.herramienta.to_string(), a.pedido.clone()));
+            self.r
+                .llamadas
+                .push((a.herramienta.to_string(), a.pedido.clone()));
             return Ok(match a.herramienta {
                 "leer_en_voz_alta" => "Leyendo en voz alta «Informe de obra.pdf». «Para de leer» la calla.".into(),
                 "comprimir_pdf" => "«Tesis.pdf» aligerado: de 12,3 MB a 2,1 MB (83 % menos), en 4,2 s. La copia ligera esta en el chat; el original no se toco.".into(),
@@ -1495,11 +1878,16 @@ impl Ejecutor for Apunta<'_> {
             self.ctx.ultimos = ids.clone();
         }
         self.r.elementos.extend(elementos);
-        let respuesta = limpio.get("respuesta").and_then(Value::as_str).map(str::to_string);
+        let respuesta = limpio
+            .get("respuesta")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         self.r.llamadas.push((nombre, limpio));
         Ok(match respuesta {
             Some(r) => r,
-            None if n > 0 => pixpin_ia::edicion::resumen_de_lo_anadido(&self.r.escena, &ids, &self.ctx),
+            None if n > 0 => {
+                pixpin_ia::edicion::resumen_de_lo_anadido(&self.r.escena, &ids, &self.ctx)
+            }
             None => "hecho".into(),
         })
     }
@@ -1524,7 +1912,10 @@ fn pedidos() -> Vec<String> {
         // Una carpeta con llama-server.exe: el local de siempre.
         return vec!["local".into()];
     }
-    v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    v.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// **El motor `nombre`**, o por que no se puede medir (y se salta):
@@ -1550,15 +1941,22 @@ fn motor(nombre: &str) -> Result<Box<dyn Motor>, String> {
     }
     match nombre {
         "local" => motor_local(None).map(|m| Box::new(m) as Box<dyn Motor>),
-        "gemma" => motor_local(Some(pixpin_ia::modelos::GEMMA4_E2B)).map(|m| Box::new(m) as Box<dyn Motor>),
-        otro => Err(format!("motor desconocido «{otro}» (valen: {})", MOTORES.join(", "))),
+        "gemma" => {
+            motor_local(Some(pixpin_ia::modelos::GEMMA4_E2B)).map(|m| Box::new(m) as Box<dyn Motor>)
+        }
+        otro => Err(format!(
+            "motor desconocido «{otro}» (valen: {})",
+            MOTORES.join(", ")
+        )),
     }
 }
 
 /// llama.cpp con el modelo de siempre (o `PIXPIN_IA_MODELO`), o con
 /// `modelo` si se da (Gemma). `Err` si falta algo por bajar.
 fn motor_local(modelo: Option<pixpin_ia::modelos::Modelo>) -> Result<MotorLlama, String> {
-    let base = PathBuf::from(std::env::var("LOCALAPPDATA").unwrap()).join("PixPinMax").join("modelos");
+    let base = PathBuf::from(std::env::var("LOCALAPPDATA").unwrap())
+        .join("PixPinMax")
+        .join("modelos");
     let motor_dir = std::env::var("PIXPIN_IA_MOTOR")
         .ok()
         .filter(|m| PathBuf::from(m).join("llama-server.exe").is_file())
@@ -1597,10 +1995,18 @@ fn motor_local(modelo: Option<pixpin_ia::modelos::Modelo>) -> Result<MotorLlama,
         Ok(otro) => Dispositivo::Gpu(otro.to_string()),
     };
     // `PIXPIN_IA_CACHE_REUSE=n`: el `--cache-reuse` de llama.cpp, para medirlo.
-    if let Some(n) = std::env::var("PIXPIN_IA_CACHE_REUSE").ok().and_then(|n| n.parse().ok()) {
+    if let Some(n) = std::env::var("PIXPIN_IA_CACHE_REUSE")
+        .ok()
+        .and_then(|n| n.parse().ok())
+    {
         config.reutilizar = Some(n);
     }
-    println!("motor: llama.cpp con {} en {:?} · cache-reuse: {:?}", pesos.display(), config.dispositivo, config.reutilizar);
+    println!(
+        "motor: llama.cpp con {} en {:?} · cache-reuse: {:?}",
+        pesos.display(),
+        config.dispositivo,
+        config.reutilizar
+    );
     Ok(MotorLlama::nuevo(config))
 }
 
@@ -1621,9 +2027,15 @@ fn correr(fuente: &Fuente) -> Vec<(&'static str, Nota)> {
     let mut fallos = Vec::new();
     // (primero visible, total) de cada caso, en segundos.
     let mut tiempos: Vec<(f32, f32)> = Vec::new();
-    println!("     {:<32} {:>7} {:>7}  {:<16} herramientas", "caso", "1º vis.", "total", "vueltas cache");
+    println!(
+        "     {:<32} {:>7} {:>7}  {:<16} herramientas",
+        "caso", "1º vis.", "total", "vueltas cache"
+    );
     for caso in casos() {
-        if solo.as_deref().is_some_and(|s| !s.split('|').any(|x| caso.nombre.contains(x))) {
+        if solo
+            .as_deref()
+            .is_some_and(|s| !s.split('|').any(|x| caso.nombre.contains(x)))
+        {
             continue;
         }
         // Con `grabado` no hay motor comun: uno por caso, con su respuesta.
@@ -1663,7 +2075,10 @@ fn correr(fuente: &Fuente) -> Vec<(&'static str, Nota)> {
         // Como en la app: con algo en el lienzo y un pedido de dibujar o
         // editar, el modelo recibe su resumen.
         if inicial.cuantos_visibles() > 0 && pixpin_ia::edicion::viene_a_cuento(caso.pedido) {
-            pixpin_ia::edicion::anadir_resumen(&mut historial, &pixpin_ia::edicion::resumen(&inicial, &ctx));
+            pixpin_ia::edicion::anadir_resumen(
+                &mut historial,
+                &pixpin_ia::edicion::resumen(&inicial, &ctx),
+            );
         }
         let medido = crono::Medido::nuevo(motor);
         // El camino rapido (14-oct), salvo con `PIXPIN_IA_RAPIDO=0` (para medir
@@ -1687,21 +2102,28 @@ fn correr(fuente: &Fuente) -> Vec<(&'static str, Nota)> {
                 fotos: Default::default(),
             };
             let mut t_texto = None;
-            let fin = agente::turno_con(&medido, &mut historial, &herramientas, &mut ej, &opciones, &mut |e| {
-                if primero.is_none() && crono::se_ve(&e) {
-                    primero = Some(t0.elapsed().as_secs_f32());
-                }
-                if matches!(e, Evento::Texto(_)) && t_texto.is_none() {
-                    t_texto = Some(t0.elapsed().as_secs_f32());
-                }
-                if let Evento::Reintento { motivo } = &e {
-                    invalidas.push(motivo.clone());
-                }
-                if !matches!(e, Evento::Texto(_)) {
-                    eventos.push(format!("{e:?}").chars().take(300).collect::<String>());
-                }
-                Seguir::Si
-            });
+            let fin = agente::turno_con(
+                &medido,
+                &mut historial,
+                &herramientas,
+                &mut ej,
+                &opciones,
+                &mut |e| {
+                    if primero.is_none() && crono::se_ve(&e) {
+                        primero = Some(t0.elapsed().as_secs_f32());
+                    }
+                    if matches!(e, Evento::Texto(_)) && t_texto.is_none() {
+                        t_texto = Some(t0.elapsed().as_secs_f32());
+                    }
+                    if let Evento::Reintento { motivo } = &e {
+                        invalidas.push(motivo.clone());
+                    }
+                    if !matches!(e, Evento::Texto(_)) {
+                        eventos.push(format!("{e:?}").chars().take(300).collect::<String>());
+                    }
+                    Seguir::Si
+                },
+            );
             ej.r.t_texto = t_texto;
             (fin, std::mem::take(&mut ej.fotos))
         };
@@ -1739,8 +2161,16 @@ fn correr(fuente: &Fuente) -> Vec<(&'static str, Nota)> {
             visible(r.t_texto),
             visible(r.t_dibujo),
             r.elementos.len(),
-            r.llamadas.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","),
-            veredicto.as_ref().err().map(|m| format!("  <- {m}")).unwrap_or_default()
+            r.llamadas
+                .iter()
+                .map(|(n, _)| n.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+            veredicto
+                .as_ref()
+                .err()
+                .map(|m| format!("  <- {m}"))
+                .unwrap_or_default()
         );
         if !ok {
             fallos.push(format!(
@@ -1751,7 +2181,11 @@ fn correr(fuente: &Fuente) -> Vec<(&'static str, Nota)> {
                 historial
                     .iter()
                     .flat_map(|m| m.llamadas.iter())
-                    .map(|l| format!("{} {}", l.nombre, l.argumentos.chars().take(600).collect::<String>()))
+                    .map(|l| format!(
+                        "{} {}",
+                        l.nombre,
+                        l.argumentos.chars().take(600).collect::<String>()
+                    ))
                     .collect::<Vec<_>>()
                     .join("\n           "),
                 r.texto.trim().chars().take(300).collect::<String>()
@@ -1764,9 +2198,12 @@ fn correr(fuente: &Fuente) -> Vec<(&'static str, Nota)> {
     notas
 }
 
+/// Lo de cada motor: su nombre y su nota en cada caso (o por que no corrio).
+type DeUnMotor = (String, Result<Vec<(&'static str, Nota)>, String>);
+
 /// **La tabla comparativa** (Markdown): una fila por caso, una columna por
 /// motor («✓ 3,2 s» / «✗ 3,2 s»), y abajo el acierto y el tiempo total.
-fn tabla(motores: &[(String, Result<Vec<(&'static str, Nota)>, String>)]) -> String {
+fn tabla(motores: &[DeUnMotor]) -> String {
     let mut casos: Vec<&'static str> = Vec::new();
     for (_, r) in motores {
         if let Ok(v) = r {
@@ -1804,7 +2241,11 @@ fn tabla(motores: &[(String, Result<Vec<(&'static str, Nota)>, String>)]) -> Str
         s.push_str(&match r {
             Ok(v) => {
                 let bien = v.iter().filter(|(_, (ok, _))| *ok).count();
-                format!(" **{bien}/{} = {:.0} %** |", v.len(), bien as f64 * 100.0 / v.len().max(1) as f64)
+                format!(
+                    " **{bien}/{} = {:.0} %** |",
+                    v.len(),
+                    bien as f64 * 100.0 / v.len().max(1) as f64
+                )
             }
             Err(e) => format!(" saltado: {e} |"),
         });
@@ -1827,7 +2268,9 @@ fn banco() {
     for nombre in pedidos() {
         println!("\n===== {nombre} =====");
         let fuente = if nombre == "grabado" {
-            grabado::respuestas().map(Fuente::Grabado).ok_or_else(|| "sin respuestas grabadas".to_string())
+            grabado::respuestas()
+                .map(Fuente::Grabado)
+                .ok_or_else(|| "sin respuestas grabadas".to_string())
         } else {
             motor(&nombre).map(Fuente::Motor)
         };
@@ -1859,14 +2302,23 @@ fn banco() {
 #[test]
 fn la_tabla_compara_y_dice_lo_saltado() {
     let r = vec![
-        ("local".to_string(), Ok(vec![("a", (true, 1.0)), ("b", (false, 2.5))])),
-        ("gemma".to_string(), Ok(vec![("a", (true, 3.0)), ("b", (true, 4.0))])),
+        (
+            "local".to_string(),
+            Ok(vec![("a", (true, 1.0)), ("b", (false, 2.5))]),
+        ),
+        (
+            "gemma".to_string(),
+            Ok(vec![("a", (true, 3.0)), ("b", (true, 4.0))]),
+        ),
         ("claude".to_string(), Err("sin clave de Claude".to_string())),
     ];
     let t = tabla(&r);
     assert!(t.starts_with("| caso | local | gemma | claude |"), "{t}");
     assert!(t.contains("| b | ✗ 2.5 s | ✓ 4.0 s | — |"), "{t}");
-    assert!(t.contains("**1/2 = 50 %**") && t.contains("**2/2 = 100 %**"), "{t}");
+    assert!(
+        t.contains("**1/2 = 50 %**") && t.contains("**2/2 = 100 %**"),
+        "{t}"
+    );
     assert!(t.contains("saltado: sin clave de Claude"), "{t}");
 }
 
@@ -1874,14 +2326,20 @@ fn la_tabla_compara_y_dice_lo_saltado() {
 fn un_motor_desconocido_o_sin_clave_se_salta_sin_romper() {
     assert!(motor("gpt-9").err().unwrap().contains("desconocido"));
     // Sin la variable ni clave guardada, la nube se salta (no se pide).
-    if std::env::var("DEEPSEEK_API_KEY").is_err() && pixpin_ia::nube::claves::leer(pixpin_ia::nube::Proveedor::DeepSeek).is_none() {
+    if std::env::var("DEEPSEEK_API_KEY").is_err()
+        && pixpin_ia::nube::claves::leer(pixpin_ia::nube::Proveedor::DeepSeek).is_none()
+    {
         assert!(motor("deepseek").err().unwrap().contains("sin clave"));
     }
 }
 
 /// El nombre del motor para la carpeta de las imagenes.
 fn nombre_del_motor() -> String {
-    match std::env::var("PIXPIN_IA_MOTOR").unwrap_or_default().to_lowercase().as_str() {
+    match std::env::var("PIXPIN_IA_MOTOR")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
         "claude" => "claude".into(),
         "deepseek" => "deepseek".into(),
         "grabado" => "grabado".into(),
@@ -1908,7 +2366,10 @@ fn imagenes_del_caso(caso: &Caso, imagen: Option<&[u8]>, elementos: &[Value]) {
         }
         None => pintar::pedido_a_png(caso.pedido, &entrada),
     }
-    pintar::elementos_a_png(elementos, &dir.join(format!("{}-resultado.png", caso.nombre)));
+    pintar::elementos_a_png(
+        elementos,
+        &dir.join(format!("{}-resultado.png", caso.nombre)),
+    );
 }
 
 /// Los de editar: la entrada es el lienzo de antes (o la foto adjunta, o el
@@ -1930,7 +2391,11 @@ fn imagenes_de_edicion(
         None if antes.cuantos_visibles() > 0 => pintar::escena_a_png_con(antes, &entrada, fotos),
         None => pintar::pedido_a_png(caso.pedido, &entrada),
     }
-    pintar::escena_a_png_con(despues, &dir.join(format!("{}-resultado.png", caso.nombre)), fotos);
+    pintar::escena_a_png_con(
+        despues,
+        &dir.join(format!("{}-resultado.png", caso.nombre)),
+        fotos,
+    );
 }
 
 /// Pintar a PNG por el camino del PDF del lienzo (exportar → PDF de
@@ -1951,20 +2416,33 @@ mod pintar {
         ruta: &Path,
         fotos: &std::collections::HashMap<u64, pixpin_pdf::escribir::Pixeles>,
     ) {
-        let hojas = pixpin_motor2d::exportar::hojas(escena, pixpin_motor2d::exportar::Alcance::Todo, &[], None);
+        let hojas = pixpin_motor2d::exportar::hojas(
+            escena,
+            pixpin_motor2d::exportar::Alcance::Todo,
+            &[],
+            None,
+        );
         if hojas.is_empty() {
             return;
         }
         let blanco = pixpin_motor2d::ColorRgba::opaco(1.0, 1.0, 1.0);
         let de = |id: u64| {
-            fotos.get(&id).map(|p| pixpin_pdf::escribir::Pixeles { ancho: p.ancho, alto: p.alto, rgba: p.rgba.clone() })
+            fotos.get(&id).map(|p| pixpin_pdf::escribir::Pixeles {
+                ancho: p.ancho,
+                alto: p.alto,
+                rgba: p.rgba.clone(),
+            })
         };
-        let Some(pdf) = pixpin_pdf::escribir::de_hojas(&hojas, Some(blanco), &de) else { return };
+        let Some(pdf) = pixpin_pdf::escribir::de_hojas(&hojas, Some(blanco), &de) else {
+            return;
+        };
         let tmp = ruta.with_extension("pdf");
         if std::fs::write(&tmp, pdf).is_err() {
             return;
         }
-        if let Ok(img) = crate::sin_pintor::Documento::abrir(&tmp).and_then(|d| d.renderizar(0, 1100)) {
+        if let Ok(img) =
+            crate::sin_pintor::Documento::abrir(&tmp).and_then(|d| d.renderizar(0, 1100))
+        {
             if let Ok(png) = pixpin_codec::imagen::codificar_png(&img) {
                 let _ = std::fs::write(ruta, png);
             }
@@ -1974,7 +2452,9 @@ mod pintar {
 
     pub fn elementos_a_png(elementos: &[Value], ruta: &Path) {
         let doc = pixpin_ia::lienzo::documento(elementos.to_vec());
-        let Ok(lienzo) = pixpin_motor2d::excalidraw::leer(&doc) else { return };
+        let Ok(lienzo) = pixpin_motor2d::excalidraw::leer(&doc) else {
+            return;
+        };
         let escena = pixpin_motor2d::excalidraw::a_escena(&lienzo);
         escena_a_png(&escena, ruta);
     }
@@ -2025,12 +2505,27 @@ fn volcar_para_haiku() {
     let caso = &casos()[0];
     let (mut historial, _) = banco_ia::preparar(caso.pedido, None);
     let herramientas = pixpin_ia::herramientas::catalogo();
-    agente::turno(&captura, &mut historial, &herramientas, &mut grabado::NoEjecuta, &mut |_| Seguir::Si).unwrap();
+    agente::turno(
+        &captura,
+        &mut historial,
+        &herramientas,
+        &mut grabado::NoEjecuta,
+        &mut |_| Seguir::Si,
+    )
+    .unwrap();
     let peticion = captura.primera();
-    let cuerpo = pixpin_ia::nube::claude::cuerpo(&peticion, &HashMap::new(), pixpin_ia::nube::claude::MAX_TOKENS);
+    let cuerpo = pixpin_ia::nube::claude::cuerpo(
+        &peticion,
+        &HashMap::new(),
+        pixpin_ia::nube::claude::MAX_TOKENS,
+    );
     let sistema = cuerpo["system"][0]["text"].as_str().unwrap();
     std::fs::write(dir.join("sistema.txt"), sistema).unwrap();
-    std::fs::write(dir.join("herramientas.json"), serde_json::to_string_pretty(&cuerpo["tools"]).unwrap()).unwrap();
+    std::fs::write(
+        dir.join("herramientas.json"),
+        serde_json::to_string_pretty(&cuerpo["tools"]).unwrap(),
+    )
+    .unwrap();
 
     let mut lista = Vec::new();
     for caso in casos() {
@@ -2039,9 +2534,15 @@ fn volcar_para_haiku() {
             std::fs::write(&ruta, f()).unwrap();
             ruta.display().to_string()
         });
-        lista.push(serde_json::json!({"nombre": caso.nombre, "pedido": caso.pedido, "imagen": imagen}));
+        lista.push(
+            serde_json::json!({"nombre": caso.nombre, "pedido": caso.pedido, "imagen": imagen}),
+        );
     }
-    std::fs::write(dir.join("casos.json"), serde_json::to_string_pretty(&lista).unwrap()).unwrap();
+    std::fs::write(
+        dir.join("casos.json"),
+        serde_json::to_string_pretty(&lista).unwrap(),
+    )
+    .unwrap();
     println!(
         "volcado en {}: {} casos, {} herramientas, sistema de {} caracteres",
         dir.display(),
@@ -2056,10 +2557,10 @@ fn volcar_para_haiku() {
 mod grabado {
     use std::sync::Mutex;
 
+    use pixpin_ia::ErrorIa;
     use pixpin_ia::agente::Ejecutor;
     use pixpin_ia::herramientas::Llamada;
     use pixpin_ia::motor::{Fin, LlamadaCruda, Medidas, Motor, Peticion, Respuesta, Seguir, Trozo};
-    use pixpin_ia::ErrorIa;
     use serde_json::Value;
 
     /// `Some` con `PIXPIN_IA_MOTOR=grabado`: el JSON de `PIXPIN_IA_GRABADO`.
@@ -2067,10 +2568,16 @@ mod grabado {
         if !std::env::var("PIXPIN_IA_MOTOR").is_ok_and(|m| m.eq_ignore_ascii_case("grabado")) {
             return None;
         }
-        let ruta = std::env::var("PIXPIN_IA_GRABADO").expect("modo grabado sin PIXPIN_IA_GRABADO=<respuestas.json>");
-        let texto = std::fs::read_to_string(&ruta).unwrap_or_else(|e| panic!("no se puede leer {ruta}: {e}"));
-        let v: Value = serde_json::from_str(&texto).unwrap_or_else(|e| panic!("{ruta} no es JSON: {e}"));
-        assert!(v.is_object(), "{ruta}: se espera un objeto {{\"<caso>\": {{...}}}}");
+        let ruta = std::env::var("PIXPIN_IA_GRABADO")
+            .expect("modo grabado sin PIXPIN_IA_GRABADO=<respuestas.json>");
+        let texto = std::fs::read_to_string(&ruta)
+            .unwrap_or_else(|e| panic!("no se puede leer {ruta}: {e}"));
+        let v: Value =
+            serde_json::from_str(&texto).unwrap_or_else(|e| panic!("{ruta} no es JSON: {e}"));
+        assert!(
+            v.is_object(),
+            "{ruta}: se espera un objeto {{\"<caso>\": {{...}}}}"
+        );
         println!("motor: grabado ({ruta})");
         Some(v)
     }
@@ -2084,17 +2591,22 @@ mod grabado {
 
     impl MotorGrabado {
         pub fn del_caso(todas: &Value, caso: &str) -> Result<MotorGrabado, String> {
-            let r = todas.get(caso).ok_or("sin respuesta grabada para este caso")?;
-            let texto = r.get("texto").and_then(Value::as_str).unwrap_or_default().to_string();
+            let r = todas
+                .get(caso)
+                .ok_or("sin respuesta grabada para este caso")?;
+            let texto = r
+                .get("texto")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
             let mut llamadas = Vec::new();
             match r.get("llamadas") {
                 None | Some(Value::Null) => {}
                 Some(Value::Array(a)) => {
                     for (i, l) in a.iter().enumerate() {
-                        let nombre = l
-                            .get("nombre")
-                            .and_then(Value::as_str)
-                            .ok_or(format!("respuesta grabada mal formada: la llamada {i} no tiene «nombre»"))?;
+                        let nombre = l.get("nombre").and_then(Value::as_str).ok_or(format!(
+                            "respuesta grabada mal formada: la llamada {i} no tiene «nombre»"
+                        ))?;
                         // Un texto se pasa tal cual (para probar JSON roto).
                         let argumentos = match l.get("entrada") {
                             Some(Value::String(s)) => s.clone(),
@@ -2108,7 +2620,9 @@ mod grabado {
                         });
                     }
                 }
-                Some(_) => return Err("respuesta grabada mal formada: «llamadas» no es una lista".into()),
+                Some(_) => {
+                    return Err("respuesta grabada mal formada: «llamadas» no es una lista".into());
+                }
             }
             Ok(MotorGrabado {
                 texto,
@@ -2119,12 +2633,18 @@ mod grabado {
     }
 
     impl Motor for MotorGrabado {
-        fn completar(&self, _: &Peticion, al_trozo: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+        fn completar(
+            &self,
+            _: &Peticion,
+            al_trozo: &mut dyn FnMut(&Trozo) -> Seguir,
+        ) -> Result<Respuesta, ErrorIa> {
             let mut n = self.vueltas.lock().unwrap();
             *n += 1;
             if *n == 1 && !self.llamadas.is_empty() {
                 for l in &self.llamadas {
-                    al_trozo(&Trozo::Llamando { nombre: l.nombre.clone() });
+                    al_trozo(&Trozo::Llamando {
+                        nombre: l.nombre.clone(),
+                    });
                 }
                 return Ok(Respuesta {
                     texto: String::new(),
@@ -2150,12 +2670,21 @@ mod grabado {
 
     impl Captura {
         pub fn primera(&self) -> Peticion {
-            self.0.lock().unwrap().first().cloned().expect("no se pidio nada")
+            self.0
+                .lock()
+                .unwrap()
+                .first()
+                .cloned()
+                .expect("no se pidio nada")
         }
     }
 
     impl Motor for Captura {
-        fn completar(&self, p: &Peticion, _: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+        fn completar(
+            &self,
+            p: &Peticion,
+            _: &mut dyn FnMut(&Trozo) -> Seguir,
+        ) -> Result<Respuesta, ErrorIa> {
             self.0.lock().unwrap().push(p.clone());
             Ok(Respuesta::de_texto("ok"))
         }
@@ -2188,7 +2717,12 @@ mod banco_ia {
                 let mut f = self.0.borrow_mut();
                 let n = f.listas.len();
                 let proyecto = p["proyecto"].as_str().unwrap_or("g").to_string();
-                let chat = f.chats.iter().find(|c| c.id == proyecto).map(|c| c.nombre.clone()).unwrap_or_default();
+                let chat = f
+                    .chats
+                    .iter()
+                    .find(|c| c.id == proyecto)
+                    .map(|c| c.nombre.clone())
+                    .unwrap_or_default();
                 f.listas.push(pixpin_ia::tareas::VistaLista {
                     guardados: proyecto == "g",
                     proyecto,
@@ -2234,34 +2768,73 @@ mod banco_ia {
             texto: texto.into(),
             hecha,
             creada: None,
-            vence: vence.map(|(d, m)| Momento { dia: hoy + d, minuto: m }),
+            vence: vence.map(|(d, m)| Momento {
+                dia: hoy + d,
+                minuto: m,
+            }),
         };
-        let lista = |proyecto: &str, chat: &str, guardados: bool, codigo: &str, titulo: &str, tareas| VistaLista {
-            proyecto: proyecto.into(),
-            chat: chat.into(),
-            guardados,
-            codigo: codigo.into(),
-            titulo: titulo.into(),
-            cuando: 0,
-            tareas,
-        };
+        let lista =
+            |proyecto: &str, chat: &str, guardados: bool, codigo: &str, titulo: &str, tareas| {
+                VistaLista {
+                    proyecto: proyecto.into(),
+                    chat: chat.into(),
+                    guardados,
+                    codigo: codigo.into(),
+                    titulo: titulo.into(),
+                    cuando: 0,
+                    tareas,
+                }
+            };
         Fijas {
             listas: vec![
-                lista("g", "Mensajes guardados", true, "inbox", "Inbox", vec![
-                    t(0, "comprar pan", false, None),
-                    t(1, "llamar al banco", false, Some((-1, 600))),
-                    t(2, "pagar la luz", true, None),
-                ]),
-                lista("casa", "Casa Lima", false, "obra", "Obra", vec![
-                    t(0, "revisar encofrado", false, Some((1, 540))),
-                    t(1, "pedir cemento", true, None),
-                ]),
-                lista("norte", "Obra Norte", false, "compras", "Compras", vec![t(0, "comprar clavos", false, Some((20, 540)))]),
+                lista(
+                    "g",
+                    "Mensajes guardados",
+                    true,
+                    "inbox",
+                    "Inbox",
+                    vec![
+                        t(0, "comprar pan", false, None),
+                        t(1, "llamar al banco", false, Some((-1, 600))),
+                        t(2, "pagar la luz", true, None),
+                    ],
+                ),
+                lista(
+                    "casa",
+                    "Casa Lima",
+                    false,
+                    "obra",
+                    "Obra",
+                    vec![
+                        t(0, "revisar encofrado", false, Some((1, 540))),
+                        t(1, "pedir cemento", true, None),
+                    ],
+                ),
+                lista(
+                    "norte",
+                    "Obra Norte",
+                    false,
+                    "compras",
+                    "Compras",
+                    vec![t(0, "comprar clavos", false, Some((20, 540)))],
+                ),
             ],
             chats: vec![
-                Chat { id: "g".into(), nombre: "Mensajes guardados".into(), guardados: true },
-                Chat { id: "casa".into(), nombre: "Casa Lima".into(), guardados: false },
-                Chat { id: "norte".into(), nombre: "Obra Norte".into(), guardados: false },
+                Chat {
+                    id: "g".into(),
+                    nombre: "Mensajes guardados".into(),
+                    guardados: true,
+                },
+                Chat {
+                    id: "casa".into(),
+                    nombre: "Casa Lima".into(),
+                    guardados: false,
+                },
+                Chat {
+                    id: "norte".into(),
+                    nombre: "Obra Norte".into(),
+                    guardados: false,
+                },
             ],
             ahora: Some(ahora()),
         }
@@ -2270,7 +2843,10 @@ mod banco_ia {
     /// Las instrucciones de siempre (con el resumen de la app) y solo las
     /// herramientas que vienen a cuento (`seleccion::para_el_pedido`), como
     /// hace el chat.
-    pub fn preparar(pedido: &str, imagen: Option<Vec<u8>>) -> (Vec<Mensaje>, Vec<pixpin_ia::Herramienta>) {
+    pub fn preparar(
+        pedido: &str,
+        imagen: Option<Vec<u8>>,
+    ) -> (Vec<Mensaje>, Vec<pixpin_ia::Herramienta>) {
         let herramientas = pixpin_ia::seleccion::para_el_pedido(pedido, imagen.is_some());
         let usuario = match imagen {
             // La foto de un problema: con el OCR pegado, como hace la app
@@ -2282,7 +2858,10 @@ mod banco_ia {
             Some(b) => Mensaje::usuario_con_imagen(pedido, b, "image/png"),
             None => Mensaje::usuario(pedido),
         };
-        (vec![Mensaje::sistema(agente::instrucciones()), usuario], herramientas)
+        (
+            vec![Mensaje::sistema(agente::instrucciones()), usuario],
+            herramientas,
+        )
     }
 
     /// Lo que el OCR de Windows lee en una imagen, dicho para el modelo.
@@ -2293,20 +2872,37 @@ mod banco_ia {
     }
 
     /// (nombre, lo pedido en JSON limpio, elementos que acaban en el lienzo).
-    pub fn resumir(llamada: &Llamada, imagen: Option<&[u8]>) -> Result<(String, Value, Vec<Value>), String> {
+    pub fn resumir(
+        llamada: &Llamada,
+        imagen: Option<&[u8]>,
+    ) -> Result<(String, Value, Vec<Value>), String> {
         let nombre = llamada.nombre().to_string();
         Ok(match llamada {
-            Llamada::Dibujar(_) => (nombre, Value::Null, lienzo::elementos(llamada, (0.0, 0.0), 1)),
-            Llamada::Svg(_) | Llamada::Funciones(_) | Llamada::Ecuacion(_) | Llamada::Cronograma(_) | Llamada::Problema(_) => {
-                (nombre, Value::Null, lienzo::elementos(llamada, (0.0, 0.0), 1))
-            }
+            Llamada::Dibujar(_) => (
+                nombre,
+                Value::Null,
+                lienzo::elementos(llamada, (0.0, 0.0), 1),
+            ),
+            Llamada::Svg(_)
+            | Llamada::Funciones(_)
+            | Llamada::Ecuacion(_)
+            | Llamada::Cronograma(_)
+            | Llamada::Problema(_) => (
+                nombre,
+                Value::Null,
+                lienzo::elementos(llamada, (0.0, 0.0), 1),
+            ),
             Llamada::Fisica(d) => (
                 nombre,
                 serde_json::json!({"tipo": d.tipo, "numeros": d.valores.numeros, "listas": d.valores.listas,
                     "opciones": d.valores.opciones, "resultados": d.resultados}),
                 lienzo::elementos(llamada, (0.0, 0.0), 1),
             ),
-            Llamada::Figuras(p) => (nombre, serde_json::json!({"figuras": format!("{p:?}")}), Vec::new()),
+            Llamada::Figuras(p) => (
+                nombre,
+                serde_json::json!({"figuras": format!("{p:?}")}),
+                Vec::new(),
+            ),
             Llamada::Grafica(g) => (
                 nombre,
                 serde_json::json!({"tipo": format!("{:?}", g.tipo).to_lowercase(), "valores": g.valores, "etiquetas": g.etiquetas}),
@@ -2315,10 +2911,16 @@ mod banco_ia {
             Llamada::Ocr(_) => (nombre, Value::Null, Vec::new()),
             Llamada::Calcar(p) => {
                 let bytes = imagen.ok_or("no hay ninguna imagen adjunta que calcar")?;
-                let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?.to_rgba8();
+                let img = image::load_from_memory(bytes)
+                    .map_err(|e| e.to_string())?
+                    .to_rgba8();
                 let c = pixpin_ia::calcar::calcar(img.as_raw(), img.width(), img.height(), p);
                 let els = lienzo::elementos_de_calcado(&c, (0.0, 0.0), 1);
-                (nombre, serde_json::json!({"solo_contornos": p.solo_contornos}), els)
+                (
+                    nombre,
+                    serde_json::json!({"solo_contornos": p.solo_contornos}),
+                    els,
+                )
             }
             Llamada::App(a) => {
                 let mut v = a.pedido.clone();
@@ -2351,7 +2953,9 @@ mod imagenes {
         let w = 512u32;
         let mut px = vec![255u8; (w * w * 3) as usize];
         let c = w as f64 / 2.0;
-        let elipse = |fx: f64, fy: f64, cx: f64, cy: f64, rx: f64, ry: f64| ((fx - cx) / rx).powi(2) + ((fy - cy) / ry).powi(2);
+        let elipse = |fx: f64, fy: f64, cx: f64, cy: f64, rx: f64, ry: f64| {
+            ((fx - cx) / rx).powi(2) + ((fy - cy) / ry).powi(2)
+        };
         for y in 0..w {
             for x in 0..w {
                 let (fx, fy) = (x as f64 + 0.5, y as f64 + 0.5);
@@ -2368,7 +2972,11 @@ mod imagenes {
                 }
                 let hocico = elipse(fx, fy, c, 350.0, 110.0, 70.0);
                 if hocico <= 1.0 {
-                    col = Some([250.0 - 15.0 * hocico, 215.0 - 25.0 * hocico, 175.0 - 25.0 * hocico]);
+                    col = Some([
+                        250.0 - 15.0 * hocico,
+                        215.0 - 25.0 * hocico,
+                        175.0 - 25.0 * hocico,
+                    ]);
                 }
                 if elipse(fx, fy, c, 310.0, 24.0, 16.0) <= 1.0 {
                     col = Some([80.0, 50.0, 55.0]);
@@ -2397,7 +3005,9 @@ mod imagenes {
     pub fn persona_png() -> Vec<u8> {
         let (w, h) = (384u32, 512u32);
         let mut px = vec![255u8; (w * h * 3) as usize];
-        let e = |fx: f64, fy: f64, cx: f64, cy: f64, rx: f64, ry: f64| ((fx - cx) / rx).powi(2) + ((fy - cy) / ry).powi(2);
+        let e = |fx: f64, fy: f64, cx: f64, cy: f64, rx: f64, ry: f64| {
+            ((fx - cx) / rx).powi(2) + ((fy - cy) / ry).powi(2)
+        };
         for y in 0..h {
             for x in 0..w {
                 let (fx, fy) = (x as f64 + 0.5, y as f64 + 0.5);
@@ -2421,7 +3031,11 @@ mod imagenes {
                 // Cara, con sombra hacia el borde.
                 let cara = e(fx, fy, 192.0, 215.0, 88.0, 112.0);
                 if cara <= 1.0 {
-                    c = [235.0 - 35.0 * cara, 185.0 - 35.0 * cara, 150.0 - 30.0 * cara];
+                    c = [
+                        235.0 - 35.0 * cara,
+                        185.0 - 35.0 * cara,
+                        150.0 - 30.0 * cara,
+                    ];
                 }
                 // Pelo: un casquete por arriba de la cara.
                 let pelo = e(fx, fy, 192.0, 170.0, 100.0, 92.0);
@@ -2480,7 +3094,8 @@ mod imagenes {
                     pon(x, y, [150, 100, 60], &mut px);
                 }
                 // Tejado: triangulo de (100,180) (350,180) (225,80).
-                let dentro = y <= 180 && y >= 80 && (x - 225).abs() as f32 <= (y - 80) as f32 * 1.25;
+                let dentro =
+                    (80..=180).contains(&y) && (x - 225).abs() as f32 <= (y - 80) as f32 * 1.25;
                 if dentro {
                     pon(x, y, [210, 30, 30], &mut px);
                 }
@@ -2539,7 +3154,11 @@ mod imagenes {
         for &b in datos {
             c ^= b as u32;
             for _ in 0..8 {
-                c = if c & 1 != 0 { 0xedb8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 != 0 {
+                    0xedb8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
         }
         !c
@@ -2580,22 +3199,26 @@ mod crono {
             if v.is_empty() {
                 return "0 v (sin modelo)".into();
             }
-            let caches: Vec<String> = v.iter().map(|x| format!("{}/{}", x.cache, x.entrada)).collect();
+            let caches: Vec<String> = v
+                .iter()
+                .map(|x| format!("{}/{}", x.cache, x.entrada))
+                .collect();
             format!("{} v · {}", v.len(), caches.join(" "))
         }
     }
 
     impl Motor for Medido<'_> {
-        fn completar(&self, p: &Peticion, al_trozo: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+        fn completar(
+            &self,
+            p: &Peticion,
+            al_trozo: &mut dyn FnMut(&Trozo) -> Seguir,
+        ) -> Result<Respuesta, ErrorIa> {
             let r = self.dentro.completar(p, al_trozo);
             let (entrada, cache) = r
                 .as_ref()
                 .map(|r| (r.medidas.tokens_entrada, r.medidas.tokens_cache_leidos))
                 .unwrap_or_default();
-            self.vueltas.lock().unwrap().push(Vuelta {
-                entrada,
-                cache,
-            });
+            self.vueltas.lock().unwrap().push(Vuelta { entrada, cache });
             r
         }
 
@@ -2654,15 +3277,21 @@ mod crono {
 fn cache_entre_preguntas() {
     use pixpin_ia::hoja_trabajo::HojaDeTrabajo;
     use pixpin_ia::motor::Peticion;
-    let motor = motor(&std::env::var("PIXPIN_IA_MOTOR").unwrap_or_else(|_| "claude".into())).unwrap();
+    let motor =
+        motor(&std::env::var("PIXPIN_IA_MOTOR").unwrap_or_else(|_| "claude".into())).unwrap();
     let base = agente::instrucciones();
     let mut historial = Vec::new();
-    for (i, (objetivo, pregunta)) in [("saludar", "Hola, contesta solo: hola."), ("despedirse", "Ahora contesta solo: adios.")]
-        .into_iter()
-        .enumerate()
+    for (i, (objetivo, pregunta)) in [
+        ("saludar", "Hola, contesta solo: hola."),
+        ("despedirse", "Ahora contesta solo: adios."),
+    ]
+    .into_iter()
+    .enumerate()
     {
-        let mut hoja = HojaDeTrabajo::default();
-        hoja.objetivo = objetivo.into();
+        let hoja = HojaDeTrabajo {
+            objetivo: objetivo.into(),
+            ..Default::default()
+        };
         let mut sistema = pixpin_ia::contexto::sistema_con_hoja(&base, &hoja, None);
         // `PIXPIN_IA_SIN_PARTIR=1`: como antes del 14-oct (la hoja dentro del
         // mismo bloque que lo fijo), para comparar.
@@ -2685,7 +3314,10 @@ fn cache_entre_preguntas() {
             r.texto.trim()
         );
         if i == 1 {
-            assert!(r.medidas.tokens_cache_leidos > 0, "la segunda pregunta no leyo nada de la cache");
+            assert!(
+                r.medidas.tokens_cache_leidos > 0,
+                "la segunda pregunta no leyo nada de la cache"
+            );
         }
         historial.push(Mensaje::texto(pixpin_ia::motor::Rol::Asistente, r.texto));
     }
@@ -2761,12 +3393,24 @@ fn muestras_del_lienzo() {
     ]);
     for (nombre, herramienta, args) in casos {
         let t0 = Instant::now();
-        let v = validar(&LlamadaCruda { id: "1".into(), nombre: herramienta.into(), argumentos: args }, &catalogo())
-            .unwrap_or_else(|e| panic!("{nombre}: {e}"));
+        let v = validar(
+            &LlamadaCruda {
+                id: "1".into(),
+                nombre: herramienta.into(),
+                argumentos: args,
+            },
+            &catalogo(),
+        )
+        .unwrap_or_else(|e| panic!("{nombre}: {e}"));
         let els = lienzo::elementos(&v.llamada, (0.0, 0.0), 7);
         let t_hecho = t0.elapsed();
         pintar::elementos_a_png(&els, &dir.join(format!("{nombre}.png")));
-        println!("{nombre}: {} elementos en {:?} (PNG en {:?})", els.len(), t_hecho, t0.elapsed());
+        println!(
+            "{nombre}: {} elementos en {:?} (PNG en {:?})",
+            els.len(),
+            t_hecho,
+            t0.elapsed()
+        );
     }
 }
 
@@ -2782,7 +3426,11 @@ fn probar_nube_minima() {
             Proveedor::Claude => "ANTHROPIC_API_KEY",
             Proveedor::DeepSeek => "DEEPSEEK_API_KEY",
         };
-        let Some(clave) = std::env::var(var).ok().filter(|c| !c.trim().is_empty()).or_else(|| claves::leer(p)) else {
+        let Some(clave) = std::env::var(var)
+            .ok()
+            .filter(|c| !c.trim().is_empty())
+            .or_else(|| claves::leer(p))
+        else {
             println!("{}: sin clave guardada", p.nombre());
             continue;
         };
@@ -2799,24 +3447,53 @@ fn probar_nube_minima() {
         let (tx, rx) = std::sync::mpsc::channel();
         let url = p.url();
         std::thread::spawn(move || {
-            let pedido = http::Pedido { url, cabeceras: cab, cuerpo: &cuerpo };
+            let pedido = http::Pedido {
+                url,
+                cabeceras: cab,
+                cuerpo: &cuerpo,
+            };
             let mut resp = Vec::new();
             let r = http::enviar(&pedido, &mut |b| {
                 resp.extend_from_slice(b);
                 Seguir::Si
             });
-            let _ = tx.send((r, String::from_utf8_lossy(&resp).chars().take(300).collect::<String>()));
+            let _ = tx.send((
+                r,
+                String::from_utf8_lossy(&resp)
+                    .chars()
+                    .take(300)
+                    .collect::<String>(),
+            ));
         });
         let tapar = |s: &str| {
             let k = clave.trim();
-            if k.len() > 6 { s.replace(k, "sk-…") } else { s.to_string() }
+            if k.len() > 6 {
+                s.replace(k, "sk-…")
+            } else {
+                s.to_string()
+            }
         };
         match rx.recv_timeout(std::time::Duration::from_secs(60)) {
-            Ok((Ok(_), cuerpo)) => println!("{}: 200 en {} ms · {}", p.nombre(), t.elapsed().as_millis(), tapar(&cuerpo)),
+            Ok((Ok(_), cuerpo)) => println!(
+                "{}: 200 en {} ms · {}",
+                p.nombre(),
+                t.elapsed().as_millis(),
+                tapar(&cuerpo)
+            ),
             Ok((Err(http::Fallo::Http { codigo, cuerpo, .. }), _)) => {
-                println!("{}: HTTP {codigo} en {} ms · {}", p.nombre(), t.elapsed().as_millis(), tapar(&cuerpo))
+                println!(
+                    "{}: HTTP {codigo} en {} ms · {}",
+                    p.nombre(),
+                    t.elapsed().as_millis(),
+                    tapar(&cuerpo)
+                )
             }
-            Ok((Err(http::Fallo::Red(d)), _)) => println!("{}: sin red en {} ms · {}", p.nombre(), t.elapsed().as_millis(), tapar(&d)),
+            Ok((Err(http::Fallo::Red(d)), _)) => println!(
+                "{}: sin red en {} ms · {}",
+                p.nombre(),
+                t.elapsed().as_millis(),
+                tapar(&d)
+            ),
             Err(_) => println!("{}: colgado, sin respuesta en 60 s", p.nombre()),
         }
     }
@@ -2843,7 +3520,11 @@ mod banco15 {
     }
 
     const fn c(nombre: &'static str, pedido: &'static str, imagen: Option<&'static str>) -> Caso15 {
-        Caso15 { nombre, pedido, imagen }
+        Caso15 {
+            nombre,
+            pedido,
+            imagen,
+        }
     }
 
     pub const LIMPIO: &str = "Pasa en limpio al lienzo el problema de esta foto.";
@@ -2851,35 +3532,135 @@ mod banco15 {
     pub fn casos() -> Vec<Caso15> {
         vec![
             // Hojas con formulas -> problema_en_limpio.
-            c("hoja-integrales-problema_en_limpio", LIMPIO, Some(r"banco-15-oct\entradas\hoja-integrales.png")),
-            c("hoja-fracciones-escaneada-problema_en_limpio", LIMPIO, Some(r"banco-15-oct\entradas\hoja-fracciones-escaneada.png")),
-            c("hoja-matriz-problema_en_limpio", LIMPIO, Some(r"banco-15-oct\entradas\hoja-matriz.png")),
-            c("hoja-sistema-escaneada-problema_en_limpio", LIMPIO, Some(r"banco-15-oct\entradas\hoja-sistema-escaneada.png")),
-            c("hoja-cuadratica-grafica-problema_en_limpio", LIMPIO, Some(r"banco-imagenes\hoja-2-sintetica.png")),
-            c("hoja-real-amor-a-sofia-agente", "Pasa esta hoja al lienzo.", Some(r"hoja-real\amor-a-sofia.png")),
+            c(
+                "hoja-integrales-problema_en_limpio",
+                LIMPIO,
+                Some(r"banco-15-oct\entradas\hoja-integrales.png"),
+            ),
+            c(
+                "hoja-fracciones-escaneada-problema_en_limpio",
+                LIMPIO,
+                Some(r"banco-15-oct\entradas\hoja-fracciones-escaneada.png"),
+            ),
+            c(
+                "hoja-matriz-problema_en_limpio",
+                LIMPIO,
+                Some(r"banco-15-oct\entradas\hoja-matriz.png"),
+            ),
+            c(
+                "hoja-sistema-escaneada-problema_en_limpio",
+                LIMPIO,
+                Some(r"banco-15-oct\entradas\hoja-sistema-escaneada.png"),
+            ),
+            c(
+                "hoja-cuadratica-grafica-problema_en_limpio",
+                LIMPIO,
+                Some(r"banco-imagenes\hoja-2-sintetica.png"),
+            ),
+            c(
+                "hoja-real-amor-a-sofia-agente",
+                "Pasa esta hoja al lienzo.",
+                Some(r"hoja-real\amor-a-sofia.png"),
+            ),
             // Graficas.
-            c("grafica-tangente", "Grafica f(x) = x^3 - 3x entre -3 y 3 y traza la recta tangente en x = 2.", None),
-            c("grafica-area", "Grafica y = sin x entre 0 y π y sombrea el área bajo la curva.", None),
-            c("grafica-raices-cubica", "Grafica y = x^3 - x y marca sus raíces.", None),
-            c("grafica-parametrica-lissajous", "Grafica la curva paramétrica x = cos(3t), y = sin(2t) para t entre 0 y 2π.", None),
-            c("grafica-polar-rosa", "Grafica la rosa polar r = 2 sin(3θ).", None),
-            c("grafica-barras-notas", "Haz una gráfica de barras con las notas del examen: Ana 15, Luis 12, Rosa 18, Juan 10, Marta 16.", None),
-            c("grafica-lineas-temperatura", "Haz una gráfica de líneas con la temperatura de la semana: lunes 18, martes 20, miércoles 17, jueves 22, viernes 24 °C.", None),
-            c("grafica-pastel-presupuesto", "Haz una gráfica de pastel del presupuesto de la obra: materiales 45 %, mano de obra 35 %, equipos 15 %, otros 5 %.", None),
+            c(
+                "grafica-tangente",
+                "Grafica f(x) = x^3 - 3x entre -3 y 3 y traza la recta tangente en x = 2.",
+                None,
+            ),
+            c(
+                "grafica-area",
+                "Grafica y = sin x entre 0 y π y sombrea el área bajo la curva.",
+                None,
+            ),
+            c(
+                "grafica-raices-cubica",
+                "Grafica y = x^3 - x y marca sus raíces.",
+                None,
+            ),
+            c(
+                "grafica-parametrica-lissajous",
+                "Grafica la curva paramétrica x = cos(3t), y = sin(2t) para t entre 0 y 2π.",
+                None,
+            ),
+            c(
+                "grafica-polar-rosa",
+                "Grafica la rosa polar r = 2 sin(3θ).",
+                None,
+            ),
+            c(
+                "grafica-barras-notas",
+                "Haz una gráfica de barras con las notas del examen: Ana 15, Luis 12, Rosa 18, Juan 10, Marta 16.",
+                None,
+            ),
+            c(
+                "grafica-lineas-temperatura",
+                "Haz una gráfica de líneas con la temperatura de la semana: lunes 18, martes 20, miércoles 17, jueves 22, viernes 24 °C.",
+                None,
+            ),
+            c(
+                "grafica-pastel-presupuesto",
+                "Haz una gráfica de pastel del presupuesto de la obra: materiales 45 %, mano de obra 35 %, equipos 15 %, otros 5 %.",
+                None,
+            ),
             // Geometria.
-            c("geometria-triangulo-alturas", "Dibuja el triángulo de vértices A(0,0), B(6,0) y C(2,4) con sus tres alturas y marca el ortocentro.", None),
-            c("geometria-circunferencia-inscrita", "Dibuja un triángulo rectángulo de catetos 3 y 4 con su circunferencia inscrita, marcando el incentro.", None),
-            c("geometria-perpendicular-paralela", "Dibuja una recta horizontal, un punto P encima de ella, la perpendicular a la recta por P y la paralela a la recta por P.", None),
-            c("geometria-rectangulo-cotas", "Dibuja un rectángulo de 8 m por 5 m con sus cotas, como en un plano.", None),
+            c(
+                "geometria-triangulo-alturas",
+                "Dibuja el triángulo de vértices A(0,0), B(6,0) y C(2,4) con sus tres alturas y marca el ortocentro.",
+                None,
+            ),
+            c(
+                "geometria-circunferencia-inscrita",
+                "Dibuja un triángulo rectángulo de catetos 3 y 4 con su circunferencia inscrita, marcando el incentro.",
+                None,
+            ),
+            c(
+                "geometria-perpendicular-paralela",
+                "Dibuja una recta horizontal, un punto P encima de ella, la perpendicular a la recta por P y la paralela a la recta por P.",
+                None,
+            ),
+            c(
+                "geometria-rectangulo-cotas",
+                "Dibuja un rectángulo de 8 m por 5 m con sus cotas, como en un plano.",
+                None,
+            ),
             // Fisica.
-            c("fisica-plano-inclinado", "Haz el diagrama de cuerpo libre de un bloque de 5 kg en un plano inclinado de 37° con coeficiente de rozamiento 0,2.", None),
-            c("fisica-circuito-serie", "Dibuja un circuito con una batería de 12 V y tres resistencias en serie de 2, 4 y 6 Ω, y calcula la corriente.", None),
-            c("fisica-tiro-parabolico", "Dibuja el tiro parabólico de un proyectil lanzado a 30 m/s con 60° de elevación.", None),
-            c("fisica-poleas-atwood", "Dibuja una máquina de Atwood con masas de 3 kg y 5 kg colgando de una polea.", None),
+            c(
+                "fisica-plano-inclinado",
+                "Haz el diagrama de cuerpo libre de un bloque de 5 kg en un plano inclinado de 37° con coeficiente de rozamiento 0,2.",
+                None,
+            ),
+            c(
+                "fisica-circuito-serie",
+                "Dibuja un circuito con una batería de 12 V y tres resistencias en serie de 2, 4 y 6 Ω, y calcula la corriente.",
+                None,
+            ),
+            c(
+                "fisica-tiro-parabolico",
+                "Dibuja el tiro parabólico de un proyectil lanzado a 30 m/s con 60° de elevación.",
+                None,
+            ),
+            c(
+                "fisica-poleas-atwood",
+                "Dibuja una máquina de Atwood con masas de 3 kg y 5 kg colgando de una polea.",
+                None,
+            ),
             // Otros.
-            c("tabla-planetas", "Haz una tabla con los planetas interiores: nombre, distancia al Sol en UA y número de lunas.", None),
-            c("diagrama-flujo-par-impar", "Dibuja un diagrama de flujo que lea un número y diga si es par o impar.", None),
-            c("croquis-casa", "Dibuja un croquis de la fachada de una casa de un piso con puerta, dos ventanas y techo a dos aguas.", None),
+            c(
+                "tabla-planetas",
+                "Haz una tabla con los planetas interiores: nombre, distancia al Sol en UA y número de lunas.",
+                None,
+            ),
+            c(
+                "diagrama-flujo-par-impar",
+                "Dibuja un diagrama de flujo que lea un número y diga si es par o impar.",
+                None,
+            ),
+            c(
+                "croquis-casa",
+                "Dibuja un croquis de la fachada de una casa de un piso con puerta, dos ventanas y techo a dos aguas.",
+                None,
+            ),
             c(
                 "cronograma-tesis",
                 "Hazme un cronograma de mi tesis: revisión bibliográfica del 2 al 13 de noviembre de 2026, encuestas del 16 al 27 de noviembre después de la revisión, análisis del 30 de noviembre al 11 de diciembre después de las encuestas, redacción del 7 al 18 de diciembre, y la entrega el 21 de diciembre.",
@@ -2893,7 +3674,9 @@ mod banco15 {
     }
 
     pub fn salida() -> PathBuf {
-        std::env::var("PIXPIN_BANCO_15").map(PathBuf::from).unwrap_or_else(|_| scratch().join("banco-15-oct"))
+        std::env::var("PIXPIN_BANCO_15")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| scratch().join("banco-15-oct"))
     }
 
     pub struct Hecho15 {
@@ -2914,21 +3697,37 @@ mod banco15 {
         let mut r = Resultado::default();
         let ctx = pixpin_ia::edicion::Contexto::default();
         let medido = crono::Medido::nuevo(motor);
-        let opciones = agente::Opciones { rapido: Some(banco_ia::ahora()), ..Default::default() };
+        let opciones = agente::Opciones {
+            rapido: Some(banco_ia::ahora()),
+            ..Default::default()
+        };
         let t0 = Instant::now();
         let mut primero: Option<f32> = None;
         let mut eventos = Vec::new();
         let (fin, fotos) = {
-            let mut ej = Apunta { r: &mut r, imagen, t0, ctx, fotos: Default::default() };
-            let fin = agente::turno_con(&medido, &mut historial, &herramientas, &mut ej, &opciones, &mut |e| {
-                if primero.is_none() && crono::se_ve(&e) {
-                    primero = Some(t0.elapsed().as_secs_f32());
-                }
-                if !matches!(e, Evento::Texto(_) | Evento::Pensando(_)) {
-                    eventos.push(format!("{e:?}").chars().take(200).collect::<String>());
-                }
-                Seguir::Si
-            });
+            let mut ej = Apunta {
+                r: &mut r,
+                imagen,
+                t0,
+                ctx,
+                fotos: Default::default(),
+            };
+            let fin = agente::turno_con(
+                &medido,
+                &mut historial,
+                &herramientas,
+                &mut ej,
+                &opciones,
+                &mut |e| {
+                    if primero.is_none() && crono::se_ve(&e) {
+                        primero = Some(t0.elapsed().as_secs_f32());
+                    }
+                    if !matches!(e, Evento::Texto(_) | Evento::Pensando(_)) {
+                        eventos.push(format!("{e:?}").chars().take(200).collect::<String>());
+                    }
+                    Seguir::Si
+                },
+            );
             (fin, std::mem::take(&mut ej.fotos))
         };
         let total = t0.elapsed().as_secs_f32();
@@ -2936,12 +3735,21 @@ mod banco15 {
             Ok(f) => r.texto = f.texto,
             Err(e) => r.texto = format!("ERROR DEL MOTOR: {e}"),
         }
-        Hecho15 { r, fotos, primero: primero.unwrap_or(total), total, vueltas: medido.resumen(), eventos }
+        Hecho15 {
+            r,
+            fotos,
+            primero: primero.unwrap_or(total),
+            total,
+            vueltas: medido.resumen(),
+            eventos,
+        }
     }
 
     fn letra() -> Option<&'static pixpin_pdf::letra::Letra> {
-        static L: std::sync::OnceLock<Option<pixpin_pdf::letra::Letra>> = std::sync::OnceLock::new();
-        L.get_or_init(|| pixpin_pdf::letra::del_sistema("Segoe UI")).as_ref()
+        static L: std::sync::OnceLock<Option<pixpin_pdf::letra::Letra>> =
+            std::sync::OnceLock::new();
+        L.get_or_init(|| pixpin_pdf::letra::del_sistema("Segoe UI"))
+            .as_ref()
     }
 
     /// La escena a pixeles por el camino del PDF del lienzo: `caja` fija (en
@@ -2952,7 +3760,12 @@ mod banco15 {
         caja: Option<(f32, f32, f32, f32)>,
         ancho: u32,
     ) -> Option<pixpin_codec::ImagenRgba> {
-        let mut hojas = pixpin_motor2d::exportar::hojas(escena, pixpin_motor2d::exportar::Alcance::Todo, &[], None);
+        let mut hojas = pixpin_motor2d::exportar::hojas(
+            escena,
+            pixpin_motor2d::exportar::Alcance::Todo,
+            &[],
+            None,
+        );
         if hojas.is_empty() {
             return None;
         }
@@ -2964,12 +3777,24 @@ mod banco15 {
         });
         hojas[0].caja = c;
         let tam = (c.2 - c.0, c.3 - c.1);
-        let de = |id: u64| fotos.get(&id).map(|p| pixpin_pdf::escribir::Pixeles { ancho: p.ancho, alto: p.alto, rgba: p.rgba.clone() });
+        let de = |id: u64| {
+            fotos.get(&id).map(|p| pixpin_pdf::escribir::Pixeles {
+                ancho: p.ancho,
+                alto: p.alto,
+                rgba: p.rgba.clone(),
+            })
+        };
         let pdf = pixpin_pdf::escribir::de_hojas_a_medida(&hojas, &[tam], &de, letra())?;
         static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let ruta = std::env::temp_dir().join(format!("pixpin-banco15-ia-{}-{}.pdf", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)));
+        let ruta = std::env::temp_dir().join(format!(
+            "pixpin-banco15-ia-{}-{}.pdf",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        ));
         std::fs::write(&ruta, pdf).ok()?;
-        let img = crate::sin_pintor::Documento::abrir(&ruta).and_then(|d| d.renderizar(0, ancho)).ok();
+        let img = crate::sin_pintor::Documento::abrir(&ruta)
+            .and_then(|d| d.renderizar(0, ancho))
+            .ok();
         let _ = std::fs::remove_file(&ruta);
         img
     }
@@ -3017,19 +3842,31 @@ mod banco15 {
         for (i, r) in renglones.into_iter().enumerate() {
             let ancho_t = pixpin_motor2d::exportar::ancho_de_texto(&r, tam);
             s.anadir(Elemento {
-                figura: Figura::Texto { texto: r, tam, familia: "Segoe UI".into() },
+                figura: Figura::Texto {
+                    texto: r,
+                    tam,
+                    familia: "Segoe UI".into(),
+                },
                 x: 14.0,
                 y: 10.0 + i as f32 * tam * 1.45,
                 ancho: ancho_t,
                 alto: tam * 1.25,
-                trazo: if i + 1 == n { ColorRgba::opaco(0.05, 0.30, 0.60) } else { ColorRgba::opaco(0.10, 0.12, 0.18) },
+                trazo: if i + 1 == n {
+                    ColorRgba::opaco(0.05, 0.30, 0.60)
+                } else {
+                    ColorRgba::opaco(0.10, 0.12, 0.18)
+                },
                 ..Default::default()
             });
         }
-        a_imagen(&s, &Default::default(), Some((0.0, 0.0, w, h)), ancho).expect("no salio la franja")
+        a_imagen(&s, &Default::default(), Some((0.0, 0.0, w, h)), ancho)
+            .expect("no salio la franja")
     }
 
-    pub fn apilar(arriba: &pixpin_codec::ImagenRgba, abajo: &pixpin_codec::ImagenRgba) -> pixpin_codec::ImagenRgba {
+    pub fn apilar(
+        arriba: &pixpin_codec::ImagenRgba,
+        abajo: &pixpin_codec::ImagenRgba,
+    ) -> pixpin_codec::ImagenRgba {
         let w = arriba.ancho.max(abajo.ancho);
         let margen = 16u32;
         let h = arriba.alto + margen + abajo.alto;
@@ -3038,12 +3875,17 @@ mod banco15 {
             for y in 0..img.alto {
                 let d = ((oy + y) * w * 4) as usize;
                 let o = (y * img.ancho * 4) as usize;
-                px[d..d + (img.ancho * 4) as usize].copy_from_slice(&img.pixeles[o..o + (img.ancho * 4) as usize]);
+                px[d..d + (img.ancho * 4) as usize]
+                    .copy_from_slice(&img.pixeles[o..o + (img.ancho * 4) as usize]);
             }
         };
         poner(arriba, 0);
         poner(abajo, arriba.alto + margen);
-        pixpin_codec::ImagenRgba { ancho: w, alto: h, pixeles: px }
+        pixpin_codec::ImagenRgba {
+            ancho: w,
+            alto: h,
+            pixeles: px,
+        }
     }
 }
 
@@ -3052,7 +3894,9 @@ mod banco15 {
 fn banco_15_oct() {
     let solo = std::env::var("PIXPIN_IA_SOLO").ok();
     let mut filas = Vec::new();
-    let pedidos_ = std::env::var("PIXPIN_IA_MOTOR").map(|_| pedidos()).unwrap_or_else(|_| vec!["deepseek".into(), "claude".into()]);
+    let pedidos_ = std::env::var("PIXPIN_IA_MOTOR")
+        .map(|_| pedidos())
+        .unwrap_or_else(|_| vec!["deepseek".into(), "claude".into()]);
     for nombre in pedidos_ {
         let m = match motor(&nombre) {
             Ok(m) => m,
@@ -3064,7 +3908,10 @@ fn banco_15_oct() {
         let dir = banco15::salida().join(&nombre);
         std::fs::create_dir_all(&dir).unwrap();
         for caso in banco15::casos() {
-            if solo.as_deref().is_some_and(|s| !s.split('|').any(|x| caso.nombre.contains(x))) {
+            if solo
+                .as_deref()
+                .is_some_and(|s| !s.split('|').any(|x| caso.nombre.contains(x)))
+            {
                 continue;
             }
             let imagen = match caso.imagen {
@@ -3084,14 +3931,22 @@ fn banco_15_oct() {
                 h.primero,
                 h.total,
                 h.vueltas,
-                if herramientas.is_empty() { "sin herramientas".to_string() } else { herramientas.join(", ") }
+                if herramientas.is_empty() {
+                    "sin herramientas".to_string()
+                } else {
+                    herramientas.join(", ")
+                }
             );
             let dibujo = banco15::a_imagen(&h.r.escena, &h.fotos, None, 1400);
             match &dibujo {
                 Some(img) => {
                     let fr = banco15::franja(caso.pedido, &linea, img.ancho);
                     let todo = banco15::apilar(&fr, img);
-                    std::fs::write(dir.join(format!("{}.png", caso.nombre)), pixpin_codec::imagen::codificar_png(&todo).unwrap()).unwrap();
+                    std::fs::write(
+                        dir.join(format!("{}.png", caso.nombre)),
+                        pixpin_codec::imagen::codificar_png(&todo).unwrap(),
+                    )
+                    .unwrap();
                 }
                 None => {
                     let _ = std::fs::remove_file(dir.join(format!("{}.png", caso.nombre)));
@@ -3107,9 +3962,20 @@ fn banco_15_oct() {
                 h.r.escena.cuantos_visibles(),
                 herramientas.join(",")
             );
-            println!("    texto: «{}»", h.r.texto.trim().chars().take(400).collect::<String>().replace('\n', " ⏎ "));
+            println!(
+                "    texto: «{}»",
+                h.r.texto
+                    .trim()
+                    .chars()
+                    .take(400)
+                    .collect::<String>()
+                    .replace('\n', " ⏎ ")
+            );
             for (n, v) in &h.r.llamadas {
-                println!("    llamo {n}: {}", v.to_string().chars().take(400).collect::<String>());
+                println!(
+                    "    llamo {n}: {}",
+                    v.to_string().chars().take(400).collect::<String>()
+                );
             }
             for (n, e) in &h.r.ediciones {
                 if let Err(e) = e {
@@ -3117,7 +3983,10 @@ fn banco_15_oct() {
                 }
             }
             if dibujo.is_none() {
-                println!("    (lienzo vacio) eventos: {}", h.eventos.join(" / ").chars().take(600).collect::<String>());
+                println!(
+                    "    (lienzo vacio) eventos: {}",
+                    h.eventos.join(" / ").chars().take(600).collect::<String>()
+                );
             }
             filas.push(format!(
                 "| {} | {nombre} | {:.1} s | {:.1} s | {} | {} |",
@@ -3125,12 +3994,18 @@ fn banco_15_oct() {
                 h.primero,
                 h.total,
                 h.vueltas,
-                if herramientas.is_empty() { "—".to_string() } else { herramientas.join(", ") }
+                if herramientas.is_empty() {
+                    "—".to_string()
+                } else {
+                    herramientas.join(", ")
+                }
             ));
         }
         m.soltar();
     }
-    println!("\n| caso | motor | 1º visible | total | vueltas | herramientas |\n|---|---|---|---|---|---|");
+    println!(
+        "\n| caso | motor | 1º visible | total | vueltas | herramientas |\n|---|---|---|---|---|---|"
+    );
     for f in &filas {
         println!("{f}");
     }

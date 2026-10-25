@@ -16,10 +16,11 @@
 // `!(x > 0.0)` va a proposito en todo el crate: tambien descarta NaN. Lo
 // avisa un Clippy nuevo; el codigo es el de Windows, tal cual.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
+pub mod anotado;
 pub mod convertir;
+pub mod convertir3d;
 pub mod croquis;
 pub mod enganche;
-pub mod convertir3d;
 #[cfg(windows)]
 pub mod gpu;
 #[cfg(windows)]
@@ -31,18 +32,21 @@ pub mod modelo;
 pub mod modelo3d;
 pub mod orbita;
 pub mod proxy;
+/// Pintar un plano a PNG en la CPU: para las pruebas y, con el rasgo
+/// `pintar-png`, para las de la app (el banco del asistente).
+#[cfg(any(test, feature = "pintar-png"))]
+pub mod pruebas_png;
 pub mod regla;
-pub mod anotado;
-#[cfg(windows)]
-pub mod ventana3d;
 pub mod relleno;
 pub mod shx;
 pub mod teselar;
 pub mod texto;
 #[cfg(windows)]
 pub mod ventana;
+#[cfg(windows)]
+pub mod ventana3d;
+#[cfg(windows)]
+pub mod iconos;
+#[cfg(windows)]
+mod trayecto_svg;
 pub mod web;
-/// Pintar un plano a PNG en la CPU: para las pruebas y, con el rasgo
-/// `pintar-png`, para las de la app (el banco del asistente).
-#[cfg(any(test, feature = "pintar-png"))]
-pub mod pruebas_png;

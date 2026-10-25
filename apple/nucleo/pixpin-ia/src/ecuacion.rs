@@ -66,7 +66,10 @@ pub struct Ecuacion {
     pub color: String,
 }
 
-pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Ecuacion, ErrorHerramienta> {
+pub fn validar(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Ecuacion, ErrorHerramienta> {
     let texto = ["ecuacion", "formula", "latex", "texto"]
         .iter()
         .find_map(|k| args.get(*k).and_then(Value::as_str))
@@ -74,7 +77,9 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Ec
         .filter(|t| !t.is_empty())
         .ok_or_else(|| mal("falta «ecuacion» (en LaTeX o escrita normal)"))?;
     if texto.chars().count() > MAX_LARGO {
-        return Err(mal(format!("la ecuacion pasa de {MAX_LARGO} caracteres: partela en varias")));
+        return Err(mal(format!(
+            "la ecuacion pasa de {MAX_LARGO} caracteres: partela en varias"
+        )));
     }
     // Los modelos escapan de mas (`\\frac` en vez de `\frac`, medido con
     // Haiku el 14-oct): una barra doble pegada a una letra es un mandato,
@@ -83,7 +88,10 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Ec
     let car: Vec<char> = texto.chars().collect();
     let mut i = 0;
     while i < car.len() {
-        if car[i] == '\\' && car.get(i + 1) == Some(&'\\') && car.get(i + 2).is_some_and(|c| c.is_ascii_alphabetic()) {
+        if car[i] == '\\'
+            && car.get(i + 1) == Some(&'\\')
+            && car.get(i + 2).is_some_and(|c| c.is_ascii_alphabetic())
+        {
             i += 1;
             continue;
         }
@@ -113,14 +121,19 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Ec
     let abre = limpio.matches('{').count();
     let cierra = limpio.matches('}').count();
     if abre != cierra {
-        return Err(mal(format!("las llaves no cuadran ({abre} «{{» y {cierra} «}}»)")));
+        return Err(mal(format!(
+            "las llaves no cuadran ({abre} «{{» y {cierra} «}}»)"
+        )));
     }
     let raros: Vec<String> = lineas
         .iter()
         .flat_map(|l| desconocidos(&formulas::leer(l)))
         .collect();
     if !raros.is_empty() {
-        avisos.push(format!("no se entendio {} y sale tal cual", raros.join(", ")));
+        avisos.push(format!(
+            "no se entendio {} y sale tal cual",
+            raros.join(", ")
+        ));
     }
     let num = |k: &str, r: (f64, f64)| -> Result<Option<f64>, ErrorHerramienta> {
         match args.get(k) {
@@ -129,7 +142,12 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Ec
                 .as_f64()
                 .filter(|n| n.is_finite() && (r.0..=r.1).contains(n))
                 .map(Some)
-                .ok_or_else(|| mal(format!("«{k}» tiene que ser un numero de {} a {}", r.0, r.1))),
+                .ok_or_else(|| {
+                    mal(format!(
+                        "«{k}» tiene que ser un numero de {} a {}",
+                        r.0, r.1
+                    ))
+                }),
         }
     };
     let donde = match (num("x", (-200.0, 2000.0))?, num("y", (-200.0, 2000.0))?) {
@@ -142,7 +160,12 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Ec
         .and_then(Value::as_str)
         .and_then(crate::herramientas::color)
         .map_or_else(|| "#1e1e1e".to_string(), |c| c.0);
-    Ok(Ecuacion { lineas, donde, tam, color })
+    Ok(Ecuacion {
+        lineas,
+        donde,
+        tam,
+        color,
+    })
 }
 
 /// **Los renglones de una ecuacion**: se parte por `\\` y por saltos de
@@ -155,7 +178,11 @@ pub fn partir_lineas(texto: &str) -> Vec<String> {
     let mut actual = String::new();
     let mut prof = 0usize;
     let mut i = 0;
-    let empieza = |i: usize, s: &str| s.chars().enumerate().all(|(k, ch)| c.get(i + k) == Some(&ch));
+    let empieza = |i: usize, s: &str| {
+        s.chars()
+            .enumerate()
+            .all(|(k, ch)| c.get(i + k) == Some(&ch))
+    };
     while i < c.len() {
         if empieza(i, "\\begin{") {
             prof += 1;
@@ -196,7 +223,11 @@ pub fn partir_lineas(texto: &str) -> Vec<String> {
         i += 1;
     }
     lineas.push(actual);
-    lineas.into_iter().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
+    lineas
+        .into_iter()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
 }
 
 /// Los mandatos que el lector no entendio (salen con su barra).
@@ -214,8 +245,14 @@ pub fn componer(p: &Pieza, t: f32, medir: caja::Medir<'_>) -> Caja {
 /// que ocupa.
 pub fn piezas(e: &Ecuacion) -> (Vec<Elemento>, (f32, f32)) {
     let medir = |t: &str, tam: f32| crate::lienzo::medir_con(t, tam, FAMILIA);
-    let color = pixpin_motor2d::excalidraw::color_desde(Some(&json!(e.color))).unwrap_or(ColorRgba::opaco(0.12, 0.12, 0.12));
-    let estilo = Estilo { color, tam: e.tam as f32, opacidad: 1.0, familia: FAMILIA.into() };
+    let color = pixpin_motor2d::excalidraw::color_desde(Some(&json!(e.color)))
+        .unwrap_or(ColorRgba::opaco(0.12, 0.12, 0.12));
+    let estilo = Estilo {
+        color,
+        tam: e.tam as f32,
+        opacidad: 1.0,
+        familia: FAMILIA.into(),
+    };
     let cajas: Vec<Caja> = e
         .lineas
         .iter()
@@ -261,7 +298,10 @@ mod pruebas {
                 _ => None,
             })
             .collect();
-        let rayas = els.iter().filter(|e| matches!(e.figura, Figura::Linea { .. })).count();
+        let rayas = els
+            .iter()
+            .filter(|e| matches!(e.figura, Figura::Linea { .. }))
+            .count();
         // La raya de la fraccion y el signo de la raiz.
         assert!(rayas >= 2, "{rayas}");
         assert!(textos.iter().any(|t| t.contains('±')), "{textos:?}");
@@ -270,22 +310,32 @@ mod pruebas {
         assert!(h > e.tam as f32 * 1.8, "{w}x{h}");
         let mut f = Fabrica::nueva((0.0, 0.0), 2);
         elementos(&mut f, &e);
-        let l = pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
+        let l =
+            pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
         assert_eq!(l.cuantos_ajenos(), 0);
     }
 
     #[test]
     fn el_latex_escapado_de_mas_sigue_siendo_una_linea() {
         // Lo que mando Haiku: `\\frac` con dos barras.
-        let e = validar_(json!({"ecuacion": r"x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"})).unwrap();
+        let e =
+            validar_(json!({"ecuacion": r"x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"})).unwrap();
         assert_eq!(e.lineas.len(), 1, "{:?}", e.lineas);
         let (els, _) = piezas(&e);
-        assert!(els.iter().filter(|e| matches!(e.figura, Figura::Linea { .. })).count() >= 2);
+        assert!(
+            els.iter()
+                .filter(|e| matches!(e.figura, Figura::Linea { .. }))
+                .count()
+                >= 2
+        );
     }
 
     #[test]
     fn varias_lineas_y_escritura_corriente() {
-        let e = validar_(json!({"ecuacion": "E = mc^2 \\\\ a^2 + b^2 = c^2\nsqrt(2)/2", "x": 10, "y": 20})).unwrap();
+        let e = validar_(
+            json!({"ecuacion": "E = mc^2 \\\\ a^2 + b^2 = c^2\nsqrt(2)/2", "x": 10, "y": 20}),
+        )
+        .unwrap();
         assert_eq!(e.lineas.len(), 3);
         let (els, _) = piezas(&e);
         let y0 = els.iter().map(|e| e.y).fold(f32::MAX, f32::min);
@@ -305,22 +355,49 @@ mod pruebas {
     #[test]
     fn matrices_sistemas_y_texto_salen_compuestos_sin_barras() {
         let e = validar_(json!({"ecuacion": r"A = \begin{bmatrix} 2 & -1 & 0 \\ 1 & 3 & 2 \\ 0 & 1 & 4 \end{bmatrix}"})).unwrap();
-        assert_eq!(e.lineas.len(), 1, "la matriz no se parte en renglones: {:?}", e.lineas);
+        assert_eq!(
+            e.lineas.len(),
+            1,
+            "la matriz no se parte en renglones: {:?}",
+            e.lineas
+        );
         let (els, (_, h)) = piezas(&e);
         let t = textos_de(&els);
-        assert!(t.iter().all(|x| !x.contains('\\') && !x.contains('&')), "{t:?}");
-        assert_eq!(t.iter().filter(|x| x.trim() == "-1" || x.trim() == "−1" || x.trim() == "1").count() >= 3, true, "{t:?}");
+        assert!(
+            t.iter().all(|x| !x.contains('\\') && !x.contains('&')),
+            "{t:?}"
+        );
+        assert!(
+            t.iter()
+                .filter(|x| x.trim() == "-1" || x.trim() == "−1" || x.trim() == "1")
+                .count()
+                >= 3,
+            "{t:?}"
+        );
         assert!(h > e.tam as f32 * 2.5, "tres filas de alto: {h}");
         // Los corchetes, dibujados.
-        assert!(els.iter().filter(|e| matches!(e.figura, Figura::Linea { .. })).count() >= 2);
+        assert!(
+            els.iter()
+                .filter(|e| matches!(e.figura, Figura::Linea { .. }))
+                .count()
+                >= 2
+        );
         let mut avisos = Vec::new();
-        let Value::Object(m) = json!({"ecuacion": r"\begin{cases} 2x + y = 5 \\ x - y = 1 \end{cases} \qquad \text{si } x \in \mathbb{R}, \operatorname{rang}(A) = 3, \ln x \to \infty"}) else { panic!() };
+        let Value::Object(m) = json!({"ecuacion": r"\begin{cases} 2x + y = 5 \\ x - y = 1 \end{cases} \qquad \text{si } x \in \mathbb{R}, \operatorname{rang}(A) = 3, \ln x \to \infty"})
+        else {
+            panic!()
+        };
         let e = validar(&m, &mut avisos).unwrap();
         assert!(avisos.is_empty(), "{avisos:?}");
         assert_eq!(e.lineas.len(), 1);
         let t = textos_de(&piezas(&e).0);
         assert!(t.iter().all(|x| !x.contains('\\')), "{t:?}");
-        assert!(t.iter().any(|x| x.contains("si")) && t.iter().any(|x| x.contains('ℝ')) && t.iter().any(|x| x.contains("rang")), "{t:?}");
+        assert!(
+            t.iter().any(|x| x.contains("si"))
+                && t.iter().any(|x| x.contains('ℝ'))
+                && t.iter().any(|x| x.contains("rang")),
+            "{t:?}"
+        );
         // Fuera de un entorno, `\\` sigue partiendo renglones.
         assert_eq!(partir_lineas(r"a = 1 \\ b = 2"), vec!["a = 1", "b = 2"]);
         assert_eq!(partir_lineas("x &= 2\ny &= 3"), vec!["x = 2", "y = 3"]);
@@ -330,12 +407,19 @@ mod pruebas {
     fn lo_roto_se_rechaza() {
         assert!(validar_(json!({})).is_err());
         assert!(validar_(json!({"ecuacion": "   "})).is_err());
-        assert!(validar_(json!({"ecuacion": "\\frac{a}{b"})).unwrap_err().to_string().contains("llaves"));
+        assert!(
+            validar_(json!({"ecuacion": "\\frac{a}{b"}))
+                .unwrap_err()
+                .to_string()
+                .contains("llaves")
+        );
         assert!(validar_(json!({"ecuacion": "x".repeat(MAX_LARGO + 1)})).is_err());
         assert!(validar_(json!({"ecuacion": "x", "tam_letra": 900})).is_err());
         // Un mandato desconocido no rompe: sale tal cual, con aviso.
         let mut avisos = Vec::new();
-        let Value::Object(m) = json!({"ecuacion": "\\inventado{x} + 1"}) else { panic!() };
+        let Value::Object(m) = json!({"ecuacion": "\\inventado{x} + 1"}) else {
+            panic!()
+        };
         assert!(validar(&m, &mut avisos).is_ok());
         assert_eq!(avisos.len(), 1, "{avisos:?}");
     }

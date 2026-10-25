@@ -91,7 +91,10 @@ impl Servicio {
     /// Todos hacia otro servidor (`http://127.0.0.1:puerto`), con las
     /// mismas rutas: el servidor falso de las pruebas.
     pub fn extremos_en(&self, base: &str) -> Extremos {
-        let mover = |u: &str| match u.split_once("://").and_then(|(_, r)| r.find('/').map(|i| &r[i..])) {
+        let mover = |u: &str| match u
+            .split_once("://")
+            .and_then(|(_, r)| r.find('/').map(|i| &r[i..]))
+        {
             Some(ruta) => format!("{base}{ruta}"),
             None if u.is_empty() => String::new(),
             None => base.to_string(),
@@ -115,7 +118,8 @@ pub fn por_id(id: &str) -> Option<&'static Servicio> {
     SERVICIOS.iter().find(|s| {
         s.id == id
             || (s.id == "google_drive" && (id == "drive" || id == "google"))
-            || (s.id == "google_calendar" && matches!(id.as_str(), "calendar" | "calendario" | "google_calendario"))
+            || (s.id == "google_calendar"
+                && matches!(id.as_str(), "calendar" | "calendario" | "google_calendario"))
     })
 }
 
@@ -144,7 +148,15 @@ pub enum Contenido {
 }
 
 /// Los tipos que se pueden pedir al buscar.
-pub const TIPOS: &[&str] = &["cualquiera", "documento", "hoja", "presentacion", "pdf", "imagen", "carpeta"];
+pub const TIPOS: &[&str] = &[
+    "cualquiera",
+    "documento",
+    "hoja",
+    "presentacion",
+    "pdf",
+    "imagen",
+    "carpeta",
+];
 
 /// **Lo que se le pide a un servicio de archivos.** Errores ya dichos para
 /// el modelo (que y por que).
@@ -189,17 +201,29 @@ impl Conexion {
     }
 
     /// Con otras direcciones y otra carpeta (las pruebas).
-    pub fn abrir_en(s: &'static Servicio, extremos: Extremos, carpeta: &Path) -> Result<Conexion, String> {
+    pub fn abrir_en(
+        s: &'static Servicio,
+        extremos: Extremos,
+        carpeta: &Path,
+    ) -> Result<Conexion, String> {
         let g = guardado::leer_de(carpeta, s);
         if !g.conectado() || g.cliente.is_none() {
             return Err(sin_conectar(s));
         }
-        Ok(Conexion { servicio: s, extremos, carpeta: carpeta.to_path_buf(), estado: Mutex::new(g) })
+        Ok(Conexion {
+            servicio: s,
+            extremos,
+            carpeta: carpeta.to_path_buf(),
+            estado: Mutex::new(g),
+        })
     }
 
     fn guardar(&self, g: &Guardado) {
         if let Err(e) = guardado::guardar_en(&self.carpeta, self.servicio, g) {
-            tracing::warn!("conexiones: no se pudo guardar {}: {e}", self.servicio.nombre);
+            tracing::warn!(
+                "conexiones: no se pudo guardar {}: {e}",
+                self.servicio.nombre
+            );
         }
     }
 
@@ -224,7 +248,10 @@ impl Conexion {
                 g.tokens = None;
                 g.cuenta = None;
                 self.guardar(&g);
-                Err(format!("{}: {m} (Ajustes → Asistente → Conexiones → Conectar).", self.servicio.nombre))
+                Err(format!(
+                    "{}: {m} (Ajustes → Asistente → Conexiones → Conectar).",
+                    self.servicio.nombre
+                ))
             }
             Err(FalloToken::Otro(m)) => Err(format!("{}: {m}", self.servicio.nombre)),
         }
@@ -267,11 +294,20 @@ impl Conexion {
                     .unwrap_or("")
                     .to_string();
                 match codigo {
-                    401 => format!("{n} rechazo el permiso; hay que volver a conectar en Ajustes → Asistente → Conexiones"),
+                    401 => format!(
+                        "{n} rechazo el permiso; hay que volver a conectar en Ajustes → Asistente → Conexiones"
+                    ),
                     403 => format!("{n} no deja hacer eso ({detalle})"),
                     404 => format!("ese archivo no existe en {n} o no tienes acceso"),
                     429 => format!("{n} pide esperar un poco (demasiadas peticiones)"),
-                    c => format!("{n} contesto {c}{}", if detalle.is_empty() { String::new() } else { format!(": {detalle}") }),
+                    c => format!(
+                        "{n} contesto {c}{}",
+                        if detalle.is_empty() {
+                            String::new()
+                        } else {
+                            format!(": {detalle}")
+                        }
+                    ),
                 }
             }
         }
@@ -303,10 +339,12 @@ pub fn conectar_en(
     espera: std::time::Duration,
 ) -> Result<String, String> {
     let mut g = guardado::leer_de(carpeta, s);
-    let cliente = g
-        .cliente
-        .clone()
-        .ok_or_else(|| format!("falta el ID de cliente de {}: pegalo arriba (se crea en {})", s.nombre, s.consola))?;
+    let cliente = g.cliente.clone().ok_or_else(|| {
+        format!(
+            "falta el ID de cliente de {}: pegalo arriba (se crea en {})",
+            s.nombre, s.consola
+        )
+    })?;
     let tokens: Tokens = oauth::autorizar(s, extremos, &cliente, abrir, parar, espera)?;
     g.tokens = Some(tokens);
     g.cuenta = None;
@@ -327,15 +365,26 @@ pub fn conectar_en(
 /// **Desconecta**: borra los tokens de este PC (el ID de cliente se queda)
 /// y retira el permiso en el servicio. Lo segundo puede fallar sin red: lo
 /// importante ya esta hecho.
-pub fn desconectar_en(s: &'static Servicio, extremos: &Extremos, carpeta: &Path) -> Result<(), String> {
+pub fn desconectar_en(
+    s: &'static Servicio,
+    extremos: &Extremos,
+    carpeta: &Path,
+) -> Result<(), String> {
     let mut g = guardado::leer_de(carpeta, s);
     let tokens = g.tokens.take();
     g.cuenta = None;
     guardado::guardar_en(carpeta, s, &g)?;
     if let Some(t) = tokens {
-        let token = if t.refresco.is_empty() { t.acceso } else { t.refresco };
+        let token = if t.refresco.is_empty() {
+            t.acceso
+        } else {
+            t.refresco
+        };
         if let Err(e) = oauth::revocar(extremos, &token) {
-            tracing::info!("conexiones: no se pudo retirar el permiso de {} en el servicio: {e}", s.nombre);
+            tracing::info!(
+                "conexiones: no se pudo retirar el permiso de {} en el servicio: {e}",
+                s.nombre
+            );
         }
     }
     Ok(())
@@ -343,7 +392,11 @@ pub fn desconectar_en(s: &'static Servicio, extremos: &Extremos, carpeta: &Path)
 
 /// Guarda el ID de cliente pegado (sin tocar los tokens; si el ID cambia,
 /// los tokens del anterior ya no valen y se quitan).
-pub fn guardar_cliente_en(s: &'static Servicio, carpeta: &Path, pegado: &str) -> Result<guardado::Cliente, String> {
+pub fn guardar_cliente_en(
+    s: &'static Servicio,
+    carpeta: &Path,
+    pegado: &str,
+) -> Result<guardado::Cliente, String> {
     let cliente = guardado::leer_cliente(pegado).ok_or_else(|| {
         "eso no parece un ID de cliente (algo como 1234-abc.apps.googleusercontent.com, o el JSON que da Google)".to_string()
     })?;
@@ -356,7 +409,10 @@ pub fn guardar_cliente_en(s: &'static Servicio, carpeta: &Path, pegado: &str) ->
     guardado::guardar_en(carpeta, s, &g)?;
     // (El mismo ID de cliente de Google vale para Drive y Calendar: a los
     // otros servicios de la misma cuenta que aun no tienen, se les pone.)
-    for otro in SERVICIOS.iter().filter(|o| o.id != s.id && o.autorizar == s.autorizar) {
+    for otro in SERVICIOS
+        .iter()
+        .filter(|o| o.id != s.id && o.autorizar == s.autorizar)
+    {
         let mut go = guardado::leer_de(carpeta, otro);
         if go.cliente.is_none() {
             go.cliente = Some(cliente.clone());
@@ -389,7 +445,12 @@ pub fn lista_para_el_modelo(s: &Servicio, archivos: &[Archivo]) -> String {
         if a.modificado.len() >= 10 {
             datos.push(format!("modificado {}", &a.modificado[..10]));
         }
-        out.push_str(&format!("- «{}» ({}) id: {}\n", a.nombre, datos.join(", "), a.id));
+        out.push_str(&format!(
+            "- «{}» ({}) id: {}\n",
+            a.nombre,
+            datos.join(", "),
+            a.id
+        ));
     }
     out.push_str("Para leer, bajar o subir a una carpeta usa su id.");
     out

@@ -50,8 +50,17 @@ pub struct Panel {
 impl Panel {
     /// Lo de dentro (sin el borde).
     pub fn interior(&self) -> Caja {
-        let g = if self.estilo.borde.is_some() { self.estilo.grosor + 1.0 } else { 1.0 };
-        Caja::nueva(self.caja.x + g, self.caja.y + g, (self.caja.w - 2.0 * g).max(1.0), (self.caja.h - 2.0 * g).max(1.0))
+        let g = if self.estilo.borde.is_some() {
+            self.estilo.grosor + 1.0
+        } else {
+            1.0
+        };
+        Caja::nueva(
+            self.caja.x + g,
+            self.caja.y + g,
+            (self.caja.w - 2.0 * g).max(1.0),
+            (self.caja.h - 2.0 * g).max(1.0),
+        )
     }
 }
 
@@ -60,7 +69,14 @@ const CELDA: usize = 2;
 
 /// La mediana de cada canal de los pixeles de `caja` que cumplen `vale`
 /// (cada `paso` pixeles).
-fn color_mediano(rgba: &[u8], w: u32, h: u32, caja: &Caja, paso: usize, vale: impl Fn([u8; 3]) -> bool) -> Option<[u8; 3]> {
+fn color_mediano(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    caja: &Caja,
+    paso: usize,
+    vale: impl Fn([u8; 3]) -> bool,
+) -> Option<[u8; 3]> {
     let c = caja.dentro(w as f64, h as f64);
     let mut canales: [Vec<u8>; 3] = Default::default();
     for y in (c.y as u32..c.y1() as u32).step_by(paso.max(1)) {
@@ -95,7 +111,14 @@ fn gris(p: [u8; 3]) -> f64 {
 }
 
 /// **Los recuadros de la hoja.** `hm`: el alto de letra del cuerpo.
-pub fn buscar(rgba: &[u8], w: u32, h: u32, a: &Analisis, palabras: &[PalabraHoja], hm: f64) -> Vec<Panel> {
+pub fn buscar(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    a: &Analisis,
+    palabras: &[PalabraHoja],
+    hm: f64,
+) -> Vec<Panel> {
     let mut v = por_fondo(rgba, w, h, a, hm);
     // Los bordes suaves (el gris claro de una tarjeta, que no llega a tinta):
     // las rayas, con un umbral casi de papel. Asi sale la tarjeta que la marca
@@ -107,7 +130,11 @@ pub fn buscar(rgba: &[u8], w: u32, h: u32, a: &Analisis, palabras: &[PalabraHoja
     bordes.extend(por_borde(rgba, w, h, a, &suave, palabras, hm));
     for b in bordes {
         // El mismo recuadro visto por su fondo y por su borde: uno, con los dos.
-        match v.iter_mut().find(|p| p.caja.crecer(hm).contiene(b.caja.x, b.caja.y) && b.caja.crecer(hm).contiene(p.caja.x1(), p.caja.y1()) && p.caja.crecer(hm).contiene(b.caja.x1(), b.caja.y1())) {
+        match v.iter_mut().find(|p| {
+            p.caja.crecer(hm).contiene(b.caja.x, b.caja.y)
+                && b.caja.crecer(hm).contiene(p.caja.x1(), p.caja.y1())
+                && p.caja.crecer(hm).contiene(b.caja.x1(), b.caja.y1())
+        }) {
             Some(p) => {
                 if p.estilo.borde.is_none() {
                     p.estilo.borde = b.estilo.borde;
@@ -144,7 +171,10 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
     for cy in 0..ch {
         for cx in 0..cw {
             let (x0, y0) = ((cx as f64 * kp) as u32, (cy as f64 * kp) as u32);
-            let (x1, y1) = ((((cx + 1) as f64 * kp) as u32).min(w), (((cy + 1) as f64 * kp) as u32).min(h));
+            let (x1, y1) = (
+                (((cx + 1) as f64 * kp) as u32).min(w),
+                (((cy + 1) as f64 * kp) as u32).min(h),
+            );
             let (mut s, mut n) = ([0f64; 3], 0f64);
             let (mut lo, mut hi) = ([255u8; 3], [0u8; 3]);
             for y in y0..y1.max(y0 + 1).min(h) {
@@ -165,7 +195,10 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
             vale[cy * cw + cx] = liso && dist(m, papel) >= 7.0;
         }
     }
-    let media: Vec<u8> = color.iter().map(|m| gris([m[0] as u8, m[1] as u8, m[2] as u8]) as u8).collect();
+    let media: Vec<u8> = color
+        .iter()
+        .map(|m| gris([m[0] as u8, m[1] as u8, m[2] as u8]) as u8)
+        .collect();
     // Grupos de celdas vecinas del mismo gris.
     let mut padre: Vec<usize> = (0..cw * ch).collect();
     fn raiz(p: &mut [usize], mut i: usize) -> usize {
@@ -181,7 +214,13 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
             if !vale[i] {
                 continue;
             }
-            for j in [if cx + 1 < cw { Some(i + 1) } else { None }, if cy + 1 < ch { Some(i + cw) } else { None }].into_iter().flatten() {
+            for j in [
+                if cx + 1 < cw { Some(i + 1) } else { None },
+                if cy + 1 < ch { Some(i + cw) } else { None },
+            ]
+            .into_iter()
+            .flatten()
+            {
                 if vale[j] && dist(color[i], color[j]) <= 8.0 {
                     let (ri, rj) = (raiz(&mut padre, i), raiz(&mut padre, j));
                     if ri != rj {
@@ -191,7 +230,8 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
             }
         }
     }
-    let mut grupos: std::collections::HashMap<usize, (usize, usize, usize, usize, usize)> = Default::default();
+    let mut grupos: std::collections::HashMap<usize, (usize, usize, usize, usize, usize)> =
+        Default::default();
     let mut de = vec![usize::MAX; cw * ch];
     for i in 0..cw * ch {
         if !vale[i] {
@@ -242,8 +282,14 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
                 lleno(&mut (y0 + m..=y1 - m).flat_map(|y| [(x0, y), (x0 + 1, y)])),
                 lleno(&mut (y0 + m..=y1 - m).flat_map(|y| [(x1, y), (x1 - 1, y)])),
             ];
-            let peor = (0..4).min_by(|&i, &j| lados[i].total_cmp(&lados[j])).unwrap_or(0);
-            if lados[peor] >= 0.6 || recortado[peor] >= 3 || x1 - x0 < 8 + 2 * m || y1 - y0 < 6 + 2 * m {
+            let peor = (0..4)
+                .min_by(|&i, &j| lados[i].total_cmp(&lados[j]))
+                .unwrap_or(0);
+            if lados[peor] >= 0.6
+                || recortado[peor] >= 3
+                || x1 - x0 < 8 + 2 * m
+                || y1 - y0 < 6 + 2 * m
+            {
                 break lados;
             }
             recortado[peor] += 1;
@@ -261,19 +307,42 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
             continue;
         }
         let redondo = de[y0 * cw + x0] != r && de[y0 * cw + x0 + m] == r;
-        let caja = Caja::de_esquinas(x0 as f64 * k, y0 as f64 * k, (x1 + 1) as f64 * k, (y1 + 1) as f64 * k);
+        let caja = Caja::de_esquinas(
+            x0 as f64 * k,
+            y0 as f64 * k,
+            (x1 + 1) as f64 * k,
+            (y1 + 1) as f64 * k,
+        );
         // El fondo: lo liso de dentro, en color.
-        let g_medio = media.iter().zip(&de).filter(|(_, d)| **d == r).map(|(m, _)| *m as f64).sum::<f64>() / n as f64;
+        let g_medio = media
+            .iter()
+            .zip(&de)
+            .filter(|(_, d)| **d == r)
+            .map(|(m, _)| *m as f64)
+            .sum::<f64>()
+            / n as f64;
         let mut suma = [0f64; 3];
         for (c, _) in color.iter().zip(&de).filter(|(_, d)| **d == r) {
             for k in 0..3 {
                 suma[k] += c[k];
             }
         }
-        let relleno = Some([(suma[0] / n as f64) as u8, (suma[1] / n as f64) as u8, (suma[2] / n as f64) as u8]);
+        let relleno = Some([
+            (suma[0] / n as f64) as u8,
+            (suma[1] / n as f64) as u8,
+            (suma[2] / n as f64) as u8,
+        ]);
         // El borde: una franja mas oscura justo por fuera, en tres lados o mas.
         let (borde, grosor, caja) = borde_de(rgba, w, h, &caja, g_medio, hm);
-        salida.push(Panel { caja, estilo: Estilo { relleno, borde, grosor, redondo } });
+        salida.push(Panel {
+            caja,
+            estilo: Estilo {
+                relleno,
+                borde,
+                grosor,
+                redondo,
+            },
+        });
     }
     salida
 }
@@ -281,7 +350,14 @@ fn por_fondo(rgba: &[u8], w: u32, h: u32, a: &Analisis, hm: f64) -> Vec<Panel> {
 /// El borde de un recuadro de fondo: mira por fuera de cada lado hasta
 /// `hm / 2`; si en tres lados o mas hay una franja mas oscura que el fondo,
 /// ese es el borde (su color y su grueso) y la caja crece hasta el.
-fn borde_de(rgba: &[u8], w: u32, h: u32, caja: &Caja, g_fondo: f64, hm: f64) -> (Option<[u8; 3]>, f64, Caja) {
+fn borde_de(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    caja: &Caja,
+    g_fondo: f64,
+    hm: f64,
+) -> (Option<[u8; 3]>, f64, Caja) {
     let hasta = (hm * 0.5).clamp(2.0, 8.0) as i64;
     let mut gruesos = Vec::new();
     let mut colores: Vec<[u8; 3]> = Vec::new();
@@ -293,12 +369,35 @@ fn borde_de(rgba: &[u8], w: u32, h: u32, caja: &Caja, g_fondo: f64, hm: f64) -> 
         Some([rgba[i], rgba[i + 1], rgba[i + 2]])
     };
     // (lado: desde donde y hacia donde se mira; se toma la mitad del lado)
-    let (x0, y0, x1, y1) = (caja.x as i64, caja.y as i64, caja.x1() as i64, caja.y1() as i64);
-    let lados: [(Box<dyn Fn(i64, i64) -> (i64, i64)>, i64, i64); 4] = [
-        (Box::new(move |t, d| (t, y0 - 1 - d)), x0 + (x1 - x0) / 4, x1 - (x1 - x0) / 4),
-        (Box::new(move |t, d| (t, y1 + d)), x0 + (x1 - x0) / 4, x1 - (x1 - x0) / 4),
-        (Box::new(move |t, d| (x0 - 1 - d, t)), y0 + (y1 - y0) / 4, y1 - (y1 - y0) / 4),
-        (Box::new(move |t, d| (x1 + d, t)), y0 + (y1 - y0) / 4, y1 - (y1 - y0) / 4),
+    let (x0, y0, x1, y1) = (
+        caja.x as i64,
+        caja.y as i64,
+        caja.x1() as i64,
+        caja.y1() as i64,
+    );
+    // Como se recorre el lado (a lo largo, hacia fuera) y su tramo.
+    type Lado = (Box<dyn Fn(i64, i64) -> (i64, i64)>, i64, i64);
+    let lados: [Lado; 4] = [
+        (
+            Box::new(move |t, d| (t, y0 - 1 - d)),
+            x0 + (x1 - x0) / 4,
+            x1 - (x1 - x0) / 4,
+        ),
+        (
+            Box::new(move |t, d| (t, y1 + d)),
+            x0 + (x1 - x0) / 4,
+            x1 - (x1 - x0) / 4,
+        ),
+        (
+            Box::new(move |t, d| (x0 - 1 - d, t)),
+            y0 + (y1 - y0) / 4,
+            y1 - (y1 - y0) / 4,
+        ),
+        (
+            Box::new(move |t, d| (x1 + d, t)),
+            y0 + (y1 - y0) / 4,
+            y1 - (y1 - y0) / 4,
+        ),
     ];
     let mut con = 0;
     for (donde, t0, t1) in &lados {
@@ -345,14 +444,26 @@ fn borde_de(rgba: &[u8], w: u32, h: u32, caja: &Caja, g_fondo: f64, hm: f64) -> 
 /// dos verticales que las unen, con texto dentro y sin rayas que lo partan
 /// (eso es una tabla). El de una figura (el rectangulo de «Rectangulo») no
 /// lleva texto dentro: no es un recuadro.
-fn por_borde(rgba: &[u8], w: u32, h: u32, a: &Analisis, de_rayas: &Analisis, palabras: &[PalabraHoja], hm: f64) -> Vec<Panel> {
+fn por_borde(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    a: &Analisis,
+    de_rayas: &Analisis,
+    palabras: &[PalabraHoja],
+    hm: f64,
+) -> Vec<Panel> {
     let rayas = imagen::rayas(de_rayas, 0.04);
-    let hs: Vec<&imagen::Raya> = rayas.iter().filter(|r| !r.vertical && r.largo() >= 6.0 * hm).collect();
+    let hs: Vec<&imagen::Raya> = rayas
+        .iter()
+        .filter(|r| !r.vertical && r.largo() >= 6.0 * hm)
+        .collect();
     let vs: Vec<&imagen::Raya> = rayas.iter().filter(|r| r.vertical).collect();
     let mut salida: Vec<Panel> = Vec::new();
     for t in &hs {
         // La de abajo mas cercana que cierre la caja.
-        let mut abajo: Vec<&&imagen::Raya> = hs.iter().filter(|b| b.y0 - t.y0 >= 2.0 * hm).collect();
+        let mut abajo: Vec<&&imagen::Raya> =
+            hs.iter().filter(|b| b.y0 - t.y0 >= 2.0 * hm).collect();
         abajo.sort_by(|a, b| a.y0.total_cmp(&b.y0));
         for b in abajo {
             let (x0, x1) = (t.x0.max(b.x0), t.x1.min(b.x1));
@@ -363,31 +474,58 @@ fn por_borde(rgba: &[u8], w: u32, h: u32, a: &Analisis, de_rayas: &Analisis, pal
             // recuadros de la columna de la derecha de Polinomios llegan al
             // borde y no tienen lado derecho. El borde la cierra.)
             let al_borde = |x: f64| x <= hm * 0.8 || x >= w as f64 - hm * 0.8;
-            let cierra = |x: f64| al_borde(x) || vs.iter().any(|v| (v.x0 - x).abs() <= hm * 0.8 && v.y0 <= t.y0 + hm && v.y1 >= b.y0 - hm && (v.y1.min(b.y0) - v.y0.max(t.y0)) >= 0.8 * (b.y0 - t.y0));
+            let cierra = |x: f64| {
+                al_borde(x)
+                    || vs.iter().any(|v| {
+                        (v.x0 - x).abs() <= hm * 0.8
+                            && v.y0 <= t.y0 + hm
+                            && v.y1 >= b.y0 - hm
+                            && (v.y1.min(b.y0) - v.y0.max(t.y0)) >= 0.8 * (b.y0 - t.y0)
+                    })
+            };
             if !(cierra(x0) && cierra(x1)) {
                 continue;
             }
             let caja = Caja::de_esquinas(x0, t.y0, x1, b.y0);
             let dentro = caja.crecer(-hm * 0.3);
-            let letras: usize = palabras.iter().filter(|p| dentro.contiene(p.caja.cx(), p.caja.cy())).map(|p| p.texto.chars().filter(|c| c.is_alphanumeric()).count()).sum();
+            let letras: usize = palabras
+                .iter()
+                .filter(|p| dentro.contiene(p.caja.cx(), p.caja.cy()))
+                .map(|p| p.texto.chars().filter(|c| c.is_alphanumeric()).count())
+                .sum();
             // Una raya que la cruza entera por dentro: una tabla.
             let partida = rayas.iter().any(|r| {
                 if r.vertical {
-                    r.x0 > x0 + hm && r.x0 < x1 - hm && (r.y1.min(b.y0) - r.y0.max(t.y0)) >= 0.8 * (b.y0 - t.y0)
+                    r.x0 > x0 + hm
+                        && r.x0 < x1 - hm
+                        && (r.y1.min(b.y0) - r.y0.max(t.y0)) >= 0.8 * (b.y0 - t.y0)
                 } else {
-                    r.y0 > t.y0 + hm && r.y0 < b.y0 - hm && (r.x1.min(x1) - r.x0.max(x0)) >= 0.8 * (x1 - x0)
+                    r.y0 > t.y0 + hm
+                        && r.y0 < b.y0 - hm
+                        && (r.x1.min(x1) - r.x0.max(x0)) >= 0.8 * (x1 - x0)
                 }
             });
             if std::env::var_os("PIXPIN_PANELES_DEPURAR").is_some() {
                 eprintln!("caja por borde {caja:?}: letras {letras}, partida {partida}");
             }
             let papel = a.fondo as f64;
-            let relleno = color_mediano(rgba, w, h, &caja.crecer(-hm * 0.2), 4, |p| gris(p) > a.umbral as f64 + 30.0).filter(|c| (gris(*c) - papel).abs() > 8.0);
+            let relleno = color_mediano(rgba, w, h, &caja.crecer(-hm * 0.2), 4, |p| {
+                gris(p) > a.umbral as f64 + 30.0
+            })
+            .filter(|c| (gris(*c) - papel).abs() > 8.0);
             // (Con fondo propio es una tarjeta aunque el OCR no leyera nada dentro.)
             if (letras >= 4 || relleno.is_some()) && !partida {
                 let grosor = ((t.grosor + b.grosor) / 2.0).max(1.0);
                 let borde = color_mediano(rgba, w, h, &t.caja(), 1, |p| gris(p) < 200.0);
-                salida.push(Panel { caja: caja.crecer(grosor / 2.0), estilo: Estilo { relleno, borde, grosor, redondo: false } });
+                salida.push(Panel {
+                    caja: caja.crecer(grosor / 2.0),
+                    estilo: Estilo {
+                        relleno,
+                        borde,
+                        grosor,
+                        redondo: false,
+                    },
+                });
             }
             break;
         }
@@ -396,10 +534,22 @@ fn por_borde(rgba: &[u8], w: u32, h: u32, a: &Analisis, de_rayas: &Analisis, pal
     // sino la pestana oscura del titulo; la raya de abajo y dos laterales que
     // empiezan a la misma altura la cierran.
     for b in &hs {
-        if salida.iter().any(|p| (p.caja.y1() - b.y0).abs() <= hm && (p.caja.x - b.x0).abs() <= hm) {
+        if salida
+            .iter()
+            .any(|p| (p.caja.y1() - b.y0).abs() <= hm && (p.caja.x - b.x0).abs() <= hm)
+        {
             continue;
         }
-        let lado = |x: f64| vs.iter().filter(|v| (v.x0 - x).abs() <= hm * 0.8 && (v.y1 - b.y0).abs() <= hm && v.largo() >= 3.0 * hm).max_by(|p, q| p.largo().total_cmp(&q.largo())).copied();
+        let lado = |x: f64| {
+            vs.iter()
+                .filter(|v| {
+                    (v.x0 - x).abs() <= hm * 0.8
+                        && (v.y1 - b.y0).abs() <= hm
+                        && v.largo() >= 3.0 * hm
+                })
+                .max_by(|p, q| p.largo().total_cmp(&q.largo()))
+                .copied()
+        };
         // (Un lado en el borde de la imagen: vale el otro.)
         let en_borde = |x: f64| x <= hm * 0.8 || x >= w as f64 - hm * 0.8;
         let arriba = match (lado(b.x0), lado(b.x1)) {
@@ -409,13 +559,25 @@ fn por_borde(rgba: &[u8], w: u32, h: u32, a: &Analisis, de_rayas: &Analisis, pal
             _ => continue,
         };
         let caja = Caja::de_esquinas(b.x0, arriba, b.x1, b.y0);
-        let letras: usize = palabras.iter().filter(|p| caja.contiene(p.caja.cx(), p.caja.cy())).map(|p| p.texto.chars().filter(|c| c.is_alphanumeric()).count()).sum();
+        let letras: usize = palabras
+            .iter()
+            .filter(|p| caja.contiene(p.caja.cx(), p.caja.cy()))
+            .map(|p| p.texto.chars().filter(|c| c.is_alphanumeric()).count())
+            .sum();
         if letras < 4 {
             continue;
         }
         let grosor = b.grosor.max(1.0);
         let borde = color_mediano(rgba, w, h, &b.caja(), 1, |p| gris(p) < 200.0);
-        salida.push(Panel { caja: caja.crecer(grosor / 2.0), estilo: Estilo { relleno: None, borde, grosor, redondo: false } });
+        salida.push(Panel {
+            caja: caja.crecer(grosor / 2.0),
+            estilo: Estilo {
+                relleno: None,
+                borde,
+                grosor,
+                redondo: false,
+            },
+        });
     }
     salida
 }
@@ -431,7 +593,11 @@ pub fn quitar_adornos(s: &mut Seccionado, rgba: &[u8]) {
     let a = imagen::analizar(rgba, w, h);
     let claro = a.umbral as f64 + 20.0;
     s.zonas.retain(|z| {
-        if !matches!(z.tipo, Tipo::Foto | Tipo::Dibujo | Tipo::Dudosa | Tipo::Grafica) || !z.renglones.is_empty() {
+        if !matches!(
+            z.tipo,
+            Tipo::Foto | Tipo::Dibujo | Tipo::Dudosa | Tipo::Grafica
+        ) || !z.renglones.is_empty()
+        {
             return true;
         }
         let c = z.caja.dentro(w as f64, h as f64);
@@ -470,8 +636,15 @@ fn invertidos(s: &mut Seccionado, rgba: &[u8], fondo: [u8; 3]) {
         return;
     }
     let (w, h) = (s.ancho, s.alto);
-    for z in s.zonas.iter_mut().filter(|z| matches!(z.tipo, Tipo::Parrafo | Tipo::Encabezado | Tipo::Formula | Tipo::Dudosa)) {
-        let Some(c) = color_mediano(rgba, w, h, &z.caja, 2, |_| true) else { continue };
+    for z in s.zonas.iter_mut().filter(|z| {
+        matches!(
+            z.tipo,
+            Tipo::Parrafo | Tipo::Encabezado | Tipo::Formula | Tipo::Dudosa
+        )
+    }) {
+        let Some(c) = color_mediano(rgba, w, h, &z.caja, 2, |_| true) else {
+            continue;
+        };
         if gris(c) < 110.0 {
             z.tipo = Tipo::Foto;
             z.renglones.clear();
@@ -536,7 +709,13 @@ fn juntar_texto_y_formulas(s: &mut Seccionado) {
         }
         // En el mismo renglon y casi pegadas.
         let mismo = p.caja.solape_y(&q.caja) >= 0.5 * p.caja.h.min(q.caja.h).min(2.0 * a);
-        let hueco = if q.caja.x >= p.caja.x1() { q.caja.x - p.caja.x1() } else if p.caja.x >= q.caja.x1() { p.caja.x - q.caja.x1() } else { 0.0 };
+        let hueco = if q.caja.x >= p.caja.x1() {
+            q.caja.x - p.caja.x1()
+        } else if p.caja.x >= q.caja.x1() {
+            p.caja.x - q.caja.x1()
+        } else {
+            0.0
+        };
         mismo && hueco <= 1.5 * a && (p.caja.h <= 3.0 * a || q.caja.h <= 3.0 * a)
     };
     // Grupos por union de vecinos (hasta que no crezcan).
@@ -561,20 +740,30 @@ fn juntar_texto_y_formulas(s: &mut Seccionado) {
             }
         }
     }
-    let mut por_raiz: std::collections::BTreeMap<usize, Vec<usize>> = std::collections::BTreeMap::new();
+    let mut por_raiz: std::collections::BTreeMap<usize, Vec<usize>> =
+        std::collections::BTreeMap::new();
     for i in 0..n {
         por_raiz.entry(raiz(&grupo, i)).or_default().push(i);
     }
     let mut quitar: Vec<usize> = Vec::new();
     for (r0, miembros) in por_raiz {
         // Sola, se rehace si algun renglon es tan alto que son dos.
-        let alto_de_mas = miembros.len() == 1 && entra(&s.zonas[r0]) && s.zonas[r0].renglones.iter().any(|rg| rg.caja.h > 1.9 * a);
+        let alto_de_mas = miembros.len() == 1
+            && entra(&s.zonas[r0])
+            && s.zonas[r0].renglones.iter().any(|rg| rg.caja.h > 1.9 * a);
         if miembros.len() < 2 && !alto_de_mas {
             continue;
         }
         // Los renglones de todos, y la tinta sin letras de los que no tienen.
-        let renglones: Vec<super::Renglon> = miembros.iter().flat_map(|&k| s.zonas[k].renglones.iter().cloned()).collect();
-        let sueltas: Vec<Caja> = miembros.iter().filter(|&&k| s.zonas[k].renglones.is_empty()).map(|&k| s.zonas[k].caja).collect();
+        let renglones: Vec<super::Renglon> = miembros
+            .iter()
+            .flat_map(|&k| s.zonas[k].renglones.iter().cloned())
+            .collect();
+        let sueltas: Vec<Caja> = miembros
+            .iter()
+            .filter(|&&k| s.zonas[k].renglones.is_empty())
+            .map(|&k| s.zonas[k].caja)
+            .collect();
         let mut caja = s.zonas[r0].caja;
         for &k in &miembros {
             caja = caja.union(&s.zonas[k].caja);
@@ -582,12 +771,22 @@ fn juntar_texto_y_formulas(s: &mut Seccionado) {
         // Por altura, palabra a palabra: un renglon por banda (el centro de
         // cada palabra). Los renglones que traian mezclaban a veces dos
         // (una formula alta con exponentes).
-        let mut palabras: Vec<PalabraHoja> = renglones.iter().flat_map(|r| r.palabras.iter().cloned()).collect();
+        let mut palabras: Vec<PalabraHoja> = renglones
+            .iter()
+            .flat_map(|r| r.palabras.iter().cloned())
+            .collect();
         palabras.sort_by(|p, q| p.caja.cy().total_cmp(&q.caja.cy()));
         let mut bandas: Vec<(f64, super::Renglon)> = Vec::new();
         for p in palabras {
             let c = p.caja.cy();
-            let color = renglones.iter().find(|r| r.palabras.iter().any(|q| q.caja.x == p.caja.x && q.caja.y == p.caja.y)).and_then(|r| r.color);
+            let color = renglones
+                .iter()
+                .find(|r| {
+                    r.palabras
+                        .iter()
+                        .any(|q| q.caja.x == p.caja.x && q.caja.y == p.caja.y)
+                })
+                .and_then(|r| r.color);
             match bandas.iter_mut().find(|(cb, _)| (*cb - c).abs() < 0.55 * a) {
                 Some((cb, b)) => {
                     let n = b.palabras.len() as f64;
@@ -601,19 +800,39 @@ fn juntar_texto_y_formulas(s: &mut Seccionado) {
                 }
                 None => {
                     let negrita = p.negrita;
-                    bandas.push((c, super::Renglon { texto: String::new(), caja: p.caja, palabras: vec![p], negrita, color }));
+                    bandas.push((
+                        c,
+                        super::Renglon {
+                            texto: String::new(),
+                            caja: p.caja,
+                            palabras: vec![p],
+                            negrita,
+                            color,
+                        },
+                    ));
                 }
             }
         }
         let mut bandas: Vec<super::Renglon> = bandas.into_iter().map(|(_, b)| b).collect();
         for b in &mut bandas {
             b.palabras.sort_by(|p, q| p.caja.x.total_cmp(&q.caja.x));
-            b.texto = b.palabras.iter().map(|p| p.texto.as_str()).collect::<Vec<_>>().join(" ");
+            b.texto = b
+                .palabras
+                .iter()
+                .map(|p| p.texto.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
         }
         // La tinta suelta (una formula sin leer) alarga el renglon que pisa.
         for c in &sueltas {
-            if let Some(b) = bandas.iter_mut().max_by(|p, q| p.caja.solape_y(c).total_cmp(&q.caja.solape_y(c))).filter(|b| b.caja.solape_y(c) > 0.0) {
-                b.caja = b.caja.union(&Caja::de_esquinas(c.x, b.caja.y, c.x1(), b.caja.y1()));
+            if let Some(b) = bandas
+                .iter_mut()
+                .max_by(|p, q| p.caja.solape_y(c).total_cmp(&q.caja.solape_y(c)))
+                .filter(|b| b.caja.solape_y(c) > 0.0)
+            {
+                b.caja = b
+                    .caja
+                    .union(&Caja::de_esquinas(c.x, b.caja.y, c.x1(), b.caja.y1()));
             }
         }
         bandas.sort_by(|p, q| p.caja.y.total_cmp(&q.caja.y));
@@ -650,18 +869,38 @@ fn juntar_formulas_al_renglon(s: &mut Seccionado) {
         // (La caja de la ZONA: lleva la tinta que el OCR no leyo, el «AD=» de «AD=13 y».)
         let mut fr = f.renglones[0].clone();
         fr.caja = fr.caja.union(&f.caja);
-        let sitio = s.zonas.iter().enumerate().filter(|(i, z)| *i != fi && matches!(z.tipo, Tipo::Parrafo | Tipo::Encabezado)).find_map(|(i, z)| {
-            z.renglones.iter().position(|r| {
-                let misma_linea = r.caja.solape_y(&fr.caja) >= 0.6 * r.caja.h.min(fr.caja.h);
-                let hueco = if fr.caja.x >= r.caja.x1() { fr.caja.x - r.caja.x1() } else if r.caja.x >= fr.caja.x1() { r.caja.x - fr.caja.x1() } else { 0.0 };
-                misma_linea && hueco <= 3.0 * a
-            }).map(|k| (i, k))
-        });
+        let sitio = s
+            .zonas
+            .iter()
+            .enumerate()
+            .filter(|(i, z)| *i != fi && matches!(z.tipo, Tipo::Parrafo | Tipo::Encabezado))
+            .find_map(|(i, z)| {
+                z.renglones
+                    .iter()
+                    .position(|r| {
+                        let misma_linea =
+                            r.caja.solape_y(&fr.caja) >= 0.6 * r.caja.h.min(fr.caja.h);
+                        let hueco = if fr.caja.x >= r.caja.x1() {
+                            fr.caja.x - r.caja.x1()
+                        } else if r.caja.x >= fr.caja.x1() {
+                            r.caja.x - fr.caja.x1()
+                        } else {
+                            0.0
+                        };
+                        misma_linea && hueco <= 3.0 * a
+                    })
+                    .map(|k| (i, k))
+            });
         let Some((ti, k)) = sitio else { continue };
         let r = &mut s.zonas[ti].renglones[k];
         r.palabras.extend(fr.palabras.iter().cloned());
         r.palabras.sort_by(|x, y| x.caja.x.total_cmp(&y.caja.x));
-        r.texto = r.palabras.iter().map(|p| p.texto.as_str()).collect::<Vec<_>>().join(" ");
+        r.texto = r
+            .palabras
+            .iter()
+            .map(|p| p.texto.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
         r.caja = r.caja.union(&fr.caja);
         let c = s.zonas[ti].caja.union(&fr.caja);
         s.zonas[ti].caja = c;
@@ -705,7 +944,9 @@ fn contrastar(s: &mut Seccionado, rgba: &[u8], fondo: [u8; 3]) {
             if !cerca(r.color) && !r.palabras.iter().any(|p| cerca(p.color)) {
                 continue;
             }
-            if let Some(c) = color_mediano(rgba, w, h, &r.caja, 1, |p| dist([p[0] as f64, p[1] as f64, p[2] as f64], f) >= 90.0) {
+            if let Some(c) = color_mediano(rgba, w, h, &r.caja, 1, |p| {
+                dist([p[0] as f64, p[1] as f64, p[2] as f64], f) >= 90.0
+            }) {
                 if cerca(r.color) {
                     r.color = Some(c);
                 }
@@ -733,8 +974,13 @@ fn cajitas(s: &mut Seccionado) {
         let a = s.zonas[i].caja;
         let pareja = (0..s.zonas.len()).find(|&j| {
             let b = s.zonas[j].caja;
-            j != i && horizontal(&s.zonas[j]) && b.y > a.y && (b.y - a.y) >= hm * 1.2 && (b.y - a.y) <= hm * 4.5
-                && (b.x - a.x).abs() <= hm * 0.6 && (b.x1() - a.x1()).abs() <= hm * 0.6
+            j != i
+                && horizontal(&s.zonas[j])
+                && b.y > a.y
+                && (b.y - a.y) >= hm * 1.2
+                && (b.y - a.y) <= hm * 4.5
+                && (b.x - a.x).abs() <= hm * 0.6
+                && (b.x1() - a.x1()).abs() <= hm * 0.6
         });
         let Some(j) = pareja else {
             i += 1;
@@ -743,12 +989,22 @@ fn cajitas(s: &mut Seccionado) {
         // (Con aire: los laterales del marco quedan un pelo por fuera de las rayas.)
         let marco = a.union(&s.zonas[j].caja).crecer((hm * 0.5).max(3.0));
         // (Si dentro hay letras leidas, ya es texto: no se toca.)
-        let con_letras = s.zonas.iter().any(|z| z.renglones.iter().any(|r| marco.contiene(r.caja.cx(), r.caja.cy())));
+        let con_letras = s.zonas.iter().any(|z| {
+            z.renglones
+                .iter()
+                .any(|r| marco.contiene(r.caja.cx(), r.caja.cy()))
+        });
         if con_letras {
             i += 1;
             continue;
         }
-        let dentro: Vec<usize> = (0..s.zonas.len()).filter(|&k| k != i && s.zonas[k].renglones.is_empty() && s.zonas[k].caja.dentro_de(&marco) >= 0.8).collect();
+        let dentro: Vec<usize> = (0..s.zonas.len())
+            .filter(|&k| {
+                k != i
+                    && s.zonas[k].renglones.is_empty()
+                    && s.zonas[k].caja.dentro_de(&marco) >= 0.8
+            })
+            .collect();
         // (Solo lo de dentro, sin las rayas: el marco lo dibuja la formula.)
         let b = s.zonas[j].caja;
         let caja = Caja::de_esquinas(a.x + 3.0, a.y1() + 2.0, a.x1() - 3.0, b.y - 2.0);
@@ -772,7 +1028,15 @@ fn cajitas(s: &mut Seccionado) {
 /// recortada con sus colores.
 fn iconos(s: &mut Seccionado) {
     let hm0 = s.alto_letra.max(4.0);
-    let sin_letras = |z: &Zona| z.renglones.is_empty() && matches!(z.tipo, Tipo::Linea | Tipo::Dudosa | Tipo::Dibujo | Tipo::Foto) && z.caja.w <= hm0 * 8.0 && z.caja.h <= hm0 * 8.0;
+    let sin_letras = |z: &Zona| {
+        z.renglones.is_empty()
+            && matches!(
+                z.tipo,
+                Tipo::Linea | Tipo::Dudosa | Tipo::Dibujo | Tipo::Foto
+            )
+            && z.caja.w <= hm0 * 8.0
+            && z.caja.h <= hm0 * 8.0
+    };
     let hm = s.alto_letra.max(4.0);
     let mut i = 0;
     while i < s.zonas.len() {
@@ -783,7 +1047,13 @@ fn iconos(s: &mut Seccionado) {
         let mut caja = s.zonas[i].caja;
         let mut j = i + 1;
         while j < s.zonas.len() {
-            if sin_letras(&s.zonas[j]) && s.zonas[j].caja.crecer(hm * 0.6).comun(&caja.crecer(hm * 0.6)) > 0.0 {
+            if sin_letras(&s.zonas[j])
+                && s.zonas[j]
+                    .caja
+                    .crecer(hm * 0.6)
+                    .comun(&caja.crecer(hm * 0.6))
+                    > 0.0
+            {
                 caja = caja.union(&s.zonas[j].caja);
                 s.zonas.remove(j);
                 j = i + 1;
@@ -816,7 +1086,9 @@ fn etiquetas_de_color(s: &mut Seccionado, rgba: &[u8], fondo: [u8; 3]) {
         }
         // Lo que hay alrededor de las letras (sin ellas): su fondo.
         let marco = z.caja.crecer(2.0);
-        let Some(local) = color_mediano(rgba, w, h, &marco, 2, |_| true) else { continue };
+        let Some(local) = color_mediano(rgba, w, h, &marco, 2, |_| true) else {
+            continue;
+        };
         let l = [local[0] as f64, local[1] as f64, local[2] as f64];
         if dist(l, f) < 70.0 {
             continue;
@@ -838,7 +1110,9 @@ fn etiquetas_de_color(s: &mut Seccionado, rgba: &[u8], fondo: [u8; 3]) {
             continue;
         }
         // La letra: lo que se aparta de la pestana (blanco sobre gris).
-        if let Some(c) = color_mediano(rgba, w, h, &z.caja, 1, |p| dist([p[0] as f64, p[1] as f64, p[2] as f64], l) >= 90.0) {
+        if let Some(c) = color_mediano(rgba, w, h, &z.caja, 1, |p| {
+            dist([p[0] as f64, p[1] as f64, p[2] as f64], l) >= 90.0
+        }) {
             tinta.push((i, c));
         }
         let mut r = z.clone();
@@ -847,7 +1121,12 @@ fn etiquetas_de_color(s: &mut Seccionado, rgba: &[u8], fondo: [u8; 3]) {
         r.rayas.clear();
         r.dentro.clear();
         r.caja = marco;
-        r.panel = Some(Estilo { relleno: Some(local), borde: None, grosor: 0.0, redondo: true });
+        r.panel = Some(Estilo {
+            relleno: Some(local),
+            borde: None,
+            grosor: 0.0,
+            redondo: true,
+        });
         nuevas.push((i, r));
     }
     for (i, c) in tinta {
@@ -935,7 +1214,10 @@ fn negritas(rgba: &[u8], w: u32, h: u32, palabras: &mut [PalabraHoja]) {
             borde[k].sort_unstable();
             fondo[k] = borde[k][borde[k].len() / 2] as f64;
         }
-        let lejos: Vec<f64> = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).map(|(x, y)| dist(px(x, y), fondo)).collect();
+        let lejos: Vec<f64> = (y0..y1)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .map(|(x, y)| dist(px(x, y), fondo))
+            .collect();
         let tope = lejos.iter().cloned().fold(0.0, f64::max);
         if tope < 60.0 {
             return None;
@@ -960,27 +1242,50 @@ fn negritas(rgba: &[u8], w: u32, h: u32, palabras: &mut [PalabraHoja]) {
         }
         Some(tinta / trozos as f64 / c.h.max(1.0))
     };
-    let g: Vec<Option<f64>> = palabras.iter().map(|p| if p.texto.chars().filter(|c| c.is_alphanumeric()).count() >= 2 { grosor(&p.caja) } else { None }).collect();
+    let g: Vec<Option<f64>> = palabras
+        .iter()
+        .map(|p| {
+            if p.texto.chars().filter(|c| c.is_alphanumeric()).count() >= 2 {
+                grosor(&p.caja)
+            } else {
+                None
+            }
+        })
+        .collect();
     let validos: Vec<f64> = g.iter().flatten().copied().collect();
     if validos.len() < 8 {
         return;
     }
-    let Some(media) = mediana(validos) else { return };
+    let Some(media) = mediana(validos) else {
+        return;
+    };
     if std::env::var_os("PIXPIN_NEGRITA_DEPURAR").is_some() {
         for (p, g) in palabras.iter().zip(&g) {
-            eprintln!("negrita? {:<24} {:?} media {media:.3}", p.texto, g.map(|g| (g / media * 100.0).round()));
+            eprintln!(
+                "negrita? {:<24} {:?} media {media:.3}",
+                p.texto,
+                g.map(|g| (g / media * 100.0).round())
+            );
         }
     }
     // Por renglones (misma altura y seguidas): la media de sus palabras,
     // pesada por letras. Una palabra sola mide con mucho ruido.
     let mut orden: Vec<usize> = (0..palabras.len()).collect();
-    orden.sort_by(|&i, &j| palabras[i].caja.cy().total_cmp(&palabras[j].caja.cy()).then(palabras[i].caja.x.total_cmp(&palabras[j].caja.x)));
+    orden.sort_by(|&i, &j| {
+        palabras[i]
+            .caja
+            .cy()
+            .total_cmp(&palabras[j].caja.cy())
+            .then(palabras[i].caja.x.total_cmp(&palabras[j].caja.x))
+    });
     let mut renglones: Vec<Vec<usize>> = Vec::new();
     for i in orden {
         let p = &palabras[i].caja;
         let sitio = renglones.iter_mut().find(|r| {
             let u = &palabras[*r.last().unwrap()].caja;
-            (u.cy() - p.cy()).abs() < u.h.max(p.h) * 0.45 && p.x >= u.x && p.x - u.x1() < 1.6 * u.h.max(p.h)
+            (u.cy() - p.cy()).abs() < u.h.max(p.h) * 0.45
+                && p.x >= u.x
+                && p.x - u.x1() < 1.6 * u.h.max(p.h)
         });
         match sitio {
             Some(r) => r.push(i),
@@ -1031,21 +1336,38 @@ fn mover(z: &mut Zona, dx: f64, dy: f64) {
 /// **Secciona la hoja por recuadros.** Sin recuadros, es el seccionado de
 /// siempre (con los adornos quitados). `unir`: cada dibujo, una zona (una
 /// lamina, `seccion::unir_dibujos`).
-pub fn seccionar(rgba: &[u8], ancho: u32, alto: u32, palabras: Vec<PalabraHoja>, unir: bool) -> Seccionado {
+pub fn seccionar(
+    rgba: &[u8],
+    ancho: u32,
+    alto: u32,
+    palabras: Vec<PalabraHoja>,
+    unir: bool,
+) -> Seccionado {
     seccionar_limpia(rgba, ancho, alto, palabras, unir).0
 }
 
 /// Lo mismo, y la hoja con lo palido de los recuadros borrado ([`limpiar`]):
 /// quien monte las zonas tiene que usar ESA (las figuras se vectorizan de
 /// ella). `None`: la de entrada vale.
-pub fn seccionar_limpia(rgba: &[u8], ancho: u32, alto: u32, mut palabras: Vec<PalabraHoja>, unir: bool) -> (Seccionado, Option<Vec<u8>>) {
+pub fn seccionar_limpia(
+    rgba: &[u8],
+    ancho: u32,
+    alto: u32,
+    mut palabras: Vec<PalabraHoja>,
+    unir: bool,
+) -> (Seccionado, Option<Vec<u8>>) {
     negritas(rgba, ancho, alto, &mut palabras);
     let a = imagen::analizar(rgba, ancho, alto);
-    let hm = mediana(palabras.iter().map(|p| p.caja.h).collect()).unwrap_or(alto as f64 * 0.012).max(4.0);
+    let hm = mediana(palabras.iter().map(|p| p.caja.h).collect())
+        .unwrap_or(alto as f64 * 0.012)
+        .max(4.0);
     let mut paneles = buscar(rgba, ancho, alto, &a, &palabras, hm);
     // Uno sin texto dentro es una figura (el rectangulo de «Rectangulo»): en punta.
     for p in &mut paneles {
-        if !palabras.iter().any(|w| p.caja.contiene(w.caja.cx(), w.caja.cy())) {
+        if !palabras
+            .iter()
+            .any(|w| p.caja.contiene(w.caja.cx(), w.caja.cy()))
+        {
             p.estilo.redondo = false;
         }
     }
@@ -1069,19 +1391,42 @@ pub fn seccionar_limpia(rgba: &[u8], ancho: u32, alto: u32, mut palabras: Vec<Pa
     let padre: Vec<Option<usize>> = (0..paneles.len())
         .map(|i| {
             (0..paneles.len())
-                .filter(|&j| j != i && paneles[j].caja.area() > paneles[i].caja.area() && paneles[i].caja.dentro_de(&paneles[j].caja) >= 0.95)
+                .filter(|&j| {
+                    j != i
+                        && paneles[j].caja.area() > paneles[i].caja.area()
+                        && paneles[i].caja.dentro_de(&paneles[j].caja) >= 0.95
+                })
                 .min_by(|&x, &y| paneles[x].caja.area().total_cmp(&paneles[y].caja.area()))
         })
         .collect();
     let papel = [a.fondo; 3];
-    let cx = Region { rgba, ancho, alto, palabras: &palabras, paneles: &paneles, padre: &padre, papel, unir };
+    let cx = Region {
+        rgba,
+        ancho,
+        alto,
+        palabras: &palabras,
+        paneles: &paneles,
+        padre: &padre,
+        papel,
+        unir,
+    };
     let mut zonas = cx.zonas(None);
     for (i, z) in zonas.iter_mut().enumerate() {
         z.id = i;
         z.orden = i;
     }
     let columnas = 1;
-    (Seccionado { ancho, alto, zonas, columnas, alto_letra: hm, paneles: paneles.iter().map(|p| p.caja).collect() }, limpia)
+    (
+        Seccionado {
+            ancho,
+            alto,
+            zonas,
+            columnas,
+            alto_letra: hm,
+            paneles: paneles.iter().map(|p| p.caja).collect(),
+        },
+        limpia,
+    )
 }
 
 struct Region<'a> {
@@ -1103,14 +1448,24 @@ impl Region<'_> {
             Some(i) => self.paneles[i].interior(),
             None => Caja::nueva(0.0, 0.0, self.ancho as f64, self.alto as f64),
         };
-        let fondo = de.and_then(|i| self.paneles[i].estilo.relleno).unwrap_or(self.papel);
-        let hijos: Vec<usize> = (0..self.paneles.len()).filter(|&j| self.padre[j] == de).collect();
+        let fondo = de
+            .and_then(|i| self.paneles[i].estilo.relleno)
+            .unwrap_or(self.papel);
+        let hijos: Vec<usize> = (0..self.paneles.len())
+            .filter(|&j| self.padre[j] == de)
+            .collect();
         let (mut sub, sw, sh) = imagen::recortar(self.rgba, self.ancho, self.alto, &area);
         // Los recuadros de dentro, tapados con el fondo: se seccionan aparte.
         for &j in &hijos {
             let c = self.paneles[j].caja.crecer(2.0);
-            let (x0, y0) = ((c.x - area.x).max(0.0) as u32, (c.y - area.y).max(0.0) as u32);
-            let (x1, y1) = (((c.x1() - area.x).max(0.0) as u32).min(sw), ((c.y1() - area.y).max(0.0) as u32).min(sh));
+            let (x0, y0) = (
+                (c.x - area.x).max(0.0) as u32,
+                (c.y - area.y).max(0.0) as u32,
+            );
+            let (x1, y1) = (
+                ((c.x1() - area.x).max(0.0) as u32).min(sw),
+                ((c.y1() - area.y).max(0.0) as u32).min(sh),
+            );
             for y in y0..y1 {
                 for x in x0..x1 {
                     let i = ((y * sw + x) * 4) as usize;
@@ -1119,7 +1474,11 @@ impl Region<'_> {
                 }
             }
         }
-        let en_hijo = |p: &PalabraHoja| hijos.iter().any(|&j| self.paneles[j].caja.contiene(p.caja.cx(), p.caja.cy()));
+        let en_hijo = |p: &PalabraHoja| {
+            hijos
+                .iter()
+                .any(|&j| self.paneles[j].caja.contiene(p.caja.cx(), p.caja.cy()))
+        };
         let suyas: Vec<PalabraHoja> = self
             .palabras
             .iter()
@@ -1136,7 +1495,10 @@ impl Region<'_> {
         // que se aparta del fondo, sea mas claro o mas oscuro: se secciona
         // una copia «entintada» (fondo blanco, tinta oscura) y los colores
         // se miden luego en la de verdad.
-        let entintar = dist([fondo[0] as f64, fondo[1] as f64, fondo[2] as f64], [255.0; 3]) > 90.0;
+        let entintar = dist(
+            [fondo[0] as f64, fondo[1] as f64, fondo[2] as f64],
+            [255.0; 3],
+        ) > 90.0;
         let tinta = entintar.then(|| entintada(&sub, fondo));
         let ver: &[u8] = tinta.as_deref().unwrap_or(&sub);
         let mut s = seccion::seccionar(ver, sw, sh, suyas);
@@ -1203,7 +1565,9 @@ mod pruebas {
     #[test]
     #[ignore = "con una hoja del disco"]
     fn depurar_paneles() {
-        let Some(ruta) = std::env::var_os("PIXPIN_PANELES_HOJA") else { return };
+        let Some(ruta) = std::env::var_os("PIXPIN_PANELES_HOJA") else {
+            return;
+        };
         let bytes = std::fs::read(ruta).unwrap();
         let img = image::load_from_memory(&bytes).unwrap().to_rgba8();
         let (w, h) = (img.width(), img.height());
@@ -1213,8 +1577,19 @@ mod pruebas {
         let mut suave = a.clone();
         suave.umbral = a.fondo.saturating_sub(25);
         suave.tinta = suave.gris.iter().map(|&g| g < suave.umbral).collect();
-        for r in imagen::rayas(&suave, 0.04).into_iter().filter(|r| r.largo() > 60.0) {
-            println!("raya {} ({:.0},{:.0})-({:.0},{:.0}) g {:.1}", if r.vertical { "V" } else { "H" }, r.x0, r.y0, r.x1, r.y1, r.grosor);
+        for r in imagen::rayas(&suave, 0.04)
+            .into_iter()
+            .filter(|r| r.largo() > 60.0)
+        {
+            println!(
+                "raya {} ({:.0},{:.0})-({:.0},{:.0}) g {:.1}",
+                if r.vertical { "V" } else { "H" },
+                r.x0,
+                r.y0,
+                r.x1,
+                r.y1,
+                r.grosor
+            );
         }
         for p in buscar(&rgba, w, h, &a, &[], 12.0) {
             println!("panel {:?}", p);

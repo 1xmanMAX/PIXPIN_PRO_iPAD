@@ -343,7 +343,10 @@ pub(crate) fn apuntar_abierto(editor: &Arc<EditorLienzo>) {
 
 /// El editor abierto de este fichero, si lo hay.
 pub(crate) fn abierto_de(ruta: &Path) -> Option<Arc<EditorLienzo>> {
-    abiertos().iter().filter_map(|a| a.editor.upgrade()).find(|e| e.ruta == ruta)
+    abiertos()
+        .iter()
+        .filter_map(|a| a.editor.upgrade())
+        .find(|e| e.ruta == ruta)
 }
 
 /// **El lienzo abierto de un chat que estuvo al frente el ultimo** (no la
@@ -377,7 +380,10 @@ impl EditorLienzo {
     /// **Lo que hace el asistente en la escena abierta**: con el cerrojo,
     /// y si cerro algun paso de deshacer, cuenta como cambio (se guarda y
     /// se repinta) igual que lo hecho con el raton.
-    pub(crate) fn con_la_escena<R>(&self, f: impl FnOnce(&mut Escena, Option<(f32, f32, f32, f32)>) -> R) -> R {
+    pub(crate) fn con_la_escena<R>(
+        &self,
+        f: impl FnOnce(&mut Escena, Option<(f32, f32, f32, f32)>) -> R,
+    ) -> R {
         let (r, cambio) = {
             let mut st = self.tomar();
             let antes = (st.escena.pasos_cerrados(), st.escena.cuantos_visibles());
@@ -416,7 +422,11 @@ impl EditorLienzo {
     /// Abre un lienzo del disco sin ventana (el turno del asistente sobre
     /// un lienzo cerrado): se toca su escena y se guarda por el camino de
     /// siempre ([`EditorLienzo::guardar`]).
-    pub(crate) fn sin_ventana(ruta: PathBuf, carpeta: PathBuf, imagenes: Vec<ImagenDelLienzo>) -> Result<EditorLienzo, ErrorNucleo> {
+    pub(crate) fn sin_ventana(
+        ruta: PathBuf,
+        carpeta: PathBuf,
+        imagenes: Vec<ImagenDelLienzo>,
+    ) -> Result<EditorLienzo, ErrorNucleo> {
         let texto = std::fs::read_to_string(&ruta)?;
         EditorLienzo::nuevo(ruta, carpeta, &texto, Some(imagenes))
     }
@@ -704,6 +714,8 @@ fn ordenes_encima(gesto: &Gesto, escena: &Escena, zoom: f32) -> Vec<Orden> {
     v.extend(pixpin_motor2d::nudos::ordenes_de_clavos(escena, zoom));
     v.extend(gesto.laser.ordenes(zoom));
     v.extend(gesto.bolita.orden(zoom));
+    // Los marcos, a trazos azules con su numero (22-oct, `editor_marcos`).
+    v.extend(crate::editor_marcos::ordenes(escena, zoom));
     v
 }
 
@@ -860,7 +872,11 @@ impl EditorLienzo {
         zoom: f32,
     ) -> u64 {
         let v = self.puntero_sin_escala(fase, x, y, presion, modificadores, zoom);
-        if self.poner_a_escala() { self.subir_version() } else { v }
+        if self.poner_a_escala() {
+            self.subir_version()
+        } else {
+            v
+        }
     }
 
     /// **Anotando un plano**: lo que nace (o cambia de grosor o letra desde
@@ -874,7 +890,12 @@ impl EditorLienzo {
         let mut st = self.tomar();
         let visto = match st.a_escala.take() {
             Some((_, v)) => v,
-            None => st.escena.elementos.iter().map(|e| (e.id, medidas_de(e))).collect(),
+            None => st
+                .escena
+                .elementos
+                .iter()
+                .map(|e| (e.id, medidas_de(e)))
+                .collect(),
         };
         st.a_escala = Some((k, visto));
     }
@@ -884,17 +905,23 @@ impl EditorLienzo {
         let mut guarda = self.tomar();
         let st = &mut *guarda;
         let letra = st.gesto.estilo.tamano_letra;
-        let Some((k, visto)) = st.a_escala.as_mut() else { return false };
+        let Some((k, visto)) = st.a_escala.as_mut() else {
+            return false;
+        };
         let k = *k;
         let mut cambio = false;
         for e in st.escena.elementos.iter_mut() {
             let antes = visto.get(&e.id).copied();
             let (g, t) = medidas_de(e);
-            if antes.is_none_or(|(g0, _)| (g0 - g).abs() > 1e-6) && grosor_de_fabrica(g) && (k - 1.0).abs() > 1e-6 {
+            if antes.is_none_or(|(g0, _)| (g0 - g).abs() > 1e-6)
+                && grosor_de_fabrica(g)
+                && (k - 1.0).abs() > 1e-6
+            {
                 e.grosor *= k;
                 cambio = true;
             }
-            let letra_nueva = antes.is_none_or(|(_, t0)| t0.is_none_or(|t0| t.is_some_and(|t| (t0 - t).abs() > 1e-6)));
+            let letra_nueva = antes
+                .is_none_or(|(_, t0)| t0.is_none_or(|t0| t.is_some_and(|t| (t0 - t).abs() > 1e-6)));
             if letra_nueva
                 && let pixpin_motor2d::Figura::Texto { tam, .. } = &mut e.figura
                 && letra_de_fabrica(*tam, letra)
@@ -1338,7 +1365,9 @@ impl EditorLienzo {
         }
         let mut guarda = self.tomar();
         let st = &mut *guarda;
-        let hecho = st.gesto.cambiar_letra_de_angulo(&mut st.escena, paso.signum());
+        let hecho = st
+            .gesto
+            .cambiar_letra_de_angulo(&mut st.escena, paso.signum());
         drop(guarda);
         if hecho {
             self.subir_cambios();
@@ -1653,12 +1682,7 @@ impl Nucleo {
             })
             .collect();
         let carpeta = pixpin_proyecto::almacen::carpeta(self.ruta(), &chat);
-        let editor = Arc::new(EditorLienzo::nuevo(
-            ruta,
-            carpeta,
-            &texto,
-            Some(imagenes),
-        )?);
+        let editor = Arc::new(EditorLienzo::nuevo(ruta, carpeta, &texto, Some(imagenes))?);
         apuntar_abierto(&editor);
         Ok(editor)
     }
@@ -1755,12 +1779,19 @@ fn validar_nombre(parte: &str) -> Result<(), ErrorNucleo> {
 /// resaltador): solo esos se ponen a la escala del plano.
 fn grosor_de_fabrica(g: f32) -> bool {
     use pixpin_motor2d::estilo::NivelGrosor as N;
-    [N::Fino, N::Medio, N::Grueso].iter().any(|n| [n.de_forma(), n.de_tinta(), n.de_resaltador()].iter().any(|v| (v - g).abs() < 1e-4))
+    [N::Fino, N::Medio, N::Grueso].iter().any(|n| {
+        [n.de_forma(), n.de_tinta(), n.de_resaltador()]
+            .iter()
+            .any(|v| (v - g).abs() < 1e-4)
+    })
 }
 
 /// Lo mismo con la letra: los tamanos del panel y el elegido.
 fn letra_de_fabrica(t: f32, la_elegida: f32) -> bool {
-    (t - la_elegida).abs() < 1e-4 || [16.0f32, 20.0, 28.0, 36.0].iter().any(|v| (v - t).abs() < 1e-4)
+    (t - la_elegida).abs() < 1e-4
+        || [16.0f32, 20.0, 28.0, 36.0]
+            .iter()
+            .any(|v| (v - t).abs() < 1e-4)
 }
 
 fn medidas_de(e: &pixpin_motor2d::Elemento) -> (f32, Option<f32>) {

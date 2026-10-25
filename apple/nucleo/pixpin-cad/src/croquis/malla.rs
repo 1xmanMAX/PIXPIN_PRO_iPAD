@@ -22,8 +22,8 @@
 //! en oscuro, asi que cambiar el tema no obliga a rehacer nada.
 
 use super::{
-    Croquis, FormaDeBola, Imagen3D, Lamina3D, Pincel, Pt3, Trazo3D, color_de, escalar, largo, luminancia, mas, menos, normalizado, p3, por,
-    producto,
+    Croquis, FormaDeBola, Imagen3D, Lamina3D, Pincel, Pt3, Trazo3D, color_de, escalar, largo,
+    luminancia, mas, menos, normalizado, p3, por, producto,
 };
 use crate::modelo3d::{Elemento, Modelo3d, V3, color_a_u32, normal_a_u32};
 
@@ -58,7 +58,12 @@ const LO_QUE_YA_ES_CLARO: f32 = 0.62;
 const ALFA_DEL_SUELO: f32 = 0.16;
 const ALFA_DE_LOS_EJES: f32 = 0.45;
 const SOMBRA_DEL_SOL: [f32; 4] = [0.0, 0.0, 0.0, 0.33];
-const SOMBRA_DE_LA_LUNA: [f32; 4] = [0x2B as f32 / 255.0, 0x3A as f32 / 255.0, 0x67 as f32 / 255.0, 0.20];
+const SOMBRA_DE_LA_LUNA: [f32; 4] = [
+    0x2B as f32 / 255.0,
+    0x3A as f32 / 255.0,
+    0x67 as f32 / 255.0,
+    0.20,
+];
 const RESPLANDOR: f64 = 2.6;
 const ALFA_DEL_RESPLANDOR: f32 = 0x44 as f32 / 255.0;
 const SENOS_DEL_DOMO: [f64; 3] = [0.5, 0.87, 1.0];
@@ -68,7 +73,12 @@ const LADOS_DEL_TUBO: usize = 16;
 /// Lo mas fina que sale una foto en la rejilla (celdas por lado).
 const CELDAS_DE_LA_FOTO: u32 = 160;
 /// La tinta de fabrica de dia (`tintaDeFabrica`), por si un color no se entiende.
-const TINTA: [f32; 4] = [0x1e as f32 / 255.0, 0x1e as f32 / 255.0, 0x1e as f32 / 255.0, 1.0];
+const TINTA: [f32; 4] = [
+    0x1e as f32 / 255.0,
+    0x1e as f32 / 255.0,
+    0x1e as f32 / 255.0,
+    1.0,
+];
 
 /// Lo que se va llenando: el modelo, con los vertices relativos a `origen`.
 struct Obra {
@@ -86,19 +96,36 @@ impl Obra {
             self.max[k] = self.max[k].max(x);
         }
         let normal = normal_a_u32([n.x as f32, n.y as f32, n.z as f32]) | marcas;
-        self.m.vertices.push(V3 { pos: [(p.x - o[0]) as f32, (p.y - o[1]) as f32, (p.z - o[2]) as f32], normal, color: color_a_u32(color), elemento: e });
+        self.m.vertices.push(V3 {
+            pos: [
+                (p.x - o[0]) as f32,
+                (p.y - o[1]) as f32,
+                (p.z - o[2]) as f32,
+            ],
+            normal,
+            color: color_a_u32(color),
+            elemento: e,
+        });
         (self.m.vertices.len() - 1) as u32
     }
 
     fn tri(&mut self, a: u32, b: u32, c: u32, transparente: bool) {
-        let lista = if transparente { &mut self.m.transparentes } else { &mut self.m.opacos };
+        let lista = if transparente {
+            &mut self.m.transparentes
+        } else {
+            &mut self.m.opacos
+        };
         lista.extend([a, b, c]);
     }
 
     /// Un cuadrilatero plano (dos triangulos), con su normal.
     fn cuadro(&mut self, q: [Pt3; 4], color: [f32; 4], marcas: u32, e: u32, transparente: bool) {
         let n = normalizado(producto(menos(q[1], q[0]), menos(q[3], q[0])));
-        let n = if largo(n) < 0.5 { normalizado(producto(menos(q[2], q[1]), menos(q[0], q[1]))) } else { n };
+        let n = if largo(n) < 0.5 {
+            normalizado(producto(menos(q[2], q[1]), menos(q[0], q[1])))
+        } else {
+            n
+        };
         let i: Vec<u32> = q.iter().map(|p| self.v(*p, n, color, marcas, e)).collect();
         self.tri(i[0], i[1], i[2], transparente);
         self.tri(i[0], i[2], i[3], transparente);
@@ -122,7 +149,11 @@ impl Obra {
     }
 
     fn elemento(&mut self, tipo: &str, nombre: &str) -> u32 {
-        self.m.elementos.push(Elemento { tipo: tipo.to_string(), nombre: nombre.to_string(), ..Default::default() });
+        self.m.elementos.push(Elemento {
+            tipo: tipo.to_string(),
+            nombre: nombre.to_string(),
+            ..Default::default()
+        });
         (self.m.elementos.len() - 1) as u32
     }
 }
@@ -132,7 +163,12 @@ fn con_alfa(c: [f32; 4], a: f32) -> [f32; 4] {
 }
 
 fn hacia_el_blanco(c: [f32; 4], k: f32) -> [f32; 4] {
-    [c[0] + (1.0 - c[0]) * k, c[1] + (1.0 - c[1]) * k, c[2] + (1.0 - c[2]) * k, c[3]]
+    [
+        c[0] + (1.0 - c[0]) * k,
+        c[1] + (1.0 - c[1]) * k,
+        c[2] + (1.0 - c[2]) * k,
+        c[3],
+    ]
 }
 
 /// Quita los puntos repetidos seguidos (no dan tangente).
@@ -164,7 +200,11 @@ fn tangentes(p: &[Pt3]) -> Vec<Pt3> {
 
 /// Una perpendicular cualquiera a `t`.
 fn perpendicular(t: Pt3) -> Pt3 {
-    let otra = if t.z.abs() < 0.9 { p3(0.0, 0.0, 1.0) } else { p3(1.0, 0.0, 0.0) };
+    let otra = if t.z.abs() < 0.9 {
+        p3(0.0, 0.0, 1.0)
+    } else {
+        p3(1.0, 0.0, 0.0)
+    };
     normalizado(producto(t, otra))
 }
 
@@ -180,7 +220,11 @@ fn marcos(t: &[Pt3], arranque: Option<Pt3>) -> Vec<Pt3> {
         .unwrap_or_else(|| perpendicular(t[0]));
     for ti in t {
         let m = menos(n, por(*ti, escalar(n, *ti)));
-        n = if largo(m) > 1e-6 { normalizado(m) } else { perpendicular(*ti) };
+        n = if largo(m) > 1e-6 {
+            normalizado(m)
+        } else {
+            perpendicular(*ti)
+        };
         v.push(n);
     }
     v
@@ -189,14 +233,28 @@ fn marcos(t: &[Pt3], arranque: Option<Pt3>) -> Vec<Pt3> {
 /// **Un tubo**: la seccion de `lados` barrida por `p`, de radio `r[i]`.
 /// Redondo, con normales suaves; de cuatro lados, con caras planas y tapas.
 #[allow(clippy::too_many_arguments)]
-fn tubo(o: &mut Obra, p: &[Pt3], r: &[f64], lados: usize, arranque: Option<Pt3>, color: [f32; 4], marcas: u32, e: u32, transparente: bool) {
+fn tubo(
+    o: &mut Obra,
+    p: &[Pt3],
+    r: &[f64],
+    lados: usize,
+    arranque: Option<Pt3>,
+    color: [f32; 4],
+    marcas: u32,
+    e: u32,
+    transparente: bool,
+) {
     let n = p.len();
     if n < 2 {
         return;
     }
     let t = tangentes(p);
     let nn = marcos(&t, arranque);
-    let giro = if lados == 4 { std::f64::consts::FRAC_PI_4 } else { 0.0 };
+    let giro = if lados == 4 {
+        std::f64::consts::FRAC_PI_4
+    } else {
+        0.0
+    };
     let dir = |i: usize, k: usize| {
         let a = giro + std::f64::consts::TAU * k as f64 / lados as f64;
         let b = producto(t[i], nn[i]);
@@ -209,8 +267,20 @@ fn tubo(o: &mut Obra, p: &[Pt3], r: &[f64], lados: usize, arranque: Option<Pt3>,
             let mut previos: Option<(u32, u32)> = None;
             for i in 0..n {
                 let normal = normalizado(mas(dir(i, k), dir(i, k + 1)));
-                let a = o.v(mas(p[i], por(dir(i, k), r[i] * esquina)), normal, color, marcas, e);
-                let b = o.v(mas(p[i], por(dir(i, k + 1), r[i] * esquina)), normal, color, marcas, e);
+                let a = o.v(
+                    mas(p[i], por(dir(i, k), r[i] * esquina)),
+                    normal,
+                    color,
+                    marcas,
+                    e,
+                );
+                let b = o.v(
+                    mas(p[i], por(dir(i, k + 1), r[i] * esquina)),
+                    normal,
+                    color,
+                    marcas,
+                    e,
+                );
                 if let Some((a0, b0)) = previos {
                     o.tri(a0, a, b, transparente);
                     o.tri(a0, b, b0, transparente);
@@ -221,7 +291,17 @@ fn tubo(o: &mut Obra, p: &[Pt3], r: &[f64], lados: usize, arranque: Option<Pt3>,
         // Las tapas de los dos extremos.
         for (i, signo) in [(0usize, -1.0), (n - 1, 1.0)] {
             let normal = por(t[i], signo);
-            let c: Vec<u32> = (0..4).map(|k| o.v(mas(p[i], por(dir(i, k), r[i] * esquina)), normal, color, marcas, e)).collect();
+            let c: Vec<u32> = (0..4)
+                .map(|k| {
+                    o.v(
+                        mas(p[i], por(dir(i, k), r[i] * esquina)),
+                        normal,
+                        color,
+                        marcas,
+                        e,
+                    )
+                })
+                .collect();
             o.tri(c[0], c[1], c[2], transparente);
             o.tri(c[0], c[2], c[3], transparente);
         }
@@ -284,7 +364,12 @@ fn bolita(o: &mut Obra, c: Pt3, r: f64, color: [f32; 4], marcas: u32, e: u32, tr
     for j in 0..pa as u32 {
         for i in 0..me as u32 {
             let i1 = (i + 1) % me as u32;
-            let (a, b, cc, d) = (base + j * me as u32 + i, base + j * me as u32 + i1, base + (j + 1) * me as u32 + i1, base + (j + 1) * me as u32 + i);
+            let (a, b, cc, d) = (
+                base + j * me as u32 + i,
+                base + j * me as u32 + i1,
+                base + (j + 1) * me as u32 + i1,
+                base + (j + 1) * me as u32 + i,
+            );
             o.tri(a, b, cc, transparente);
             o.tri(a, cc, d, transparente);
         }
@@ -292,9 +377,23 @@ fn bolita(o: &mut Obra, c: Pt3, r: f64, color: [f32; 4], marcas: u32, e: u32, tr
 }
 
 /// Una banda entre dos rieles (rodillo, cuchilla, sombra): de dos caras.
-fn banda(o: &mut Obra, a: &[Pt3], b: &[Pt3], color: [f32; 4], marcas: u32, e: u32, transparente: bool) {
+fn banda(
+    o: &mut Obra,
+    a: &[Pt3],
+    b: &[Pt3],
+    color: [f32; 4],
+    marcas: u32,
+    e: u32,
+    transparente: bool,
+) {
     for i in 1..a.len().min(b.len()) {
-        o.cuadro([a[i - 1], a[i], b[i], b[i - 1]], color, marcas, e, transparente);
+        o.cuadro(
+            [a[i - 1], a[i], b[i], b[i - 1]],
+            color,
+            marcas,
+            e,
+            transparente,
+        );
     }
 }
 
@@ -320,12 +419,25 @@ fn tamano(c: &Croquis) -> (Pt3, f64) {
             mx[k] = mx[k].max(x);
         }
     }
-    let centro = p3((mn[0] + mx[0]) / 2.0, (mn[1] + mx[1]) / 2.0, (mn[2] + mx[2]) / 2.0);
-    let lado = (mx[0] - mn[0]).max(mx[1] - mn[1]).max(mx[2] - mn[2]).max(1.0);
+    let centro = p3(
+        (mn[0] + mx[0]) / 2.0,
+        (mn[1] + mx[1]) / 2.0,
+        (mn[2] + mx[2]) / 2.0,
+    );
+    let lado = (mx[0] - mn[0])
+        .max(mx[1] - mn[1])
+        .max(mx[2] - mn[2])
+        .max(1.0);
     (centro, lado)
 }
 
-fn trazo(o: &mut Obra, c: &Croquis, t: &Trazo3D, sombras: &[([f32; 4], super::Sol3D)], escena: f64) {
+fn trazo(
+    o: &mut Obra,
+    c: &Croquis,
+    t: &Trazo3D,
+    sombras: &[([f32; 4], super::Sol3D)],
+    escena: f64,
+) {
     let ancho = t.ancho_del_mundo();
     let (p, de) = sin_repetidos(&t.puntos, ancho * 1e-4);
     if p.is_empty() {
@@ -334,15 +446,28 @@ fn trazo(o: &mut Obra, c: &Croquis, t: &Trazo3D, sombras: &[([f32; 4], super::So
     let base = color_de(&t.color).unwrap_or(TINTA);
     let vigente = t.pincel.vigente();
     let nombre = c.nombre_de_grupo(t.grupo.as_deref()).unwrap_or("");
-    let tipo = if t.punta.plana { "Lápiz".to_string() } else { super::mayuscula(t.pincel.como_se_llama()) };
+    let tipo = if t.punta.plana {
+        "Lápiz".to_string()
+    } else {
+        super::mayuscula(t.pincel.como_se_llama())
+    };
     let e = o.elemento(&tipo, nombre);
     // Lo que alumbra: encendido va sin sombrear y avivado; apagado, del
     // color del cristal (o el suyo mas apagado).
-    let cuanta_luz = if t.alumbra() { (c.luces.cuanto() * t.luz.clamp(0.0, 1.0)) as f32 } else { 0.0 };
+    let cuanta_luz = if t.alumbra() {
+        (c.luces.cuanto() * t.luz.clamp(0.0, 1.0)) as f32
+    } else {
+        0.0
+    };
     let (color, marcas) = if cuanta_luz > 0.01 {
         (hacia_el_blanco(base, 0.35 * cuanta_luz.min(1.0)), SIN_LUZ)
     } else if t.alumbra() {
-        let apagada = t.color_apagada.as_deref().and_then(color_de).unwrap_or([base[0] * 0.6, base[1] * 0.6, base[2] * 0.6, base[3]]);
+        let apagada = t.color_apagada.as_deref().and_then(color_de).unwrap_or([
+            base[0] * 0.6,
+            base[1] * 0.6,
+            base[2] * 0.6,
+            base[3],
+        ]);
         (apagada, PLUMA)
     } else {
         (base, PLUMA)
@@ -351,7 +476,15 @@ fn trazo(o: &mut Obra, c: &Croquis, t: &Trazo3D, sombras: &[([f32; 4], super::So
     let transparente = color[3] < 0.98;
     let radio = ancho / 2.0;
     if p.len() == 1 {
-        bolita(o, p[0], radio * t.punta.ancho.clamp(0.2, 4.0), color, marcas, e, transparente);
+        bolita(
+            o,
+            p[0],
+            radio * t.punta.ancho.clamp(0.2, 4.0),
+            color,
+            marcas,
+            e,
+            transparente,
+        );
     } else {
         let normales = normales_del_trazo(t, &de);
         let tg = tangentes(&p);
@@ -364,15 +497,40 @@ fn trazo(o: &mut Obra, c: &Croquis, t: &Trazo3D, sombras: &[([f32; 4], super::So
                 // La banda: tumbada en la hoja (rodillo) o de pie (cuchilla).
                 let lado = lados_de_la_banda(&tg, normales.as_deref(), vigente == Pincel::Cuchilla);
                 let (a, b): (Vec<Pt3>, Vec<Pt3>) = if vigente == Pincel::Cuchilla {
-                    (p.clone(), p.iter().zip(&lado).map(|(q, s)| mas(*q, por(*s, ancho))).collect())
+                    (
+                        p.clone(),
+                        p.iter()
+                            .zip(&lado)
+                            .map(|(q, s)| mas(*q, por(*s, ancho)))
+                            .collect(),
+                    )
                 } else {
-                    (p.iter().zip(&lado).map(|(q, s)| menos(*q, por(*s, radio))).collect(), p.iter().zip(&lado).map(|(q, s)| mas(*q, por(*s, radio))).collect())
+                    (
+                        p.iter()
+                            .zip(&lado)
+                            .map(|(q, s)| menos(*q, por(*s, radio)))
+                            .collect(),
+                        p.iter()
+                            .zip(&lado)
+                            .map(|(q, s)| mas(*q, por(*s, radio)))
+                            .collect(),
+                    )
                 };
                 banda(o, &a, &b, color, marcas, e, transparente);
             }
             Pincel::Cuadrado => {
                 let arranque = t.normal.or(t.eje_de_la_punta);
-                tubo(o, &p, &vec![radio; p.len()], 4, arranque, color, marcas, e, transparente);
+                tubo(
+                    o,
+                    &p,
+                    &vec![radio; p.len()],
+                    4,
+                    arranque,
+                    color,
+                    marcas,
+                    e,
+                    transparente,
+                );
             }
             _ => {
                 // La redonda (y la luz): el pulso de la mano, si lo trae.
@@ -380,36 +538,89 @@ fn trazo(o: &mut Obra, c: &Croquis, t: &Trazo3D, sombras: &[([f32; 4], super::So
                 for i in 1..p.len() {
                     recorrido[i] = recorrido[i - 1] + largo(menos(p[i], p[i - 1]));
                 }
-                let presiones: Option<Vec<f64>> = t.presiones.as_ref().filter(|v| v.len() == t.puntos.len()).map(|v| de.iter().map(|&i| v[i]).collect());
-                let tiempos: Option<Vec<f64>> = t.tiempos.as_ref().filter(|v| v.len() == t.puntos.len()).map(|v| de.iter().map(|&i| v[i]).collect());
-                let anchos = if vigente == Pincel::Redondo && t.punta.pulso && (presiones.is_some() || tiempos.is_some()) {
-                    super::anchos_del_mundo(ancho, presiones.as_deref(), &recorrido, tiempos.as_deref(), true, true)
+                let presiones: Option<Vec<f64>> = t
+                    .presiones
+                    .as_ref()
+                    .filter(|v| v.len() == t.puntos.len())
+                    .map(|v| de.iter().map(|&i| v[i]).collect());
+                let tiempos: Option<Vec<f64>> = t
+                    .tiempos
+                    .as_ref()
+                    .filter(|v| v.len() == t.puntos.len())
+                    .map(|v| de.iter().map(|&i| v[i]).collect());
+                let anchos = if vigente == Pincel::Redondo
+                    && t.punta.pulso
+                    && (presiones.is_some() || tiempos.is_some())
+                {
+                    super::anchos_del_mundo(
+                        ancho,
+                        presiones.as_deref(),
+                        &recorrido,
+                        tiempos.as_deref(),
+                        true,
+                        true,
+                    )
                 } else {
                     vec![ancho; p.len()]
                 };
                 let del_ancho = t.punta.ancho.clamp(0.2, 4.0);
                 let radios: Vec<f64> = anchos.iter().map(|a| a * del_ancho / 2.0).collect();
                 let (pp, rr) = con_domos(&p, &radios);
-                tubo(o, &pp, &rr, LADOS_DEL_TUBO, t.eje_de_la_punta, color, marcas, e, transparente);
+                tubo(
+                    o,
+                    &pp,
+                    &rr,
+                    LADOS_DEL_TUBO,
+                    t.eje_de_la_punta,
+                    color,
+                    marcas,
+                    e,
+                    transparente,
+                );
                 if cuanta_luz > 0.01 {
                     // El halo: un tubo mas gordo y translucido alrededor.
                     let halo: Vec<f64> = rr.iter().map(|r| r * RESPLANDOR).collect();
                     let tinta = con_alfa(base, ALFA_DEL_RESPLANDOR * cuanta_luz.min(1.0));
-                    tubo(o, &pp, &halo, LADOS_DEL_TUBO, t.eje_de_la_punta, tinta, SIN_LUZ, e, true);
+                    tubo(
+                        o,
+                        &pp,
+                        &halo,
+                        LADOS_DEL_TUBO,
+                        t.eje_de_la_punta,
+                        tinta,
+                        SIN_LUZ,
+                        e,
+                        true,
+                    );
                 }
             }
         }
     }
     // La sombra en el suelo: una banda tumbada, del ancho del trazo.
     for (tinta, sol) in sombras {
-        let s: Vec<Pt3> = p.iter().filter_map(|q| sol.sombra_de(*q)).map(|q| p3(q.x, q.y, escena * 1e-4)).collect();
+        let s: Vec<Pt3> = p
+            .iter()
+            .filter_map(|q| sol.sombra_de(*q))
+            .map(|q| p3(q.x, q.y, escena * 1e-4))
+            .collect();
         if s.len() < 2 {
             continue;
         }
         let tg = tangentes(&s);
-        let lado: Vec<Pt3> = tg.iter().map(|t| normalizado(producto(*t, p3(0.0, 0.0, 1.0)))).collect();
-        let a: Vec<Pt3> = s.iter().zip(&lado).map(|(q, l)| menos(*q, por(*l, radio))).collect();
-        let b: Vec<Pt3> = s.iter().zip(&lado).map(|(q, l)| mas(*q, por(*l, radio))).collect();
+        let lado: Vec<Pt3> = tg
+            .iter()
+            .map(|t| normalizado(producto(*t, p3(0.0, 0.0, 1.0))))
+            .collect();
+        let a: Vec<Pt3> = s
+            .iter()
+            .zip(&lado)
+            .map(|(q, l)| menos(*q, por(*l, radio)))
+            .collect();
+        let b: Vec<Pt3> = s
+            .iter()
+            .zip(&lado)
+            .map(|(q, l)| mas(*q, por(*l, radio)))
+            .collect();
         banda(o, &a, &b, *tinta, SIN_LUZ, e, true);
     }
 }
@@ -435,26 +646,51 @@ fn hoja(o: &mut Obra, c: &Croquis, l: &Lamina3D, escena: f64) {
             _ => "Bola",
         };
         let e = o.elemento(tipo, "");
-        let velo = [0.0, 0.0, 0.0, (VELO_DE_LA_BOLA * opacidad).min(0xC0 as f32 / 255.0)];
+        let velo = [
+            0.0,
+            0.0,
+            0.0,
+            (VELO_DE_LA_BOLA * opacidad).min(0xC0 as f32 / 255.0),
+        ];
         for q in bola.malla() {
             o.cuadro(q, velo, SIN_LUZ | CONTRASTE, e, true);
         }
-        let rejilla = [0.0, 0.0, 0.0, (ALFA_DE_LA_REJILLA * opacidad).clamp(0.0, 0.6)];
+        let rejilla = [
+            0.0,
+            0.0,
+            0.0,
+            (ALFA_DE_LA_REJILLA * opacidad).clamp(0.0, 0.6),
+        ];
         let pasos = super::MERIDIANOS;
         let pi = std::f64::consts::PI;
-        let meridianos = if bola.forma == FormaDeBola::Bola { MERIDIANOS_QUE_SE_PINTAN } else { 2 * MERIDIANOS_QUE_SE_PINTAN };
+        let meridianos = if bola.forma == FormaDeBola::Bola {
+            MERIDIANOS_QUE_SE_PINTAN
+        } else {
+            2 * MERIDIANOS_QUE_SE_PINTAN
+        };
         for m in 0..meridianos {
             let vuelta = pi * m as f64 / MERIDIANOS_QUE_SE_PINTAN as f64;
-            let mut aro: Vec<Pt3> = (0..=pasos).map(|i| bola.punto(vuelta, -pi / 2.0 + pi * i as f64 / pasos as f64)).collect();
+            let mut aro: Vec<Pt3> = (0..=pasos)
+                .map(|i| bola.punto(vuelta, -pi / 2.0 + pi * i as f64 / pasos as f64))
+                .collect();
             if bola.forma == FormaDeBola::Bola {
-                aro.extend((0..=pasos).map(|i| bola.punto(vuelta + pi, pi / 2.0 - pi * i as f64 / pasos as f64)));
+                aro.extend(
+                    (0..=pasos)
+                        .map(|i| bola.punto(vuelta + pi, pi / 2.0 - pi * i as f64 / pasos as f64)),
+                );
             }
             o.raya(&aro, rejilla, SIN_LUZ | CONTRASTE, e, false);
         }
-        let (desde, hasta) = if bola.forma == FormaDeBola::Bola { (1, PARALELOS_QUE_SE_PINTAN - 1) } else { (0, PARALELOS_QUE_SE_PINTAN) };
+        let (desde, hasta) = if bola.forma == FormaDeBola::Bola {
+            (1, PARALELOS_QUE_SE_PINTAN - 1)
+        } else {
+            (0, PARALELOS_QUE_SE_PINTAN)
+        };
         for q in desde..=hasta {
             let subida = -pi / 2.0 + pi * q as f64 / PARALELOS_QUE_SE_PINTAN as f64;
-            let aro: Vec<Pt3> = (0..=pasos).map(|i| bola.punto(2.0 * pi * i as f64 / pasos as f64, subida)).collect();
+            let aro: Vec<Pt3> = (0..=pasos)
+                .map(|i| bola.punto(2.0 * pi * i as f64 / pasos as f64, subida))
+                .collect();
             o.raya(&aro, rejilla, SIN_LUZ | CONTRASTE, e, false);
         }
         return;
@@ -464,9 +700,18 @@ fn hoja(o: &mut Obra, c: &Croquis, l: &Lamina3D, escena: f64) {
     }
     let e = o.elemento("Hoja", "");
     // Una hoja sin fin a lo hondo se pinta hasta donde llega lo dibujado.
-    let fondo = if l.infinita && l.otro_perfil.is_none() { l.fondo.max(escena * 0.75) } else { l.fondo };
+    let fondo = if l.infinita && l.otro_perfil.is_none() {
+        l.fondo.max(escena * 0.75)
+    } else {
+        l.fondo
+    };
     let (color, marcas) = mancha(&l.color);
-    let velo = [color[0], color[1], color[2], (VELO_DE_LA_HOJA * opacidad).min(TOPE_DEL_VELO)];
+    let velo = [
+        color[0],
+        color[1],
+        color[2],
+        (VELO_DE_LA_HOJA * opacidad).min(TOPE_DEL_VELO),
+    ];
     for q in l.tiras_con(fondo) {
         o.cuadro(q, velo, marcas, e, true);
     }
@@ -498,24 +743,51 @@ fn hoja(o: &mut Obra, c: &Croquis, l: &Lamina3D, escena: f64) {
             o.raya(&[a, b], canto, SIN_LUZ | CONTRASTE, e, false);
         }
     } else {
-        o.raya(&l.contorno(fondo), con_alfa(color, opacidad.min(1.0)), marcas, e, true);
+        o.raya(
+            &l.contorno(fondo),
+            con_alfa(color, opacidad.min(1.0)),
+            marcas,
+            e,
+            true,
+        );
     }
 }
 
-fn imagen(o: &mut Obra, c: &Croquis, im: &Imagen3D, foto: Option<&Foto>, sombras: &[([f32; 4], super::Sol3D)], escena: f64) {
+fn imagen(
+    o: &mut Obra,
+    c: &Croquis,
+    im: &Imagen3D,
+    foto: Option<&Foto>,
+    sombras: &[([f32; 4], super::Sol3D)],
+    escena: f64,
+) {
     if im.esquinas.len() < 4 {
         return;
     }
-    let e = o.elemento("Imagen", c.nombre_de_grupo(im.grupo.as_deref()).unwrap_or(""));
-    let q = [im.esquinas[0], im.esquinas[1], im.esquinas[2], im.esquinas[3]];
+    let e = o.elemento(
+        "Imagen",
+        c.nombre_de_grupo(im.grupo.as_deref()).unwrap_or(""),
+    );
+    let q = [
+        im.esquinas[0],
+        im.esquinas[1],
+        im.esquinas[2],
+        im.esquinas[3],
+    ];
     let opacidad = im.opacidad.clamp(0.0, 1.0) as f32;
     for (tinta, sol) in sombras {
-        let s: Vec<Pt3> = q.iter().filter_map(|p| sol.sombra_de(*p)).map(|p| p3(p.x, p.y, escena * 1e-4)).collect();
+        let s: Vec<Pt3> = q
+            .iter()
+            .filter_map(|p| sol.sombra_de(*p))
+            .map(|p| p3(p.x, p.y, escena * 1e-4))
+            .collect();
         if s.len() == 4 {
             o.raya(&s, *tinta, SIN_LUZ, e, true);
         }
     }
-    let Some(f) = foto.filter(|f| f.ancho > 0 && f.alto > 0 && f.rgba.len() >= (f.ancho * f.alto * 4) as usize) else {
+    let Some(f) = foto
+        .filter(|f| f.ancho > 0 && f.alto > 0 && f.rgba.len() >= (f.ancho * f.alto * 4) as usize)
+    else {
         // Sin la foto en este equipo: su marco y sus diagonales, para que se
         // sepa que ahi hay una imagen.
         let gris = [0.0, 0.0, 0.0, 0.5 * opacidad.max(0.3)];
@@ -526,7 +798,10 @@ fn imagen(o: &mut Obra, c: &Croquis, im: &Imagen3D, foto: Option<&Foto>, sombras
     };
     // La rejilla: cada vertice con el color de su punto de la foto; la
     // tarjeta interpola entre ellos.
-    let (gw, gh) = (f.ancho.min(CELDAS_DE_LA_FOTO), f.alto.min(CELDAS_DE_LA_FOTO));
+    let (gw, gh) = (
+        f.ancho.min(CELDAS_DE_LA_FOTO),
+        f.alto.min(CELDAS_DE_LA_FOTO),
+    );
     let normal = normalizado(producto(menos(q[1], q[0]), menos(q[3], q[0])));
     let base = o.m.vertices.len() as u32;
     let mut translucida = opacidad < 0.98;
@@ -537,12 +812,26 @@ fn imagen(o: &mut Obra, c: &Croquis, im: &Imagen3D, foto: Option<&Foto>, sombras
             let arriba = mas(q[0], por(menos(q[1], q[0]), u));
             let abajo = mas(q[3], por(menos(q[2], q[3]), u));
             let p = mas(arriba, por(menos(abajo, arriba), v));
-            let (x, y) = ((u * (f.ancho - 1) as f64).round() as u32, (v * (f.alto - 1) as f64).round() as u32);
+            let (x, y) = (
+                (u * (f.ancho - 1) as f64).round() as u32,
+                (v * (f.alto - 1) as f64).round() as u32,
+            );
             let k = ((y * f.ancho + x) * 4) as usize;
             let px = &f.rgba[k..k + 4];
             let a = px[3] as f32 / 255.0 * opacidad;
             translucida |= a < 0.98;
-            o.v(p, normal, [px[0] as f32 / 255.0, px[1] as f32 / 255.0, px[2] as f32 / 255.0, a], SIN_LUZ, e);
+            o.v(
+                p,
+                normal,
+                [
+                    px[0] as f32 / 255.0,
+                    px[1] as f32 / 255.0,
+                    px[2] as f32 / 255.0,
+                    a,
+                ],
+                SIN_LUZ,
+                e,
+            );
         }
     }
     let fila = gw + 1;
@@ -568,7 +857,13 @@ fn suelo(o: &mut Obra, c: &Croquis, centro: Pt3, escena: f64) {
         while (i as f64) * lado <= x1 && i < (x0 / lado).ceil() as i64 + 400 {
             let x = i as f64 * lado;
             if i != 0 {
-                o.raya(&[p3(x, y0, 0.0), p3(x, y1, 0.0)], tinta, SIN_LUZ | CONTRASTE, e, false);
+                o.raya(
+                    &[p3(x, y0, 0.0), p3(x, y1, 0.0)],
+                    tinta,
+                    SIN_LUZ | CONTRASTE,
+                    e,
+                    false,
+                );
             }
             i += 1;
         }
@@ -576,7 +871,13 @@ fn suelo(o: &mut Obra, c: &Croquis, centro: Pt3, escena: f64) {
         while (j as f64) * lado <= y1 && j < (y0 / lado).ceil() as i64 + 400 {
             let y = j as f64 * lado;
             if j != 0 {
-                o.raya(&[p3(x0, y, 0.0), p3(x1, y, 0.0)], tinta, SIN_LUZ | CONTRASTE, e, false);
+                o.raya(
+                    &[p3(x0, y, 0.0), p3(x1, y, 0.0)],
+                    tinta,
+                    SIN_LUZ | CONTRASTE,
+                    e,
+                    false,
+                );
             }
             j += 1;
         }
@@ -584,10 +885,22 @@ fn suelo(o: &mut Obra, c: &Croquis, centro: Pt3, escena: f64) {
     // Los ejes se quedan siempre: son el cero del mundo.
     let ejes = [0.0, 0.0, 0.0, ALFA_DE_LOS_EJES];
     if (x0..=x1).contains(&0.0) {
-        o.raya(&[p3(0.0, y0, 0.0), p3(0.0, y1, 0.0)], ejes, SIN_LUZ | CONTRASTE, e, false);
+        o.raya(
+            &[p3(0.0, y0, 0.0), p3(0.0, y1, 0.0)],
+            ejes,
+            SIN_LUZ | CONTRASTE,
+            e,
+            false,
+        );
     }
     if (y0..=y1).contains(&0.0) {
-        o.raya(&[p3(x0, 0.0, 0.0), p3(x1, 0.0, 0.0)], ejes, SIN_LUZ | CONTRASTE, e, false);
+        o.raya(
+            &[p3(x0, 0.0, 0.0), p3(x1, 0.0, 0.0)],
+            ejes,
+            SIN_LUZ | CONTRASTE,
+            e,
+            false,
+        );
     }
 }
 
@@ -595,7 +908,12 @@ fn suelo(o: &mut Obra, c: &Croquis, centro: Pt3, escena: f64) {
 /// `fotos` da la foto de una ruta de [`Imagen3D`] (la resuelve quien abre:
 /// aqui no se sabe donde vive cada `pixpin:files/…`).
 pub fn a_modelo(c: &Croquis, fotos: &dyn Fn(&str) -> Option<Foto>) -> Modelo3d {
-    let mut o = Obra { m: Modelo3d::default(), origen: None, min: [f64::INFINITY; 3], max: [f64::NEG_INFINITY; 3] };
+    let mut o = Obra {
+        m: Modelo3d::default(),
+        origen: None,
+        min: [f64::INFINITY; 3],
+        max: [f64::NEG_INFINITY; 3],
+    };
     let (centro, escena) = tamano(c);
     // El origen, en el centro de lo dibujado: los milimetros no se pierden en f32.
     o.origen = Some([centro.x, centro.y, centro.z]);
@@ -645,7 +963,10 @@ pub fn caja_de_lo_dibujado(c: &Croquis, origen: [f64; 3]) -> Option<[f32; 6]> {
     }
     let mut caja = [f32::MAX, f32::MAX, f32::MAX, f32::MIN, f32::MIN, f32::MIN];
     for p in pts {
-        for (k, x) in [p.x - origen[0], p.y - origen[1], p.z - origen[2]].into_iter().enumerate() {
+        for (k, x) in [p.x - origen[0], p.y - origen[1], p.z - origen[2]]
+            .into_iter()
+            .enumerate()
+        {
             caja[k] = caja[k].min(x as f32);
             caja[k + 3] = caja[k + 3].max(x as f32);
         }
@@ -665,7 +986,13 @@ pub fn abre_claro(c: &Croquis) -> bool {
     if let Some(f) = fondo_propio(c) {
         return luminancia(f) > 0.4;
     }
-    let tintas: Vec<f32> = c.trazos.iter().filter(|t| !t.oculto).filter_map(|t| color_de(&t.color)).map(luminancia).collect();
+    let tintas: Vec<f32> = c
+        .trazos
+        .iter()
+        .filter(|t| !t.oculto)
+        .filter_map(|t| color_de(&t.color))
+        .map(luminancia)
+        .collect();
     if tintas.is_empty() {
         return true;
     }
@@ -681,8 +1008,11 @@ pub fn abre_claro(c: &Croquis) -> bool {
 #[allow(clippy::needless_range_loop)]
 pub(crate) fn lados_de_la_banda(tg: &[Pt3], normales: Option<&[Pt3]>, de_pie: bool) -> Vec<Pt3> {
     let mut v: Vec<Pt3> = Vec::with_capacity(tg.len());
+    #[allow(clippy::needless_range_loop)] // `i` indexa tambien las normales
     for i in 0..tg.len() {
-        let n = normales.and_then(|v| v.get(i).copied()).unwrap_or_else(|| perpendicular(tg[i]));
+        let n = normales
+            .and_then(|v| v.get(i).copied())
+            .unwrap_or_else(|| perpendicular(tg[i]));
         let crudo = if de_pie { n } else { producto(n, tg[i]) };
         let previo = v.last().copied();
         let mut lado = match previo {

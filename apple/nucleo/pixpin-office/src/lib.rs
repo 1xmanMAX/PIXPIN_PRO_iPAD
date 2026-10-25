@@ -18,8 +18,8 @@
 #![forbid(unsafe_code)]
 
 pub mod dml;
-pub mod formas;
 pub mod docx;
+pub mod formas;
 pub mod geometria;
 pub mod grafico;
 pub mod medidor;
@@ -67,7 +67,10 @@ impl Documento {
     /// maquetar nada).
     pub fn abrir(ruta: &Path) -> Result<Documento, ErrorOffice> {
         let bytes: Arc<[u8]> = Arc::from(std::fs::read(ruta)?);
-        let nombre = ruta.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let nombre = ruta
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
         Documento::de_bytes(bytes, tipo_de(&nombre))
     }
 

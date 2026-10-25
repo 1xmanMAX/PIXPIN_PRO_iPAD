@@ -9,7 +9,9 @@ pub fn escapar(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3 / 2);
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -26,7 +28,8 @@ pub fn desescapar(s: &str) -> String {
         match b[i] {
             b'+' => out.push(b' '),
             b'%' if i + 2 < b.len() => {
-                match u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or("zz"), 16) {
+                match u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or("zz"), 16)
+                {
                     Ok(v) => {
                         out.push(v);
                         i += 2;
@@ -54,7 +57,10 @@ pub fn consulta(q: &str) -> Vec<(String, String)> {
 
 /// El valor de `clave` en una consulta.
 pub fn valor<'a>(pares: &'a [(String, String)], clave: &str) -> Option<&'a str> {
-    pares.iter().find(|(k, _)| k == clave).map(|(_, v)| v.as_str())
+    pares
+        .iter()
+        .find(|(k, _)| k == clave)
+        .map(|(_, v)| v.as_str())
 }
 
 /// Monta `a=b&c=d` con cada valor escapado (la consulta de una URL o el

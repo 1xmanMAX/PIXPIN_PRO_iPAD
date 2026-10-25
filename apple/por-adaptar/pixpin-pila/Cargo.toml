@@ -1,0 +1,17 @@
+[package]
+name = "pixpin-pila"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pixpin-codec = { version = "0.1.0", path = "../pixpin-codec" }
+pixpin-geom = { version = "0.1.0", path = "../pixpin-geom" }
+pixpin-render = { version = "0.1.0", path = "../pixpin-render" }
+thiserror = "2.0.20"
+tracing = "0.1.41"
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Direct3D11", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader", "Win32_System_SystemInformation"] }
+
+[dev-dependencies]
+windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }

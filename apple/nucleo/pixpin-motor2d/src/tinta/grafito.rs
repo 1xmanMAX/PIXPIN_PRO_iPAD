@@ -1159,8 +1159,7 @@ fn datos_del_trazo(e: &Elemento) -> Option<Datos> {
 /// La dureza la multiplica (`dureza.oscuro` del movil): la 8B carga mas de
 /// dos veces lo que la HB en cada sello, y la 4H menos de la mitad.
 fn carga_del_pincel(p: f32, dureza: Dureza) -> f32 {
-    ((255.0 * OPACIDAD_DEL_LAPIZ * (0.16 + 0.34 * p) * dureza.oscuro()) as i32).clamp(1, 255)
-        as f32
+    ((255.0 * OPACIDAD_DEL_LAPIZ * (0.16 + 0.34 * p) * dureza.oscuro()) as i32).clamp(1, 255) as f32
         / 255.0
 }
 
@@ -2967,7 +2966,15 @@ mod pruebas {
             .collect();
         let mut azar = AzarJava::nuevo(e.id);
         estampar_caminos(
-            &mut l, &mut azar, &caminos, 2.4, 1.0, origen, [0.0; 3], true, Dureza::Hb,
+            &mut l,
+            &mut azar,
+            &caminos,
+            2.4,
+            1.0,
+            origen,
+            [0.0; 3],
+            true,
+            Dureza::Hb,
         );
         let tocado: usize = l.tocado().iter().map(|r| r.ancho * r.alto).sum();
         let total = l.ancho * l.alto;

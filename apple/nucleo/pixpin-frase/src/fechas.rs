@@ -87,7 +87,11 @@ impl Momento {
     /// La marca de las tareas: `⏰ 2026-10-09 10:00`.
     pub fn marca(&self) -> String {
         let (y, m, d) = fecha_de(self.dia);
-        format!("⏰ {y:04}-{m:02}-{d:02} {:02}:{:02}", self.minuto / 60, self.minuto % 60)
+        format!(
+            "⏰ {y:04}-{m:02}-{d:02} {:02}:{:02}",
+            self.minuto / 60,
+            self.minuto % 60
+        )
     }
 
     /// Lee una marca `⏰ AAAA-MM-DD HH:MM` al final de un texto.
@@ -114,9 +118,14 @@ impl Momento {
             -1 => "ayer".to_string(),
             _ => {
                 let (y, m, d) = fecha_de(self.dia);
-                let sem = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"][dia_de_la_semana(self.dia) as usize];
+                let sem = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+                    [dia_de_la_semana(self.dia) as usize];
                 let (ya, _, _) = fecha_de(ahora.dia);
-                if y == ya { format!("{sem} {d}/{m}") } else { format!("{sem} {d}/{m}/{y}") }
+                if y == ya {
+                    format!("{sem} {d}/{m}")
+                } else {
+                    format!("{sem} {d}/{m}/{y}")
+                }
             }
         };
         format!("{dia} {hora}")
@@ -135,7 +144,9 @@ pub fn fecha_y_hora(ms_utc: i64, desfase_ms: i64) -> Option<String> {
     }
     let m = Momento::de_ms_locales(ms_utc + desfase_ms);
     let (y, mes, d) = fecha_de(m.dia);
-    const MESES: [&str; 12] = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    const MESES: [&str; 12] = [
+        "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+    ];
     let sem = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"][dia_de_la_semana(m.dia) as usize];
     Some(format!(
         "{sem} {d}-{}-{y} {:02}:{:02}",
@@ -159,7 +170,10 @@ pub enum ErrorFecha {
 impl std::fmt::Display for ErrorFecha {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorFecha::NoEntiendo(s) => write!(f, "no entiendo la fecha «{s}»; dila como «mañana a las 10», «el viernes» o «20/10/2026»"),
+            ErrorFecha::NoEntiendo(s) => write!(
+                f,
+                "no entiendo la fecha «{s}»; dila como «mañana a las 10», «el viernes» o «20/10/2026»"
+            ),
             ErrorFecha::NoExiste(s) => write!(f, "la fecha «{s}» no existe"),
             ErrorFecha::Pasada(s) => write!(f, "la fecha «{s}» ya pasó"),
         }
@@ -167,18 +181,36 @@ impl std::fmt::Display for ErrorFecha {
 }
 
 const MESES: &[&str] = &[
-    "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre",
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
     "diciembre",
 ];
-const DIAS: &[&str] = &["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
+const DIAS: &[&str] = &[
+    "lunes",
+    "martes",
+    "miercoles",
+    "jueves",
+    "viernes",
+    "sabado",
+    "domingo",
+];
 
 fn numero(p: &str) -> Option<i64> {
     if let Ok(n) = p.parse::<i64>() {
         return Some(n);
     }
     const PALABRAS: &[&str] = &[
-        "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce",
-        "trece", "catorce", "quince",
+        "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+        "once", "doce", "trece", "catorce", "quince",
     ];
     match p {
         "un" | "una" => Some(1),
@@ -216,29 +248,57 @@ struct Leido {
 fn en_unidad(p: &str, sig: Option<&str>, unidad: Option<&str>) -> bool {
     p == "en"
         && sig.and_then(numero).is_some()
-        && matches!(unidad, Some("dia" | "dias" | "semana" | "semanas" | "hora" | "horas"))
+        && matches!(
+            unidad,
+            Some("dia" | "dias" | "semana" | "semanas" | "hora" | "horas")
+        )
 }
 
 /// Las palabras de relleno que no cambian nada.
 fn relleno(p: &str) -> bool {
-    matches!(p, "para" | "el" | "al" | "la" | "de" | "del" | "este" | "esta" | "dia" | "en" | "a" | "las" | "los" | "y" | "sobre" | "hacia" | "antes")
+    matches!(
+        p,
+        "para"
+            | "el"
+            | "al"
+            | "la"
+            | "de"
+            | "del"
+            | "este"
+            | "esta"
+            | "dia"
+            | "en"
+            | "a"
+            | "las"
+            | "los"
+            | "y"
+            | "sobre"
+            | "hacia"
+            | "antes"
+    )
 }
 
 /// **La fecha de una frase entera.** `ahora`: el momento local de ahora.
 pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
-    let original = frase.trim().trim_end_matches(['.', ',', ';']).trim().to_string();
+    let original = frase
+        .trim()
+        .trim_end_matches(['.', ',', ';'])
+        .trim()
+        .to_string();
     let q = normalizar(&original);
     // «20/10/2026», «2026-10-20» y «10:30» se parten aparte.
     // «5pm» y «5:30pm» se leen como «5 pm» y «5:30 pm» (18-oct-2026).
     let palabras: Vec<String> = q
         .split(|c: char| c.is_whitespace() || c == ',')
         .filter(|p| !p.is_empty())
-        .flat_map(|p| match p.strip_suffix("pm").or_else(|| p.strip_suffix("am")) {
-            Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit() || c == ':') => {
-                vec![n.to_string(), p[n.len()..].to_string()]
-            }
-            _ => vec![p.to_string()],
-        })
+        .flat_map(
+            |p| match p.strip_suffix("pm").or_else(|| p.strip_suffix("am")) {
+                Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit() || c == ':') => {
+                    vec![n.to_string(), p[n.len()..].to_string()]
+                }
+                _ => vec![p.to_string()],
+            },
+        )
         .collect();
     if palabras.is_empty() {
         return Err(ErrorFecha::NoEntiendo(original));
@@ -266,7 +326,8 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
             i += 1;
         } else if p == "manana" {
             // «mañana» tras «de la» es la franja («a las 9 de la mañana»).
-            let franja = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "de" && l.minuto.is_some();
+            let franja =
+                i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "de" && l.minuto.is_some();
             let por_la = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "por";
             if franja || por_la {
                 tarde = Some(false);
@@ -315,7 +376,8 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
         } else if p == "semana" {
             // «la semana que viene», «la proxima semana»: el lunes que viene.
             let antes = i >= 1 && matches!(palabras[i - 1].as_str(), "proxima" | "siguiente");
-            let despues = sig == Some("que") && palabras.get(i + 2).map(String::as_str) == Some("viene");
+            let despues =
+                sig == Some("que") && palabras.get(i + 2).map(String::as_str) == Some("viene");
             if !(antes || despues) {
                 return Err(no_entiendo());
             }
@@ -324,10 +386,18 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
             }
             let hoy = dia_de_la_semana(ahora.dia);
             poner_dia(&mut l, ahora.dia + (7 - hoy))?;
-        } else if (p == "dentro" && sig == Some("de")) || en_unidad(p, sig, palabras.get(i + 2).map(String::as_str)) {
+        } else if (p == "dentro" && sig == Some("de"))
+            || en_unidad(p, sig, palabras.get(i + 2).map(String::as_str))
+        {
             let j = if p == "dentro" { i + 2 } else { i + 1 };
-            let n = palabras.get(j).and_then(|x| numero(x)).ok_or_else(no_entiendo)?;
-            let unidad = palabras.get(j + 1).map(String::as_str).ok_or_else(no_entiendo)?;
+            let n = palabras
+                .get(j)
+                .and_then(|x| numero(x))
+                .ok_or_else(no_entiendo)?;
+            let unidad = palabras
+                .get(j + 1)
+                .map(String::as_str)
+                .ok_or_else(no_entiendo)?;
             match unidad {
                 "dia" | "dias" => poner_dia(&mut l, ahora.dia + n)?,
                 "semana" | "semanas" => poner_dia(&mut l, ahora.dia + 7 * n)?,
@@ -349,11 +419,21 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
             }
             l.sin_anio |= y.1;
             poner_dia(&mut l, dias_de(y.0, m, d))?;
-        } else if p.contains(':') || p.ends_with('h') && p.len() <= 3 && p[..p.len() - 1].parse::<u32>().is_ok() {
+        } else if p.contains(':')
+            || p.ends_with('h') && p.len() <= 3 && p[..p.len() - 1].parse::<u32>().is_ok()
+        {
             // «10:30», «10h».
             let (h, mi) = match p.split_once(':') {
-                Some((h, m)) => (h.parse::<i64>().map_err(|_| no_entiendo())?, m.trim_end_matches('h').parse::<i64>().map_err(|_| no_entiendo())?),
-                None => (p[..p.len() - 1].parse::<i64>().map_err(|_| no_entiendo())?, 0),
+                Some((h, m)) => (
+                    h.parse::<i64>().map_err(|_| no_entiendo())?,
+                    m.trim_end_matches('h')
+                        .parse::<i64>()
+                        .map_err(|_| no_entiendo())?,
+                ),
+                None => (
+                    p[..p.len() - 1].parse::<i64>().map_err(|_| no_entiendo())?,
+                    0,
+                ),
             };
             if !(0..24).contains(&h) || !(0..60).contains(&mi) {
                 return Err(no_existe());
@@ -364,7 +444,10 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
             l.minuto = Some((h * 60 + mi) as u32);
         } else if let Some(n) = numero(p) {
             // Un numero suelto: «a las 10» (hora) o «el 3 de noviembre» (dia).
-            let tras_las = i >= 1 && matches!(palabras[i - 1].as_str(), "las" | "la") && i >= 2 && palabras[i - 2] == "a"
+            let tras_las = i >= 1
+                && matches!(palabras[i - 1].as_str(), "las" | "la")
+                && i >= 2
+                && palabras[i - 2] == "a"
                 || i >= 1 && palabras[i - 1] == "las";
             let mes_detras = match (sig, palabras.get(i + 2)) {
                 (Some("de"), Some(m)) => mes(m),
@@ -407,7 +490,13 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
                     .ok_or_else(no_existe)?;
                 l.sin_mes = true;
                 poner_dia(&mut l, dia)?;
-            } else if tras_las || matches!(sig, Some("de") | Some("en") | Some("am") | Some("pm") | Some("y")) || i + 1 == palabras.len() {
+            } else if tras_las
+                || matches!(
+                    sig,
+                    Some("de") | Some("en") | Some("am") | Some("pm") | Some("y")
+                )
+                || i + 1 == palabras.len()
+            {
                 // Hora sola: «a las 5 (de la tarde)», «a las 10 y media».
                 if !(0..=24).contains(&n) {
                     return Err(no_existe());
@@ -431,7 +520,9 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
             } else {
                 return Err(no_entiendo());
             }
-        } else if let Some(m) = mes(p).filter(|_| i >= 1 && palabras[i - 1] == "de" && l.dia.is_none()) {
+        } else if let Some(m) =
+            mes(p).filter(|_| i >= 1 && palabras[i - 1] == "de" && l.dia.is_none())
+        {
             // «el dia 5 de este mes» no; aqui solo llega «de octubre» sin dia.
             let _ = m;
             return Err(no_entiendo());
@@ -448,7 +539,7 @@ pub fn interpretar(frase: &str, ahora: Momento) -> Result<Momento, ErrorFecha> {
     let mut minuto = l.minuto.unwrap_or(HORA_POR_OMISION);
     if tarde == Some(true) && minuto < 12 * 60 {
         minuto += 12 * 60;
-    } else if tarde == Some(false) && minuto >= 12 * 60 && minuto < 13 * 60 {
+    } else if tarde == Some(false) && (12 * 60..13 * 60).contains(&minuto) {
         minuto -= 12 * 60;
     }
     let mut dia = match l.dia {
@@ -519,7 +610,22 @@ pub fn separar(frase: &str, ahora: Momento) -> Result<(String, Option<Momento>),
         // La cola tiene que empezar como empieza una fecha.
         let parece = matches!(
             empieza.as_str(),
-            "para" | "el" | "al" | "hoy" | "manana" | "pasado" | "a" | "en" | "dentro" | "este" | "esta" | "la" | "proximo" | "proxima" | "antes" | "sobre"
+            "para"
+                | "el"
+                | "al"
+                | "hoy"
+                | "manana"
+                | "pasado"
+                | "a"
+                | "en"
+                | "dentro"
+                | "este"
+                | "esta"
+                | "la"
+                | "proximo"
+                | "proxima"
+                | "antes"
+                | "sobre"
         ) || dia_semana(&empieza).is_some()
             || empieza.chars().next().is_some_and(|c| c.is_ascii_digit());
         if !parece {
@@ -542,8 +648,14 @@ mod pruebas {
         // 3-oct-2026 00:00 UTC = 2-oct 19:00 en Lima (UTC-5).
         let t = 1_790_985_600_000;
         assert_eq!(fecha_y_hora(t, 0).as_deref(), Some("sáb 3-oct-2026 00:00"));
-        assert_eq!(fecha_y_hora(t, -5 * 3_600_000).as_deref(), Some("vie 2-oct-2026 19:00"));
-        assert_eq!(fecha_y_hora(t + 14 * 3_600_000 + 5 * 60_000 + 59_999, 0).as_deref(), Some("sáb 3-oct-2026 14:05"));
+        assert_eq!(
+            fecha_y_hora(t, -5 * 3_600_000).as_deref(),
+            Some("vie 2-oct-2026 19:00")
+        );
+        assert_eq!(
+            fecha_y_hora(t + 14 * 3_600_000 + 5 * 60_000 + 59_999, 0).as_deref(),
+            Some("sáb 3-oct-2026 14:05")
+        );
         // Caso negativo: un mensaje sin hora no lleva fecha.
         assert_eq!(fecha_y_hora(0, 0), None);
     }
@@ -566,7 +678,12 @@ mod pruebas {
     #[test]
     fn el_calendario_es_el_de_siempre() {
         assert_eq!(dia_de_la_semana(dias_de(2026, 10, 14)), 2, "miercoles");
-        assert!(existe(2028, 2, 29) && !existe(2026, 2, 29) && !existe(2026, 2, 31) && !existe(2026, 13, 1));
+        assert!(
+            existe(2028, 2, 29)
+                && !existe(2026, 2, 29)
+                && !existe(2026, 2, 31)
+                && !existe(2026, 13, 1)
+        );
         assert_eq!(fecha_de(dias_de(2026, 12, 31)), (2026, 12, 31));
     }
 
@@ -579,7 +696,11 @@ mod pruebas {
         assert_eq!(en("hoy a las 18:30"), "⏰ 2026-10-14 18:30");
         assert_eq!(en("esta tarde"), "⏰ 2026-10-14 17:00");
         assert_eq!(en("el viernes"), "⏰ 2026-10-16 09:00");
-        assert_eq!(en("el miércoles"), "⏰ 2026-10-21 09:00", "hoy es miercoles: el que viene");
+        assert_eq!(
+            en("el miércoles"),
+            "⏰ 2026-10-21 09:00",
+            "hoy es miercoles: el que viene"
+        );
         assert_eq!(en("el lunes por la tarde"), "⏰ 2026-10-19 17:00");
         assert_eq!(en("la semana que viene"), "⏰ 2026-10-19 09:00");
         assert_eq!(en("en 3 días"), "⏰ 2026-10-17 09:00");
@@ -588,7 +709,11 @@ mod pruebas {
         assert_eq!(en("el 20/10/2026 a las 8:15"), "⏰ 2026-10-20 08:15");
         assert_eq!(en("2026-11-03 16:00"), "⏰ 2026-11-03 16:00");
         assert_eq!(en("el 3 de noviembre"), "⏰ 2026-11-03 09:00");
-        assert_eq!(en("el 5 de enero"), "⏰ 2027-01-05 09:00", "sin año y ya pasado: el que viene");
+        assert_eq!(
+            en("el 5 de enero"),
+            "⏰ 2027-01-05 09:00",
+            "sin año y ya pasado: el que viene"
+        );
         assert_eq!(en("a las 12"), "⏰ 2026-10-14 12:00");
         assert_eq!(en("a las 9"), "⏰ 2026-10-15 09:00", "las 9 ya pasaron hoy");
         assert_eq!(en("mañana a las 10 y media"), "⏰ 2026-10-15 10:30");
@@ -603,7 +728,11 @@ mod pruebas {
         assert_eq!(en("18-10 5:30pm"), "⏰ 2026-10-18 17:30");
         assert_eq!(en("18 oct 17:00"), "⏰ 2026-10-18 17:00");
         assert_eq!(en("el 20 a las 9"), "⏰ 2026-10-20 09:00");
-        assert_eq!(en("el 20"), "⏰ 2026-10-20 09:00", "«el 20» es un dia, no las 20:00");
+        assert_eq!(
+            en("el 20"),
+            "⏰ 2026-10-20 09:00",
+            "«el 20» es un dia, no las 20:00"
+        );
         assert_eq!(en("20 de octubre 8:30"), "⏰ 2026-10-20 08:30");
         assert_eq!(en("mañana 7"), "⏰ 2026-10-15 07:00");
         assert_eq!(en("viernes 15:30"), "⏰ 2026-10-16 15:30");
@@ -617,22 +746,48 @@ mod pruebas {
             dia: dias_de(2026, 11, 2),
             minuto: 600,
         };
-        assert_eq!(interpretar("el 31", fin_de_nov).unwrap().marca(), "⏰ 2026-12-31 09:00");
+        assert_eq!(
+            interpretar("el 31", fin_de_nov).unwrap().marca(),
+            "⏰ 2026-12-31 09:00"
+        );
         // Negativos: sigue sin adivinar.
         for f in ["el 32", "18/13 17:00", "5xm"] {
             assert!(interpretar(f, ahora()).is_err(), "{f}");
         }
-        assert!(matches!(interpretar("el 32", ahora()), Err(ErrorFecha::NoExiste(_))));
+        assert!(matches!(
+            interpretar("el 32", ahora()),
+            Err(ErrorFecha::NoExiste(_))
+        ));
     }
 
     #[test]
     fn lo_imposible_y_lo_pasado_no_se_adivinan() {
-        for f in ["el 31 de febrero", "30/02/2027", "mañana a las 25:00", "el 32 de octubre"] {
-            assert!(matches!(interpretar(f, ahora()), Err(ErrorFecha::NoExiste(_))), "{f}");
+        for f in [
+            "el 31 de febrero",
+            "30/02/2027",
+            "mañana a las 25:00",
+            "el 32 de octubre",
+        ] {
+            assert!(
+                matches!(interpretar(f, ahora()), Err(ErrorFecha::NoExiste(_))),
+                "{f}"
+            );
         }
-        assert!(matches!(interpretar("el 1/1/2020", ahora()), Err(ErrorFecha::Pasada(_))));
-        for f in ["cuando pueda", "algun dia", "el jueves o el viernes", "", "mañana y pasado mañana"] {
-            assert!(matches!(interpretar(f, ahora()), Err(ErrorFecha::NoEntiendo(_))), "{f}");
+        assert!(matches!(
+            interpretar("el 1/1/2020", ahora()),
+            Err(ErrorFecha::Pasada(_))
+        ));
+        for f in [
+            "cuando pueda",
+            "algun dia",
+            "el jueves o el viernes",
+            "",
+            "mañana y pasado mañana",
+        ] {
+            assert!(
+                matches!(interpretar(f, ahora()), Err(ErrorFecha::NoEntiendo(_))),
+                "{f}"
+            );
         }
     }
 
@@ -642,9 +797,15 @@ mod pruebas {
         assert_eq!(t, "llamar al banco");
         assert_eq!(m.unwrap().marca(), "⏰ 2026-10-15 10:00");
         let (t, m) = separar("revisar planos para el viernes", ahora()).unwrap();
-        assert_eq!((t.as_str(), m.unwrap().marca()), ("revisar planos", "⏰ 2026-10-16 09:00".to_string()));
+        assert_eq!(
+            (t.as_str(), m.unwrap().marca()),
+            ("revisar planos", "⏰ 2026-10-16 09:00".to_string())
+        );
         // Sin fecha, el texto tal cual (y «el» en medio no es una fecha).
-        assert_eq!(separar("pedir el cemento", ahora()).unwrap(), ("pedir el cemento".into(), None));
+        assert_eq!(
+            separar("pedir el cemento", ahora()).unwrap(),
+            ("pedir el cemento".into(), None)
+        );
         assert_eq!(separar("comprar 3 sacos", ahora()).unwrap().1, None);
         assert!(separar("pagar el alquiler el 31 de febrero", ahora()).is_err());
     }

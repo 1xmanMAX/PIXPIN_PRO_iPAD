@@ -18,7 +18,9 @@ impl Img {
     pub fn de_rgba(rgba: &[u8], w: usize, h: usize) -> Img {
         let mut px = vec![[255f32; 3]; w * h];
         for (i, p) in px.iter_mut().enumerate() {
-            let Some(q) = rgba.get(i * 4..i * 4 + 4) else { break };
+            let Some(q) = rgba.get(i * 4..i * 4 + 4) else {
+                break;
+            };
             let a = q[3] as f32 / 255.0;
             for c in 0..3 {
                 p[c] = q[c] as f32 * a + 255.0 * (1.0 - a);
@@ -27,7 +29,8 @@ impl Img {
         Img { w, h, px }
     }
     pub fn en(&self, x: i64, y: i64) -> Option<[f32; 3]> {
-        (x >= 0 && y >= 0 && (x as usize) < self.w && (y as usize) < self.h).then(|| self.px[y as usize * self.w + x as usize])
+        (x >= 0 && y >= 0 && (x as usize) < self.w && (y as usize) < self.h)
+            .then(|| self.px[y as usize * self.w + x as usize])
     }
 }
 
@@ -46,8 +49,8 @@ pub fn fondo(img: &Img) -> [f32; 3] {
         let k = ((p[0] as u8) >> 4, (p[1] as u8) >> 4, (p[2] as u8) >> 4);
         let e = cuenta.entry(k).or_insert((0, [0.0; 3]));
         e.0 += 1;
-        for c in 0..3 {
-            e.1[c] += p[c] as f64;
+        for (suma, v) in e.1.iter_mut().zip(p) {
+            *suma += v as f64;
         }
     }
     let mut cuenta: Cuenta = Default::default();
@@ -69,8 +72,16 @@ pub fn fondo(img: &Img) -> [f32; 3] {
             ver(&mut cuenta, img.px[i]);
         }
     }
-    let (n, s) = cuenta.values().max_by_key(|e| e.0).copied().unwrap_or((1, [255.0; 3]));
-    [(s[0] / n as f64) as f32, (s[1] / n as f64) as f32, (s[2] / n as f64) as f32]
+    let (n, s) = cuenta
+        .values()
+        .max_by_key(|e| e.0)
+        .copied()
+        .unwrap_or((1, [255.0; 3]));
+    [
+        (s[0] / n as f64) as f32,
+        (s[1] / n as f64) as f32,
+        (s[2] / n as f64) as f32,
+    ]
 }
 
 /// **Los colores de la tinta**: k-medias sobre una muestra de los pixeles de
@@ -95,12 +106,21 @@ pub fn colores(img: &Img, tinta: &[bool], papel: [f32; 3], k: usize) -> Vec<[f32
     }
     // Inicio: el mas lejano del papel y luego el mas lejano de los elegidos.
     let mut centros: Vec<[f32; 3]> = Vec::new();
-    let primero = muestra.iter().copied().max_by(|a, b| dist_color(*a, papel).total_cmp(&dist_color(*b, papel))).unwrap();
+    let primero = muestra
+        .iter()
+        .copied()
+        .max_by(|a, b| dist_color(*a, papel).total_cmp(&dist_color(*b, papel)))
+        .unwrap();
     centros.push(primero);
     while centros.len() < k {
         let (mejor, d) = muestra
             .iter()
-            .map(|&c| (c, centros.iter().map(|&q| d2(c, q)).fold(f32::MAX, f32::min)))
+            .map(|&c| {
+                (
+                    c,
+                    centros.iter().map(|&q| d2(c, q)).fold(f32::MAX, f32::min),
+                )
+            })
             .max_by(|a, b| a.1.total_cmp(&b.1))
             .unwrap();
         if d < 30.0 * 30.0 {
@@ -120,7 +140,11 @@ pub fn colores(img: &Img, tinta: &[bool], papel: [f32; 3], k: usize) -> Vec<[f32
         }
         for j in 0..centros.len() {
             if n[j] > 0 {
-                centros[j] = [(suma[j][0] / n[j] as f64) as f32, (suma[j][1] / n[j] as f64) as f32, (suma[j][2] / n[j] as f64) as f32];
+                centros[j] = [
+                    (suma[j][0] / n[j] as f64) as f32,
+                    (suma[j][1] / n[j] as f64) as f32,
+                    (suma[j][2] / n[j] as f64) as f32,
+                ];
             }
         }
     }
@@ -154,7 +178,11 @@ pub fn media(v: impl Iterator<Item = [f32; 3]>) -> [f32; 3] {
     if n == 0 {
         return [0.0; 3];
     }
-    [(s[0] / n as f64) as f32, (s[1] / n as f64) as f32, (s[2] / n as f64) as f32]
+    [
+        (s[0] / n as f64) as f32,
+        (s[1] / n as f64) as f32,
+        (s[2] / n as f64) as f32,
+    ]
 }
 
 pub fn cercano(centros: &[[f32; 3]], c: [f32; 3]) -> usize {
@@ -181,8 +209,16 @@ pub fn clase(centros: &[[f32; 3]], papel: [f32; 3], c: [f32; 3]) -> usize {
         let v = [q[0] - papel[0], q[1] - papel[1], q[2] - papel[2]];
         let u = [c[0] - papel[0], c[1] - papel[1], c[2] - papel[2]];
         let vv = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-        let t = if vv > 1.0 { ((u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / vv).clamp(0.0, 1.0) } else { 1.0 };
-        let r = [papel[0] + t * v[0], papel[1] + t * v[1], papel[2] + t * v[2]];
+        let t = if vv > 1.0 {
+            ((u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / vv).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let r = [
+            papel[0] + t * v[0],
+            papel[1] + t * v[1],
+            papel[2] + t * v[2],
+        ];
         // Lo que se aparta de la mezcla, y un poco lo que se aparta del
         // propio color (que una mezcla muy clara no sea de cualquiera).
         let e = d2(c, r) + 0.15 * d2(c, *q);
@@ -200,7 +236,11 @@ pub fn distancia(m: &[bool], w: usize, h: usize) -> Vec<f32> {
     let inf = 1e6f32;
     let mut d: Vec<f32> = m.iter().map(|&b| if b { inf } else { 0.0 }).collect();
     let en = |d: &Vec<f32>, x: isize, y: isize| -> f32 {
-        if x < 0 || y < 0 || x >= w as isize || y >= h as isize { 0.0 } else { d[y as usize * w + x as usize] }
+        if x < 0 || y < 0 || x >= w as isize || y >= h as isize {
+            0.0
+        } else {
+            d[y as usize * w + x as usize]
+        }
     };
     for y in 0..h as isize {
         for x in 0..w as isize {
@@ -335,7 +375,11 @@ pub fn esqueleto(m: &[bool], w: usize, h: usize) -> Vec<bool> {
                         continue;
                     }
                     let (p2, p4, p6, p8) = (v[0], v[2], v[4], v[6]);
-                    let ok = if paso == 0 { !(p2 && p4 && p6) && !(p4 && p6 && p8) } else { !(p2 && p4 && p8) && !(p2 && p6 && p8) };
+                    let ok = if paso == 0 {
+                        !(p2 && p4 && p6) && !(p4 && p6 && p8)
+                    } else {
+                        !(p2 && p4 && p8) && !(p2 && p6 && p8)
+                    };
                     if ok {
                         quitar.push(i);
                     }
@@ -358,9 +402,24 @@ pub fn esqueleto(m: &[bool], w: usize, h: usize) -> Vec<bool> {
                 continue;
             }
             let (n, e, so, o) = (s[i - w], s[i + 1], s[i + w], s[i - 1]);
-            let esquina = (n && e && !s[i - w + 1]) || (e && so && !s[i + w + 1]) || (so && o && !s[i + w - 1]) || (o && n && !s[i - w - 1]);
+            let esquina = (n && e && !s[i - w + 1])
+                || (e && so && !s[i + w + 1])
+                || (so && o && !s[i + w - 1])
+                || (o && n && !s[i - w - 1]);
             if esquina {
-                let vecinos = [s[i - w], s[i - w + 1], s[i + 1], s[i + w + 1], s[i + w], s[i + w - 1], s[i - 1], s[i - w - 1]].iter().filter(|&&q| q).count();
+                let vecinos = [
+                    s[i - w],
+                    s[i - w + 1],
+                    s[i + 1],
+                    s[i + w + 1],
+                    s[i + w],
+                    s[i + w - 1],
+                    s[i - 1],
+                    s[i - w - 1],
+                ]
+                .iter()
+                .filter(|&&q| q)
+                .count();
                 if vecinos == 2 {
                     s[i] = false;
                 }
@@ -370,7 +429,16 @@ pub fn esqueleto(m: &[bool], w: usize, h: usize) -> Vec<bool> {
     s
 }
 
-const VECINOS: [(isize, isize); 8] = [(0, -1), (1, 0), (0, 1), (-1, 0), (1, -1), (1, 1), (-1, 1), (-1, -1)];
+const VECINOS: [(isize, isize); 8] = [
+    (0, -1),
+    (1, 0),
+    (0, 1),
+    (-1, 0),
+    (1, -1),
+    (1, 1),
+    (-1, 1),
+    (-1, -1),
+];
 
 fn vecinos_de(s: &[bool], w: usize, h: usize, i: usize) -> Vec<usize> {
     let (x, y) = ((i % w) as isize, (i / w) as isize);
@@ -392,10 +460,20 @@ fn vecinos_de(s: &[bool], w: usize, h: usize, i: usize) -> Vec<usize> {
 /// los anillos sueltos. Cada cadena en centros de pixel. Los cruces (3 o mas
 /// vecinos) se reparten: cada cadena que llega a uno lo incluye como punta.
 pub fn cadenas(s: &[bool], w: usize, h: usize) -> Vec<Vec<P>> {
-    let n_vec: Vec<usize> = (0..w * h).map(|i| if s[i] { vecinos_de(s, w, h, i).len() } else { 0 }).collect();
+    let n_vec: Vec<usize> = (0..w * h)
+        .map(|i| {
+            if s[i] {
+                vecinos_de(s, w, h, i).len()
+            } else {
+                0
+            }
+        })
+        .collect();
     // Nodo: cruce (3 o mas ramas al dar la vuelta) o punta (1). Contar
     // vecinos no vale: en una escalera un pixel tiene 3 y no es cruce.
-    let cruces: Vec<u8> = (0..w * h).map(|i| if s[i] { ramas(s, w, h, i) } else { 0 }).collect();
+    let cruces: Vec<u8> = (0..w * h)
+        .map(|i| if s[i] { ramas(s, w, h, i) } else { 0 })
+        .collect();
     let es_nodo = |i: usize| n_vec[i] != 2 && (cruces[i] != 2 || n_vec[i] < 2);
     let mut visto = vec![false; w * h];
     let centro = |i: usize| ((i % w) as f64 + 0.5, (i / w) as f64 + 0.5);
@@ -420,9 +498,12 @@ pub fn cadenas(s: &[bool], w: usize, h: usize) -> Vec<Vec<P>> {
                 .filter(|&k| k != prev && (es_nodo(k) || !visto[k]))
                 .filter(|&k| k != a || camino.len() > 3)
                 .min_by_key(|&k| {
-                let (dx, dy) = ((k % w) as isize - (cur % w) as isize, (k / w) as isize - (cur / w) as isize);
-                (dx.abs() + dy.abs()) as usize
-            });
+                    let (dx, dy) = (
+                        (k % w) as isize - (cur % w) as isize,
+                        (k / w) as isize - (cur / w) as isize,
+                    );
+                    (dx.abs() + dy.abs()) as usize
+                });
             match sig {
                 Some(k) => {
                     prev = cur;
@@ -480,7 +561,16 @@ pub fn cadenas(s: &[bool], w: usize, h: usize) -> Vec<Vec<P>> {
 /// lleno al dar la vuelta por sus 8 vecinos (el «crossing number»).
 fn ramas(s: &[bool], w: usize, h: usize, i: usize) -> u8 {
     let (x, y) = ((i % w) as isize, (i / w) as isize);
-    const ANILLO: [(isize, isize); 8] = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)];
+    const ANILLO: [(isize, isize); 8] = [
+        (0, -1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+        (0, 1),
+        (-1, 1),
+        (-1, 0),
+        (-1, -1),
+    ];
     let en = |k: usize| {
         let (xx, yy) = (x + ANILLO[k].0, y + ANILLO[k].1);
         xx >= 0 && yy >= 0 && xx < w as isize && yy < h as isize && s[yy as usize * w + xx as usize]

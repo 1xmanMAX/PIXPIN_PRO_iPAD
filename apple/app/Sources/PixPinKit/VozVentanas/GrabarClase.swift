@@ -11,10 +11,12 @@
 //    veces para tirar). Sigue grabando con la pantalla bloqueada o con
 //    otra app delante (el modo de fondo `audio`); una llamada lo para y al
 //    colgar sigue solo.
-// 3. **Guardar**: la nota de voz entra en el chat (`adjuntarGrabacion`) con
-//    el nombre «Clase 25 oct 10:30» y cada foto detras con su minuto en la
-//    descripcion («En el 12:34 de la clase»). El nucleo de Apple no tiene el
-//    enlace `capturas`/`enGrabacion` de Windows: el minuto va escrito.
+// 3. **Guardar**: `Nucleo.guardarClase` deja en el chat lo mismo que
+//    Windows y el Mac: la nota de voz `Clase 24-10 18h05.m4a` y cada foto
+//    detras como captura con su minuto, enlazadas (`capturas` y
+//    `enGrabacion`), asi que sincroniza tal cual y se ve con sus capturas
+//    («Ver con las capturas») en los demas aparatos. El video de la pantalla
+//    de Windows y el Mac no se puede en el iPad (no deja grabar otras apps).
 // 4. **Pasar a texto**, con el dictado del iPad; «Dejarlo sin texto» lo
 //    corta (luego se puede pedir con «Pasar a texto» en la nota).
 
@@ -39,12 +41,12 @@ enum GrabarClase {
     /// El pie de una foto: en que minuto de la clase se hizo.
     static func pie(ms: Int64) -> String { "En el \(FormatoVoz.marca(ms: ms)) de la clase" }
 
-    /// Lo que se dice al acabar (`clase-lista-con-texto`/`-sin-texto`).
+    /// Lo que se dice al acabar (`clase-lista-con-texto`/`-sin-texto`,
+    /// los del Mac).
     static func resumen(fotos: Int, conTexto: Bool) -> String {
-        let n = fotos == 1 ? "1 foto" : "\(fotos) fotos"
-        return conTexto
-            ? "Con \(n) y la transcripción. Ábrela en el chat para verla junto a las imágenes."
-            : "Con \(n). Para el texto, pulsa «Pasar a texto» en la nota del chat."
+        conTexto
+            ? "Con \(fotos) capturas y la transcripción. Ábrela en el chat para verla junto a las imágenes."
+            : "Con \(fotos) capturas. Para el texto, pulsa «Pasar a texto» en la nota del chat."
     }
 }
 
@@ -74,6 +76,8 @@ final class ModeloClase: ObservableObject {
     private var tirarHasta: Date?
     private var pasando: Task<Void, Never>?
     private(set) var guardadaEn: (chat: String, mensaje: String)?
+    /// Las capturas que entraron en el chat (`ClaseGuardada.capturas`).
+    private var guardadas = 0
     var cerrar: (() -> Void)?
 
     init(almacen: Almacen, chat: String) {
@@ -162,34 +166,62 @@ final class ModeloClase: ObservableObject {
         fase = .guardando
         let (almacen, chat, fotos) = (self.almacen, destino, self.fotos)
         let nombreProyecto = nombreDestino
-        let empezo = mic.desde ?? Date()
         _ = Task<Void, Never> {
             guard let nota = await mic.parar() else { return }
-            guard nota.duracionMs >= FormatoVoz.minimoMs else {
+            let corta = nota.duracionMs < FormatoVoz.minimoMs
+            guard !corta || !fotos.isEmpty else {
                 try? FileManager.default.removeItem(at: nota.url)
-                aviso.decir("La grabación salió demasiado corta")
+                aviso.decir("Demasiado corta: mantén pulsado un poco más.")
                 fase = .preparar
                 return
             }
-            let g = GrabacionVoz(rutaOrigen: nota.url.path, duracionMs: nota.duracionMs, picos: nota.picos,
-                                 texto: nil, turnos: [])
-            guard let m = await almacen.adjuntarGrabacion(g, en: chat) else {
-                aviso.decir("No se pudo guardar la clase")
+            // Lo mismo que Windows y el Mac (`Nucleo.guardarClase`): la nota
+            // `Clase 24-10 18h05.m4a`, cada foto como `clase-<ms>-<n>.png` con
+            // su pie y enlazadas (`capturas`, `enGrabacion`). Las fotos van en
+            // PNG, como las capturas de Windows.
+            let carpeta = Ventanita.carpeta("clase")
+            var lista: [CapturaClase] = []
+            for (i, f) in fotos.enumerated() {
+                let datos = f.ext.lowercased() == "png" ? f.datos : (UIImage(data: f.datos)?.pngData() ?? f.datos)
+                let url = carpeta.appendingPathComponent("captura-\(Ventanita.ahoraMs)-\(i + 1).png")
+                guard (try? datos.write(to: url)) != nil else { continue }
+                lista.append(CapturaClase(ms: f.ms, rutaPng: url.path))
+            }
+            let rutaAudio = corta ? nil : nota.url.path
+            let nucleo = almacen.nucleo
+            let desfase = Int64(TimeZone.current.secondsFromGMT()) * 1000
+            let hecho = await Task.detached(priority: .userInitiated) { () -> Result<ClaseGuardada, Error> in
+                Result {
+                    try nucleo.guardarClase(chat: chat, rutaAudio: rutaAudio, duracionMs: nota.duracionMs,
+                                            picos: nota.picos, rutaVideo: nil, capturas: lista,
+                                            desfaseMs: desfase)
+                }
+            }.value
+            try? FileManager.default.removeItem(at: nota.url)
+            for c in lista { try? FileManager.default.removeItem(atPath: c.rutaPng) }
+            guard case let .success(clase) = hecho else {
+                aviso.decir("No se pudo grabar la nota de voz.")
                 fase = .preparar
                 return
             }
-            _ = await almacen.cambiar(mensaje: m.id, en: chat, .nombre(nombre: GrabarClase.nombre(empezo)))
-            for f in fotos {
-                guard let foto = await almacen.adjuntar(datos: f.datos, formato: f.ext, en: chat) else { continue }
-                _ = await almacen.cambiar(mensaje: foto.id, en: chat, .descripcion(texto: GrabarClase.pie(ms: f.ms)))
+            let nuevos = [clase.voz].compactMap { $0 } + clase.capturas
+            if almacen.mensajes[chat] != nil { almacen.anadir(nuevos, en: chat) }
+            await almacen.cargarChats()
+            guardadas = clase.capturas.count
+            guard let voz = clase.voz else {
+                var texto = "Demasiado corta: mantén pulsado un poco más."
+                if guardadas > 0 { texto += " · Lo demás se guardó: \(guardadas) capturas" }
+                aviso.decir(texto)
+                fase = .preparar
+                return
             }
-            guardadaEn = (chat, m.id)
+            ClaseEnElChat.olvidar(chat: chat, mensaje: voz.id)
+            guardadaEn = (chat, voz.id)
             fase = .pasandoATexto
-            let actual = (almacen.mensajes[chat] ?? []).first { $0.id == m.id } ?? m
             pasando = Task<Void, Never> {
-                let bien = await almacen.transcribir(actual, en: chat)
+                let bien = await almacen.transcribir(voz, en: chat)
                 guard !Task.isCancelled else { return }
-                self.acabar(proyecto: nombreProyecto, fotos: fotos.count, conTexto: bien)
+                self.acabar(proyecto: nombreProyecto, fotos: self.guardadas, conTexto: bien)
             }
         }
     }
@@ -198,7 +230,7 @@ final class ModeloClase: ObservableObject {
     func sinTexto() {
         pasando?.cancel()
         pasando = nil
-        acabar(proyecto: nombreDestino, fotos: fotos.count, conTexto: false)
+        acabar(proyecto: nombreDestino, fotos: guardadas, conTexto: false)
     }
 
     private func acabar(proyecto: String, fotos: Int, conTexto: Bool) {

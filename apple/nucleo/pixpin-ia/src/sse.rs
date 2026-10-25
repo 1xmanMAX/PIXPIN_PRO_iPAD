@@ -57,7 +57,10 @@ impl Acumulador {
         let v: Value = serde_json::from_str(datos)
             .map_err(|e| ErrorIa::Protocolo(format!("evento ilegible ({e}): {datos:.120}")))?;
         if let Some(err) = v.get("error") {
-            let m = err.get("message").and_then(Value::as_str).unwrap_or("error del motor");
+            let m = err
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("error del motor");
             return Err(ErrorIa::Protocolo(m.to_string()));
         }
         if let Some(u) = v.get("usage").filter(|u| !u.is_null()) {
@@ -81,17 +84,28 @@ impl Acumulador {
         };
         let delta = eleccion.get("delta").or_else(|| eleccion.get("message"));
         if let Some(d) = delta {
-            if let Some(t) = d.get("content").and_then(Value::as_str).filter(|t| !t.is_empty()) {
+            if let Some(t) = d
+                .get("content")
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty())
+            {
                 self.texto.push_str(t);
                 trozos.push(Trozo::Texto(t.to_string()));
             }
-            if let Some(t) = d.get("reasoning_content").and_then(Value::as_str).filter(|t| !t.is_empty()) {
+            if let Some(t) = d
+                .get("reasoning_content")
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty())
+            {
                 self.pensamiento.push_str(t);
                 trozos.push(Trozo::Pensando(t.to_string()));
             }
             if let Some(Value::Array(lista)) = d.get("tool_calls") {
                 for (pos, l) in lista.iter().enumerate() {
-                    let indice = l.get("index").and_then(Value::as_u64).map_or(pos, |i| i as usize);
+                    let indice = l
+                        .get("index")
+                        .and_then(Value::as_u64)
+                        .map_or(pos, |i| i as usize);
                     if indice > 64 {
                         return Err(ErrorIa::Protocolo("demasiadas llamadas a la vez".into()));
                     }
@@ -107,11 +121,17 @@ impl Acumulador {
                         destino.id = id.to_string();
                     }
                     if let Some(f) = l.get("function") {
-                        if let Some(n) = f.get("name").and_then(Value::as_str).filter(|n| !n.is_empty()) {
+                        if let Some(n) = f
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .filter(|n| !n.is_empty())
+                        {
                             let empezaba = destino.nombre.is_empty();
                             destino.nombre.push_str(n);
                             if empezaba {
-                                trozos.push(Trozo::Llamando { nombre: destino.nombre.clone() });
+                                trozos.push(Trozo::Llamando {
+                                    nombre: destino.nombre.clone(),
+                                });
                             }
                         }
                         if let Some(a) = f.get("arguments").and_then(Value::as_str) {
@@ -197,7 +217,9 @@ mod pruebas {
             vec![
                 Trozo::Texto("Ho".into()),
                 Trozo::Texto("la".into()),
-                Trozo::Llamando { nombre: "grafica".into() }
+                Trozo::Llamando {
+                    nombre: "grafica".into()
+                }
             ]
         );
     }
@@ -216,14 +238,19 @@ mod pruebas {
     #[test]
     fn un_error_del_motor_se_convierte_en_error() {
         let mut a = Acumulador::nuevo();
-        let e = a.meter(b"data: {\"error\":{\"message\":\"contexto lleno\"}}\n").unwrap_err();
+        let e = a
+            .meter(b"data: {\"error\":{\"message\":\"contexto lleno\"}}\n")
+            .unwrap_err();
         assert!(e.to_string().contains("contexto lleno"));
     }
 
     #[test]
     fn json_roto_en_el_flujo_es_error_de_protocolo() {
         let mut a = Acumulador::nuevo();
-        assert!(matches!(a.meter(b"data: {roto\n"), Err(ErrorIa::Protocolo(_))));
+        assert!(matches!(
+            a.meter(b"data: {roto\n"),
+            Err(ErrorIa::Protocolo(_))
+        ));
     }
 
     #[test]
@@ -238,7 +265,8 @@ mod pruebas {
     #[test]
     fn la_respuesta_cortada_lo_dice() {
         let mut a = Acumulador::nuevo();
-        a.meter(b"data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n").unwrap();
+        a.meter(b"data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n")
+            .unwrap();
         assert_eq!(a.respuesta(true).fin, Fin::Cortado);
     }
 }

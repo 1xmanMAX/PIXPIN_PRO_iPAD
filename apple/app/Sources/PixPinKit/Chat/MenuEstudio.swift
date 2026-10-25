@@ -35,8 +35,8 @@ struct EntradasDeEstudio: View {
             } else if CarpetasChat.seOfrece(m), CarpetasChat.vaALaVista(m) {
                 menuDeAnadir
             }
-            // Tarjetas de estudio: de una foto o de una nota.
-            if AnkiChat.sePuede(m) {
+            // Tarjetas de estudio: de una clase grabada, una foto o una nota.
+            if AnkiChat.sePuede(m, c: c) {
                 Button { AnkiChat.enviar(m, c: c) } label: {
                     Label("Enviar a Anki", systemImage: "rectangle.on.rectangle.angled")
                 }
@@ -49,7 +49,7 @@ struct EntradasDeEstudio: View {
     private var menuDeAnadir: some View {
         Menu {
             ForEach(CarpetasChat.delChat(c.cargados), id: \.id) { carpeta in
-                let ya = CarpetasChat.paginas(carpeta).contains { $0.id == m.id }
+                let ya = CarpetasChat.paginas(carpeta).contains(m.id)
                 Button {
                     AccionesCarpeta.anadir(m, a: carpeta, en: c.chat, almacen: c.almacen, avisar: c.avisar)
                 } label: {
@@ -59,10 +59,10 @@ struct EntradasDeEstudio: View {
             }
             Divider()
             Button {
-                let (chat, almacen, m) = (c.chat, c.almacen, m)
+                let (chat, almacen, m, c) = (c.chat, c.almacen, m, c)
                 _ = Task<Void, Never> { @MainActor in
                     guard let carpeta = await AccionesCarpeta.crear(en: chat, con: m, almacen: almacen) else { return }
-                    VistaCarpeta.abrir(chat: chat, carpeta: carpeta.id, almacen: almacen)
+                    c.escritura = .renombrar(carpeta)
                 }
             } label: {
                 Label("Nueva carpeta con esta página", systemImage: "plus")

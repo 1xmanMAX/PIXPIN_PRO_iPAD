@@ -169,7 +169,11 @@ pub fn desde_json(texto: &str) -> Vec<FiguraGuardada> {
             if elementos.is_empty() {
                 return None;
             }
-            let nombre = v.get("nombre").and_then(Value::as_str).unwrap_or("Figura").trim();
+            let nombre = v
+                .get("nombre")
+                .and_then(Value::as_str)
+                .unwrap_or("Figura")
+                .trim();
             Some(FiguraGuardada {
                 id: v
                     .get("id")
@@ -215,6 +219,25 @@ pub fn anadir(ruta: &Path, figura: FiguraGuardada) -> bool {
     guardar(ruta, &lista)
 }
 
+/// El principio de los subgrupos con nombre de una figura («parte:Salida»):
+/// las partes de las figuras de serie, para que quien las mire (la gente o
+/// el asistente) sepa que es cada cosa y la pueda mover o cambiar sola.
+pub const PREFIJO_PARTE: &str = "parte:";
+
+/// **El nombre legible de una parte** por su grupo: «parte:Salida» y
+/// «parte:Salida@g12» (ya estampada) dan «Salida»; otro grupo, `None`.
+pub fn nombre_de_parte(grupo: &str) -> Option<&str> {
+    let resto = grupo.strip_prefix(PREFIJO_PARTE)?;
+    Some(resto.split_once('@').map_or(resto, |(n, _)| n))
+}
+
+/// El grupo de una parte dentro de la figura estampada como `exterior`:
+/// lleva detras el grupo de la figura para que dos copias de la misma no
+/// compartan la «Salida» (los grupos son cadenas: dos iguales son uno).
+pub fn grupo_de_parte(nombre: &str, exterior: &str) -> String {
+    format!("{PREFIJO_PARTE}{nombre}@{exterior}")
+}
+
 /// Estampa la figura **centrada** en `centro`.
 ///
 /// `primer_id` es el identificador libre con el que empezar: la escena es
@@ -246,7 +269,13 @@ pub fn estampar(
         // El grupo de la figura va el ULTIMO de la pila: `groupIds` es una
         // pila donde el ultimo es el mas exterior, asi que desagrupar una vez
         // deshace la estampacion y deja intactos los grupos que la figura ya
-        // traia dentro.
+        // traia dentro. Las partes con nombre se quedan con su nombre, pero
+        // propias de esta copia.
+        for g in &mut e.grupos {
+            if let Some(n) = nombre_de_parte(g) {
+                *g = grupo_de_parte(n, grupo);
+            }
+        }
         e.grupos.push(grupo.to_string());
     }
     piezas
@@ -372,6 +401,27 @@ mod pruebas {
     }
 
     #[test]
+    fn las_partes_con_nombre_se_conservan_y_cada_copia_tiene_las_suyas() {
+        let mut f = guardada();
+        f.elementos[0].grupos = vec!["parte:Salida".into()];
+        let a = estampar(&f, Punto2::nuevo(0.0, 0.0), 1, "g1");
+        let b = estampar(&f, Punto2::nuevo(0.0, 0.0), 9, "g9");
+        assert_eq!(
+            a[0].grupos,
+            vec!["parte:Salida@g1".to_string(), "g1".into()]
+        );
+        assert_ne!(a[0].grupos[0], b[0].grupos[0]);
+        assert_eq!(nombre_de_parte(&a[0].grupos[0]), Some("Salida"));
+        assert_eq!(nombre_de_parte(&b[0].grupos[0]), Some("Salida"));
+        assert_eq!(nombre_de_parte("g1"), None);
+        // Guardada otra vez y estampada, no se le van pegando colas.
+        let mut otra = f.clone();
+        otra.elementos[0].grupos = vec![a[0].grupos[0].clone()];
+        let c = estampar(&otra, Punto2::nuevo(0.0, 0.0), 20, "g20");
+        assert_eq!(c[0].grupos[0], "parte:Salida@g20");
+    }
+
+    #[test]
     fn el_fichero_va_en_el_formato_del_movil_y_vuelve_igual() {
         let mut f = guardada();
         f.elementos[1].figura = Figura::Elipse;
@@ -416,8 +466,13 @@ mod pruebas {
         // piezas que no se entienden. Y el formato viejo del PC se lee.
         assert!(desde_json("no es json").is_empty());
         assert!(desde_json(r#"{"a":1}"#).is_empty());
-        assert!(desde_json(r#"[{"nombre":"vacia","elementos":[]}, 7, {"nombre":"sin"}]"#).is_empty());
-        assert!(desde_json(r#"[{"nombre":"rara","elementos":[{"type":"pixpin-solido-raro"}]}]"#).is_empty());
+        assert!(
+            desde_json(r#"[{"nombre":"vacia","elementos":[]}, 7, {"nombre":"sin"}]"#).is_empty()
+        );
+        assert!(
+            desde_json(r#"[{"nombre":"rara","elementos":[{"type":"pixpin-solido-raro"}]}]"#)
+                .is_empty()
+        );
         let viejo = serde_json::to_string(&vec![guardada()]).unwrap();
         let l = desde_json(&viejo);
         assert_eq!(l.len(), 1);
@@ -437,7 +492,10 @@ mod pruebas {
         assert!(anadir(&ruta, b));
         assert!(anadir(&ruta, a));
         let l = cargar(&ruta);
-        assert_eq!(l.iter().map(|f| f.nombre.as_str()).collect::<Vec<_>>(), ["arbol", "casa"]);
+        assert_eq!(
+            l.iter().map(|f| f.nombre.as_str()).collect::<Vec<_>>(),
+            ["arbol", "casa"]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

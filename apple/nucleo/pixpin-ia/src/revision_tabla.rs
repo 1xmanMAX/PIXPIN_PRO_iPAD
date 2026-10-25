@@ -39,7 +39,11 @@ fn cerca(a: f64, b: f64) -> bool {
 
 /// Un numero como se escribe en la tabla (sin decimales de mas).
 pub fn bonito(x: f64) -> String {
-    if (x - x.round()).abs() < 1e-6 { format!("{}", x.round() as i64) } else { format!("{:.2}", x) }
+    if (x - x.round()).abs() < 1e-6 {
+        format!("{}", x.round() as i64)
+    } else {
+        format!("{:.2}", x)
+    }
 }
 
 fn es_total(fila: &[String]) -> bool {
@@ -60,12 +64,21 @@ pub fn revisar(filas: &[Vec<String>]) -> Vec<Descuadre> {
     let cabecera = (0..columnas).all(|c| numero(celda(0, c)).is_none());
     let nombre = |c: usize| {
         let n = if cabecera { celda(0, c).trim() } else { "" };
-        if n.is_empty() { format!("la columna {}", (b'A' + c as u8) as char) } else { format!("«{n}»") }
+        if n.is_empty() {
+            format!("la columna {}", (b'A' + c as u8) as char)
+        } else {
+            format!("«{n}»")
+        }
     };
-    let datos: Vec<usize> = (usize::from(cabecera)..filas.len()).filter(|&f| !es_total(&filas[f])).collect();
+    let datos: Vec<usize> = (usize::from(cabecera)..filas.len())
+        .filter(|&f| !es_total(&filas[f]))
+        .collect();
     let mut errores = Vec::new();
     // Productos: k = i * j en casi todas las filas con los tres numeros.
-    let mut corregido: Vec<Vec<Option<f64>>> = filas.iter().map(|f| f.iter().map(|c| numero(c)).collect()).collect();
+    let mut corregido: Vec<Vec<Option<f64>>> = filas
+        .iter()
+        .map(|f| f.iter().map(|c| numero(c)).collect())
+        .collect();
     let mut usada = vec![false; columnas];
     for k in 0..columnas {
         let mut mejor: Option<(usize, usize, usize, usize)> = None;
@@ -76,7 +89,11 @@ pub fn revisar(filas: &[Vec<String>]) -> Vec<Descuadre> {
                 }
                 let (mut con, mut bien) = (0, 0);
                 for &f in &datos {
-                    if let (Some(a), Some(b), Some(c)) = (numero(celda(f, i)), numero(celda(f, j)), numero(celda(f, k))) {
+                    if let (Some(a), Some(b), Some(c)) = (
+                        numero(celda(f, i)),
+                        numero(celda(f, j)),
+                        numero(celda(f, k)),
+                    ) {
                         con += 1;
                         bien += usize::from(cerca(a * b, c));
                     }
@@ -89,7 +106,11 @@ pub fn revisar(filas: &[Vec<String>]) -> Vec<Descuadre> {
         let Some((i, j, _, _)) = mejor else { continue };
         usada[k] = true;
         for &f in &datos {
-            if let (Some(a), Some(b), Some(c)) = (numero(celda(f, i)), numero(celda(f, j)), numero(celda(f, k))) {
+            if let (Some(a), Some(b), Some(c)) = (
+                numero(celda(f, i)),
+                numero(celda(f, j)),
+                numero(celda(f, k)),
+            ) {
                 if !cerca(a * b, c) {
                     let d = a * b;
                     corregido[f][k] = Some(d);
@@ -116,7 +137,9 @@ pub fn revisar(filas: &[Vec<String>]) -> Vec<Descuadre> {
     // Totales: la fila «Total» con la suma de su columna.
     for f in (0..filas.len()).filter(|&f| es_total(&filas[f])) {
         for c in 0..columnas {
-            let Some(dice) = numero(celda(f, c)) else { continue };
+            let Some(dice) = numero(celda(f, c)) else {
+                continue;
+            };
             let arriba: Vec<usize> = datos.iter().copied().filter(|&g| g < f).collect();
             let valores: Vec<f64> = arriba.iter().filter_map(|&g| numero(celda(g, c))).collect();
             if valores.len() < 2 {
@@ -130,7 +153,14 @@ pub fn revisar(filas: &[Vec<String>]) -> Vec<Descuadre> {
                     columna: c,
                     dice,
                     deberia: suma,
-                    texto: format!("fila {} ({}): la suma de {} es {}, pero dice {}", f + 1, celda(f, 0).trim(), nombre(c), bonito(suma), bonito(dice)),
+                    texto: format!(
+                        "fila {} ({}): la suma de {} es {}, pero dice {}",
+                        f + 1,
+                        celda(f, 0).trim(),
+                        nombre(c),
+                        bonito(suma),
+                        bonito(dice)
+                    ),
                 });
             } else if usada[c] && !cerca(suma_bien, dice) {
                 errores.push(Descuadre {
@@ -156,7 +186,11 @@ pub fn revisar(filas: &[Vec<String>]) -> Vec<Descuadre> {
 /// `None` si la tabla no tiene cuentas que revisar.
 pub fn para_el_modelo(filas: &[Vec<String>]) -> Option<String> {
     let columnas = filas.iter().map(Vec::len).max().unwrap_or(0);
-    let numeros = filas.iter().flatten().filter(|c| numero(c).is_some()).count();
+    let numeros = filas
+        .iter()
+        .flatten()
+        .filter(|c| numero(c).is_some())
+        .count();
     if filas.len() < 3 || columnas < 3 || numeros < 6 {
         return None;
     }
@@ -166,7 +200,10 @@ pub fn para_el_modelo(filas: &[Vec<String>]) -> Option<String> {
     } else {
         format!(
             "Cuentas comprobadas por PixPin (exactas; no las rehagas): {}.",
-            e.iter().map(|d| d.texto.clone()).collect::<Vec<_>>().join("; ")
+            e.iter()
+                .map(|d| d.texto.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
         )
     })
 }
@@ -176,11 +213,19 @@ mod pruebas {
     use super::*;
 
     fn filas(v: &[&[&str]]) -> Vec<Vec<String>> {
-        v.iter().map(|f| f.iter().map(|c| c.to_string()).collect()).collect()
+        v.iter()
+            .map(|f| f.iter().map(|c| c.to_string()).collect())
+            .collect()
     }
 
     const METRADOS: &[&[&str]] = &[
-        &["Partida", "Unidad", "Metrado", "P. unit. (S/)", "Parcial (S/)"],
+        &[
+            "Partida",
+            "Unidad",
+            "Metrado",
+            "P. unit. (S/)",
+            "Parcial (S/)",
+        ],
         &["Muro de ladrillo KK", "m2", "180", "62.00", "11160.00"],
         &["Tarrajeo de muros", "m2", "120", "28.50", "3240.00"],
         &["Contrapiso e=4cm", "m2", "95", "34.00", "3230.00"],
@@ -209,10 +254,27 @@ mod pruebas {
         assert!(revisar(&bien).is_empty());
         assert!(para_el_modelo(&bien).unwrap().contains("todo cuadra"));
         // Negativo: sin numeros no hay cuentas.
-        assert!(para_el_modelo(&filas(&[&["a", "b", "c"], &["d", "e", "f"], &["g", "h", "i"]])).is_none());
+        assert!(
+            para_el_modelo(&filas(&[
+                &["a", "b", "c"],
+                &["d", "e", "f"],
+                &["g", "h", "i"]
+            ]))
+            .is_none()
+        );
         // Un total mal sumado sin productos.
-        let notas = filas(&[&["Item", "Costo", "x"], &["a", "100", "1"], &["b", "50", "1"], &["c", "25", "1"], &["Total", "180", "3"]]);
+        let notas = filas(&[
+            &["Item", "Costo", "x"],
+            &["a", "100", "1"],
+            &["b", "50", "1"],
+            &["c", "25", "1"],
+            &["Total", "180", "3"],
+        ]);
         let e = revisar(&notas);
-        assert!(e.iter().any(|d| d.columna == 1 && (d.deberia - 175.0).abs() < 1e-6), "{e:?}");
+        assert!(
+            e.iter()
+                .any(|d| d.columna == 1 && (d.deberia - 175.0).abs() < 1e-6),
+            "{e:?}"
+        );
     }
 }

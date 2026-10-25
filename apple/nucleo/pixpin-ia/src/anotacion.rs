@@ -76,7 +76,15 @@ pub enum Clase {
 }
 
 impl Clase {
-    pub const NOMBRES: [&'static str; 7] = ["importante", "paso", "error", "resumen", "definicion", "pregunta", "explicacion"];
+    pub const NOMBRES: [&'static str; 7] = [
+        "importante",
+        "paso",
+        "error",
+        "resumen",
+        "definicion",
+        "pregunta",
+        "explicacion",
+    ];
 
     /// De lo que escribe el modelo (con sus sinonimos habituales).
     pub fn de(s: &str) -> Option<Clase> {
@@ -137,7 +145,10 @@ pub struct Palabra {
 
 impl Palabra {
     pub fn nueva(texto: &str, caja: [f32; 4]) -> Palabra {
-        Palabra { texto: texto.to_string(), caja }
+        Palabra {
+            texto: texto.to_string(),
+            caja,
+        }
     }
 }
 
@@ -151,7 +162,11 @@ pub struct Renglon {
 
 impl Renglon {
     pub fn texto(&self) -> String {
-        self.palabras.iter().map(|p| p.texto.as_str()).collect::<Vec<_>>().join(" ")
+        self.palabras
+            .iter()
+            .map(|p| p.texto.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     pub fn caja(&self) -> Option<[f32; 4]> {
@@ -164,7 +179,12 @@ pub fn union(cajas: impl IntoIterator<Item = [f32; 4]>) -> Option<[f32; 4]> {
     cajas.into_iter().fold(None, |u: Option<[f32; 4]>, c| {
         Some(match u {
             None => c,
-            Some(u) => [u[0].min(c[0]), u[1].min(c[1]), u[2].max(c[2]), u[3].max(c[3])],
+            Some(u) => [
+                u[0].min(c[0]),
+                u[1].min(c[1]),
+                u[2].max(c[2]),
+                u[3].max(c[3]),
+            ],
         })
     })
 }
@@ -224,7 +244,9 @@ impl Pagina {
         let l = self.letra.max(1.0);
         let aire = l * 0.6;
         let minimo = l * colocar::LETRAS_MINIMAS;
-        let col = self.columna().unwrap_or([self.caja[0], self.caja[1], self.caja[0], self.caja[1]]);
+        let col =
+            self.columna()
+                .unwrap_or([self.caja[0], self.caja[1], self.caja[0], self.caja[1]]);
         let (y0, y1) = (self.caja[1] + aire, self.caja[3] - aire);
         let mut v = Vec::new();
         let izq = [self.caja[0] + aire, col[0] - aire];
@@ -232,17 +254,35 @@ impl Pagina {
         // En una hoja de calculo no hay margenes: lo que no se leyo (fuera del
         // rango pedido) tambien son celdas.
         if !self.solo_derecha && izq[1] - izq[0] >= minimo {
-            v.push(colocar::Franja { x0: izq[0], x1: izq[1], y0, y1, lado: colocar::Lado::Izquierda, fuera: false });
+            v.push(colocar::Franja {
+                x0: izq[0],
+                x1: izq[1],
+                y0,
+                y1,
+                lado: colocar::Lado::Izquierda,
+                fuera: false,
+            });
         }
         if !self.solo_derecha && der[1] - der[0] >= minimo {
-            v.push(colocar::Franja { x0: der[0], x1: der[1], y0, y1, lado: colocar::Lado::Derecha, fuera: false });
+            v.push(colocar::Franja {
+                x0: der[0],
+                x1: der[1],
+                y0,
+                y1,
+                lado: colocar::Lado::Derecha,
+                fuera: false,
+            });
         }
         if self.fuera >= minimo {
             let ancho = self.fuera - aire;
             // En una hoja de calculo se puede bajar mas alla de lo usado: una
             // de tres filas no deja sitio ni para una nota (en un PDF no: alli
             // abajo empieza la hoja siguiente).
-            let y1 = if self.solo_derecha { y1.max(y0 + l * 120.0) } else { y1 };
+            let y1 = if self.solo_derecha {
+                y1.max(y0 + l * 120.0)
+            } else {
+                y1
+            };
             v.push(colocar::Franja {
                 x0: self.caja[2] + aire,
                 x1: self.caja[2] + aire + ancho,
@@ -294,8 +334,16 @@ pub fn instrucciones(hoja_de_calculo: bool) -> String {
          por pagina; la mas util primero; no anotes dos veces el mismo trozo; nada obvio ni de relleno. \
          Un «resumen» de la pagina entera lleva de ancla el primer renglon de la pagina (o de la seccion que resume). \
          Si no hay nada que anotar, una sola linea {{\"tipo\":\"nada\",\"nota\":\"por que\"}}.",
-        celdas = if hoja_de_calculo { " o su celda «B4»" } else { "" },
-        l_celdas = if hoja_de_calculo { " (en una hoja de calculo, omitelo)" } else { "" },
+        celdas = if hoja_de_calculo {
+            " o su celda «B4»"
+        } else {
+            ""
+        },
+        l_celdas = if hoja_de_calculo {
+            " (en una hoja de calculo, omitelo)"
+        } else {
+            ""
+        },
         max = MAX_POR_PAGINA,
     )
 }
@@ -365,7 +413,9 @@ fn texto_de(v: &Value, campos: &[&str]) -> Option<String> {
 
 fn numero_de(v: &Value, campos: &[&str]) -> Option<u64> {
     campos.iter().find_map(|c| match v.get(*c) {
-        Some(Value::Number(n)) => n.as_u64().or_else(|| n.as_f64().filter(|x| *x >= 0.0).map(|x| x as u64)),
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .or_else(|| n.as_f64().filter(|x| *x >= 0.0).map(|x| x as u64)),
         Some(Value::String(s)) => s.trim().trim_start_matches(['L', 'l']).parse().ok(),
         _ => None,
     })
@@ -392,9 +442,13 @@ impl Leida {
         }
         Leida::Anotacion(Pedida {
             clase,
-            pagina: numero_de(v, &["pag", "pagina", "page"]).filter(|p| *p >= 1).map(|p| p as usize - 1),
+            pagina: numero_de(v, &["pag", "pagina", "page"])
+                .filter(|p| *p >= 1)
+                .map(|p| p as usize - 1),
             ancla,
-            linea: numero_de(v, &["l", "linea", "renglon"]).filter(|l| *l >= 1).map(|l| l as usize),
+            linea: numero_de(v, &["l", "linea", "renglon"])
+                .filter(|l| *l >= 1)
+                .map(|l| l as usize),
             nota,
             correccion: texto_de(v, &["corr", "correccion", "correcto"]),
             numero: numero_de(v, &["n", "numero", "paso"]).map(|n| n as u32),
@@ -483,7 +537,9 @@ impl Anotador {
             return Err("no hay paginas".into());
         }
         // La pagina que dijo primero; si alli no esta, las demas.
-        let dicha = p.pagina.and_then(|n| self.paginas.iter().position(|x| x.numero == n));
+        let dicha = p
+            .pagina
+            .and_then(|n| self.paginas.iter().position(|x| x.numero == n));
         let mut orden: Vec<usize> = dicha.into_iter().collect();
         orden.extend((0..self.paginas.len()).filter(|i| Some(*i) != dicha));
         let mut hallado = None;
@@ -493,7 +549,11 @@ impl Anotador {
                 ancla::primer_renglon(pag)
             } else {
                 // La linea dicha solo vale en la pagina dicha.
-                let linea = if Some(i) == dicha || dicha.is_none() { p.linea } else { None };
+                let linea = if Some(i) == dicha || dicha.is_none() {
+                    p.linea
+                } else {
+                    None
+                };
                 ancla::anclar(pag, &p.ancla, linea)
             };
             if let Some(a) = a {
@@ -512,8 +572,15 @@ impl Anotador {
         let pag = &self.paginas[i];
         let k = self.puestas + 1;
         let nota = figuras::Nota::de(p, pag.letra);
-        let colocador = self.colocadores.get_mut(&i).expect("un colocador por pagina");
-        let colocada = colocador.colocar(a.union(), &|ancho| nota.alto_con(ancho), nota.ancho_maximo());
+        let colocador = self
+            .colocadores
+            .get_mut(&i)
+            .expect("un colocador por pagina");
+        let colocada = colocador.colocar(
+            a.union(),
+            &|ancho| nota.alto_con(ancho),
+            nota.ancho_maximo(),
+        );
         let Some(colocada) = colocada else {
             self.sin_sitio += 1;
             return Err("no queda sitio en el margen de esa pagina".into());
@@ -522,19 +589,38 @@ impl Anotador {
         let elementos = figuras::de(p.clase, &a, &colocada, &nota, pag, grupos);
         self.puestas = k;
         *self.por_clase.entry(p.clase).or_default() += 1;
-        Ok(Puesta { en: i, clase: p.clase, ancla: p.ancla.clone(), fuera: colocada.franja.fuera, lado: colocada.franja.lado, elementos })
+        Ok(Puesta {
+            en: i,
+            clase: p.clase,
+            ancla: p.ancla.clone(),
+            fuera: colocada.franja.fuera,
+            lado: colocada.franja.lado,
+            elementos,
+        })
     }
 
     /// Lo hecho, contado para el modelo: «5 anotaciones (3 importante, 2
     /// pregunta)».
     pub fn resumen(&self) -> String {
-        let mut partes: Vec<(usize, &str)> = self.por_clase.iter().map(|(c, n)| (*n, c.nombre())).collect();
+        let mut partes: Vec<(usize, &str)> = self
+            .por_clase
+            .iter()
+            .map(|(c, n)| (*n, c.nombre()))
+            .collect();
         partes.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)));
         let detalle: Vec<String> = partes.iter().map(|(n, c)| format!("{n} {c}")).collect();
         let mut s = format!("{} anotaciones ({})", self.puestas, detalle.join(", "));
         if !self.no_encontradas.is_empty() {
-            let lista: Vec<String> = self.no_encontradas.iter().take(4).map(|a| format!("«{a}»")).collect();
-            s.push_str(&format!("; no se encontraron en el texto: {}", lista.join(", ")));
+            let lista: Vec<String> = self
+                .no_encontradas
+                .iter()
+                .take(4)
+                .map(|a| format!("«{a}»"))
+                .collect();
+            s.push_str(&format!(
+                "; no se encontraron en el texto: {}",
+                lista.join(", ")
+            ));
         }
         if self.sin_sitio > 0 {
             s.push_str(&format!("; {} no cupieron en el margen", self.sin_sitio));

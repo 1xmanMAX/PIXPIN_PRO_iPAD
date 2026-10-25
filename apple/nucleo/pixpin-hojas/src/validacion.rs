@@ -67,8 +67,16 @@ impl Validacion {
     /// Los limites de un tipo numerico como texto (`1 a 10`, `>= 5`...) para
     /// mostrarlos; `None` si no hay nada que decir.
     pub fn resumen(&self) -> Option<String> {
-        let (a, b) = (self.formula1.as_str(), self.formula2.as_deref().unwrap_or(""));
-        if a.is_empty() || matches!(self.tipo, TipoValidacion::Lista | TipoValidacion::Personalizada | TipoValidacion::Cualquiera) {
+        let (a, b) = (
+            self.formula1.as_str(),
+            self.formula2.as_deref().unwrap_or(""),
+        );
+        if a.is_empty()
+            || matches!(
+                self.tipo,
+                TipoValidacion::Lista | TipoValidacion::Personalizada | TipoValidacion::Cualquiera
+            )
+        {
             return None;
         }
         Some(match self.operador.as_str() {
@@ -94,7 +102,12 @@ pub fn origen_de(f: &str) -> Option<OrigenLista> {
     if let Some(interior) = f.strip_prefix('"') {
         // Literal: las comillas dobles internas van duplicadas.
         let interior = interior.strip_suffix('"')?;
-        let valores: Vec<String> = interior.replace("\"\"", "\"").split(',').map(|s| s.trim().to_string()).take(MAX_VALORES).collect();
+        let valores: Vec<String> = interior
+            .replace("\"\"", "\"")
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .take(MAX_VALORES)
+            .collect();
         return Some(OrigenLista::Literal(valores));
     }
     let (hoja, ref_) = match f.rfind('!') {
@@ -121,14 +134,22 @@ pub fn leer(raiz: &Nodo) -> Vec<Validacion> {
     let mut v = Vec::new();
     for n in nodos.into_iter().take(MAX_REGLAS) {
         // En x14 el sqref es un hijo (`xm:sqref`); en la normal, un atributo.
-        let sq = n.attr("sqref").map(str::to_string).or_else(|| n.hijo("sqref").map(|s| s.texto.clone())).unwrap_or_default();
+        let sq = n
+            .attr("sqref")
+            .map(str::to_string)
+            .or_else(|| n.hijo("sqref").map(|s| s.texto.clone()))
+            .unwrap_or_default();
         let rangos: Vec<Rango> = sq.split_whitespace().filter_map(Rango::leer).collect();
         if rangos.is_empty() {
             continue;
         }
         let formula = |nombre: &str| -> Option<String> {
             let f = n.hijo(nombre)?;
-            let t = f.hijo("f").map(|x| x.texto.as_str()).unwrap_or(f.texto.as_str()).trim();
+            let t = f
+                .hijo("f")
+                .map(|x| x.texto.as_str())
+                .unwrap_or(f.texto.as_str())
+                .trim();
             (!t.is_empty()).then(|| t.to_string())
         };
         let tipo = match n.attr("type").unwrap_or("none") {
@@ -164,15 +185,30 @@ pub const MAX_MENU: usize = 500;
 /// formateado: los literales tal cual, o las celdas del rango (de esta hoja
 /// o de otra del libro, que se lee solo hasta la fila que hace falta). Los
 /// vacios se saltan. Una formula que no se sabe resolver da una lista vacia.
-pub fn valores_lista(libro: &crate::libro::Libro, actual: &crate::hoja::Hoja, v: &Validacion) -> Vec<String> {
+pub fn valores_lista(
+    libro: &crate::libro::Libro,
+    actual: &crate::hoja::Hoja,
+    v: &Validacion,
+) -> Vec<String> {
     match v.origen_lista() {
-        Some(OrigenLista::Literal(l)) => l.into_iter().filter(|s| !s.is_empty()).take(MAX_MENU).collect(),
+        Some(OrigenLista::Literal(l)) => l
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .take(MAX_MENU)
+            .collect(),
         Some(OrigenLista::Rango { hoja, rango }) => {
             let otra;
-            let h = match hoja.as_deref().filter(|n| !n.eq_ignore_ascii_case(&actual.nombre)) {
+            let h = match hoja
+                .as_deref()
+                .filter(|n| !n.eq_ignore_ascii_case(&actual.nombre))
+            {
                 None => actual,
                 Some(n) => {
-                    let Some(i) = libro.hojas.iter().position(|h| h.nombre.eq_ignore_ascii_case(n)) else {
+                    let Some(i) = libro
+                        .hojas
+                        .iter()
+                        .position(|h| h.nombre.eq_ignore_ascii_case(n))
+                    else {
                         return Vec::new();
                     };
                     let mut h = libro.abrir_hoja(i);
@@ -182,10 +218,16 @@ pub fn valores_lista(libro: &crate::libro::Libro, actual: &crate::hoja::Hoja, v:
                 }
             };
             let mut v = Vec::new();
-            'filas: for f in rango.fila0..=rango.fila1.min(rango.fila0.saturating_add(MAX_MENU as u32 * 4)) {
+            'filas: for f in rango.fila0
+                ..=rango
+                    .fila1
+                    .min(rango.fila0.saturating_add(MAX_MENU as u32 * 4))
+            {
                 for c in rango.col0..=rango.col1.min(rango.col0 + 16) {
                     let Some(celda) = h.celda(f, c) else { continue };
-                    let Some(t) = libro.contenido(h, celda).map(|c| c.mostrado.texto) else { continue };
+                    let Some(t) = libro.contenido(h, celda).map(|c| c.mostrado.texto) else {
+                        continue;
+                    };
                     if !t.is_empty() {
                         v.push(t);
                         if v.len() >= MAX_MENU {
@@ -221,7 +263,14 @@ mod pruebas {
         assert!(r.afecta(5, 1) && r.afecta(3, 3) && !r.afecta(0, 0));
         assert!(r.flecha && r.permitir_vacio);
         assert_eq!(r.titulo, "Estado");
-        assert_eq!(r.origen_lista(), Some(OrigenLista::Literal(vec!["Abierto".into(), "Cerrado".into(), "En curso".into()])));
+        assert_eq!(
+            r.origen_lista(),
+            Some(OrigenLista::Literal(vec![
+                "Abierto".into(),
+                "Cerrado".into(),
+                "En curso".into()
+            ]))
+        );
     }
 
     #[test]
@@ -232,10 +281,43 @@ mod pruebas {
             <dataValidation type="list" sqref="A3"><formula1>$C$1:$C$4</formula1></dataValidation></dataValidations></worksheet>"#,
         );
         assert_eq!(v.len(), 3);
-        assert_eq!(v[0].origen_lista(), Some(OrigenLista::Rango { hoja: Some("Listas".into()), rango: Rango { fila0: 0, col0: 0, fila1: 4, col1: 0 } }));
-        assert_eq!(v[1].origen_lista(), Some(OrigenLista::Rango { hoja: Some("Mis datos".into()), rango: Rango { fila0: 0, col0: 1, fila1: 2, col1: 1 } }));
+        assert_eq!(
+            v[0].origen_lista(),
+            Some(OrigenLista::Rango {
+                hoja: Some("Listas".into()),
+                rango: Rango {
+                    fila0: 0,
+                    col0: 0,
+                    fila1: 4,
+                    col1: 0
+                }
+            })
+        );
+        assert_eq!(
+            v[1].origen_lista(),
+            Some(OrigenLista::Rango {
+                hoja: Some("Mis datos".into()),
+                rango: Rango {
+                    fila0: 0,
+                    col0: 1,
+                    fila1: 2,
+                    col1: 1
+                }
+            })
+        );
         assert!(!v[1].flecha, "showDropDown=1 oculta la flecha");
-        assert_eq!(v[2].origen_lista(), Some(OrigenLista::Rango { hoja: None, rango: Rango { fila0: 0, col0: 2, fila1: 3, col1: 2 } }));
+        assert_eq!(
+            v[2].origen_lista(),
+            Some(OrigenLista::Rango {
+                hoja: None,
+                rango: Rango {
+                    fila0: 0,
+                    col0: 2,
+                    fila1: 3,
+                    col1: 2
+                }
+            })
+        );
     }
 
     #[test]
@@ -261,7 +343,10 @@ mod pruebas {
         );
         assert_eq!(v.len(), 1);
         assert!(v[0].afecta(2, 5));
-        assert!(matches!(v[0].origen_lista(), Some(OrigenLista::Rango { .. })));
+        assert!(matches!(
+            v[0].origen_lista(),
+            Some(OrigenLista::Rango { .. })
+        ));
     }
 
     #[test]
@@ -277,11 +362,20 @@ mod pruebas {
             .is_empty()
         );
         // Formulas raras: no se resuelven, pero no rompen.
-        assert_eq!(origen_de("INDIRECT(\"A\"&B1)"), Some(OrigenLista::Otro("INDIRECT(\"A\"&B1)".into())));
-        assert_eq!(origen_de("MiNombre"), Some(OrigenLista::Otro("MiNombre".into())));
+        assert_eq!(
+            origen_de("INDIRECT(\"A\"&B1)"),
+            Some(OrigenLista::Otro("INDIRECT(\"A\"&B1)".into()))
+        );
+        assert_eq!(
+            origen_de("MiNombre"),
+            Some(OrigenLista::Otro("MiNombre".into()))
+        );
         assert_eq!(origen_de("\"sin cerrar"), None);
         assert_eq!(origen_de(""), None);
-        assert_eq!(origen_de("=Hoja!!!"), Some(OrigenLista::Otro("Hoja!!!".into())));
+        assert_eq!(
+            origen_de("=Hoja!!!"),
+            Some(OrigenLista::Otro("Hoja!!!".into()))
+        );
         // Tipo desconocido -> cualquiera, sin lista.
         let v = reglas(r#"<worksheet><dataValidation type="inventado" sqref="A1"/></worksheet>"#);
         assert_eq!(v[0].tipo, TipoValidacion::Cualquiera);

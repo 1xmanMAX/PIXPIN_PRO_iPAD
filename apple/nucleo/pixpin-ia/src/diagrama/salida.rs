@@ -17,14 +17,22 @@ fn hex(c: [u8; 3]) -> String {
 }
 
 fn color(c: [u8; 3]) -> ColorRgba {
-    ColorRgba::opaco(c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0)
+    ColorRgba::opaco(
+        c[0] as f32 / 255.0,
+        c[1] as f32 / 255.0,
+        c[2] as f32 / 255.0,
+    )
 }
 
 /// Lo casi negro, negro del lienzo (el antialias lo deja gris oscuro).
 fn limpio(c: [u8; 3]) -> [u8; 3] {
     let max = *c.iter().max().unwrap_or(&0) as i32;
     let min = *c.iter().min().unwrap_or(&0) as i32;
-    if max < 90 && max - min < 30 { [30, 30, 30] } else { c }
+    if max < 90 && max - min < 30 {
+        [30, 30, 30]
+    } else {
+        c
+    }
 }
 
 fn estilo(e: Estilo) -> EstiloTrazo {
@@ -43,7 +51,13 @@ fn grosor(g: f64, escala: f64) -> f32 {
 /// **Los elementos del diagrama** en la fabrica: el pixel `(x, y)` del
 /// recorte cae en `origen + (x, y) * escala`. Debajo las regiones, luego
 /// los trazos, los puntos y encima los rotulos.
-pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut Fabrica, familia: &str) {
+pub(crate) fn elementos(
+    d: &Diagrama,
+    origen: (f64, f64),
+    escala: f64,
+    f: &mut Fabrica,
+    familia: &str,
+) {
     let a = |p: (f64, f64)| (origen.0 + p.0 * escala, origen.1 + p.1 * escala);
     let ap = |p: (f64, f64)| {
         let q = a(p);
@@ -51,7 +65,11 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
     };
     for r in &d.regiones {
         let contorno: Vec<(f64, f64)> = r.contorno.iter().map(|&p| a(p)).collect();
-        let huecos: Vec<Vec<(f64, f64)>> = r.huecos.iter().map(|h| h.iter().map(|&p| a(p)).collect()).collect();
+        let huecos: Vec<Vec<(f64, f64)>> = r
+            .huecos
+            .iter()
+            .map(|h| h.iter().map(|&p| a(p)).collect())
+            .collect();
         let c = hex(r.color);
         f.region(&contorno, &huecos, &c, &c);
         if let Some(v) = f.salida.last_mut() {
@@ -60,7 +78,12 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
         }
     }
     let mut piezas: Vec<Elemento> = Vec::new();
-    let base = |c: [u8; 3], g: f64| Elemento { trazo: color(limpio(c)), grosor: grosor(g, escala), rugosidad: 0.0, ..Default::default() };
+    let base = |c: [u8; 3], g: f64| Elemento {
+        trazo: color(limpio(c)),
+        grosor: grosor(g, escala),
+        rugosidad: 0.0,
+        ..Default::default()
+    };
     // Con lo que estila un trazo del diagrama (color, grosor, sin temblor).
     let estilar = |mut e: Elemento, c: [u8; 3], g: f64| {
         let b = base(c, g);
@@ -88,7 +111,11 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
     for o in &d.ovalos {
         let (cx, cy) = a(o.c);
         let mut e = base(o.color, o.grosor);
-        e.figura = if o.rombo { Figura::Rombo } else { Figura::Elipse };
+        e.figura = if o.rombo {
+            Figura::Rombo
+        } else {
+            Figura::Elipse
+        };
         e.x = (cx - o.rx * escala) as f32;
         e.y = (cy - o.ry * escala) as f32;
         e.ancho = (2.0 * o.rx * escala) as f32;
@@ -115,13 +142,26 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
     for arco in &d.arcos {
         let c = ap(arco.c);
         let r = (arco.r * escala) as f32;
-        let e = if arco.entera() { ge::circunferencia(c, r) } else { ge::arco(c, r, arco.inicio as f32, arco.barrido as f32) };
+        let e = if arco.entera() {
+            ge::circunferencia(c, r)
+        } else {
+            ge::arco(c, r, arco.inicio as f32, arco.barrido as f32)
+        };
         let mut e = estilar(e, arco.color, arco.grosor);
         e.estilo = estilo(arco.estilo);
         piezas.push(e);
     }
     // La punta como en el papel: abierta (dos rayas) o rellena.
-    let punta = |p: (f64, f64)| if d.puntas_abiertas.iter().any(|&q| super::ajuste::dist(p, q) <= 3.0) { TipoPunta::Flecha } else { TipoPunta::Triangulo };
+    let punta = |p: (f64, f64)| {
+        if d.puntas_abiertas
+            .iter()
+            .any(|&q| super::ajuste::dist(p, q) <= 3.0)
+        {
+            TipoPunta::Flecha
+        } else {
+            TipoPunta::Triangulo
+        }
+    };
     for s in &d.segmentos {
         let puntos = vec![ap(s.a), ap(s.b)];
         let mut e = base(s.color, s.grosor);
@@ -133,8 +173,16 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
         e.figura = if s.flecha_a || s.flecha_b {
             Figura::Flecha {
                 puntos,
-                punta_inicio: if s.flecha_a { punta(s.a) } else { TipoPunta::Ninguna },
-                punta_fin: if s.flecha_b { punta(s.b) } else { TipoPunta::Ninguna },
+                punta_inicio: if s.flecha_a {
+                    punta(s.a)
+                } else {
+                    TipoPunta::Ninguna
+                },
+                punta_fin: if s.flecha_b {
+                    punta(s.b)
+                } else {
+                    TipoPunta::Ninguna
+                },
                 codos: false,
             }
         } else {
@@ -151,18 +199,41 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
         e.grosor = ((p.r * escala / 1.6).max(1.0)) as f32;
         e.x = x as f32;
         e.y = y as f32;
-        e.figura = Figura::Punto { letra: String::new(), angulo: 0.0, radio: 14.0 };
+        e.figura = Figura::Punto {
+            letra: String::new(),
+            angulo: 0.0,
+            radio: 14.0,
+        };
         piezas.push(e);
     }
-    let k = pixpin_motor2d::texto::interlineado_de(familia).unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
+    let k = pixpin_motor2d::texto::interlineado_de(familia)
+        .unwrap_or(pixpin_motor2d::texto::INTERLINEADO) as f64;
     for r in &d.rotulos {
-        let c = crate::hoja::Caja::nueva(origen.0 + r.caja.x * escala, origen.1 + r.caja.y * escala, r.caja.w * escala, r.caja.h * escala);
+        let c = crate::hoja::Caja::nueva(
+            origen.0 + r.caja.x * escala,
+            origen.1 + r.caja.y * escala,
+            r.caja.w * escala,
+            r.caja.h * escala,
+        );
         // Una letra suelta mide su alto de mayuscula (~0,7 de la letra); una
         // palabra del OCR, el renglon.
         // (Varias letras sueltas leidas juntas miden como un renglon.)
-        let tam = if r.letra_suelta && r.texto.chars().count() <= 2 { c.h / 0.72 } else { c.h * 1.05 };
+        let tam = if r.letra_suelta && r.texto.chars().count() <= 2 {
+            c.h / 0.72
+        } else {
+            c.h * 1.05
+        };
         let tam = ((tam * 2.0).round() / 2.0).max(6.0);
-        piezas.push(crate::hoja::montaje::un_texto(&r.texto, c.x, c.cy() - tam * k / 2.0, tam, familia, r.negrita, Alineacion::Izquierda, r.color.map(limpio)));
+        piezas.push(crate::hoja::montaje::un_texto(
+            &r.texto,
+            c.x,
+            c.cy() - tam * k / 2.0,
+            tam,
+            familia,
+            r.negrita,
+            Alineacion::Izquierda,
+            r.color.map(limpio),
+        ));
     }
     f.de_motor(&piezas);
     for v in f.salida.iter_mut() {
@@ -174,15 +245,24 @@ pub(crate) fn elementos(d: &Diagrama, origen: (f64, f64), escala: f64, f: &mut F
 
 /// **Los elementos del diagrama**, en su propio grupo: `origen` y `escala`
 /// llevan el recorte al lienzo.
-pub fn a_elementos(d: &Diagrama, origen: (f64, f64), escala: f64, semilla: u64, familia: &str) -> Vec<serde_json::Value> {
+pub fn a_elementos(
+    d: &Diagrama,
+    origen: (f64, f64),
+    escala: f64,
+    semilla: u64,
+    familia: &str,
+) -> Vec<serde_json::Value> {
     let mut f = Fabrica::nueva((0.0, 0.0), semilla);
     f.grupo = Some(f.nombre_de_grupo("diagrama"));
     elementos(d, origen, escala, &mut f, familia);
     f.salida
 }
 
-
 /// El borde de una marca: su color, mas oscuro.
 fn oscuro(c: [u8; 3]) -> [u8; 3] {
-    [(c[0] as f32 * 0.7) as u8, (c[1] as f32 * 0.7) as u8, (c[2] as f32 * 0.7) as u8]
+    [
+        (c[0] as f32 * 0.7) as u8,
+        (c[1] as f32 * 0.7) as u8,
+        (c[2] as f32 * 0.7) as u8,
+    ]
 }

@@ -23,7 +23,9 @@ use pixpin_docs::xml::Nodo;
 
 use crate::dml::{self, Contexto};
 use crate::medidor::Medidor;
-use crate::pagina::{Color, Discontinuo, Elemento, Figura, Letra, Rect, Relleno, Texto, Tramo, Trazo};
+use crate::pagina::{
+    Color, Discontinuo, Elemento, Figura, Letra, Rect, Relleno, Texto, Tramo, Trazo,
+};
 use crate::paquete::{Paquete, Relaciones, attr_num, emu};
 use crate::tema;
 
@@ -66,27 +68,40 @@ pub enum Agrupacion {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Clase {
     /// Columnas (`horizontal: false`) o barras.
-    Barras { horizontal: bool },
+    Barras {
+        horizontal: bool,
+    },
     Lineas,
     Area,
     /// Circular (`agujero` 0) o anillo (`agujero`: fraccion del radio).
     /// `primer_angulo` en grados, desde las doce y en el sentido del reloj.
-    Circular { agujero: f32, primer_angulo: f32 },
+    Circular {
+        agujero: f32,
+        primer_angulo: f32,
+    },
     Dispersion,
     Burbuja,
-    Radar { relleno: bool },
+    Radar {
+        relleno: bool,
+    },
 }
 
 impl Clase {
     fn cartesiana(&self) -> bool {
-        matches!(self, Clase::Barras { .. } | Clase::Lineas | Clase::Area | Clase::Dispersion | Clase::Burbuja)
+        matches!(
+            self,
+            Clase::Barras { .. } | Clase::Lineas | Clase::Area | Clase::Dispersion | Clase::Burbuja
+        )
     }
     fn xy(&self) -> bool {
         matches!(self, Clase::Dispersion | Clase::Burbuja)
     }
     /// En la leyenda: una caja de color (si no, una raya con marcador).
     fn muestra_caja(&self) -> bool {
-        !matches!(self, Clase::Lineas | Clase::Dispersion | Clase::Radar { relleno: false })
+        !matches!(
+            self,
+            Clase::Lineas | Clase::Dispersion | Clase::Radar { relleno: false }
+        )
     }
 }
 
@@ -102,7 +117,12 @@ pub struct EstiloTexto {
 
 impl EstiloTexto {
     fn letra(&self) -> Letra {
-        Letra { familia: Arc::from(self.familia.as_str()), tam: self.tam, negrita: self.negrita, cursiva: self.cursiva }
+        Letra {
+            familia: Arc::from(self.familia.as_str()),
+            tam: self.tam,
+            negrita: self.negrita,
+            cursiva: self.cursiva,
+        }
     }
 }
 
@@ -350,7 +370,12 @@ pub fn de_datos(
 ) -> Option<Vec<Elemento>> {
     let uri = datos.atributo("uri");
     if es_grafico_nuevo(uri) {
-        return Some(aviso(ancho, alto, "Gráfico de un tipo nuevo de Office: sin vista previa", medidor));
+        return Some(aviso(
+            ancho,
+            alto,
+            "Gráfico de un tipo nuevo de Office: sin vista previa",
+            medidor,
+        ));
     }
     if !es_grafico(uri) {
         return None;
@@ -360,7 +385,10 @@ pub fn de_datos(
         let r = c.atributo_con_prefijo("r", "id");
         if r.is_empty() { c.atributo("id") } else { r }
     });
-    let raiz = rid.and_then(|r| rels.get(r)).filter(|r| !r.externa).and_then(|r| paquete.xml(&r.destino));
+    let raiz = rid
+        .and_then(|r| rels.get(r))
+        .filter(|r| !r.externa)
+        .and_then(|r| paquete.xml(&r.destino));
     Some(match raiz.as_ref().and_then(|r| leer(r, ctx)) {
         Some(g) => pintar(&g, ancho, alto, medidor),
         None => aviso(ancho, alto, "Gráfico sin datos que se puedan leer", medidor),
@@ -374,7 +402,14 @@ pub fn rama_alternativa(ac: &Nodo) -> Option<&Nodo> {
     let eleccion = ac.hijo("Choice");
     let respaldo = ac.hijo("Fallback");
     match eleccion {
-        Some(c) if respaldo.is_some() && c.descendientes("graphicData").iter().any(|d| es_grafico_nuevo(d.atributo("uri"))) => respaldo,
+        Some(c)
+            if respaldo.is_some()
+                && c.descendientes("graphicData")
+                    .iter()
+                    .any(|d| es_grafico_nuevo(d.atributo("uri"))) =>
+        {
+            respaldo
+        }
         Some(c) => Some(c),
         None => respaldo,
     }
@@ -388,9 +423,19 @@ pub fn aviso(ancho: f32, alto: f32, texto: &str, medidor: &dyn Medidor) -> Vec<E
     let mut els = vec![Elemento::Rect {
         rect: Rect::nuevo(0.0, 0.0, ancho, alto),
         relleno: Some(Relleno::Solido(Color::rgb(0xF2, 0xF2, 0xF2))),
-        borde: Some(Trazo { color: GRIS_EJE, grosor: 0.75, discontinuo: Discontinuo::Rayas }),
+        borde: Some(Trazo {
+            color: GRIS_EJE,
+            grosor: 0.75,
+            discontinuo: Discontinuo::Rayas,
+        }),
     }];
-    let mut estilo = EstiloTexto { familia: "Segoe UI".into(), tam: 10.0, negrita: false, cursiva: false, color: GRIS_TEXTO };
+    let mut estilo = EstiloTexto {
+        familia: "Segoe UI".into(),
+        tam: 10.0,
+        negrita: false,
+        cursiva: false,
+        color: GRIS_TEXTO,
+    };
     let p = Pincel { m: medidor };
     let w = p.ancho(texto, &estilo);
     if w > ancho - 8.0 && w > 0.0 {
@@ -399,7 +444,11 @@ pub fn aviso(ancho: f32, alto: f32, texto: &str, medidor: &dyn Medidor) -> Vec<E
     if let Some((e, _)) = p.texto(texto, &estilo, ancho / 2.0, alto / 2.0, 0.5, 0.5) {
         els.push(e);
     }
-    vec![Elemento::Grupo { transformada: IDENTIDAD, recorte: Some(Rect::nuevo(0.0, 0.0, ancho, alto)), elementos: els }]
+    vec![Elemento::Grupo {
+        transformada: IDENTIDAD,
+        recorte: Some(Rect::nuevo(0.0, 0.0, ancho, alto)),
+        elementos: els,
+    }]
 }
 
 // ---------------------------------------------------------------------
@@ -416,11 +465,14 @@ fn bandera(padre: &Nodo, k: &str) -> bool {
 }
 
 fn num_hijo(n: &Nodo, k: &str) -> Option<f64> {
-    n.hijo(k).and_then(|x| x.valor().trim().parse::<f64>().ok()).filter(|v| v.is_finite())
+    n.hijo(k)
+        .and_then(|x| x.valor().trim().parse::<f64>().ok())
+        .filter(|v| v.is_finite())
 }
 
 fn entero_hijo(n: &Nodo, k: &str) -> Option<usize> {
-    n.hijo(k).and_then(|x| x.valor().trim().parse::<usize>().ok())
+    n.hijo(k)
+        .and_then(|x| x.valor().trim().parse::<usize>().ok())
 }
 
 fn aplicar_rpr(e: &mut EstiloTexto, rpr: &Nodo, ctx: Contexto) {
@@ -458,7 +510,11 @@ fn estilo_de(txpr: Option<&Nodo>, base: &EstiloTexto, ctx: Contexto) -> EstiloTe
         if let Some(d) = p.hijo("pPr").and_then(|x| x.hijo("defRPr")) {
             aplicar_rpr(&mut e, d, ctx);
         }
-        if let Some(r) = p.elementos().find(|x| x.nombre == "r").and_then(|r| r.hijo("rPr")) {
+        if let Some(r) = p
+            .elementos()
+            .find(|x| x.nombre == "r")
+            .and_then(|r| r.hijo("rPr"))
+        {
             aplicar_rpr(&mut e, r, ctx);
         }
     }
@@ -468,12 +524,23 @@ fn estilo_de(txpr: Option<&Nodo>, base: &EstiloTexto, ctx: Contexto) -> EstiloTe
 /// Los puntos de una cache (`numCache`, `strCache`, `numLit`, `strLit` o el
 /// primer nivel de `multiLvlStrCache`), por indice, y su `formatCode`.
 fn cache(n: &Nodo) -> (Vec<Option<String>>, String) {
-    let simple = ["numCache", "strCache", "numLit", "strLit"].iter().find_map(|k| n.descendientes(k).into_iter().next()).map(|c| (c, c));
-    let multi = || n.descendientes("multiLvlStrCache").into_iter().next().and_then(|m| m.hijo("lvl").map(|l| (l, m)));
+    let simple = ["numCache", "strCache", "numLit", "strLit"]
+        .iter()
+        .find_map(|k| n.descendientes(k).into_iter().next())
+        .map(|c| (c, c));
+    let multi = || {
+        n.descendientes("multiLvlStrCache")
+            .into_iter()
+            .next()
+            .and_then(|m| m.hijo("lvl").map(|l| (l, m)))
+    };
     let Some((c, padre)) = simple.or_else(multi) else {
         return (Vec::new(), String::new());
     };
-    let formato = c.hijo("formatCode").map(|f| f.texto().trim().to_string()).unwrap_or_default();
+    let formato = c
+        .hijo("formatCode")
+        .map(|f| f.texto().trim().to_string())
+        .unwrap_or_default();
     let cuenta = entero_hijo(padre, "ptCount").unwrap_or(0).min(MAX_PUNTOS);
     let mut v: Vec<Option<String>> = vec![None; cuenta];
     for (k, pt) in c.elementos().filter(|e| e.nombre == "pt").enumerate() {
@@ -492,7 +559,15 @@ fn cache(n: &Nodo) -> (Vec<Option<String>>, String) {
 /// Los numeros de una cache: lo que no es un numero queda como hueco.
 pub fn numeros(n: &Nodo) -> (Vec<Option<f64>>, String) {
     let (v, f) = cache(n);
-    (v.into_iter().map(|s| s.and_then(|s| s.trim().parse::<f64>().ok()).filter(|x| x.is_finite())).collect(), f)
+    (
+        v.into_iter()
+            .map(|s| {
+                s.and_then(|s| s.trim().parse::<f64>().ok())
+                    .filter(|x| x.is_finite())
+            })
+            .collect(),
+        f,
+    )
 }
 
 fn es_cache_numerica(n: &Nodo) -> bool {
@@ -514,18 +589,33 @@ fn texto_de_tx(tx: &Nodo) -> Option<String> {
 fn lineas_rich(rich: &Nodo) -> Vec<String> {
     rich.elementos()
         .filter(|e| e.nombre == "p")
-        .map(|p| p.elementos().filter(|r| r.nombre == "r" || r.nombre == "fld").map(|r| r.hijo("t").map(|t| t.texto()).unwrap_or_default()).collect())
+        .map(|p| {
+            p.elementos()
+                .filter(|r| r.nombre == "r" || r.nombre == "fld")
+                .map(|r| r.hijo("t").map(|t| t.texto()).unwrap_or_default())
+                .collect()
+        })
         .collect()
 }
 
 fn manual(n: Option<&Nodo>) -> Option<Manual> {
     let m = n?.hijo("layout")?.hijo("manualLayout")?;
-    let modo = |k: &str| m.hijo(k).map(|x| x.valor().to_string()).unwrap_or_else(|| "factor".into());
+    let modo = |k: &str| {
+        m.hijo(k)
+            .map(|x| x.valor().to_string())
+            .unwrap_or_else(|| "factor".into())
+    };
     if modo("xMode") != "edge" || modo("yMode") != "edge" {
         return None;
     }
     let f = |k: &str| num_hijo(m, k).map(|v| (v as f32).clamp(0.0, 1.0));
-    Some(Manual { interior: m.hijo("layoutTarget").map(|t| t.valor()) == Some("inner"), x: f("x")?, y: f("y")?, w: f("w"), h: f("h") })
+    Some(Manual {
+        interior: m.hijo("layoutTarget").map(|t| t.valor()) == Some("inner"),
+        x: f("x")?,
+        y: f("y")?,
+        w: f("w"),
+        h: f("h"),
+    })
 }
 
 fn leer_titulo(t: &Nodo, base: &EstiloTexto, factor: f32, ctx: Contexto, defecto: &str) -> Titulo {
@@ -544,7 +634,11 @@ fn leer_titulo(t: &Nodo, base: &EstiloTexto, factor: f32, ctx: Contexto, defecto
     if lineas.iter().all(|l| l.trim().is_empty()) {
         lineas = vec![defecto.to_string()];
     }
-    Titulo { lineas, estilo: est, manual: manual(Some(t)) }
+    Titulo {
+        lineas,
+        estilo: est,
+        manual: manual(Some(t)),
+    }
 }
 
 fn leer_etiquetas(d: &Nodo, base: &EstiloTexto, ctx: Contexto) -> Etiquetas {
@@ -560,12 +654,25 @@ fn leer_etiquetas(d: &Nodo, base: &EstiloTexto, ctx: Contexto) -> Etiquetas {
         categoria: bandera(d, "showCatName"),
         serie: bandera(d, "showSerName"),
         borrar: bandera(d, "delete"),
-        posicion: d.hijo("dLblPos").map(|p| p.valor().to_string()).unwrap_or_default(),
-        formato: nf.filter(|_| !vinculado).map(|n| n.atributo("formatCode").to_string()).filter(|s| !s.is_empty()),
-        separador: d.hijo("separator").map(|s| s.texto()).unwrap_or_else(|| ", ".into()),
+        posicion: d
+            .hijo("dLblPos")
+            .map(|p| p.valor().to_string())
+            .unwrap_or_default(),
+        formato: nf
+            .filter(|_| !vinculado)
+            .map(|n| n.atributo("formatCode").to_string())
+            .filter(|s| !s.is_empty()),
+        separador: d
+            .hijo("separator")
+            .map(|s| s.texto())
+            .unwrap_or_else(|| ", ".into()),
         estilo: estilo_propio,
         color_propio,
-        borrados: d.elementos().filter(|e| e.nombre == "dLbl" && bandera(e, "delete")).filter_map(|e| entero_hijo(e, "idx")).collect(),
+        borrados: d
+            .elementos()
+            .filter(|e| e.nombre == "dLbl" && bandera(e, "delete"))
+            .filter_map(|e| entero_hijo(e, "idx"))
+            .collect(),
     }
 }
 
@@ -585,9 +692,14 @@ fn leer_marcador(m: &Nodo, ctx: Contexto) -> Marcador {
     let sppr = m.hijo("spPr");
     Marcador {
         simbolo,
-        tam: num_hijo(m, "size").map(|v| v as f32).unwrap_or(5.0).clamp(2.0, 72.0),
+        tam: num_hijo(m, "size")
+            .map(|v| v as f32)
+            .unwrap_or(5.0)
+            .clamp(2.0, 72.0),
         relleno: sppr.and_then(|p| dml::relleno(p, ctx, None)),
-        linea: sppr.and_then(|p| p.hijo("ln")).and_then(|l| dml::linea(l, ctx, None)),
+        linea: sppr
+            .and_then(|p| p.hijo("ln"))
+            .and_then(|l| dml::linea(l, ctx, None)),
     }
 }
 
@@ -602,7 +714,10 @@ fn leer_eje(a: &Nodo, base: &EstiloTexto, ctx: Contexto) -> Eje {
             Some(t) => t,
             None => {
                 let g = ln.and_then(|l| attr_num(l, "w", 1.0)).map(emu);
-                defecto.map(|t| Trazo { grosor: g.unwrap_or(t.grosor), ..t })
+                defecto.map(|t| Trazo {
+                    grosor: g.unwrap_or(t.grosor),
+                    ..t
+                })
             }
         }
     };
@@ -616,23 +731,47 @@ fn leer_eje(a: &Nodo, base: &EstiloTexto, ctx: Contexto) -> Eje {
     };
     let estilo = estilo_de(a.hijo("txPr"), base, ctx);
     Eje {
-        id: a.hijo("axId").map(|i| i.valor().to_string()).unwrap_or_default(),
+        id: a
+            .hijo("axId")
+            .map(|i| i.valor().to_string())
+            .unwrap_or_default(),
         valores,
-        pos: a.hijo("axPos").and_then(|p| p.valor().chars().next()).unwrap_or(if valores { 'l' } else { 'b' }),
+        pos: a
+            .hijo("axPos")
+            .and_then(|p| p.valor().chars().next())
+            .unwrap_or(if valores { 'l' } else { 'b' }),
         borrado: bandera(a, "delete"),
-        invertido: sc.and_then(|s| s.hijo("orientation")).is_some_and(|o| o.valor() == "maxMin"),
+        invertido: sc
+            .and_then(|s| s.hijo("orientation"))
+            .is_some_and(|o| o.valor() == "maxMin"),
         min: sc.and_then(|s| num_hijo(s, "min")),
         max: sc.and_then(|s| num_hijo(s, "max")),
         unidad: num_hijo(a, "majorUnit").filter(|u| *u > 0.0),
-        formato: nf.filter(|_| !vinculado).map(|n| n.atributo("formatCode").to_string()).filter(|s| !s.is_empty()),
-        cuadricula: a.hijo("majorGridlines").and_then(|m| linea_de(m.hijo("spPr"), Some(Trazo::solido(GRIS_REJILLA, 0.75)))),
+        formato: nf
+            .filter(|_| !vinculado)
+            .map(|n| n.atributo("formatCode").to_string())
+            .filter(|s| !s.is_empty()),
+        cuadricula: a
+            .hijo("majorGridlines")
+            .and_then(|m| linea_de(m.hijo("spPr"), Some(Trazo::solido(GRIS_REJILLA, 0.75)))),
         linea: linea_de(a.hijo("spPr"), Some(Trazo::solido(GRIS_EJE, 0.75))),
-        pos_etiquetas: a.hijo("tickLblPos").map(|p| p.valor().to_string()).unwrap_or_else(|| "nextTo".into()),
-        marcas: a.hijo("majorTickMark").map(|p| p.valor().to_string()).unwrap_or_else(|| "out".into()),
-        titulo: a.hijo("title").map(|t| leer_titulo(t, &estilo, 1.0, ctx, "Título del eje")),
+        pos_etiquetas: a
+            .hijo("tickLblPos")
+            .map(|p| p.valor().to_string())
+            .unwrap_or_else(|| "nextTo".into()),
+        marcas: a
+            .hijo("majorTickMark")
+            .map(|p| p.valor().to_string())
+            .unwrap_or_else(|| "out".into()),
+        titulo: a
+            .hijo("title")
+            .map(|t| leer_titulo(t, &estilo, 1.0, ctx, "Título del eje")),
         estilo,
         cruza,
-        entre: a.hijo("crossBetween").map(|c| c.valor() != "midCat").unwrap_or(true),
+        entre: a
+            .hijo("crossBetween")
+            .map(|c| c.valor() != "midCat")
+            .unwrap_or(true),
     }
 }
 
@@ -644,16 +783,34 @@ fn luminosidad(c: Color, m: f32, o: f32) -> Color {
     let (h, s, l) = tema::rgb_a_hsl(c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0);
     let (r, g, b) = tema::hsl_a_rgb(h, s, (l * m + o).clamp(0.0, 1.0));
     let q = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color { r: q(r), g: q(g), b: q(b), a: c.a }
+    Color {
+        r: q(r),
+        g: q(g),
+        b: q(b),
+        a: c.a,
+    }
 }
 
 /// Los colores automaticos de Office: accent1..6 y, a partir del septimo,
 /// los mismos con las variaciones de `colors1.xml` (mas oscuros, mas claros).
 pub fn paleta(ctx: Contexto, n: usize) -> Vec<Color> {
-    const VARIACIONES: [(f32, f32); 9] = [(1.0, 0.0), (0.6, 0.0), (0.8, 0.2), (0.8, 0.0), (0.6, 0.4), (0.5, 0.0), (0.7, 0.3), (0.7, 0.0), (0.5, 0.5)];
+    const VARIACIONES: [(f32, f32); 9] = [
+        (1.0, 0.0),
+        (0.6, 0.0),
+        (0.8, 0.2),
+        (0.8, 0.0),
+        (0.6, 0.4),
+        (0.5, 0.0),
+        (0.7, 0.3),
+        (0.7, 0.0),
+        (0.5, 0.5),
+    ];
     (0..n.clamp(6, 256))
         .map(|i| {
-            let base = ctx.tema.esquema(&format!("accent{}", i % 6 + 1), ctx.mapa).unwrap_or(Color::NEGRO);
+            let base = ctx
+                .tema
+                .esquema(&format!("accent{}", i % 6 + 1), ctx.mapa)
+                .unwrap_or(Color::NEGRO);
             let (m, o) = VARIACIONES[(i / 6) % VARIACIONES.len()];
             luminosidad(base, m, o)
         })
@@ -667,10 +824,19 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
     }
     let chart = raiz.hijo("chart")?;
     let pa = chart.hijo("plotArea")?;
-    let base = EstiloTexto { familia: ctx.tema.letra_texto.clone(), tam: 10.0, negrita: false, cursiva: false, color: GRIS_TEXTO };
+    let base = EstiloTexto {
+        familia: ctx.tema.letra_texto.clone(),
+        tam: 10.0,
+        negrita: false,
+        cursiva: false,
+        color: GRIS_TEXTO,
+    };
     let base = estilo_de(raiz.hijo("txPr"), &base, ctx);
-    let ejes: Vec<Eje> =
-        pa.elementos().filter(|e| matches!(e.nombre.as_str(), "catAx" | "valAx" | "dateAx" | "serAx")).map(|a| leer_eje(a, &base, ctx)).collect();
+    let ejes: Vec<Eje> = pa
+        .elementos()
+        .filter(|e| matches!(e.nombre.as_str(), "catAx" | "valAx" | "dateAx" | "serAx"))
+        .map(|a| leer_eje(a, &base, ctx))
+        .collect();
 
     let mut grupos = Vec::new();
     let mut sin_dibujo = Vec::new();
@@ -683,34 +849,62 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
             _ => Agrupacion::Normal,
         };
         let clase = match gn.nombre.as_str() {
-            "barChart" | "bar3DChart" => Clase::Barras { horizontal: gn.hijo("barDir").is_some_and(|b| b.valor() == "bar") },
+            "barChart" | "bar3DChart" => Clase::Barras {
+                horizontal: gn.hijo("barDir").is_some_and(|b| b.valor() == "bar"),
+            },
             "lineChart" | "line3DChart" => Clase::Lineas,
             "areaChart" | "area3DChart" => Clase::Area,
-            "pieChart" | "pie3DChart" | "ofPieChart" => {
-                Clase::Circular { agujero: 0.0, primer_angulo: num_hijo(gn, "firstSliceAng").unwrap_or(0.0) as f32 }
-            }
+            "pieChart" | "pie3DChart" | "ofPieChart" => Clase::Circular {
+                agujero: 0.0,
+                primer_angulo: num_hijo(gn, "firstSliceAng").unwrap_or(0.0) as f32,
+            },
             "doughnutChart" => Clase::Circular {
                 agujero: (num_hijo(gn, "holeSize").unwrap_or(50.0) as f32 / 100.0).clamp(0.1, 0.9),
                 primer_angulo: num_hijo(gn, "firstSliceAng").unwrap_or(0.0) as f32,
             },
             "scatterChart" => Clase::Dispersion,
             "bubbleChart" => Clase::Burbuja,
-            "radarChart" => Clase::Radar { relleno: gn.hijo("radarStyle").is_some_and(|r| r.valor() == "filled") },
+            "radarChart" => Clase::Radar {
+                relleno: gn.hijo("radarStyle").is_some_and(|r| r.valor() == "filled"),
+            },
             otro => {
                 sin_dibujo.push(otro.to_string());
                 continue;
             }
         };
-        let ejes_grupo: Vec<String> = gn.elementos().filter(|e| e.nombre == "axId").map(|e| e.valor().to_string()).collect();
+        let ejes_grupo: Vec<String> = gn
+            .elementos()
+            .filter(|e| e.nombre == "axId")
+            .map(|e| e.valor().to_string())
+            .collect();
         let mut etq_base = base.clone();
         etq_base.color = GRIS_ETIQUETA;
         let mut series: Vec<(f64, Serie)> = Vec::new();
-        for (k, s) in gn.elementos().filter(|e| e.nombre == "ser").take(MAX_SERIES).enumerate() {
+        for (k, s) in gn
+            .elementos()
+            .filter(|e| e.nombre == "ser")
+            .take(MAX_SERIES)
+            .enumerate()
+        {
             let indice = entero_hijo(s, "idx").unwrap_or(vistas + k).min(10_000);
             let orden = num_hijo(s, "order").unwrap_or(indice as f64);
-            let nombre = s.hijo("tx").and_then(texto_de_tx).unwrap_or_else(|| format!("Serie{}", indice + 1));
-            let (valores, formato) = s.hijo("val").or_else(|| s.hijo("yVal")).map(numeros).unwrap_or_default();
-            let xs = if clase.xy() { s.hijo("xVal").filter(|x| es_cache_numerica(x)).map(|x| numeros(x).0).unwrap_or_default() } else { Vec::new() };
+            let nombre = s
+                .hijo("tx")
+                .and_then(texto_de_tx)
+                .unwrap_or_else(|| format!("Serie{}", indice + 1));
+            let (valores, formato) = s
+                .hijo("val")
+                .or_else(|| s.hijo("yVal"))
+                .map(numeros)
+                .unwrap_or_default();
+            let xs = if clase.xy() {
+                s.hijo("xVal")
+                    .filter(|x| es_cache_numerica(x))
+                    .map(|x| numeros(x).0)
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             if categorias.is_empty()
                 && !clase.xy()
                 && let Some(c) = s.hijo("cat")
@@ -724,7 +918,10 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
                 nombre,
                 valores,
                 xs,
-                tamanos: s.hijo("bubbleSize").map(|b| numeros(b).0).unwrap_or_default(),
+                tamanos: s
+                    .hijo("bubbleSize")
+                    .map(|b| numeros(b).0)
+                    .unwrap_or_default(),
                 formato,
                 relleno: sppr.and_then(|p| dml::relleno(p, ctx, None)),
                 linea: ln.and_then(|l| dml::linea(l, ctx, None)),
@@ -732,7 +929,12 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
                 puntos: s
                     .elementos()
                     .filter(|e| e.nombre == "dPt")
-                    .filter_map(|d| Some((entero_hijo(d, "idx")?, d.hijo("spPr").and_then(|p| dml::relleno(p, ctx, None))?)))
+                    .filter_map(|d| {
+                        Some((
+                            entero_hijo(d, "idx")?,
+                            d.hijo("spPr").and_then(|p| dml::relleno(p, ctx, None))?,
+                        ))
+                    })
                     .collect(),
                 marcador: s.hijo("marker").map(|m| leer_marcador(m, ctx)),
                 suave: s.hijo("smooth").is_some_and(si),
@@ -748,13 +950,23 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
             clase,
             agrupacion,
             series: series.into_iter().map(|(_, s)| s).collect(),
-            varia_colores: gn.hijo("varyColors").map(si).unwrap_or(matches!(clase, Clase::Circular { .. })),
+            varia_colores: gn
+                .hijo("varyColors")
+                .map(si)
+                .unwrap_or(matches!(clase, Clase::Circular { .. })),
             hueco: (num_hijo(gn, "gapWidth").unwrap_or(150.0) as f32 / 100.0).clamp(0.0, 5.0),
-            solape: (num_hijo(gn, "overlap").unwrap_or(if apilada { 100.0 } else { 0.0 }) as f32 / 100.0).clamp(-1.0, 1.0),
+            solape: (num_hijo(gn, "overlap").unwrap_or(if apilada { 100.0 } else { 0.0 }) as f32
+                / 100.0)
+                .clamp(-1.0, 1.0),
             // Un radar «marker» lleva marcadores sin decirlo en el grupo.
-            marcadores: bandera(gn, "marker") || gn.hijo("radarStyle").is_some_and(|r| r.valor() == "marker"),
-            estilo_dispersion: gn.hijo("scatterStyle").map(|s| s.valor().to_string()).unwrap_or_default(),
-            escala_burbuja: (num_hijo(gn, "bubbleScale").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 3.0),
+            marcadores: bandera(gn, "marker")
+                || gn.hijo("radarStyle").is_some_and(|r| r.valor() == "marker"),
+            estilo_dispersion: gn
+                .hijo("scatterStyle")
+                .map(|s| s.valor().to_string())
+                .unwrap_or_default(),
+            escala_burbuja: (num_hijo(gn, "bubbleScale").unwrap_or(100.0) as f32 / 100.0)
+                .clamp(0.0, 3.0),
             etiquetas: gn.hijo("dLbls").map(|d| leer_etiquetas(d, &etq_base, ctx)),
             ejes: ejes_grupo,
         });
@@ -764,7 +976,12 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
     }
 
     // Los colores automaticos.
-    let mas_puntos = grupos.iter().flat_map(|g| g.series.iter()).map(|s| s.valores.len().max(s.indice + 1)).max().unwrap_or(0);
+    let mas_puntos = grupos
+        .iter()
+        .flat_map(|g| g.series.iter())
+        .map(|s| s.valores.len().max(s.indice + 1))
+        .max()
+        .unwrap_or(0);
     let paleta = paleta(ctx, mas_puntos.max(categorias.len()));
     for g in &mut grupos {
         for s in &mut g.series {
@@ -773,11 +990,20 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
     }
 
     let total_series: usize = grupos.iter().map(|g| g.series.len()).sum();
-    let unica = grupos.iter().flat_map(|g| g.series.iter()).next().map(|s| s.nombre.clone()).unwrap_or_default();
+    let unica = grupos
+        .iter()
+        .flat_map(|g| g.series.iter())
+        .next()
+        .map(|s| s.nombre.clone())
+        .unwrap_or_default();
     let borrado = bandera(chart, "autoTitleDeleted");
     let titulo = match chart.hijo("title") {
         Some(t) => {
-            let defecto = if total_series == 1 { unica.clone() } else { "Título del gráfico".into() };
+            let defecto = if total_series == 1 {
+                unica.clone()
+            } else {
+                "Título del gráfico".into()
+            };
             Some(leer_titulo(t, &base, 1.4, ctx, &defecto))
         }
         // Sin titulo y sin borrarlo, Office pone el nombre de la unica serie.
@@ -789,13 +1015,24 @@ pub fn leer(raiz: &Nodo, ctx: Contexto) -> Option<Grafico> {
         None => None,
     };
     let leyenda = chart.hijo("legend").map(|l| Leyenda {
-        pos: l.hijo("legendPos").map(|p| p.valor().to_string()).unwrap_or_else(|| "r".into()),
+        pos: l
+            .hijo("legendPos")
+            .map(|p| p.valor().to_string())
+            .unwrap_or_else(|| "r".into()),
         manual: manual(Some(l)),
         estilo: estilo_de(l.hijo("txPr"), &base, ctx),
-        borradas: l.elementos().filter(|e| e.nombre == "legendEntry" && bandera(e, "delete")).filter_map(|e| entero_hijo(e, "idx")).collect(),
+        borradas: l
+            .elementos()
+            .filter(|e| e.nombre == "legendEntry" && bandera(e, "delete"))
+            .filter_map(|e| entero_hijo(e, "idx"))
+            .collect(),
     });
     let relleno_de = |sppr: Option<&Nodo>| sppr.and_then(|p| dml::relleno(p, ctx, None)).flatten();
-    let borde_de = |sppr: Option<&Nodo>| sppr.and_then(|p| p.hijo("ln")).and_then(|l| dml::linea(l, ctx, None)).flatten();
+    let borde_de = |sppr: Option<&Nodo>| {
+        sppr.and_then(|p| p.hijo("ln"))
+            .and_then(|l| dml::linea(l, ctx, None))
+            .flatten()
+    };
     Some(Grafico {
         titulo,
         leyenda,
@@ -825,9 +1062,16 @@ fn textos_categoria(c: &Nodo, ejes: &[Eje], ids: &[String]) -> Vec<String> {
     if es_cache_numerica(c) {
         let (v, formato) = numeros(c);
         let codigo = eje.and_then(|e| e.formato.clone()).unwrap_or(formato);
-        return v.into_iter().map(|x| x.map(|x| formatear(x, &codigo, None)).unwrap_or_default()).collect();
+        return v
+            .into_iter()
+            .map(|x| x.map(|x| formatear(x, &codigo, None)).unwrap_or_default())
+            .collect();
     }
-    cache(c).0.into_iter().map(|s| s.unwrap_or_default()).collect()
+    cache(c)
+        .0
+        .into_iter()
+        .map(|s| s.unwrap_or_default())
+        .collect()
 }
 
 // ---------------------------------------------------------------------
@@ -846,7 +1090,11 @@ impl Escala {
     /// Los valores de las marcas, de `min` a `max`.
     pub fn marcas(&self) -> Vec<f64> {
         let n = ((self.max - self.min) / self.paso + 1e-6).floor();
-        let n = if n.is_finite() && n >= 0.0 { (n as usize).min(MAX_MARCAS) } else { 0 };
+        let n = if n.is_finite() && n >= 0.0 {
+            (n as usize).min(MAX_MARCAS)
+        } else {
+            0
+        };
         (0..=n)
             .map(|k| {
                 // Sin los restos de coma flotante (0,30000000000000004).
@@ -861,7 +1109,11 @@ impl Escala {
     /// Donde cae `v` entre `min` (0) y `max` (1).
     pub fn fraccion(&self, v: f64) -> f64 {
         let d = self.max - self.min;
-        if d.abs() < 1e-300 { 0.5 } else { (v - self.min) / d }
+        if d.abs() < 1e-300 {
+            0.5
+        } else {
+            (v - self.min) / d
+        }
     }
 }
 
@@ -890,8 +1142,19 @@ pub fn paso_bonito(bruto: f64) -> f64 {
 /// maximo), un 5 % de aire por el lado que se aleja del cero, y los extremos
 /// redondeados al paso, que da como mucho unas `max_div` divisiones.
 /// `min`, `max` y `paso` del archivo mandan sobre lo calculado.
-pub fn escala(dmin: f64, dmax: f64, min: Option<f64>, max: Option<f64>, paso: Option<f64>, max_div: usize) -> Escala {
-    let (mut lo, mut hi) = if dmin.is_finite() && dmax.is_finite() { (dmin.min(dmax), dmin.max(dmax)) } else { (0.0, 0.0) };
+pub fn escala(
+    dmin: f64,
+    dmax: f64,
+    min: Option<f64>,
+    max: Option<f64>,
+    paso: Option<f64>,
+    max_div: usize,
+) -> Escala {
+    let (mut lo, mut hi) = if dmin.is_finite() && dmax.is_finite() {
+        (dmin.min(dmax), dmin.max(dmax))
+    } else {
+        (0.0, 0.0)
+    };
     if lo >= 0.0 {
         if hi == 0.0 || lo < hi * 5.0 / 6.0 {
             lo = 0.0;
@@ -938,13 +1201,27 @@ pub fn escala(dmin: f64, dmax: f64, min: Option<f64>, max: Option<f64>, paso: Op
         b = a + if a == 0.0 { 1.0 } else { a.abs() };
     }
     let div = max_div.clamp(1, MAX_MARCAS) as f64;
-    let p = paso.filter(|p| p.is_finite() && *p > 0.0 && (b - a) / p <= MAX_MARCAS as f64).unwrap_or_else(|| paso_bonito((b - a) / div));
-    let lo_r = if min.is_some() { a } else { (a / p + 1e-9).floor() * p };
-    let mut hi_r = if max.is_some() { b } else { (b / p - 1e-9).ceil() * p };
+    let p = paso
+        .filter(|p| p.is_finite() && *p > 0.0 && (b - a) / p <= MAX_MARCAS as f64)
+        .unwrap_or_else(|| paso_bonito((b - a) / div));
+    let lo_r = if min.is_some() {
+        a
+    } else {
+        (a / p + 1e-9).floor() * p
+    };
+    let mut hi_r = if max.is_some() {
+        b
+    } else {
+        (b / p - 1e-9).ceil() * p
+    };
     if hi_r.partial_cmp(&lo_r) != Some(std::cmp::Ordering::Greater) {
         hi_r = lo_r + p;
     }
-    Escala { min: lo_r, max: hi_r, paso: p }
+    Escala {
+        min: lo_r,
+        max: hi_r,
+        paso: p,
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -989,19 +1266,30 @@ fn general(v: f64) -> String {
     if !(1e-9..1e11).contains(&a) {
         let s = format!("{v:.4E}");
         let (m, e) = s.split_once('E').unwrap_or((&s, "0"));
-        let m = if m.contains('.') { m.trim_end_matches('0').trim_end_matches('.') } else { m };
+        let m = if m.contains('.') {
+            m.trim_end_matches('0').trim_end_matches('.')
+        } else {
+            m
+        };
         let e: i32 = e.parse().unwrap_or(0);
         return format!("{m}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs());
     }
     let dec = (8 - a.log10().floor() as i32).clamp(0, 10) as usize;
     let s = format!("{v:.dec$}");
-    let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
+    let s = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    };
     if s == "-0" { "0".into() } else { s }
 }
 
 fn general_con_paso(v: f64, paso: f64) -> String {
     let mut d = 0usize;
-    while d < 10 && ((paso * 10f64.powi(d as i32)).round() - paso * 10f64.powi(d as i32)).abs() > 1e-6 * 10f64.powi(d as i32) {
+    while d < 10
+        && ((paso * 10f64.powi(d as i32)).round() - paso * 10f64.powi(d as i32)).abs()
+            > 1e-6 * 10f64.powi(d as i32)
+    {
         d += 1;
     }
     if v.abs() >= 1e11 {
@@ -1009,8 +1297,19 @@ fn general_con_paso(v: f64, paso: f64) -> String {
     }
     // Como Excel: sin los ceros de sobra (0, 0.5, 1, 1.5).
     let s = format!("{v:.d$}");
-    let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
-    if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') { "0".to_string() } else { s }
+    let s = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    };
+    if s.trim_start_matches('-')
+        .chars()
+        .all(|c| c == '0' || c == '.')
+    {
+        "0".to_string()
+    } else {
+        s
+    }
 }
 
 /// Parte un codigo por los `;` que no van entre comillas ni corchetes.
@@ -1069,7 +1368,9 @@ fn esqueleto(sec: &str) -> String {
 
 fn es_fecha(sec: &str) -> bool {
     let e = esqueleto(sec).to_ascii_lowercase();
-    !e.contains('0') && !e.contains('#') && e.chars().any(|c| matches!(c, 'y' | 'd' | 'm' | 'h' | 's'))
+    !e.contains('0')
+        && !e.contains('#')
+        && e.chars().any(|c| matches!(c, 'y' | 'd' | 'm' | 'h' | 's'))
 }
 
 fn formatear_numero(v: f64, sec: &str, signo: bool) -> String {
@@ -1082,7 +1383,11 @@ fn formatear_numero(v: f64, sec: &str, signo: bool) -> String {
         if en {
             *tras = true;
         }
-        if *tras { post.push_str(s) } else { pre.push_str(s) }
+        if *tras {
+            post.push_str(s)
+        } else {
+            pre.push_str(s)
+        }
     };
     while let Some(c) = cs.next() {
         match c {
@@ -1118,7 +1423,13 @@ fn formatear_numero(v: f64, sec: &str, signo: bool) -> String {
                 }
                 // `[$€-407]`: el simbolo de moneda; `[Red]` y demas se tiran.
                 if let Some(r) = t.strip_prefix('$') {
-                    literal(r.split('-').next().unwrap_or(""), en_cuerpo, &mut tras, &mut pre, &mut post);
+                    literal(
+                        r.split('-').next().unwrap_or(""),
+                        en_cuerpo,
+                        &mut tras,
+                        &mut pre,
+                        &mut post,
+                    );
                 }
             }
             '%' => {
@@ -1151,28 +1462,60 @@ fn formatear_numero(v: f64, sec: &str, signo: bool) -> String {
     let negativo = signo && v < 0.0;
     let a = v.abs();
     let numero = if let Some((mant, exp)) = cuerpo.split_once('E') {
-        let dec = mant.split_once('.').map(|(_, d)| d.chars().filter(|c| matches!(c, '0' | '#' | '?')).count()).unwrap_or(0);
-        let digitos = exp.chars().filter(|c| matches!(c, '0' | '#')).count().max(1);
+        let dec = mant
+            .split_once('.')
+            .map(|(_, d)| d.chars().filter(|c| matches!(c, '0' | '#' | '?')).count())
+            .unwrap_or(0);
+        let digitos = exp
+            .chars()
+            .filter(|c| matches!(c, '0' | '#'))
+            .count()
+            .max(1);
         let s = format!("{a:.dec$e}");
         let (m, e) = s.split_once('e').unwrap_or((&s, "0"));
         let e: i32 = e.parse().unwrap_or(0);
         let mas = exp.starts_with('+');
-        format!("{m}E{}{:0digitos$}", if e < 0 { "-" } else if mas { "+" } else { "" }, e.abs())
+        format!(
+            "{m}E{}{:0digitos$}",
+            if e < 0 {
+                "-"
+            } else if mas {
+                "+"
+            } else {
+                ""
+            },
+            e.abs()
+        )
     } else {
         let (ent, frac) = cuerpo.split_once('.').unwrap_or((cuerpo, ""));
-        let max_dec = frac.chars().filter(|c| matches!(c, '0' | '#' | '?')).count().min(12);
+        let max_dec = frac
+            .chars()
+            .filter(|c| matches!(c, '0' | '#' | '?'))
+            .count()
+            .min(12);
         let min_dec = frac.chars().filter(|c| *c == '0').count().min(max_dec);
         // Redondeo de Excel: los medios, lejos del cero.
         let f = 10f64.powi(max_dec as i32);
         let s = format!("{:.max_dec$}", (a * f).round() / f);
-        let (ip, fp) = s.split_once('.').map(|(x, y)| (x.to_string(), y.to_string())).unwrap_or((s.clone(), String::new()));
+        let (ip, fp) = s
+            .split_once('.')
+            .map(|(x, y)| (x.to_string(), y.to_string()))
+            .unwrap_or((s.clone(), String::new()));
         let mut fp = fp;
         while fp.len() > min_dec && fp.ends_with('0') {
             fp.pop();
         }
-        let ip = if ip == "0" && !ent.contains('0') && (!fp.is_empty() || a != 0.0) { String::new() } else { ip };
+        let ip = if ip == "0" && !ent.contains('0') && (!fp.is_empty() || a != 0.0) {
+            String::new()
+        } else {
+            ip
+        };
         let ip = if ent.contains(',') { miles(&ip) } else { ip };
-        if fp.is_empty() { ip } else { format!("{ip}.{fp}") }
+        if fp.is_empty() {
+            ip
+        } else {
+            format!("{ip}.{fp}")
+        }
     };
     let cero = !numero.chars().any(|c| c.is_ascii_digit() && c != '0');
     let menos = if negativo && !cero { "-" } else { "" };
@@ -1196,7 +1539,11 @@ fn miles(ip: &str) -> String {
 fn fecha(serial: f64) -> (i64, u32, u32) {
     let dias = serial.floor() as i64;
     // De serie a dias desde 1970-01-01.
-    let z = (if dias < 61 { dias - 25568 } else { dias - 25569 }) + 719_468;
+    let z = (if dias < 61 {
+        dias - 25568
+    } else {
+        dias - 25569
+    }) + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
@@ -1208,8 +1555,29 @@ fn fecha(serial: f64) -> (i64, u32, u32) {
     (y, m, d)
 }
 
-const MESES: [&str; 12] = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-const DIAS: [&str; 7] = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES: [&str; 12] = [
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+];
+const DIAS: [&str; 7] = [
+    "domingo",
+    "lunes",
+    "martes",
+    "miércoles",
+    "jueves",
+    "viernes",
+    "sábado",
+];
 
 fn formatear_fecha(v: f64, sec: &str) -> String {
     if !(0.0..2_958_466.0).contains(&v) {
@@ -1261,10 +1629,21 @@ fn formatear_fecha(v: f64, sec: &str) -> String {
             while i + n < cs.len() && cs[i + n].to_ascii_lowercase() == l {
                 n += 1;
             }
-            let siguiente_s = cs[i + n..].iter().find(|c| c.is_ascii_alphabetic()).is_some_and(|c| c.eq_ignore_ascii_case(&'s'));
+            let siguiente_s = cs[i + n..]
+                .iter()
+                .find(|c| c.is_ascii_alphabetic())
+                .is_some_and(|c| c.eq_ignore_ascii_case(&'s'));
             match l {
-                'y' => out.push_str(&if n <= 2 { format!("{:02}", y.rem_euclid(100)) } else { y.to_string() }),
-                'm' if tras_hora || siguiente_s => out.push_str(&if n >= 2 { format!("{mi:02}") } else { mi.to_string() }),
+                'y' => out.push_str(&if n <= 2 {
+                    format!("{:02}", y.rem_euclid(100))
+                } else {
+                    y.to_string()
+                }),
+                'm' if tras_hora || siguiente_s => out.push_str(&if n >= 2 {
+                    format!("{mi:02}")
+                } else {
+                    mi.to_string()
+                }),
                 'm' => {
                     let nombre = MESES[(mes as usize).saturating_sub(1).min(11)];
                     match n {
@@ -1281,8 +1660,16 @@ fn formatear_fecha(v: f64, sec: &str) -> String {
                     3 => out.extend(DIAS[dia_semana].chars().take(3)),
                     _ => out.push_str(DIAS[dia_semana]),
                 },
-                'h' => out.push_str(&if n >= 2 { format!("{h:02}") } else { h.to_string() }),
-                _ => out.push_str(&if n >= 2 { format!("{s:02}") } else { s.to_string() }),
+                'h' => out.push_str(&if n >= 2 {
+                    format!("{h:02}")
+                } else {
+                    h.to_string()
+                }),
+                _ => out.push_str(&if n >= 2 {
+                    format!("{s:02}")
+                } else {
+                    s.to_string()
+                }),
             }
             tras_hora = l == 'h';
             i += n;
@@ -1321,7 +1708,15 @@ impl Pincel<'_> {
 
     /// Un texto con su caja anclada en (x, y): `ah` 0 izquierda, 0,5
     /// centro, 1 derecha; `av` 0 arriba, 0,5 centro, 1 abajo.
-    fn texto(&self, s: &str, e: &EstiloTexto, x: f32, y: f32, ah: f32, av: f32) -> Option<(Elemento, Rect)> {
+    fn texto(
+        &self,
+        s: &str,
+        e: &EstiloTexto,
+        x: f32,
+        y: f32,
+        ah: f32,
+        av: f32,
+    ) -> Option<(Elemento, Rect)> {
         if s.is_empty() {
             return None;
         }
@@ -1367,7 +1762,11 @@ impl Pincel<'_> {
         let mut lineas: Vec<String> = Vec::new();
         let mut actual = String::new();
         for p in s.split_whitespace() {
-            let prueba = if actual.is_empty() { p.to_string() } else { format!("{actual} {p}") };
+            let prueba = if actual.is_empty() {
+                p.to_string()
+            } else {
+                format!("{actual} {p}")
+            };
             if self.ancho(&prueba, e) <= max || actual.is_empty() {
                 actual = prueba;
             } else {
@@ -1396,12 +1795,23 @@ impl Recta {
 }
 
 fn figura(inicio: (f32, f32), tramos: Vec<Tramo>, cerrada: bool) -> Figura {
-    Figura { inicio, tramos, cerrada, rellenar: cerrada, trazar: true, ..Default::default() }
+    Figura {
+        inicio,
+        tramos,
+        cerrada,
+        rellenar: cerrada,
+        trazar: true,
+        ..Default::default()
+    }
 }
 
 fn poligono(p: &[(f32, f32)], cerrada: bool) -> Option<Figura> {
     let (primero, resto) = p.split_first()?;
-    Some(figura(*primero, resto.iter().map(|q| Tramo::Linea(q.0, q.1)).collect(), cerrada))
+    Some(figura(
+        *primero,
+        resto.iter().map(|q| Tramo::Linea(q.0, q.1)).collect(),
+        cerrada,
+    ))
 }
 
 /// Un arco de circunferencia de `a0` a `a1` (radianes, en el sentido del
@@ -1449,19 +1859,60 @@ fn suave(p: &[(f32, f32)]) -> Vec<Tramo> {
 /// rellena.
 fn figura_marcador(s: Simbolo, x: f32, y: f32, t: f32) -> Vec<Figura> {
     let r = t / 2.0;
-    let abierta = |a: (f32, f32), b: (f32, f32)| Figura { inicio: a, tramos: vec![Tramo::Linea(b.0, b.1)], cerrada: false, rellenar: false, trazar: true, ..Default::default() };
+    let abierta = |a: (f32, f32), b: (f32, f32)| Figura {
+        inicio: a,
+        tramos: vec![Tramo::Linea(b.0, b.1)],
+        cerrada: false,
+        rellenar: false,
+        trazar: true,
+        ..Default::default()
+    };
     match s {
         Simbolo::Ninguno => Vec::new(),
         Simbolo::Circulo => vec![circulo(x, y, r)],
         Simbolo::Punto => vec![circulo(x, y, r * 0.5)],
-        Simbolo::Cuadrado => poligono(&[(x - r, y - r), (x + r, y - r), (x + r, y + r), (x - r, y + r)], true).into_iter().collect(),
-        Simbolo::Rombo => poligono(&[(x, y - r), (x + r, y), (x, y + r), (x - r, y)], true).into_iter().collect(),
-        Simbolo::Triangulo => poligono(&[(x, y - r), (x + r, y + r), (x - r, y + r)], true).into_iter().collect(),
-        Simbolo::Raya => poligono(&[(x - r, y - r * 0.25), (x + r, y - r * 0.25), (x + r, y + r * 0.25), (x - r, y + r * 0.25)], true).into_iter().collect(),
-        Simbolo::Equis => vec![abierta((x - r, y - r), (x + r, y + r)), abierta((x - r, y + r), (x + r, y - r))],
-        Simbolo::Mas => vec![abierta((x - r, y), (x + r, y)), abierta((x, y - r), (x, y + r))],
+        Simbolo::Cuadrado => poligono(
+            &[
+                (x - r, y - r),
+                (x + r, y - r),
+                (x + r, y + r),
+                (x - r, y + r),
+            ],
+            true,
+        )
+        .into_iter()
+        .collect(),
+        Simbolo::Rombo => poligono(&[(x, y - r), (x + r, y), (x, y + r), (x - r, y)], true)
+            .into_iter()
+            .collect(),
+        Simbolo::Triangulo => poligono(&[(x, y - r), (x + r, y + r), (x - r, y + r)], true)
+            .into_iter()
+            .collect(),
+        Simbolo::Raya => poligono(
+            &[
+                (x - r, y - r * 0.25),
+                (x + r, y - r * 0.25),
+                (x + r, y + r * 0.25),
+                (x - r, y + r * 0.25),
+            ],
+            true,
+        )
+        .into_iter()
+        .collect(),
+        Simbolo::Equis => vec![
+            abierta((x - r, y - r), (x + r, y + r)),
+            abierta((x - r, y + r), (x + r, y - r)),
+        ],
+        Simbolo::Mas => vec![
+            abierta((x - r, y), (x + r, y)),
+            abierta((x, y - r), (x, y + r)),
+        ],
         Simbolo::Estrella => {
-            vec![abierta((x - r, y - r), (x + r, y + r)), abierta((x - r, y + r), (x + r, y - r)), abierta((x, y - r), (x, y + r))]
+            vec![
+                abierta((x - r, y - r), (x + r, y + r)),
+                abierta((x - r, y + r), (x + r, y - r)),
+                abierta((x, y - r), (x, y + r)),
+            ]
         }
     }
 }
@@ -1470,7 +1921,10 @@ fn figura_marcador(s: Simbolo, x: f32, y: f32, t: f32) -> Vec<Figura> {
 #[derive(Debug, Clone)]
 enum Muestra {
     Caja(Option<Relleno>, Option<Trazo>),
-    Raya(Option<Trazo>, Option<(Simbolo, Option<Relleno>, Option<Trazo>)>),
+    Raya(
+        Option<Trazo>,
+        Option<(Simbolo, Option<Relleno>, Option<Trazo>)>,
+    ),
 }
 
 fn relleno_serie(s: &Serie) -> Option<Relleno> {
@@ -1495,7 +1949,10 @@ fn relleno_punto(g: &Grafico, gr: &Grupo, s: &Serie, i: usize) -> Option<Relleno
     if let Some((_, r)) = s.puntos.iter().find(|(k, _)| *k == i) {
         return r.clone();
     }
-    if gr.varia_colores && (gr.series.len() == 1 || matches!(gr.clase, Clase::Circular { .. })) && s.relleno.is_none() {
+    if gr.varia_colores
+        && (gr.series.len() == 1 || matches!(gr.clase, Clase::Circular { .. }))
+        && s.relleno.is_none()
+    {
         return Some(Relleno::Solido(g.paleta[i % g.paleta.len()]));
     }
     relleno_serie(s)
@@ -1544,22 +2001,39 @@ fn texto_etiqueta(e: &Etiquetas, s: &Serie, cat: &str, v: f64, parte: Option<f64
         partes.push(cat.to_string());
     }
     if e.valor {
-        let f = if e.porcentaje { s.formato.as_str() } else { e.formato.as_deref().unwrap_or(&s.formato) };
+        let f = if e.porcentaje {
+            s.formato.as_str()
+        } else {
+            e.formato.as_deref().unwrap_or(&s.formato)
+        };
         partes.push(formatear(v, f, None));
     }
     if e.porcentaje
         && let Some(p) = parte
     {
-        partes.push(formatear(p, e.formato.as_deref().filter(|f| f.contains('%')).unwrap_or("0%"), None));
+        partes.push(formatear(
+            p,
+            e.formato
+                .as_deref()
+                .filter(|f| f.contains('%'))
+                .unwrap_or("0%"),
+            None,
+        ));
     }
     partes.join(&e.separador)
 }
 
 /// Blanco o casi negro, el que mas contraste sobre `fondo`.
 fn contraste(fondo: Option<&Relleno>) -> Color {
-    let Some(c) = fondo.map(|r| r.color_medio()) else { return GRIS_ETIQUETA };
+    let Some(c) = fondo.map(|r| r.color_medio()) else {
+        return GRIS_ETIQUETA;
+    };
     let l = 0.299 * c.r as f32 + 0.587 * c.g as f32 + 0.114 * c.b as f32;
-    if l < 140.0 { Color::BLANCO } else { GRIS_ETIQUETA }
+    if l < 140.0 {
+        Color::BLANCO
+    } else {
+        GRIS_ETIQUETA
+    }
 }
 
 /// Pinta un grafico en una caja de `ancho` x `alto` puntos con origen
@@ -1568,11 +2042,26 @@ pub fn pintar(g: &Grafico, ancho: f32, alto: f32, medidor: &dyn Medidor) -> Vec<
     if !(ancho >= 4.0 && alto >= 4.0) {
         return Vec::new();
     }
-    let mut d = Dibujo { p: Pincel { m: medidor }, els: Vec::new(), encima: Vec::new(), ancho, alto };
+    let mut d = Dibujo {
+        p: Pincel { m: medidor },
+        els: Vec::new(),
+        encima: Vec::new(),
+        ancho,
+        alto,
+    };
     if g.fondo.is_some() || g.borde.is_some() {
-        d.els.push(Elemento::Rect { rect: Rect::nuevo(0.0, 0.0, ancho, alto), relleno: g.fondo.clone(), borde: g.borde });
+        d.els.push(Elemento::Rect {
+            rect: Rect::nuevo(0.0, 0.0, ancho, alto),
+            relleno: g.fondo.clone(),
+            borde: g.borde,
+        });
     }
-    let mut area = Rect::nuevo(MARGEN, MARGEN, (ancho - 2.0 * MARGEN).max(1.0), (alto - 2.0 * MARGEN).max(1.0));
+    let mut area = Rect::nuevo(
+        MARGEN,
+        MARGEN,
+        (ancho - 2.0 * MARGEN).max(1.0),
+        (alto - 2.0 * MARGEN).max(1.0),
+    );
     if let Some(t) = &g.titulo {
         d.titulo(t, &mut area);
     }
@@ -1582,8 +2071,14 @@ pub fn pintar(g: &Grafico, ancho: f32, alto: f32, medidor: &dyn Medidor) -> Vec<
             d.leyenda(l, &entradas, &mut area);
         }
     }
-    let circular = g.grupos.iter().find(|x| matches!(x.clase, Clase::Circular { .. }));
-    let radar = g.grupos.iter().find(|x| matches!(x.clase, Clase::Radar { .. }));
+    let circular = g
+        .grupos
+        .iter()
+        .find(|x| matches!(x.clase, Clase::Circular { .. }));
+    let radar = g
+        .grupos
+        .iter()
+        .find(|x| matches!(x.clase, Clase::Radar { .. }));
     let con_ejes = g.grupos.iter().any(|x| x.clase.cartesiana());
     // El trazado puesto a mano (el interior de uno con ejes lo coloca el
     // propio dibujo, con las etiquetas por fuera).
@@ -1600,16 +2095,32 @@ pub fn pintar(g: &Grafico, ancho: f32, alto: f32, medidor: &dyn Medidor) -> Vec<
         d.radar(g, gr, area);
     } else {
         let nombres = g.sin_dibujo.join(", ");
-        let estilo = EstiloTexto { color: GRIS_TEXTO, ..g.texto.clone() };
+        let estilo = EstiloTexto {
+            color: GRIS_TEXTO,
+            ..g.texto.clone()
+        };
         let texto = format!("Gráfico sin vista previa ({nombres})");
         let texto = d.p.recortar(&texto, &estilo, area.ancho);
-        if let Some((e, _)) = d.p.texto(&texto, &estilo, area.x + area.ancho / 2.0, area.y + area.alto / 2.0, 0.5, 0.5) {
+        if let Some((e, _)) = d.p.texto(
+            &texto,
+            &estilo,
+            area.x + area.ancho / 2.0,
+            area.y + area.alto / 2.0,
+            0.5,
+            0.5,
+        ) {
             d.els.push(e);
         }
     }
-    let Dibujo { mut els, encima, .. } = d;
+    let Dibujo {
+        mut els, encima, ..
+    } = d;
     els.extend(encima);
-    vec![Elemento::Grupo { transformada: IDENTIDAD, recorte: Some(Rect::nuevo(0.0, 0.0, ancho, alto)), elementos: els }]
+    vec![Elemento::Grupo {
+        transformada: IDENTIDAD,
+        recorte: Some(Rect::nuevo(0.0, 0.0, ancho, alto)),
+        elementos: els,
+    }]
 }
 
 fn entradas_leyenda(g: &Grafico, l: &Leyenda) -> Vec<(String, Muestra)> {
@@ -1617,31 +2128,55 @@ fn entradas_leyenda(g: &Grafico, l: &Leyenda) -> Vec<(String, Muestra)> {
     // Un circular, o una sola serie que varia colores: una entrada por
     // categoria.
     let por_puntos = g.grupos.first().filter(|gr| {
-        matches!(gr.clase, Clase::Circular { .. }) || (gr.varia_colores && g.grupos.len() == 1 && gr.series.len() == 1 && !gr.clase.xy())
+        matches!(gr.clase, Clase::Circular { .. })
+            || (gr.varia_colores && g.grupos.len() == 1 && gr.series.len() == 1 && !gr.clase.xy())
     });
     if let Some(gr) = por_puntos {
         let Some(s) = gr.series.first() else { return v };
         let n = g.categorias.len().max(s.valores.len());
         for i in 0..n.min(MAX_PUNTOS) {
-            let nombre = g.categorias.get(i).cloned().filter(|c| !c.is_empty()).unwrap_or_else(|| (i + 1).to_string());
-            let borde = if matches!(gr.clase, Clase::Circular { .. }) { None } else { s.linea.flatten() };
+            let nombre = g
+                .categorias
+                .get(i)
+                .cloned()
+                .filter(|c| !c.is_empty())
+                .unwrap_or_else(|| (i + 1).to_string());
+            let borde = if matches!(gr.clase, Clase::Circular { .. }) {
+                None
+            } else {
+                s.linea.flatten()
+            };
             v.push((nombre, Muestra::Caja(relleno_punto(g, gr, s, i), borde)));
         }
     } else {
         for gr in &g.grupos {
             for s in &gr.series {
                 let m = if gr.clase.muestra_caja() {
-                    let borde = if matches!(gr.clase, Clase::Burbuja) { None } else { s.linea.flatten() };
+                    let borde = if matches!(gr.clase, Clase::Burbuja) {
+                        None
+                    } else {
+                        s.linea.flatten()
+                    };
                     Muestra::Caja(relleno_serie(s), borde)
                 } else {
-                    let raya = if matches!(gr.clase, Clase::Dispersion) && gr.estilo_dispersion == "marker" { None } else { trazo_serie(s) };
+                    let raya = if matches!(gr.clase, Clase::Dispersion)
+                        && gr.estilo_dispersion == "marker"
+                    {
+                        None
+                    } else {
+                        trazo_serie(s)
+                    };
                     Muestra::Raya(raya, marcador_de(gr, s).map(|(sim, _, r, b)| (sim, r, b)))
                 };
                 v.push((s.nombre.clone(), m));
             }
         }
     }
-    v.into_iter().enumerate().filter(|(i, _)| !l.borradas.contains(i)).map(|(_, e)| e).collect()
+    v.into_iter()
+        .enumerate()
+        .filter(|(i, _)| !l.borradas.contains(i))
+        .map(|(_, e)| e)
+        .collect()
 }
 
 struct Dibujo<'a> {
@@ -1663,7 +2198,12 @@ impl Dibujo<'_> {
     fn caja_manual(&self, m: Manual) -> Rect {
         let w = m.w.unwrap_or(1.0 - m.x).max(0.01);
         let h = m.h.unwrap_or(1.0 - m.y).max(0.01);
-        Rect::nuevo(m.x * self.ancho, m.y * self.alto, w * self.ancho, h * self.alto)
+        Rect::nuevo(
+            m.x * self.ancho,
+            m.y * self.alto,
+            w * self.ancho,
+            h * self.alto,
+        )
     }
 
     fn titulo(&mut self, t: &Titulo, area: &mut Rect) {
@@ -1675,7 +2215,14 @@ impl Dibujo<'_> {
         };
         for (k, l) in t.lineas.iter().enumerate() {
             let l = self.p.recortar(l, &t.estilo, area.ancho);
-            let e = self.p.texto(&l, &t.estilo, x, y + lh * k as f32, if centrar { 0.5 } else { 0.0 }, 0.0);
+            let e = self.p.texto(
+                &l,
+                &t.estilo,
+                x,
+                y + lh * k as f32,
+                if centrar { 0.5 } else { 0.0 },
+                0.0,
+            );
             self.poner(e);
         }
         if t.manual.is_none() {
@@ -1688,18 +2235,33 @@ impl Dibujo<'_> {
     fn muestra(&mut self, m: &Muestra, x: f32, y_centro: f32, lado: f32) -> f32 {
         match m {
             Muestra::Caja(relleno, borde) => {
-                self.els.push(Elemento::Rect { rect: Rect::nuevo(x, y_centro - lado / 2.0, lado, lado), relleno: relleno.clone(), borde: *borde });
+                self.els.push(Elemento::Rect {
+                    rect: Rect::nuevo(x, y_centro - lado / 2.0, lado, lado),
+                    relleno: relleno.clone(),
+                    borde: *borde,
+                });
                 lado
             }
             Muestra::Raya(trazo, marca) => {
                 let w = lado * 2.6;
                 if let Some(t) = trazo {
-                    self.els.push(Elemento::Linea { desde: (x, y_centro), hasta: (x + w, y_centro), trazo: Trazo { grosor: t.grosor.min(3.0), ..*t } });
+                    self.els.push(Elemento::Linea {
+                        desde: (x, y_centro),
+                        hasta: (x + w, y_centro),
+                        trazo: Trazo {
+                            grosor: t.grosor.min(3.0),
+                            ..*t
+                        },
+                    });
                 }
                 if let Some((sim, relleno, borde)) = marca {
                     let figuras = figura_marcador(*sim, x + w / 2.0, y_centro, lado.min(7.0));
                     if !figuras.is_empty() {
-                        self.els.push(Elemento::Trayecto { figuras, relleno: relleno.clone(), borde: *borde });
+                        self.els.push(Elemento::Trayecto {
+                            figuras,
+                            relleno: relleno.clone(),
+                            borde: *borde,
+                        });
                     }
                 }
                 w
@@ -1710,7 +2272,13 @@ impl Dibujo<'_> {
     fn leyenda(&mut self, l: &Leyenda, entradas: &[(String, Muestra)], area: &mut Rect) {
         let lh = self.p.renglon(&l.estilo);
         let lado = (l.estilo.tam * 0.7).clamp(4.0, 12.0);
-        let ancho_muestra = |m: &Muestra| if matches!(m, Muestra::Raya(..)) { lado * 2.6 } else { lado };
+        let ancho_muestra = |m: &Muestra| {
+            if matches!(m, Muestra::Raya(..)) {
+                lado * 2.6
+            } else {
+                lado
+            }
+        };
         let max_texto = area.ancho * 0.45;
         let items: Vec<(String, f32)> = entradas
             .iter()
@@ -1728,8 +2296,16 @@ impl Dibujo<'_> {
             let (x, y0) = match caja {
                 Some(c) => (c.x, c.y),
                 None => {
-                    let x = if l.pos == "l" { area.x } else { area.derecha() - ancho };
-                    let y = if l.pos == "tr" { area.y } else { area.y + (area.alto - alto).max(0.0) / 2.0 };
+                    let x = if l.pos == "l" {
+                        area.x
+                    } else {
+                        area.derecha() - ancho
+                    };
+                    let y = if l.pos == "tr" {
+                        area.y
+                    } else {
+                        area.y + (area.alto - alto).max(0.0) / 2.0
+                    };
                     (x, y)
                 }
             };
@@ -1769,15 +2345,26 @@ impl Dibujo<'_> {
             let alto = lh * filas.len() as f32;
             let (x0, y0, w0) = match caja {
                 Some(c) => (c.x, c.y, c.ancho),
-                None => (area.x, if l.pos == "t" { area.y } else { area.abajo() - alto }, area.ancho),
+                None => (
+                    area.x,
+                    if l.pos == "t" {
+                        area.y
+                    } else {
+                        area.abajo() - alto
+                    },
+                    area.ancho,
+                ),
             };
             for (f, fila) in filas.iter().enumerate() {
-                let ancho_fila: f32 = fila.iter().map(|k| items[*k].1).sum::<f32>() + 10.0 * fila.len().saturating_sub(1) as f32;
+                let ancho_fila: f32 = fila.iter().map(|k| items[*k].1).sum::<f32>()
+                    + 10.0 * fila.len().saturating_sub(1) as f32;
                 let mut x = x0 + (w0 - ancho_fila).max(0.0) / 2.0;
                 let yc = y0 + lh * (f as f32 + 0.5);
                 for k in fila {
                     let w = self.muestra(&entradas[*k].1, x, yc, lado);
-                    let e = self.p.texto(&items[*k].0, &l.estilo, x + w + 4.0, yc, 0.0, 0.5);
+                    let e = self
+                        .p
+                        .texto(&items[*k].0, &l.estilo, x + w + 4.0, yc, 0.0, 0.5);
                     self.poner(e);
                     x += items[*k].1 + 10.0;
                 }
@@ -1794,8 +2381,14 @@ impl Dibujo<'_> {
 
     /// Un texto girado 90° (se lee de abajo arriba) centrado en (x, y).
     fn texto_vertical(&mut self, s: &str, e: &EstiloTexto, x: f32, y: f32) {
-        let Some((t, _)) = self.p.texto(s, e, 0.0, 0.0, 0.5, 0.5) else { return };
-        self.els.push(Elemento::Grupo { transformada: [0.0, -1.0, 1.0, 0.0, x, y], recorte: None, elementos: vec![t] });
+        let Some((t, _)) = self.p.texto(s, e, 0.0, 0.0, 0.5, 0.5) else {
+            return;
+        };
+        self.els.push(Elemento::Grupo {
+            transformada: [0.0, -1.0, 1.0, 0.0, x, y],
+            recorte: None,
+            elementos: vec![t],
+        });
     }
 
     // -----------------------------------------------------------------
@@ -1803,15 +2396,31 @@ impl Dibujo<'_> {
     // -----------------------------------------------------------------
 
     fn circular(&mut self, g: &Grafico, gr: &Grupo, area: Rect) {
-        let Clase::Circular { agujero, primer_angulo } = gr.clase else { return };
-        let series: Vec<&Serie> = if agujero > 0.0 { gr.series.iter().collect() } else { gr.series.iter().take(1).collect() };
+        let Clase::Circular {
+            agujero,
+            primer_angulo,
+        } = gr.clase
+        else {
+            return;
+        };
+        let series: Vec<&Serie> = if agujero > 0.0 {
+            gr.series.iter().collect()
+        } else {
+            gr.series.iter().take(1).collect()
+        };
         if series.is_empty() {
             return;
         }
-        let fuera = series.iter().any(|s| etiquetas_de(gr, s).is_some_and(|e| e.posicion == "outEnd"));
+        let fuera = series
+            .iter()
+            .any(|s| etiquetas_de(gr, s).is_some_and(|e| e.posicion == "outEnd"));
         let mut r = area.ancho.min(area.alto) / 2.0;
         if fuera {
-            let lh = series.iter().filter_map(|s| etiquetas_de(gr, s)).map(|e| self.p.renglon(&e.estilo)).fold(0.0, f32::max);
+            let lh = series
+                .iter()
+                .filter_map(|s| etiquetas_de(gr, s))
+                .map(|e| self.p.renglon(&e.estilo))
+                .fold(0.0, f32::max);
             r = (r - lh * 1.6).max(r * 0.5);
         }
         let r = r.max(1.0);
@@ -1820,8 +2429,19 @@ impl Dibujo<'_> {
         let grueso = (r - r_hueco) / series.len() as f32;
         let inicio = -FRAC_PI_2 + primer_angulo.to_radians();
         for (k, s) in series.iter().enumerate() {
-            let (ri, ro) = if agujero > 0.0 { (r_hueco + grueso * k as f32, r_hueco + grueso * (k + 1) as f32) } else { (0.0, r) };
-            let vals: Vec<f64> = s.valores.iter().map(|v| v.map(f64::abs).unwrap_or(0.0)).collect();
+            let (ri, ro) = if agujero > 0.0 {
+                (
+                    r_hueco + grueso * k as f32,
+                    r_hueco + grueso * (k + 1) as f32,
+                )
+            } else {
+                (0.0, r)
+            };
+            let vals: Vec<f64> = s
+                .valores
+                .iter()
+                .map(|v| v.map(f64::abs).unwrap_or(0.0))
+                .collect();
             let total: f64 = vals.iter().sum();
             if total.is_nan() || total <= 0.0 {
                 continue;
@@ -1848,12 +2468,17 @@ impl Dibujo<'_> {
                     figura((cx + ro * a0.cos(), cy + ro * a0.sin()), tramos, true)
                 };
                 let relleno = relleno_punto(g, gr, s, i);
-                self.els.push(Elemento::Trayecto { figuras: vec![fig], relleno: relleno.clone(), borde: s.linea.flatten() });
+                self.els.push(Elemento::Trayecto {
+                    figuras: vec![fig],
+                    relleno: relleno.clone(),
+                    borde: s.linea.flatten(),
+                });
                 if let Some(e) = etq
                     && !e.borrados.contains(&i)
                 {
                     let cat = g.categorias.get(i).map(|c| c.as_str()).unwrap_or("");
-                    let texto = texto_etiqueta(e, s, cat, s.valores[i].unwrap_or(0.0), Some(*v / total));
+                    let texto =
+                        texto_etiqueta(e, s, cat, s.valores[i].unwrap_or(0.0), Some(*v / total));
                     let medio = a0 + barrido / 2.0;
                     let ancho_t = self.p.ancho(&texto, &e.estilo);
                     let afuera = match e.posicion.as_str() {
@@ -1888,16 +2513,36 @@ impl Dibujo<'_> {
     // -----------------------------------------------------------------
 
     fn radar(&mut self, g: &Grafico, gr: &Grupo, area: Rect) {
-        let n = g.categorias.len().max(gr.series.iter().map(|s| s.valores.len()).max().unwrap_or(0)).clamp(1, MAX_PUNTOS);
+        let n = g
+            .categorias
+            .len()
+            .max(gr.series.iter().map(|s| s.valores.len()).max().unwrap_or(0))
+            .clamp(1, MAX_PUNTOS);
         let ev = ejes_de(g, gr).1;
         let ec = ejes_de(g, gr).0;
         let lh = self.p.renglon(&ec.estilo);
-        let max_cat = (0..n).map(|i| self.p.ancho(g.categorias.get(i).map(|s| s.as_str()).unwrap_or(""), &ec.estilo)).fold(0.0, f32::max);
-        let r = ((area.ancho / 2.0 - max_cat.min(area.ancho / 4.0) - 6.0).min(area.alto / 2.0 - lh - 6.0)).max(4.0);
+        let max_cat = (0..n)
+            .map(|i| {
+                self.p.ancho(
+                    g.categorias.get(i).map(|s| s.as_str()).unwrap_or(""),
+                    &ec.estilo,
+                )
+            })
+            .fold(0.0, f32::max);
+        let r = ((area.ancho / 2.0 - max_cat.min(area.ancho / 4.0) - 6.0)
+            .min(area.alto / 2.0 - lh - 6.0))
+        .max(4.0);
         let (cx, cy) = (area.x + area.ancho / 2.0, area.y + area.alto / 2.0);
         let (lo, hi) = rango_grupo(gr, n).unwrap_or((0.0, 0.0));
         let lhv = self.p.renglon(&ev.estilo);
-        let esc = escala(lo, hi, ev.min, ev.max, ev.unidad, ((r / (lhv * 1.5)).floor() as usize).clamp(2, 10));
+        let esc = escala(
+            lo,
+            hi,
+            ev.min,
+            ev.max,
+            ev.unidad,
+            ((r / (lhv * 1.5)).floor() as usize).clamp(2, 10),
+        );
         let angulo = |i: usize| -FRAC_PI_2 + TAU * i as f32 / n as f32;
         let punto = |i: usize, f: f64| {
             let rr = r * (f.clamp(0.0, 1.0) as f32);
@@ -1911,40 +2556,104 @@ impl Dibujo<'_> {
             }
             let pts: Vec<(f32, f32)> = (0..n).map(|i| punto(i, f)).collect();
             if let Some(fig) = poligono(&pts, true) {
-                self.els.push(Elemento::Trayecto { figuras: vec![Figura { rellenar: false, ..fig }], relleno: None, borde: Some(rejilla) });
+                self.els.push(Elemento::Trayecto {
+                    figuras: vec![Figura {
+                        rellenar: false,
+                        ..fig
+                    }],
+                    relleno: None,
+                    borde: Some(rejilla),
+                });
             }
         }
         for i in 0..n {
             let q = punto(i, 1.0);
-            self.els.push(Elemento::Linea { desde: (cx, cy), hasta: q, trazo: ec.linea.unwrap_or(rejilla) });
+            self.els.push(Elemento::Linea {
+                desde: (cx, cy),
+                hasta: q,
+                trazo: ec.linea.unwrap_or(rejilla),
+            });
             let a = angulo(i);
             let (x, y) = (cx + (r + 5.0) * a.cos(), cy + (r + 5.0) * a.sin());
-            let ah = if a.cos().abs() < 0.2 { 0.5 } else if a.cos() > 0.0 { 0.0 } else { 1.0 };
+            let ah = if a.cos().abs() < 0.2 {
+                0.5
+            } else if a.cos() > 0.0 {
+                0.0
+            } else {
+                1.0
+            };
             let av = 0.5 - 0.5 * a.sin();
             if ec.visible() {
-                let e = self.p.texto(g.categorias.get(i).map(|s| s.as_str()).unwrap_or(""), &ec.estilo, x, y, ah, av);
+                let e = self.p.texto(
+                    g.categorias.get(i).map(|s| s.as_str()).unwrap_or(""),
+                    &ec.estilo,
+                    x,
+                    y,
+                    ah,
+                    av,
+                );
                 self.poner(e);
             }
         }
         if ev.visible() {
-            let formato = ev.formato.clone().or_else(|| gr.series.first().map(|s| s.formato.clone())).unwrap_or_default();
+            let formato = ev
+                .formato
+                .clone()
+                .or_else(|| gr.series.first().map(|s| s.formato.clone()))
+                .unwrap_or_default();
             for m in esc.marcas() {
                 let (x, y) = punto(0, esc.fraccion(m));
-                let e = self.p.texto(&formatear(m, &formato, Some(esc.paso)), &ev.estilo, x - 3.0, y, 1.0, 0.5);
+                let e = self.p.texto(
+                    &formatear(m, &formato, Some(esc.paso)),
+                    &ev.estilo,
+                    x - 3.0,
+                    y,
+                    1.0,
+                    0.5,
+                );
                 self.poner(e);
             }
         }
-        let Clase::Radar { relleno } = gr.clase else { return };
+        let Clase::Radar { relleno } = gr.clase else {
+            return;
+        };
         for s in &gr.series {
-            let pts: Vec<(f32, f32)> = (0..n).map(|i| punto(i, esc.fraccion(s.valores.get(i).copied().flatten().unwrap_or(0.0)))).collect();
-            let Some(fig) = poligono(&pts, true) else { continue };
+            let pts: Vec<(f32, f32)> = (0..n)
+                .map(|i| {
+                    punto(
+                        i,
+                        esc.fraccion(s.valores.get(i).copied().flatten().unwrap_or(0.0)),
+                    )
+                })
+                .collect();
+            let Some(fig) = poligono(&pts, true) else {
+                continue;
+            };
             if relleno {
-                self.els.push(Elemento::Trayecto { figuras: vec![fig], relleno: relleno_serie(s), borde: s.linea.flatten() });
+                self.els.push(Elemento::Trayecto {
+                    figuras: vec![fig],
+                    relleno: relleno_serie(s),
+                    borde: s.linea.flatten(),
+                });
             } else {
-                self.els.push(Elemento::Trayecto { figuras: vec![Figura { rellenar: false, ..fig }], relleno: None, borde: trazo_serie(s) });
+                self.els.push(Elemento::Trayecto {
+                    figuras: vec![Figura {
+                        rellenar: false,
+                        ..fig
+                    }],
+                    relleno: None,
+                    borde: trazo_serie(s),
+                });
                 if let Some((sim, tam, rel, bor)) = marcador_de(gr, s) {
-                    let figuras: Vec<Figura> = pts.iter().flat_map(|p| figura_marcador(sim, p.0, p.1, tam)).collect();
-                    self.els.push(Elemento::Trayecto { figuras, relleno: rel, borde: bor });
+                    let figuras: Vec<Figura> = pts
+                        .iter()
+                        .flat_map(|p| figura_marcador(sim, p.0, p.1, tam))
+                        .collect();
+                    self.els.push(Elemento::Trayecto {
+                        figuras,
+                        relleno: rel,
+                        borde: bor,
+                    });
                 }
             }
         }
@@ -1956,7 +2665,9 @@ impl Dibujo<'_> {
 
     fn cartesiano(&mut self, g: &Grafico, area: Rect) {
         let grupos: Vec<&Grupo> = g.grupos.iter().filter(|x| x.clase.cartesiana()).collect();
-        let Some(primero) = grupos.first() else { return };
+        let Some(primero) = grupos.first() else {
+            return;
+        };
         let horizontal = matches!(primero.clase, Clase::Barras { horizontal: true });
         let xy = primero.clase.xy();
         let (ec, ev) = ejes_de(g, primero);
@@ -1979,7 +2690,15 @@ impl Dibujo<'_> {
         } else {
             g.categorias
                 .len()
-                .max(grupos.iter().filter(|x| !x.clase.xy()).flat_map(|x| x.series.iter()).map(|s| s.valores.len()).max().unwrap_or(0))
+                .max(
+                    grupos
+                        .iter()
+                        .filter(|x| !x.clase.xy())
+                        .flat_map(|x| x.series.iter())
+                        .map(|s| s.valores.len())
+                        .max()
+                        .unwrap_or(0),
+                )
                 .clamp(1, MAX_PUNTOS)
         };
         let (mut r1, mut r2) = (None, None);
@@ -2020,17 +2739,29 @@ impl Dibujo<'_> {
         } else {
             Lado::categorias(ec.clone(), n, ev.entre)
         };
-        let mut lado_v = if horizontal { Lado::categorias(ec.clone(), n, ev.entre) } else { Lado::valores(ev.clone(), r1, pct1, formato_de(&ev, pct1, false)) };
+        let mut lado_v = if horizontal {
+            Lado::categorias(ec.clone(), n, ev.entre)
+        } else {
+            Lado::valores(ev.clone(), r1, pct1, formato_de(&ev, pct1, false))
+        };
         let mut lado_v2 = ev2.clone().map(|e| {
             let f = formato_de(&e, pct2, true);
             Lado::valores(e, r2, pct2, f)
         });
         let lh_h = self.p.renglon(&lado_h.eje.estilo);
         let lh_v = self.p.renglon(&lado_v.eje.estilo);
-        let interior = g.manual_trazado.filter(|m| m.interior).map(|m| self.caja_manual(m));
+        let interior = g
+            .manual_trazado
+            .filter(|m| m.interior)
+            .map(|m| self.caja_manual(m));
         // Dos pasadas: el largo de los ejes depende de lo que ocupan sus
         // etiquetas, y las etiquetas de valores del paso que cabe.
-        let mut trazado = Rect::nuevo(area.x + 30.0, area.y + lh_v / 2.0, (area.ancho - 34.0).max(10.0), (area.alto - lh_h - 8.0).max(10.0));
+        let mut trazado = Rect::nuevo(
+            area.x + 30.0,
+            area.y + lh_v / 2.0,
+            (area.ancho - 34.0).max(10.0),
+            (area.alto - lh_h - 8.0).max(10.0),
+        );
         let mut cats_h: Vec<Vec<String>> = Vec::new();
         let mut salto_h = 1usize;
         for _ in 0..2 {
@@ -2051,7 +2782,13 @@ impl Dibujo<'_> {
             let mut abajo = 0.0f32;
             if lado_v.eje.visible() {
                 let tope = area.ancho * 0.4;
-                let w = textos_v.iter().map(|t| self.p.ancho(t, &lado_v.eje.estilo)).fold(0.0, f32::max).min(tope) + HUECO + 2.0;
+                let w = textos_v
+                    .iter()
+                    .map(|t| self.p.ancho(t, &lado_v.eje.estilo))
+                    .fold(0.0, f32::max)
+                    .min(tope)
+                    + HUECO
+                    + 2.0;
                 if lado_v.eje.pos == 'r' {
                     der += w;
                 } else {
@@ -2059,7 +2796,13 @@ impl Dibujo<'_> {
                 }
             }
             if let Some(l) = lado_v2.as_ref().filter(|l| l.eje.visible()) {
-                let w = l.textos(g).iter().map(|t| self.p.ancho(t, &l.eje.estilo)).fold(0.0, f32::max) + HUECO + 2.0;
+                let w = l
+                    .textos(g)
+                    .iter()
+                    .map(|t| self.p.ancho(t, &l.eje.estilo))
+                    .fold(0.0, f32::max)
+                    + HUECO
+                    + 2.0;
                 if lado_v.eje.pos == 'r' {
                     izq += w;
                 } else {
@@ -2088,14 +2831,25 @@ impl Dibujo<'_> {
             if lado_h.eje.visible() {
                 let alto_h = if lado_h.escala.is_none() {
                     // Categorias: en renglones si caben partidas, o saltando.
-                    let banda = if lado_h.entre { trazado.ancho / n as f32 } else { trazado.ancho / n.saturating_sub(1).max(1) as f32 };
-                    let (lineas, salto) = self.repartir_categorias(&textos_h, &lado_h.eje.estilo, banda);
+                    let banda = if lado_h.entre {
+                        trazado.ancho / n as f32
+                    } else {
+                        trazado.ancho / n.saturating_sub(1).max(1) as f32
+                    };
+                    let (lineas, salto) =
+                        self.repartir_categorias(&textos_h, &lado_h.eje.estilo, banda);
                     let alto = lineas.iter().map(|l| l.len()).max().unwrap_or(1) as f32 * lh_h;
                     if !lado_h.entre {
                         // Los puntos van en los bordes: que quepa medio rotulo
                         // del primero y del ultimo.
                         let medio = |l: Option<&Vec<String>>| {
-                            l.map(|l| l.iter().map(|x| self.p.ancho(x, &lado_h.eje.estilo)).fold(0.0, f32::max)).unwrap_or(0.0) / 2.0
+                            l.map(|l| {
+                                l.iter()
+                                    .map(|x| self.p.ancho(x, &lado_h.eje.estilo))
+                                    .fold(0.0, f32::max)
+                            })
+                            .unwrap_or(0.0)
+                                / 2.0
                         };
                         izq = izq.max(medio(lineas.first()));
                         der = der.max(medio(lineas.last()));
@@ -2104,7 +2858,10 @@ impl Dibujo<'_> {
                     salto_h = salto;
                     alto
                 } else {
-                    let ultimo = textos_h.last().map(|t| self.p.ancho(t, &lado_h.eje.estilo)).unwrap_or(0.0);
+                    let ultimo = textos_h
+                        .last()
+                        .map(|t| self.p.ancho(t, &lado_h.eje.estilo))
+                        .unwrap_or(0.0);
                     der = der.max(ultimo / 2.0);
                     lh_h
                 };
@@ -2127,7 +2884,12 @@ impl Dibujo<'_> {
                 abajo += self.p.renglon(&t.estilo) + 4.0;
             }
             if interior.is_none() {
-                trazado = Rect::nuevo(area.x + izq, area.y + arriba, (area.ancho - izq - der).max(10.0), (area.alto - arriba - abajo).max(10.0));
+                trazado = Rect::nuevo(
+                    area.x + izq,
+                    area.y + arriba,
+                    (area.ancho - izq - der).max(10.0),
+                    (area.alto - arriba - abajo).max(10.0),
+                );
             }
         }
         lado_h.textos_cache = lado_h.textos(g);
@@ -2138,27 +2900,67 @@ impl Dibujo<'_> {
 
         // Las rectas de los ejes.
         let rh = if lado_h.eje.invertido {
-            Recta { a: trazado.derecha(), b: trazado.x }
+            Recta {
+                a: trazado.derecha(),
+                b: trazado.x,
+            }
         } else {
-            Recta { a: trazado.x, b: trazado.derecha() }
+            Recta {
+                a: trazado.x,
+                b: trazado.derecha(),
+            }
         };
-        let rv = if lado_v.eje.invertido { Recta { a: trazado.y, b: trazado.abajo() } } else { Recta { a: trazado.abajo(), b: trazado.y } };
-        let rv2 = lado_v2.as_ref().map(|l| if l.eje.invertido { Recta { a: trazado.y, b: trazado.abajo() } } else { Recta { a: trazado.abajo(), b: trazado.y } });
+        let rv = if lado_v.eje.invertido {
+            Recta {
+                a: trazado.y,
+                b: trazado.abajo(),
+            }
+        } else {
+            Recta {
+                a: trazado.abajo(),
+                b: trazado.y,
+            }
+        };
+        let rv2 = lado_v2.as_ref().map(|l| {
+            if l.eje.invertido {
+                Recta {
+                    a: trazado.y,
+                    b: trazado.abajo(),
+                }
+            } else {
+                Recta {
+                    a: trazado.abajo(),
+                    b: trazado.y,
+                }
+            }
+        });
 
         // El fondo del trazado y las cuadriculas.
         if g.fondo_trazado.is_some() || g.borde_trazado.is_some() {
-            self.els.push(Elemento::Rect { rect: trazado, relleno: g.fondo_trazado.clone(), borde: g.borde_trazado });
+            self.els.push(Elemento::Rect {
+                rect: trazado,
+                relleno: g.fondo_trazado.clone(),
+                borde: g.borde_trazado,
+            });
         }
         if let Some(t) = lado_h.eje.cuadricula {
             for f in lado_h.fracciones_rejilla() {
                 let x = rh.en(f);
-                self.els.push(Elemento::Linea { desde: (x, trazado.y), hasta: (x, trazado.abajo()), trazo: t });
+                self.els.push(Elemento::Linea {
+                    desde: (x, trazado.y),
+                    hasta: (x, trazado.abajo()),
+                    trazo: t,
+                });
             }
         }
         if let Some(t) = lado_v.eje.cuadricula {
             for f in lado_v.fracciones_rejilla() {
                 let y = rv.en(f);
-                self.els.push(Elemento::Linea { desde: (trazado.x, y), hasta: (trazado.derecha(), y), trazo: t });
+                self.els.push(Elemento::Linea {
+                    desde: (trazado.x, y),
+                    hasta: (trazado.derecha(), y),
+                    trazo: t,
+                });
             }
         }
 
@@ -2210,7 +3012,12 @@ impl Dibujo<'_> {
         let holgura = 8.0;
         self.els.push(Elemento::Grupo {
             transformada: IDENTIDAD,
-            recorte: Some(Rect::nuevo(trazado.x - holgura, trazado.y - holgura, trazado.ancho + 2.0 * holgura, trazado.alto + 2.0 * holgura)),
+            recorte: Some(Rect::nuevo(
+                trazado.x - holgura,
+                trazado.y - holgura,
+                trazado.ancho + 2.0 * holgura,
+                trazado.alto + 2.0 * holgura,
+            )),
             elementos: series_els,
         });
 
@@ -2222,12 +3029,20 @@ impl Dibujo<'_> {
         // Eje H.
         if !lado_h.eje.borrado {
             if let Some(t) = lado_h.eje.linea {
-                self.els.push(Elemento::Linea { desde: (trazado.x, y_h), hasta: (trazado.derecha(), y_h), trazo: t });
+                self.els.push(Elemento::Linea {
+                    desde: (trazado.x, y_h),
+                    hasta: (trazado.derecha(), y_h),
+                    trazo: t,
+                });
                 let s = if abajo { 1.0 } else { -1.0 };
                 for f in lado_h.fracciones_marcas() {
                     let x = rh.en(f);
                     if let Some((a, b)) = tramo_marca(&lado_h.eje.marcas, y_h, s) {
-                        self.els.push(Elemento::Linea { desde: (x, a), hasta: (x, b), trazo: t });
+                        self.els.push(Elemento::Linea {
+                            desde: (x, a),
+                            hasta: (x, b),
+                            trazo: t,
+                        });
                     }
                 }
             }
@@ -2237,10 +3052,22 @@ impl Dibujo<'_> {
                     "high" => rv.a.min(rv.b),
                     _ => y_h,
                 };
-                let extra = if matches!(lado_h.eje.marcas.as_str(), "out" | "cross") { MARCA } else { 0.0 };
-                let (y, av) = if abajo { (y_et + HUECO + extra, 0.0) } else { (y_et - HUECO - extra, 1.0) };
+                let extra = if matches!(lado_h.eje.marcas.as_str(), "out" | "cross") {
+                    MARCA
+                } else {
+                    0.0
+                };
+                let (y, av) = if abajo {
+                    (y_et + HUECO + extra, 0.0)
+                } else {
+                    (y_et - HUECO - extra, 1.0)
+                };
                 if lado_h.escala.is_some() {
-                    for (f, t) in lado_h.fracciones_textos().into_iter().zip(&lado_h.textos_cache) {
+                    for (f, t) in lado_h
+                        .fracciones_textos()
+                        .into_iter()
+                        .zip(&lado_h.textos_cache)
+                    {
                         let e = self.p.texto(t, &lado_h.eje.estilo, rh.en(f), y, 0.5, av);
                         self.poner(e);
                     }
@@ -2249,10 +3076,16 @@ impl Dibujo<'_> {
                         if i % salto_h != 0 {
                             continue;
                         }
-                        let Some(lineas) = cats_h.get(i) else { continue };
+                        let Some(lineas) = cats_h.get(i) else {
+                            continue;
+                        };
                         let k = lineas.len() as f32;
                         for (j, l) in lineas.iter().enumerate() {
-                            let yy = if abajo { y + lh_h * j as f32 } else { y - lh_h * (k - 1.0 - j as f32) };
+                            let yy = if abajo {
+                                y + lh_h * j as f32
+                            } else {
+                                y - lh_h * (k - 1.0 - j as f32)
+                            };
                             let e = self.p.texto(l, &lado_h.eje.estilo, rh.en(f), yy, 0.5, av);
                             self.poner(e);
                         }
@@ -2263,7 +3096,11 @@ impl Dibujo<'_> {
         // Eje V (y el secundario).
         let mut lados_v: Vec<(&Lado, Recta, f32, bool)> = vec![(&lado_v, rv, x_v, izquierda)];
         if let (Some(l), Some(r)) = (lado_v2.as_ref(), rv2) {
-            let x = if izquierda { trazado.derecha() } else { trazado.x };
+            let x = if izquierda {
+                trazado.derecha()
+            } else {
+                trazado.x
+            };
             lados_v.push((l, r, x, !izquierda));
         }
         for (lado, recta, x_eje, a_la_izq) in lados_v {
@@ -2272,11 +3109,19 @@ impl Dibujo<'_> {
             }
             let s = if a_la_izq { -1.0 } else { 1.0 };
             if let Some(t) = lado.eje.linea {
-                self.els.push(Elemento::Linea { desde: (x_eje, trazado.y), hasta: (x_eje, trazado.abajo()), trazo: t });
+                self.els.push(Elemento::Linea {
+                    desde: (x_eje, trazado.y),
+                    hasta: (x_eje, trazado.abajo()),
+                    trazo: t,
+                });
                 for f in lado.fracciones_marcas() {
                     let y = recta.en(f);
                     if let Some((a, b)) = tramo_marca(&lado.eje.marcas, x_eje, s) {
-                        self.els.push(Elemento::Linea { desde: (a, y), hasta: (b, y), trazo: t });
+                        self.els.push(Elemento::Linea {
+                            desde: (a, y),
+                            hasta: (b, y),
+                            trazo: t,
+                        });
                     }
                 }
             }
@@ -2286,18 +3131,33 @@ impl Dibujo<'_> {
                     "high" => rh.a.max(rh.b),
                     _ => x_eje,
                 };
-                let extra = if matches!(lado.eje.marcas.as_str(), "out" | "cross") { MARCA } else { 0.0 };
+                let extra = if matches!(lado.eje.marcas.as_str(), "out" | "cross") {
+                    MARCA
+                } else {
+                    0.0
+                };
                 let x = x_et + s * (HUECO + extra);
                 let tope = area.ancho * 0.4;
                 for (f, t) in lado.fracciones_textos().into_iter().zip(&lado.textos_cache) {
                     let t = self.p.recortar(t, &lado.eje.estilo, tope);
-                    let e = self.p.texto(&t, &lado.eje.estilo, x, recta.en(f), if a_la_izq { 1.0 } else { 0.0 }, 0.5);
+                    let e = self.p.texto(
+                        &t,
+                        &lado.eje.estilo,
+                        x,
+                        recta.en(f),
+                        if a_la_izq { 1.0 } else { 0.0 },
+                        0.5,
+                    );
                     self.poner(e);
                 }
             }
             if let Some(t) = &lado.eje.titulo {
                 let lh = self.p.renglon(&t.estilo);
-                let x = if a_la_izq { area.x + lh / 2.0 } else { area.derecha() - lh / 2.0 };
+                let x = if a_la_izq {
+                    area.x + lh / 2.0
+                } else {
+                    area.derecha() - lh / 2.0
+                };
                 let texto = t.lineas.join(" ");
                 let texto = self.p.recortar(&texto, &t.estilo, trazado.alto);
                 self.texto_vertical(&texto, &t.estilo, x, trazado.y + trazado.alto / 2.0);
@@ -2307,7 +3167,14 @@ impl Dibujo<'_> {
             && !lado_h.eje.borrado
         {
             let texto = self.p.recortar(&t.lineas.join(" "), &t.estilo, area.ancho);
-            let e = self.p.texto(&texto, &t.estilo, trazado.x + trazado.ancho / 2.0, area.abajo(), 0.5, 1.0);
+            let e = self.p.texto(
+                &texto,
+                &t.estilo,
+                trazado.x + trazado.ancho / 2.0,
+                area.abajo(),
+                0.5,
+                1.0,
+            );
             self.poner(e);
         }
     }
@@ -2315,21 +3182,34 @@ impl Dibujo<'_> {
     /// Reparte los rotulos de las categorias en su banda: partidos en
     /// renglones (tres como mucho) si asi caben; si no, uno de cada
     /// `salto`.
-    fn repartir_categorias(&self, textos: &[String], e: &EstiloTexto, banda: f32) -> (Vec<Vec<String>>, usize) {
+    fn repartir_categorias(
+        &self,
+        textos: &[String],
+        e: &EstiloTexto,
+        banda: f32,
+    ) -> (Vec<Vec<String>>, usize) {
         let max = (banda - 2.0).max(1.0);
         let anchos: Vec<f32> = textos.iter().map(|t| self.p.ancho(t, e)).collect();
         if anchos.iter().all(|w| *w <= max) {
             return (textos.iter().map(|t| vec![t.clone()]).collect(), 1);
         }
         let partidas: Vec<Vec<String>> = textos.iter().map(|t| self.p.partir(t, e, max)).collect();
-        let cabe = partidas.iter().all(|l| l.len() <= 3 && l.iter().all(|x| self.p.ancho(x, e) <= max));
+        let cabe = partidas
+            .iter()
+            .all(|l| l.len() <= 3 && l.iter().all(|x| self.p.ancho(x, e) <= max));
         if cabe {
             return (partidas, 1);
         }
         let mayor = anchos.iter().copied().fold(0.0, f32::max);
         let salto = ((mayor + 6.0) / banda.max(0.1)).ceil().max(1.0) as usize;
         let tope = max * salto as f32;
-        (textos.iter().map(|t| vec![self.p.recortar(t, e, tope)]).collect(), salto)
+        (
+            textos
+                .iter()
+                .map(|t| vec![self.p.recortar(t, e, tope)])
+                .collect(),
+            salto,
+        )
     }
 
     fn barras(&mut self, g: &Grafico, gr: &Grupo, m: &Marco, salida: &mut Vec<Elemento>) {
@@ -2344,10 +3224,19 @@ impl Dibujo<'_> {
         for i in 0..m.n {
             let centro = (i as f32 + 0.5) * banda;
             let ini = centro - grupo_w / 2.0;
-            let total: f64 = if pct { gr.series.iter().map(|s| s.valores.get(i).copied().flatten().unwrap_or(0.0).abs()).sum() } else { 1.0 };
+            let total: f64 = if pct {
+                gr.series
+                    .iter()
+                    .map(|s| s.valores.get(i).copied().flatten().unwrap_or(0.0).abs())
+                    .sum()
+            } else {
+                1.0
+            };
             let (mut pos, mut neg) = (0.0f64, 0.0f64);
             for (si, s) in gr.series.iter().enumerate() {
-                let Some(v) = s.valores.get(i).copied().flatten() else { continue };
+                let Some(v) = s.valores.get(i).copied().flatten() else {
+                    continue;
+                };
                 let vv = if pct {
                     if total > 0.0 { v / total } else { 0.0 }
                 } else {
@@ -2366,7 +3255,12 @@ impl Dibujo<'_> {
                 } else {
                     (m.base, vv)
                 };
-                let f0 = ini + if apilada { 0.0 } else { si as f32 * w * (1.0 - ov) };
+                let f0 = ini
+                    + if apilada {
+                        0.0
+                    } else {
+                        si as f32 * w * (1.0 - ov)
+                    };
                 let (c0, c1) = (m.cat.en(f0 as f64), m.cat.en((f0 + w) as f64));
                 let fa = m.escala.fraccion(a).clamp(0.0, 1.0);
                 let fb = m.escala.fraccion(b).clamp(0.0, 1.0);
@@ -2377,13 +3271,21 @@ impl Dibujo<'_> {
                     Rect::nuevo(c0.min(c1), v0.min(v1), (c1 - c0).abs(), (v1 - v0).abs())
                 };
                 let relleno = relleno_punto(g, gr, s, i);
-                salida.push(Elemento::Rect { rect, relleno: relleno.clone(), borde: s.linea.flatten() });
+                salida.push(Elemento::Rect {
+                    rect,
+                    relleno: relleno.clone(),
+                    borde: s.linea.flatten(),
+                });
                 if let Some(e) = etiquetas_de(gr, s)
                     && !e.borrados.contains(&i)
                 {
                     let cat = g.categorias.get(i).map(|c| c.as_str()).unwrap_or("");
                     let texto = texto_etiqueta(e, s, cat, v, pct.then_some(vv));
-                    let posicion = if e.posicion.is_empty() { if apilada { "ctr" } else { "outEnd" } } else { e.posicion.as_str() };
+                    let posicion = if e.posicion.is_empty() {
+                        if apilada { "ctr" } else { "outEnd" }
+                    } else {
+                        e.posicion.as_str()
+                    };
                     // Hacia donde crece la barra en pantalla.
                     let dir = if v1 >= v0 { 1.0 } else { -1.0 };
                     let cc = (c0 + c1) / 2.0;
@@ -2441,7 +3343,11 @@ impl Dibujo<'_> {
                     }
                     Agrupacion::Porcentaje => {
                         acum[i] += v;
-                        if totales[i] > 0.0 { acum[i] / totales[i] } else { 0.0 }
+                        if totales[i] > 0.0 {
+                            acum[i] / totales[i]
+                        } else {
+                            0.0
+                        }
                     }
                 };
                 let fc = m.fraccion_cat(i);
@@ -2461,8 +3367,19 @@ impl Dibujo<'_> {
                 let mut tramo: Vec<(f32, f32)> = Vec::new();
                 let cerrar = |tramo: &mut Vec<(f32, f32)>, figuras: &mut Vec<Figura>| {
                     if tramo.len() >= 2 {
-                        let tramos = if s.suave { suave(tramo) } else { tramo[1..].iter().map(|p| Tramo::Linea(p.0, p.1)).collect() };
-                        figuras.push(Figura { inicio: tramo[0], tramos, cerrada: false, rellenar: false, trazar: true, ..Default::default() });
+                        let tramos = if s.suave {
+                            suave(tramo)
+                        } else {
+                            tramo[1..].iter().map(|p| Tramo::Linea(p.0, p.1)).collect()
+                        };
+                        figuras.push(Figura {
+                            inicio: tramo[0],
+                            tramos,
+                            cerrada: false,
+                            rellenar: false,
+                            trazar: true,
+                            ..Default::default()
+                        });
                     }
                     tramo.clear();
                 };
@@ -2475,20 +3392,39 @@ impl Dibujo<'_> {
                 }
                 cerrar(&mut tramo, &mut figuras);
                 if !figuras.is_empty() {
-                    salida.push(Elemento::Trayecto { figuras, relleno: None, borde: Some(t) });
+                    salida.push(Elemento::Trayecto {
+                        figuras,
+                        relleno: None,
+                        borde: Some(t),
+                    });
                 }
             }
             if let Some((sim, tam, rel, bor)) = marcador_de(gr, s) {
-                let figuras: Vec<Figura> = pts.iter().flatten().flat_map(|p| figura_marcador(sim, p.0, p.1, tam)).collect();
+                let figuras: Vec<Figura> = pts
+                    .iter()
+                    .flatten()
+                    .flat_map(|p| figura_marcador(sim, p.0, p.1, tam))
+                    .collect();
                 if !figuras.is_empty() {
-                    salida.push(Elemento::Trayecto { figuras, relleno: rel, borde: bor });
+                    salida.push(Elemento::Trayecto {
+                        figuras,
+                        relleno: rel,
+                        borde: bor,
+                    });
                 }
             }
             self.etiquetas_puntos(g, gr, s, &pts, m.horizontal);
         }
     }
 
-    fn etiquetas_puntos(&mut self, g: &Grafico, gr: &Grupo, s: &Serie, pts: &[Option<(f32, f32, f64)>], _horizontal: bool) {
+    fn etiquetas_puntos(
+        &mut self,
+        g: &Grafico,
+        gr: &Grupo,
+        s: &Serie,
+        pts: &[Option<(f32, f32, f64)>],
+        _horizontal: bool,
+    ) {
         let Some(e) = etiquetas_de(gr, s) else { return };
         for (i, p) in pts.iter().enumerate() {
             let Some((x, y, v)) = p else { continue };
@@ -2514,14 +3450,26 @@ impl Dibujo<'_> {
     fn areas(&mut self, g: &Grafico, gr: &Grupo, m: &Marco, salida: &mut Vec<Elemento>) {
         let totales = totales(gr, m.n);
         let mut acum = vec![0.0; m.n];
-        let mut debajo: Vec<(f32, f32)> = (0..m.n).map(|i| m.punto(m.fraccion_cat(i), m.escala.fraccion(m.base))).collect();
+        let mut debajo: Vec<(f32, f32)> = (0..m.n)
+            .map(|i| m.punto(m.fraccion_cat(i), m.escala.fraccion(m.base)))
+            .collect();
         for s in &gr.series {
             let pts = self.puntos_serie(g, gr, s, m, &mut acum, &totales, true);
-            let arriba: Vec<(f32, f32)> = pts.iter().map(|p| p.map(|p| (p.0, p.1)).unwrap_or((0.0, 0.0))).collect();
+            let arriba: Vec<(f32, f32)> = pts
+                .iter()
+                .map(|p| p.map(|p| (p.0, p.1)).unwrap_or((0.0, 0.0)))
+                .collect();
             let mut contorno = arriba.clone();
             contorno.extend(debajo.iter().rev());
             if let Some(f) = poligono(&contorno, true) {
-                salida.push(Elemento::Trayecto { figuras: vec![Figura { trazar: s.linea.flatten().is_some(), ..f }], relleno: relleno_serie(s), borde: s.linea.flatten() });
+                salida.push(Elemento::Trayecto {
+                    figuras: vec![Figura {
+                        trazar: s.linea.flatten().is_some(),
+                        ..f
+                    }],
+                    relleno: relleno_serie(s),
+                    borde: s.linea.flatten(),
+                });
             }
             self.etiquetas_puntos(g, gr, s, &pts, m.horizontal);
             if gr.agrupacion != Agrupacion::Normal {
@@ -2531,9 +3479,24 @@ impl Dibujo<'_> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn dispersion(&mut self, g: &Grafico, gr: &Grupo, rh: Recta, ex: Escala, rv: Recta, ey: Escala, trazado: &Rect, salida: &mut Vec<Elemento>) {
+    fn dispersion(
+        &mut self,
+        g: &Grafico,
+        gr: &Grupo,
+        rh: Recta,
+        ex: Escala,
+        rv: Recta,
+        ey: Escala,
+        trazado: &Rect,
+        salida: &mut Vec<Elemento>,
+    ) {
         let burbuja = matches!(gr.clase, Clase::Burbuja);
-        let max_tam = gr.series.iter().flat_map(|s| s.tamanos.iter().flatten()).map(|t| t.abs()).fold(0.0f64, f64::max);
+        let max_tam = gr
+            .series
+            .iter()
+            .flat_map(|s| s.tamanos.iter().flatten())
+            .map(|t| t.abs())
+            .fold(0.0f64, f64::max);
         let diametro_max = trazado.ancho.min(trazado.alto) * 0.25 * gr.escala_burbuja;
         for s in &gr.series {
             let pts: Vec<Option<(f32, f32, f64)>> = s
@@ -2555,10 +3518,16 @@ impl Dibujo<'_> {
                     }
                     let d = diametro_max * (t / max_tam).sqrt() as f32;
                     let relleno = relleno_punto(g, gr, s, i).map(|r| match r {
-                        Relleno::Solido(c) if s.relleno.is_none() => Relleno::Solido(c.con_alfa(0.75)),
+                        Relleno::Solido(c) if s.relleno.is_none() => {
+                            Relleno::Solido(c.con_alfa(0.75))
+                        }
                         otro => otro,
                     });
-                    salida.push(Elemento::Trayecto { figuras: vec![circulo(*x, *y, d / 2.0)], relleno, borde: s.linea.flatten() });
+                    salida.push(Elemento::Trayecto {
+                        figuras: vec![circulo(*x, *y, d / 2.0)],
+                        relleno,
+                        borde: s.linea.flatten(),
+                    });
                 }
             } else {
                 let con_linea = !matches!(gr.estilo_dispersion.as_str(), "marker" | "none");
@@ -2571,21 +3540,44 @@ impl Dibujo<'_> {
                             Some((x, y, _)) => tramo.push((*x, *y)),
                             None => {
                                 if tramo.len() >= 2 {
-                                    let tramos = if suave_s { suave(&tramo) } else { tramo[1..].iter().map(|p| Tramo::Linea(p.0, p.1)).collect() };
-                                    figuras.push(Figura { inicio: tramo[0], tramos, cerrada: false, rellenar: false, trazar: true, ..Default::default() });
+                                    let tramos = if suave_s {
+                                        suave(&tramo)
+                                    } else {
+                                        tramo[1..].iter().map(|p| Tramo::Linea(p.0, p.1)).collect()
+                                    };
+                                    figuras.push(Figura {
+                                        inicio: tramo[0],
+                                        tramos,
+                                        cerrada: false,
+                                        rellenar: false,
+                                        trazar: true,
+                                        ..Default::default()
+                                    });
                                 }
                                 tramo.clear();
                             }
                         }
                     }
                     if !figuras.is_empty() {
-                        salida.push(Elemento::Trayecto { figuras, relleno: None, borde: Some(t) });
+                        salida.push(Elemento::Trayecto {
+                            figuras,
+                            relleno: None,
+                            borde: Some(t),
+                        });
                     }
                 }
                 if let Some((sim, tam, rel, bor)) = marcador_de(gr, s) {
-                    let figuras: Vec<Figura> = pts.iter().flatten().flat_map(|p| figura_marcador(sim, p.0, p.1, tam)).collect();
+                    let figuras: Vec<Figura> = pts
+                        .iter()
+                        .flatten()
+                        .flat_map(|p| figura_marcador(sim, p.0, p.1, tam))
+                        .collect();
                     if !figuras.is_empty() {
-                        salida.push(Elemento::Trayecto { figuras, relleno: rel, borde: bor });
+                        salida.push(Elemento::Trayecto {
+                            figuras,
+                            relleno: rel,
+                            borde: bor,
+                        });
                     }
                 }
             }
@@ -2615,7 +3607,11 @@ impl Marco {
     }
 
     fn punto(&self, fcat: f64, fval: f64) -> (f32, f32) {
-        if self.horizontal { (self.val.en(fval), self.cat.en(fcat)) } else { (self.cat.en(fcat), self.val.en(fval)) }
+        if self.horizontal {
+            (self.val.en(fval), self.cat.en(fcat))
+        } else {
+            (self.cat.en(fcat), self.val.en(fval))
+        }
     }
 }
 
@@ -2647,11 +3643,29 @@ struct Lado {
 
 impl Lado {
     fn valores(eje: Eje, rango: Option<(f64, f64)>, porcentaje: bool, formato: String) -> Lado {
-        Lado { eje, escala: None, rango, porcentaje, formato, n: 0, entre: true, textos_cache: Vec::new() }
+        Lado {
+            eje,
+            escala: None,
+            rango,
+            porcentaje,
+            formato,
+            n: 0,
+            entre: true,
+            textos_cache: Vec::new(),
+        }
     }
 
     fn categorias(eje: Eje, n: usize, entre: bool) -> Lado {
-        Lado { eje, escala: None, rango: None, porcentaje: false, formato: String::new(), n, entre, textos_cache: Vec::new() }
+        Lado {
+            eje,
+            escala: None,
+            rango: None,
+            porcentaje: false,
+            formato: String::new(),
+            n,
+            entre,
+            textos_cache: Vec::new(),
+        }
     }
 
     fn es_valores(&self) -> bool {
@@ -2663,13 +3677,19 @@ impl Lado {
         if !self.es_valores() {
             return;
         }
-        let div = if vertical { largo / (alto * 1.8).max(1.0) } else { largo / (alto * 4.5).max(1.0) };
+        let div = if vertical {
+            largo / (alto * 1.8).max(1.0)
+        } else {
+            largo / (alto * 4.5).max(1.0)
+        };
         let div = (div.floor() as usize).clamp(2, 10);
         let (lo, hi) = self.rango.unwrap_or((0.0, 0.0));
         let e = &self.eje;
         self.escala = Some(if self.porcentaje {
             let a = e.min.unwrap_or(if lo < -1e-9 { -1.0 } else { 0.0 });
-            let b = e.max.unwrap_or(if hi > 1e-9 || lo >= -1e-9 { 1.0 } else { 0.0 });
+            let b = e
+                .max
+                .unwrap_or(if hi > 1e-9 || lo >= -1e-9 { 1.0 } else { 0.0 });
             escala(a, b, Some(a), Some(b), e.unidad, 10)
         } else {
             escala(lo, hi, e.min, e.max, e.unidad, div)
@@ -2678,9 +3698,20 @@ impl Lado {
 
     fn textos(&self, g: &Grafico) -> Vec<String> {
         match self.escala {
-            Some(esc) => esc.marcas().into_iter().map(|m| formatear(m, &self.formato, Some(esc.paso))).collect(),
+            Some(esc) => esc
+                .marcas()
+                .into_iter()
+                .map(|m| formatear(m, &self.formato, Some(esc.paso)))
+                .collect(),
             None if self.es_valores() => Vec::new(),
-            None => (0..self.n).map(|i| g.categorias.get(i).cloned().unwrap_or_else(|| (i + 1).to_string())).collect(),
+            None => (0..self.n)
+                .map(|i| {
+                    g.categorias
+                        .get(i)
+                        .cloned()
+                        .unwrap_or_else(|| (i + 1).to_string())
+                })
+                .collect(),
         }
     }
 
@@ -2688,7 +3719,9 @@ impl Lado {
     fn fracciones_textos(&self) -> Vec<f64> {
         match self.escala {
             Some(esc) => esc.marcas().into_iter().map(|m| esc.fraccion(m)).collect(),
-            None => (0..self.n).map(|i| fraccion_categoria(i, self.n, self.entre)).collect(),
+            None => (0..self.n)
+                .map(|i| fraccion_categoria(i, self.n, self.entre))
+                .collect(),
         }
     }
 
@@ -2696,8 +3729,12 @@ impl Lado {
     fn fracciones_marcas(&self) -> Vec<f64> {
         match self.escala {
             Some(esc) => esc.marcas().into_iter().map(|m| esc.fraccion(m)).collect(),
-            None if self.entre => (0..=self.n).map(|k| k as f64 / self.n.max(1) as f64).collect(),
-            None => (0..self.n).map(|i| fraccion_categoria(i, self.n, false)).collect(),
+            None if self.entre => (0..=self.n)
+                .map(|k| k as f64 / self.n.max(1) as f64)
+                .collect(),
+            None => (0..self.n)
+                .map(|i| fraccion_categoria(i, self.n, false))
+                .collect(),
         }
     }
 
@@ -2742,15 +3779,29 @@ fn fraccion_cruce(c: Cruce, otro: &Lado) -> f64 {
 /// Los dos ejes de un grupo: (categorias o X, valores o Y). Si el archivo
 /// no los trae, unos por defecto.
 fn ejes_de(g: &Grafico, gr: &Grupo) -> (Eje, Eje) {
-    let mios: Vec<&Eje> = gr.ejes.iter().filter_map(|id| g.ejes.iter().find(|e| &e.id == id)).collect();
+    let mios: Vec<&Eje> = gr
+        .ejes
+        .iter()
+        .filter_map(|id| g.ejes.iter().find(|e| &e.id == id))
+        .collect();
     let horizontal = matches!(gr.clase, Clase::Barras { horizontal: true });
     let base = &g.texto;
     if gr.clase.xy() {
-        let x = mios.iter().find(|e| matches!(e.pos, 'b' | 't')).or(mios.first()).copied();
-        let y = mios.iter().find(|e| Some(e.id.as_str()) != x.map(|x| x.id.as_str())).copied();
+        let x = mios
+            .iter()
+            .find(|e| matches!(e.pos, 'b' | 't'))
+            .or(mios.first())
+            .copied();
+        let y = mios
+            .iter()
+            .find(|e| Some(e.id.as_str()) != x.map(|x| x.id.as_str()))
+            .copied();
         let mut dx = Eje::defecto(true, 'b', base);
         dx.cuadricula = None;
-        return (x.cloned().unwrap_or(dx), y.cloned().unwrap_or_else(|| Eje::defecto(true, 'l', base)));
+        return (
+            x.cloned().unwrap_or(dx),
+            y.cloned().unwrap_or_else(|| Eje::defecto(true, 'l', base)),
+        );
     }
     let cat = mios.iter().find(|e| !e.valores).map(|e| (*e).clone());
     let val = mios.iter().find(|e| e.valores).map(|e| (*e).clone());
@@ -2770,7 +3821,14 @@ fn unir(a: Option<(f64, f64)>, b: Option<(f64, f64)>) -> Option<(f64, f64)> {
 
 /// La suma de los valores absolutos de cada categoria (para el 100 %).
 fn totales(gr: &Grupo, n: usize) -> Vec<f64> {
-    (0..n).map(|i| gr.series.iter().map(|s| s.valores.get(i).copied().flatten().unwrap_or(0.0).abs()).sum()).collect()
+    (0..n)
+        .map(|i| {
+            gr.series
+                .iter()
+                .map(|s| s.valores.get(i).copied().flatten().unwrap_or(0.0).abs())
+                .sum()
+        })
+        .collect()
 }
 
 /// De donde a donde van los valores de un grupo (las sumas si apila).
@@ -2785,7 +3843,11 @@ fn rango_grupo(gr: &Grupo, n: usize) -> Option<(f64, f64)> {
         }
     };
     match gr.agrupacion {
-        Agrupacion::Normal => gr.series.iter().flat_map(|s| s.valores.iter().flatten()).for_each(|v| meter(*v)),
+        Agrupacion::Normal => gr
+            .series
+            .iter()
+            .flat_map(|s| s.valores.iter().flatten())
+            .for_each(|v| meter(*v)),
         Agrupacion::Apilada | Agrupacion::Porcentaje => {
             let totales = totales(gr, n);
             for (i, total) in totales.iter().enumerate() {
@@ -2801,7 +3863,11 @@ fn rango_grupo(gr: &Grupo, n: usize) -> Option<(f64, f64)> {
                     }
                 }
                 if hay {
-                    let d = if gr.agrupacion == Agrupacion::Porcentaje && *total > 0.0 { *total } else { 1.0 };
+                    let d = if gr.agrupacion == Agrupacion::Porcentaje && *total > 0.0 {
+                        *total
+                    } else {
+                        1.0
+                    };
                     meter(pos / d);
                     meter(neg / d);
                 }
@@ -2845,7 +3911,12 @@ mod pruebas {
     }
 
     fn serie(nombre: &str, cats: &[&str], vals: &[&str]) -> String {
-        let pts = |v: &[&str]| v.iter().enumerate().map(|(i, x)| format!(r#"<c:pt idx="{i}"><c:v>{x}</c:v></c:pt>"#)).collect::<String>();
+        let pts = |v: &[&str]| {
+            v.iter()
+                .enumerate()
+                .map(|(i, x)| format!(r#"<c:pt idx="{i}"><c:v>{x}</c:v></c:pt>"#))
+                .collect::<String>()
+        };
         format!(
             r#"<c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>{nombre}</c:v></c:pt></c:strCache></c:strRef></c:tx>
             <c:cat><c:strRef><c:strCache><c:ptCount val="{}"/>{}</c:strCache></c:strRef></c:cat>
@@ -2887,7 +3958,12 @@ mod pruebas {
 
     #[test]
     fn se_leen_las_series_de_la_cache() {
-        let g = grafico(&barras(&serie("Ventas", &["Ene", "Feb", "Mar"], &["4.5", "2", "7"]))).unwrap();
+        let g = grafico(&barras(&serie(
+            "Ventas",
+            &["Ene", "Feb", "Mar"],
+            &["4.5", "2", "7"],
+        )))
+        .unwrap();
         assert_eq!(g.categorias, vec!["Ene", "Feb", "Mar"]);
         let s = &g.grupos[0].series[0];
         assert_eq!(s.nombre, "Ventas");
@@ -2900,7 +3976,12 @@ mod pruebas {
 
     #[test]
     fn un_valor_que_no_es_numero_queda_como_hueco() {
-        let g = grafico(&barras(&serie("S", &["a", "b", "c"], &["1", "#N/A", "abc"]))).unwrap();
+        let g = grafico(&barras(&serie(
+            "S",
+            &["a", "b", "c"],
+            &["1", "#N/A", "abc"],
+        )))
+        .unwrap();
         assert_eq!(g.grupos[0].series[0].valores, vec![Some(1.0), None, None]);
         let els = pintar(&g, 300.0, 200.0, &MedidorFijo::default());
         assert!(!els.is_empty());
@@ -2915,7 +3996,10 @@ mod pruebas {
         let mut t = Vec::new();
         textos(&els, &mut t);
         // Sin datos, el eje va de 0 a 1.
-        assert!(t.contains(&"0".to_string()) && t.contains(&"1".to_string()), "{t:?}");
+        assert!(
+            t.contains(&"0".to_string()) && t.contains(&"1".to_string()),
+            "{t:?}"
+        );
     }
 
     #[test]
@@ -2994,8 +4078,22 @@ mod pruebas {
 
     #[test]
     fn la_escala_es_la_de_excel() {
-        assert_eq!(escala(0.0, 4.7, None, None, None, 10), Escala { min: 0.0, max: 5.0, paso: 0.5 });
-        assert_eq!(escala(0.0, 80.0, None, None, None, 10), Escala { min: 0.0, max: 90.0, paso: 10.0 });
+        assert_eq!(
+            escala(0.0, 4.7, None, None, None, 10),
+            Escala {
+                min: 0.0,
+                max: 5.0,
+                paso: 0.5
+            }
+        );
+        assert_eq!(
+            escala(0.0, 80.0, None, None, None, 10),
+            Escala {
+                min: 0.0,
+                max: 90.0,
+                paso: 10.0
+            }
+        );
         // Todo ceros.
         let e = escala(0.0, 0.0, None, None, None, 10);
         assert!(e.min == 0.0 && e.max > 0.0);
@@ -3005,13 +4103,23 @@ mod pruebas {
         assert!(e.min <= -5.0);
         // Mezcla: el cero es una marca.
         let e = escala(-3.0, 7.0, None, None, None, 10);
-        assert!(e.min < -3.0 && e.max > 7.0 && e.marcas().contains(&0.0), "{e:?}");
+        assert!(
+            e.min < -3.0 && e.max > 7.0 && e.marcas().contains(&0.0),
+            "{e:?}"
+        );
         // Lejos del cero: no empieza en cero.
         let e = escala(90.0, 100.0, None, None, None, 10);
         assert!(e.min > 0.0 && e.min <= 90.0 && e.max >= 100.0, "{e:?}");
         // Lo que dice el archivo manda.
         let e = escala(0.0, 4.7, Some(1.0), Some(4.0), Some(1.0), 10);
-        assert_eq!(e, Escala { min: 1.0, max: 4.0, paso: 1.0 });
+        assert_eq!(
+            e,
+            Escala {
+                min: 1.0,
+                max: 4.0,
+                paso: 1.0
+            }
+        );
         // Datos imposibles.
         let e = escala(f64::NAN, f64::INFINITY, None, None, None, 10);
         assert!(e.min.is_finite() && e.max.is_finite() && e.max > e.min);
@@ -3022,7 +4130,11 @@ mod pruebas {
 
     #[test]
     fn las_marcas_no_arrastran_restos_de_coma_flotante() {
-        let e = Escala { min: 0.0, max: 1.0, paso: 0.1 };
+        let e = Escala {
+            min: 0.0,
+            max: 1.0,
+            paso: 0.1,
+        };
         let m = e.marcas();
         assert_eq!(m.len(), 11);
         assert_eq!(m[3], 0.3);
@@ -3070,7 +4182,10 @@ mod pruebas {
     #[test]
     fn las_apiladas_al_cien_llegan_arriba() {
         let mut series = serie("A", &["x", "y"], &["1", "3"]);
-        series.push_str(&serie("B", &["x", "y"], &["3", "1"]).replace(r#"<c:idx val="0"/><c:order val="0"/>"#, r#"<c:idx val="1"/><c:order val="1"/>"#));
+        series.push_str(&serie("B", &["x", "y"], &["3", "1"]).replace(
+            r#"<c:idx val="0"/><c:order val="0"/>"#,
+            r#"<c:idx val="1"/><c:order val="1"/>"#,
+        ));
         let x = barras(&series).replace("clustered", "percentStacked");
         let g = grafico(&x).unwrap();
         assert_eq!(g.grupos[0].agrupacion, Agrupacion::Porcentaje);

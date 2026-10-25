@@ -63,7 +63,11 @@ pub(crate) fn escalar(a: Pt3, b: Pt3) -> f64 {
     a.x * b.x + a.y * b.y + a.z * b.z
 }
 pub(crate) fn producto(a: Pt3, b: Pt3) -> Pt3 {
-    p3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
+    p3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x,
+    )
 }
 pub(crate) fn largo(a: Pt3) -> f64 {
     escalar(a, a).sqrt()
@@ -124,14 +128,27 @@ impl Default for Croquis {
 impl Croquis {
     /// `Croquis.vacio` de Kotlin.
     pub fn vacio(&self) -> bool {
-        self.trazos.is_empty() && self.laminas.is_empty() && self.imagenes.is_empty() && self.modelos.is_empty()
+        self.trazos.is_empty()
+            && self.laminas.is_empty()
+            && self.imagenes.is_empty()
+            && self.modelos.is_empty()
     }
 
     /// `Croquis.puntos()`: lo que se ve, para encuadrar. Sin las hojas
     /// mientras haya algo dibujado (una hoja es un plano, no tiene tamano).
     pub fn puntos(&self) -> Vec<Pt3> {
-        let mut v: Vec<Pt3> = self.trazos.iter().filter(|t| !t.oculto).flat_map(|t| t.puntos.iter().copied()).collect();
-        v.extend(self.imagenes.iter().filter(|i| !i.oculto).flat_map(|i| i.esquinas.iter().copied()));
+        let mut v: Vec<Pt3> = self
+            .trazos
+            .iter()
+            .filter(|t| !t.oculto)
+            .flat_map(|t| t.puntos.iter().copied())
+            .collect();
+        v.extend(
+            self.imagenes
+                .iter()
+                .filter(|i| !i.oculto)
+                .flat_map(|i| i.esquinas.iter().copied()),
+        );
         if v.is_empty() {
             v = self.laminas.iter().flat_map(|l| l.esquinas()).collect();
         }
@@ -141,7 +158,10 @@ impl Croquis {
     /// El nombre del grupo de algo, si lo tiene.
     pub fn nombre_de_grupo(&self, grupo: Option<&str>) -> Option<&str> {
         let g = grupo?;
-        self.grupos.iter().find(|x| x.id == g).map(|x| x.nombre.as_str())
+        self.grupos
+            .iter()
+            .find(|x| x.id == g)
+            .map(|x| x.nombre.as_str())
     }
 }
 
@@ -208,7 +228,13 @@ pub struct PuntaDelPincel {
 
 impl Default for PuntaDelPincel {
     fn default() -> Self {
-        PuntaDelPincel { ancho: 1.0, largo: 1.0, pulso: true, alumbra: false, plana: false }
+        PuntaDelPincel {
+            ancho: 1.0,
+            largo: 1.0,
+            pulso: true,
+            alumbra: false,
+            plana: false,
+        }
     }
 }
 
@@ -275,14 +301,21 @@ pub struct Luces3D {
 
 impl Default for Luces3D {
     fn default() -> Self {
-        Luces3D { encendidas: true, fuerza: 1.0 }
+        Luces3D {
+            encendidas: true,
+            fuerza: 1.0,
+        }
     }
 }
 
 impl Luces3D {
     /// Lo que multiplica a la luz de cada trazo: cero es apagado.
     pub fn cuanto(&self) -> f64 {
-        if self.encendidas { self.fuerza.clamp(0.0, 2.0) } else { 0.0 }
+        if self.encendidas {
+            self.fuerza.clamp(0.0, 2.0)
+        } else {
+            0.0
+        }
     }
 }
 
@@ -304,7 +337,10 @@ pub struct Sol3D {
 
 impl Default for Sol3D {
     fn default() -> Self {
-        Sol3D { azimut: azimut_de_fabrica(), altura: altura_de_fabrica() }
+        Sol3D {
+            azimut: azimut_de_fabrica(),
+            altura: altura_de_fabrica(),
+        }
     }
 }
 
@@ -315,7 +351,11 @@ impl Sol3D {
     /// Hacia donde viajan los rayos: del sol al suelo, bajando.
     pub fn rayo(&self) -> Pt3 {
         let alta = self.altura.clamp(ALTURA_MINIMA, PI / 2.0);
-        normalizado(p3(self.azimut.sin() * alta.cos(), self.azimut.cos() * alta.cos(), -alta.sin()))
+        normalizado(p3(
+            self.azimut.sin() * alta.cos(),
+            self.azimut.cos() * alta.cos(),
+            -alta.sin(),
+        ))
     }
 
     /// Donde cae la sombra de un punto en el suelo (`z = 0`), o nada si el
@@ -404,7 +444,11 @@ pub struct Lamina3D {
 
 impl Lamina3D {
     fn desplazamiento(&self, i: usize, fondo: f64) -> Pt3 {
-        let d = self.direcciones.as_ref().and_then(|v| v.get(i).copied()).unwrap_or(self.direccion);
+        let d = self
+            .direcciones
+            .as_ref()
+            .and_then(|v| v.get(i).copied())
+            .unwrap_or(self.direccion);
         por(normalizado(d), fondo)
     }
 
@@ -412,7 +456,10 @@ impl Lamina3D {
     /// `fondo` deja estirar las hojas que no se acaban a lo hondo.
     pub fn lados(&self, i: usize, fondo: f64) -> (Pt3, Pt3) {
         if let Some(otro) = &self.otro_perfil {
-            return (self.perfil[i], otro.get(i).copied().unwrap_or(self.perfil[i]));
+            return (
+                self.perfil[i],
+                otro.get(i).copied().unwrap_or(self.perfil[i]),
+            );
         }
         let d = self.desplazamiento(i, fondo);
         (menos(self.perfil[i], d), mas(self.perfil[i], d))
@@ -501,11 +548,18 @@ const GROSOR_DEL_ANILLO: f64 = 0.28;
 
 impl Esfera3D {
     fn eje(&self, k: usize, defecto: Pt3) -> Pt3 {
-        self.ejes.as_ref().and_then(|e| e.get(k).copied()).unwrap_or(defecto)
+        self.ejes
+            .as_ref()
+            .and_then(|e| e.get(k).copied())
+            .unwrap_or(defecto)
     }
 
     fn en_el_mundo(&self, a: f64, b: f64, c: f64) -> Pt3 {
-        let (u, v, w) = (self.eje(0, p3(1.0, 0.0, 0.0)), self.eje(1, p3(0.0, 1.0, 0.0)), self.eje(2, p3(0.0, 0.0, 1.0)));
+        let (u, v, w) = (
+            self.eje(0, p3(1.0, 0.0, 0.0)),
+            self.eje(1, p3(0.0, 1.0, 0.0)),
+            self.eje(2, p3(0.0, 0.0, 1.0)),
+        );
         p3(
             self.centro.x + u.x * a + v.x * b + w.x * c,
             self.centro.y + u.y * a + v.y * b + w.y * c,
@@ -517,7 +571,11 @@ impl Esfera3D {
     pub fn punto(&self, vuelta: f64, subida: f64) -> Pt3 {
         let (cv, sv) = (vuelta.cos(), vuelta.sin());
         let altura = (subida / (PI / 2.0)).clamp(-1.0, 1.0);
-        let (pu, po, pt) = (self.radio * self.escala.x, self.radio * self.escala.y, self.radio * self.escala.z);
+        let (pu, po, pt) = (
+            self.radio * self.escala.x,
+            self.radio * self.escala.y,
+            self.radio * self.escala.z,
+        );
         let (a, b, c) = match self.forma {
             FormaDeBola::Cilindro => (pu * cv, po * sv, pt * altura),
             FormaDeBola::Cono => {
@@ -527,7 +585,11 @@ impl Esfera3D {
             FormaDeBola::Anillo => {
                 let theta = (subida + PI / 2.0) * 2.0;
                 let r = RADIO_DEL_ANILLO + GROSOR_DEL_ANILLO * theta.cos();
-                (pu * r * cv, po * r * sv, pt * GROSOR_DEL_ANILLO * theta.sin())
+                (
+                    pu * r * cv,
+                    po * r * sv,
+                    pt * GROSOR_DEL_ANILLO * theta.sin(),
+                )
             }
             FormaDeBola::Bola | FormaDeBola::Otra => {
                 let cs = subida.cos();
@@ -546,14 +608,23 @@ impl Esfera3D {
             for i in 0..MERIDIANOS {
                 let v0 = 2.0 * PI * i as f64 / MERIDIANOS as f64;
                 let v1 = 2.0 * PI * (i + 1) as f64 / MERIDIANOS as f64;
-                v.push([self.punto(v0, s0), self.punto(v1, s0), self.punto(v1, s1), self.punto(v0, s1)]);
+                v.push([
+                    self.punto(v0, s0),
+                    self.punto(v1, s0),
+                    self.punto(v1, s1),
+                    self.punto(v0, s1),
+                ]);
             }
         }
         v
     }
 
     pub fn caja(&self) -> Vec<Pt3> {
-        let (pu, po, pt) = (self.radio * self.escala.x, self.radio * self.escala.y, self.radio * self.escala.z);
+        let (pu, po, pt) = (
+            self.radio * self.escala.x,
+            self.radio * self.escala.y,
+            self.radio * self.escala.z,
+        );
         let mut v = Vec::with_capacity(8);
         for x in [-1.0, 1.0] {
             for y in [-1.0, 1.0] {
@@ -573,7 +644,9 @@ impl Esfera3D {
 pub fn leer(bytes: &[u8]) -> Result<Croquis, String> {
     let texto = if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut s = String::new();
-        flate2::read::GzDecoder::new(bytes).read_to_string(&mut s).map_err(|e| format!("gzip: {e}"))?;
+        flate2::read::GzDecoder::new(bytes)
+            .read_to_string(&mut s)
+            .map_err(|e| format!("gzip: {e}"))?;
         s
     } else {
         String::from_utf8(bytes.to_vec()).map_err(|_| "no es texto".to_string())?
@@ -595,7 +668,13 @@ pub fn color_de(texto: &str) -> Option<[f32; 4]> {
 
 /// La luminancia (la de Compose: lineal, con los pesos de Rec. 709).
 pub fn luminancia(c: [f32; 4]) -> f32 {
-    let lin = |v: f32| if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    let lin = |v: f32| {
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
     0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
 }
 
@@ -680,7 +759,11 @@ impl Camara3D {
     }
 
     fn focal(&self, alto: f64) -> f64 {
-        if self.rectilinea { (alto / 2.0) / (self.campo() / 2.0).tan() } else { alto / self.campo() }
+        if self.rectilinea {
+            (alto / 2.0) / (self.campo() / 2.0).tan()
+        } else {
+            alto / self.campo()
+        }
     }
 
     fn distancia_del_ojo(&self, alto: f64) -> f64 {
@@ -688,12 +771,23 @@ impl Camara3D {
     }
 
     pub fn ojo(&self, alto: f64) -> Option<Pt3> {
-        if self.campo() <= 0.0 { None } else { Some(menos(self.centro, por(self.adelante(), self.distancia_del_ojo(alto)))) }
+        if self.campo() <= 0.0 {
+            None
+        } else {
+            Some(menos(
+                self.centro,
+                por(self.adelante(), self.distancia_del_ojo(alto)),
+            ))
+        }
     }
 
     pub fn adelante(&self) -> Pt3 {
         let ci = self.inclinacion.cos();
-        normalizado(p3(self.giro.sin() * ci, self.giro.cos() * ci, -self.inclinacion.sin()))
+        normalizado(p3(
+            self.giro.sin() * ci,
+            self.giro.cos() * ci,
+            -self.inclinacion.sin(),
+        ))
     }
 
     pub fn derecha(&self) -> Pt3 {
@@ -702,7 +796,10 @@ impl Camara3D {
             return horizontal;
         }
         let vertical = normalizado(producto(horizontal, self.adelante()));
-        normalizado(mas(por(horizontal, self.balanceo.cos()), por(vertical, self.balanceo.sin())))
+        normalizado(mas(
+            por(horizontal, self.balanceo.cos()),
+            por(vertical, self.balanceo.sin()),
+        ))
     }
 
     pub fn arriba(&self) -> Pt3 {
@@ -710,7 +807,11 @@ impl Camara3D {
     }
 
     fn angulo_proyectado(angulo: f64, rectilinea: bool) -> f64 {
-        if rectilinea { angulo.min(TOPE_RECTILINEO).tan() } else { angulo }
+        if rectilinea {
+            angulo.min(TOPE_RECTILINEO).tan()
+        } else {
+            angulo
+        }
     }
 
     /// `aPantalla`: del mundo a la pantalla (en `dp`), con o sin lente.
@@ -720,18 +821,31 @@ impl Camara3D {
         let u = escalar(d, der);
         let v = escalar(d, arr);
         if self.campo() <= 0.0 {
-            return Pt { x: ancho / 2.0 + u * self.zoom, y: alto / 2.0 - v * self.zoom };
+            return Pt {
+                x: ancho / 2.0 + u * self.zoom,
+                y: alto / 2.0 - v * self.zoom,
+            };
         }
         let radio = u.hypot(v);
         let hondo = escalar(d, ade) + self.distancia_del_ojo(alto);
         if radio < 1e-9 {
             if hondo >= 0.0 {
-                return Pt { x: ancho / 2.0, y: alto / 2.0 };
+                return Pt {
+                    x: ancho / 2.0,
+                    y: alto / 2.0,
+                };
             }
-            return Pt { x: ancho / 2.0, y: alto / 2.0 + self.focal(alto) * PI };
+            return Pt {
+                x: ancho / 2.0,
+                y: alto / 2.0 + self.focal(alto) * PI,
+            };
         }
-        let en_pantalla = self.focal(alto) * Self::angulo_proyectado(radio.atan2(hondo), self.rectilinea);
-        Pt { x: ancho / 2.0 + en_pantalla * u / radio, y: alto / 2.0 - en_pantalla * v / radio }
+        let en_pantalla =
+            self.focal(alto) * Self::angulo_proyectado(radio.atan2(hondo), self.rectilinea);
+        Pt {
+            x: ancho / 2.0 + en_pantalla * u / radio,
+            y: alto / 2.0 - en_pantalla * v / radio,
+        }
     }
 
     /// `rayo`: el que sale por un punto de la pantalla.
@@ -744,39 +858,70 @@ impl Camara3D {
             let radio = dx.hypot(dy);
             let ojo = self.ojo(alto).unwrap_or(self.centro);
             if radio < 1e-9 {
-                return Rayo { origen: ojo, direccion: ade };
+                return Rayo {
+                    origen: ojo,
+                    direccion: ade,
+                };
             }
-            let angulo = if self.rectilinea { (radio / f).atan() } else { radio / f };
+            let angulo = if self.rectilinea {
+                (radio / f).atan()
+            } else {
+                radio / f
+            };
             let lado = mas(por(der, dx / radio), por(arr, dy / radio));
             let direccion = normalizado(mas(por(ade, angulo.cos()), por(lado, angulo.sin())));
-            return Rayo { origen: ojo, direccion };
+            return Rayo {
+                origen: ojo,
+                direccion,
+            };
         }
         let dx = (p.x - ancho / 2.0) / self.zoom;
         let dy = (alto / 2.0 - p.y) / self.zoom;
         let origen = mas(self.centro, mas(por(der, dx), por(arr, dy)));
-        Rayo { origen: mas(origen, por(ade, -RETIRADA)), direccion: ade }
+        Rayo {
+            origen: mas(origen, por(ade, -RETIRADA)),
+            direccion: ade,
+        }
     }
 
     pub fn girada(&self, d_giro: f64, d_inclinacion: f64) -> Camara3D {
         Camara3D {
             giro: self.giro + d_giro,
-            inclinacion: (self.inclinacion + d_inclinacion).clamp(-TOPE_DE_INCLINACION, TOPE_DE_INCLINACION),
+            inclinacion: (self.inclinacion + d_inclinacion)
+                .clamp(-TOPE_DE_INCLINACION, TOPE_DE_INCLINACION),
             ..*self
         }
     }
 
     pub fn con_zoom(&self, factor: f64) -> Camara3D {
-        Camara3D { zoom: (self.zoom * factor).clamp(ZOOM_MINIMO, ZOOM_MAXIMO), ..*self }
+        Camara3D {
+            zoom: (self.zoom * factor).clamp(ZOOM_MINIMO, ZOOM_MAXIMO),
+            ..*self
+        }
     }
 
     /// `camaraEncuadrada`: con recorte, se mira al centro del rectangulo y
     /// se acerca lo que haga falta para que llene el ancho.
     pub fn encuadrada(&self, recorte: Option<&Recorte>, ancho: f64, alto: f64) -> Camara3D {
-        let Some(r) = recorte.filter(|r| r.sirve()) else { return *self };
-        let plano = Plano3D { punto: self.centro, normal: self.adelante() };
-        let medio = Pt { x: (r.x0 + r.x1) / 2.0 * ancho, y: (r.y0 + r.y1) / 2.0 * alto };
-        let centro = plano.corte(&self.rayo(medio, ancho, alto)).map_or(self.centro, |c| c.0);
-        Camara3D { centro, zoom: self.zoom / r.ancho(), ..*self }
+        let Some(r) = recorte.filter(|r| r.sirve()) else {
+            return *self;
+        };
+        let plano = Plano3D {
+            punto: self.centro,
+            normal: self.adelante(),
+        };
+        let medio = Pt {
+            x: (r.x0 + r.x1) / 2.0 * ancho,
+            y: (r.y0 + r.y1) / 2.0 * alto,
+        };
+        let centro = plano
+            .corte(&self.rayo(medio, ancho, alto))
+            .map_or(self.centro, |c| c.0);
+        Camara3D {
+            centro,
+            zoom: self.zoom / r.ancho(),
+            ..*self
+        }
     }
 }
 
@@ -785,15 +930,30 @@ impl Camara3D {
 /// PC mira en perspectiva (45 grados) y sin balanceo; una vista con lente se
 /// ve con la del PC. `origen` es el del modelo (los vertices van relativos),
 /// y `escala` los pixeles por `dp` de la ventana.
-pub fn orbita_de(vista: &Vista3D, origen: [f64; 3], ancho_px: u32, alto_px: u32, escala: f64) -> crate::orbita::Orbita {
-    let (ancho, alto) = (ancho_px.max(1) as f64 / escala, alto_px.max(1) as f64 / escala);
+pub fn orbita_de(
+    vista: &Vista3D,
+    origen: [f64; 3],
+    ancho_px: u32,
+    alto_px: u32,
+    escala: f64,
+) -> crate::orbita::Orbita {
+    let (ancho, alto) = (
+        ancho_px.max(1) as f64 / escala,
+        alto_px.max(1) as f64 / escala,
+    );
     let c = vista.camara.encuadrada(vista.recorte.as_ref(), ancho, alto);
     // Lo que se ve de alto en el centro: `alto / zoom` del mundo.
     let dist = alto / c.zoom.max(1e-9) / (2.0 * (crate::orbita::FOV / 2.0).tan());
     crate::orbita::Orbita {
-        objetivo: [c.centro.x - origen[0], c.centro.y - origen[1], c.centro.z - origen[2]],
+        objetivo: [
+            c.centro.x - origen[0],
+            c.centro.y - origen[1],
+            c.centro.z - origen[2],
+        ],
         rumbo: -c.giro - PI / 2.0,
-        altura: c.inclinacion.clamp(-crate::orbita::ALTURA_MAX, crate::orbita::ALTURA_MAX),
+        altura: c
+            .inclinacion
+            .clamp(-crate::orbita::ALTURA_MAX, crate::orbita::ALTURA_MAX),
         dist: dist.max(1e-4),
     }
 }
@@ -810,9 +970,20 @@ const AFILADO: f64 = 0.45;
 const SUELO_DEL_FACTOR: f64 = AFILADO * MINIMO_DEL_PULSO * MINIMO_DEL_PULSO;
 
 fn presion_media(presiones: Option<&[f64]>, n: usize) -> f64 {
-    let Some(p) = presiones.filter(|p| !p.is_empty()) else { return 1.0 };
-    let buenas: Vec<f64> = p.iter().take(n).filter(|x| !x.is_nan()).map(|x| x.clamp(0.0, 1.0)).collect();
-    if buenas.is_empty() { 1.0 } else { buenas.iter().sum::<f64>() / buenas.len() as f64 }
+    let Some(p) = presiones.filter(|p| !p.is_empty()) else {
+        return 1.0;
+    };
+    let buenas: Vec<f64> = p
+        .iter()
+        .take(n)
+        .filter(|x| !x.is_nan())
+        .map(|x| x.clamp(0.0, 1.0))
+        .collect();
+    if buenas.is_empty() {
+        1.0
+    } else {
+        buenas.iter().sum::<f64>() / buenas.len() as f64
+    }
 }
 
 /// **`anchosDelMundo`**: el ancho de cada muestra de un trazo con pulso.
@@ -852,7 +1023,11 @@ pub fn anchos_del_mundo(
                     k = i + 1;
                 }
                 let dt = t[k] - t[j];
-                senal[i] = if dt > 0.0 { (recorrido[k] - recorrido[j]) / dt } else { anterior };
+                senal[i] = if dt > 0.0 {
+                    (recorrido[k] - recorrido[j]) / dt
+                } else {
+                    anterior
+                };
                 anterior = senal[i];
             }
         }
@@ -888,13 +1063,21 @@ pub fn anchos_del_mundo(
             suyo *= MINIMO_DEL_PULSO + (1.0 - MINIMO_DEL_PULSO) * v;
         }
         let del_principio = if afila_el_principio { i } else { usize::MAX };
-        let del_final = if afila_el_final { n - 1 - i } else { usize::MAX };
+        let del_final = if afila_el_final {
+            n - 1 - i
+        } else {
+            usize::MAX
+        };
         let del_borde = del_principio.min(del_final);
         if del_borde < PUNTAS_QUE_SE_AFILAN {
             let cuanto = (del_borde as f64 + 1.0) / (PUNTAS_QUE_SE_AFILAN as f64 + 1.0);
             suyo *= AFILADO + (1.0 - AFILADO) * cuanto;
         }
-        salida[i] = if suyo.is_nan() { 1.0 } else { suyo.clamp(SUELO_DEL_FACTOR, 1.0) };
+        salida[i] = if suyo.is_nan() {
+            1.0
+        } else {
+            suyo.clamp(SUELO_DEL_FACTOR, 1.0)
+        };
     }
     let alisar = |v: &[f64]| -> Vec<f64> {
         (0..n)
@@ -905,7 +1088,10 @@ pub fn anchos_del_mundo(
             })
             .collect()
     };
-    alisar(&alisar(&salida)).into_iter().map(|f| calibre * f).collect()
+    alisar(&alisar(&salida))
+        .into_iter()
+        .map(|f| calibre * f)
+        .collect()
 }
 
 /// La primera letra en mayuscula (`liston` -> `Liston`), para nombrar.

@@ -55,7 +55,10 @@ fn crear_e_invitar_deja_dentro_a_todos_y_con_firmas_buenas() {
     assert!(c.personas.iter().all(Persona::dentro));
     // Lo que llega a quien no tenia nada se cree entero.
     assert_eq!(juntar(None, &c), c);
-    assert_eq!(en_comun(&[c.clone()], "id-ana", "id-eva"), ["p1"]);
+    assert_eq!(
+        en_comun(std::slice::from_ref(&c), "id-ana", "id-eva"),
+        ["p1"]
+    );
     let a = autores(&c);
     assert_eq!(a.get("MAXX").map(String::as_str), Some("Max"));
     assert_eq!(a.get("ANAA").map(String::as_str), Some("Ana"));
@@ -65,7 +68,13 @@ fn crear_e_invitar_deja_dentro_a_todos_y_con_firmas_buenas() {
 #[test]
 fn juntar_da_lo_mismo_en_cualquier_orden() {
     let g = gente();
-    let base = invitar(&crear("p1", "Tesis", &g.max, 100), &g.max, &g.ana.ficha(0), 200).unwrap();
+    let base = invitar(
+        &crear("p1", "Tesis", &g.max, 100),
+        &g.max,
+        &g.ana.ficha(0),
+        200,
+    )
+    .unwrap();
     let de_ana = invitar(&base, &g.ana, &g.eva.ficha(0), 300).unwrap();
     let de_max = invitar(&base, &g.max, &g.luis.ficha(0), 310).unwrap();
     let a = juntar(Some(&de_ana), &de_max);
@@ -78,7 +87,9 @@ fn juntar_da_lo_mismo_en_cualquier_orden() {
     assert_eq!(ordenar(&a), ordenar(&b));
     assert_eq!(
         dentro_ids(&a),
-        ["id-max", "id-ana", "id-eva", "id-luis"].map(String::from).into()
+        ["id-max", "id-ana", "id-eva", "id-luis"]
+            .map(String::from)
+            .into()
     );
     // Juntar dos veces no cambia nada.
     assert_eq!(juntar(Some(&a), &de_ana), a);
@@ -95,7 +106,7 @@ fn solo_el_creador_quita_a_otros_y_cada_uno_puede_irse() {
     assert!(quitar(&c, &g.ana, "id-eva", 400).is_err());
     let sin_eva = quitar(&c, &g.max, "id-eva", 400).unwrap();
     assert!(!dentro(&sin_eva, "id-eva"));
-    assert!(en_comun(&[sin_eva.clone()], "id-ana", "id-eva").is_empty());
+    assert!(en_comun(std::slice::from_ref(&sin_eva), "id-ana", "id-eva").is_empty());
     let en_ana = juntar(Some(&c), &sin_eva);
     assert!(!dentro(&en_ana, "id-eva"));
     let sin_ana = quitar(&en_ana, &g.ana, "id-ana", 500).unwrap();
@@ -119,7 +130,13 @@ fn una_salida_que_no_firma_el_creador_no_se_cree() {
         personas: c
             .personas
             .iter()
-            .map(|x| if x.id == "id-eva" { p.clone() } else { x.clone() })
+            .map(|x| {
+                if x.id == "id-eva" {
+                    p.clone()
+                } else {
+                    x.clone()
+                }
+            })
             .collect(),
         ..c.clone()
     };
@@ -140,7 +157,13 @@ fn nadie_le_cambia_la_clave_ni_el_nombre_a_otro() {
     let g = gente();
     let c = con_ana_y_eva(&g);
     let impostora = yo("id-eva", "Eva", "EVAA");
-    let trampa = invitar(&crear("p1", "Tesis", &g.max, 100), &g.max, &impostora.ficha(0), 999).unwrap();
+    let trampa = invitar(
+        &crear("p1", "Tesis", &g.max, 100),
+        &g.max,
+        &impostora.ficha(0),
+        999,
+    )
+    .unwrap();
     let junto = juntar(Some(&c), &trampa);
     assert_eq!(junto.persona("id-eva").unwrap().clave, g.eva.clave());
     // Cambiarle el nombre sin volver a firmar tampoco cuela.
@@ -162,7 +185,13 @@ fn nadie_le_cambia_la_clave_ni_el_nombre_a_otro() {
             .collect(),
         ..c.clone()
     };
-    assert_eq!(juntar(Some(&c), &renombrada).persona("id-eva").unwrap().nombre, "Eva");
+    assert_eq!(
+        juntar(Some(&c), &renombrada)
+            .persona("id-eva")
+            .unwrap()
+            .nombre,
+        "Eva"
+    );
 }
 
 #[test]
@@ -182,7 +211,12 @@ fn una_lista_inventada_no_entra_aunque_llegue_a_quien_no_tenia_nada() {
     };
     assert!(juntar(None, &sin_firma).personas.is_empty());
     let huerfana = ChatCompartido {
-        personas: c.personas.iter().filter(|p| p.id != "id-ana").cloned().collect(),
+        personas: c
+            .personas
+            .iter()
+            .filter(|p| p.id != "id-ana")
+            .cloned()
+            .collect(),
         ..c.clone()
     };
     assert_eq!(ids(&juntar(None, &huerfana)), ["id-max"]);
@@ -221,7 +255,10 @@ fn por_clave_solo_se_encuentra_a_quien_esta_en_un_chat_conmigo() {
     let g = gente();
     let c = con_ana_y_eva(&g);
     let l = [c.clone()];
-    assert_eq!(por_clave(&l, "id-ana", &g.eva.clave()).unwrap().id, "id-eva");
+    assert_eq!(
+        por_clave(&l, "id-ana", &g.eva.clave()).unwrap().id,
+        "id-eva"
+    );
     assert!(por_clave(&l, "id-luis", &g.eva.clave()).is_none());
     assert!(por_clave(&l, "id-ana", &g.luis.clave()).is_none());
     let sin_eva = [quitar(&c, &g.max, "id-eva", 400).unwrap()];
@@ -233,12 +270,28 @@ fn por_clave_solo_se_encuentra_a_quien_esta_en_un_chat_conmigo() {
 #[test]
 fn entre_aparatos_del_grupo_el_otro_entra_en_mis_chats_compartidos() {
     let g = gente();
-    let c = invitar(&crear("p1", "Tesis", &g.max, 100), &g.max, &g.ana.ficha(0), 200).unwrap();
+    let c = invitar(
+        &crear("p1", "Tesis", &g.max, 100),
+        &g.max,
+        &g.ana.ficha(0),
+        200,
+    )
+    .unwrap();
     let tableta = yo("id-max-tab", "Max", "MTAB");
-    let en_el_telefono = juntar_del_grupo(&[c.clone()], &[], &g.max, Some(&tableta.ficha(0)), 300);
+    let en_el_telefono = juntar_del_grupo(
+        std::slice::from_ref(&c),
+        &[],
+        &g.max,
+        Some(&tableta.ficha(0)),
+        300,
+    );
     assert!(dentro(&en_el_telefono[0], "id-max-tab"));
-    let en_la_tableta = juntar_del_grupo(&[], &en_el_telefono, &tableta, Some(&g.max.ficha(0)), 300);
-    assert_eq!(dentro_ids(&en_la_tableta[0]), dentro_ids(&en_el_telefono[0]));
+    let en_la_tableta =
+        juntar_del_grupo(&[], &en_el_telefono, &tableta, Some(&g.max.ficha(0)), 300);
+    assert_eq!(
+        dentro_ids(&en_la_tableta[0]),
+        dentro_ids(&en_el_telefono[0])
+    );
     assert!(dentro(&juntar(Some(&c), &en_el_telefono[0]), "id-max-tab"));
 }
 
@@ -265,9 +318,11 @@ fn las_claves_acuerdan_el_mismo_secreto_y_firman() {
 /// ("EC")` con `secp256r1`, `Signature("SHA256withECDSA")` y
 /// `KeyAgreement("ECDH")`, las mismas llamadas que `Llaves` de Android.
 const MAX_PUBLICA: &str = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhaVHFo/5hOPsWex473SEo+YmgDXg7SPKVXOmVKwI1Ny5IGSbc5jXDzzOqFJ50bioFnF4d3KJDRRDLpOUJ6DvPw==";
-const MAX_PRIVADA: &str = "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCA7o0IrCwtogfwmAcMRkTu3+bNAYimDTocQMvKIanyqaA==";
+const MAX_PRIVADA: &str =
+    "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCA7o0IrCwtogfwmAcMRkTu3+bNAYimDTocQMvKIanyqaA==";
 const ANA_PUBLICA: &str = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1HW4yh9ZT/MndY+cqw1W+9yXS/5pFB3LELNauMp0mdGKaYTnfT/OMF4aNoewKF42YjQwh3bLmWeZwhXFf4iBvg==";
-const ANA_PRIVADA: &str = "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCCBUuKli3ITQQusMk95bTnnAMKp0KiLkhCTwE/qcR/n7Q==";
+const ANA_PRIVADA: &str =
+    "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCCBUuKli3ITQQusMk95bTnnAMKp0KiLkhCTwE/qcR/n7Q==";
 /// Firmas de Max: 0 y 3 sobre la entrada de Max (con tildes y eñe), 1 y 4
 /// sobre la de Ana, 2 y 5 sobre la salida. La 2, 3, 4 y 5 llevan la `s`
 /// alta, que Java no normaliza.
@@ -311,10 +366,19 @@ fn las_firmas_de_java_se_creen_aqui_sobre_los_mismos_textos() {
         texto_de_salida("p1", &sale),
     ];
     for (i, f) in FIRMAS.iter().enumerate() {
-        assert!(Llaves::verificar(MAX_PUBLICA, &textos[i % 3], f), "firma {i}");
+        assert!(
+            Llaves::verificar(MAX_PUBLICA, &textos[i % 3], f),
+            "firma {i}"
+        );
         // Caso negativo: sobre el texto de otro, o con la clave de Ana, no.
-        assert!(!Llaves::verificar(MAX_PUBLICA, &textos[(i + 1) % 3], f), "firma {i} cruzada");
-        assert!(!Llaves::verificar(ANA_PUBLICA, &textos[i % 3], f), "firma {i} con otra clave");
+        assert!(
+            !Llaves::verificar(MAX_PUBLICA, &textos[(i + 1) % 3], f),
+            "firma {i} cruzada"
+        );
+        assert!(
+            !Llaves::verificar(ANA_PUBLICA, &textos[i % 3], f),
+            "firma {i} con otra clave"
+        );
     }
     // Y la lista entera, firmada en Java, se junta aqui como alli.
     let c = ChatCompartido {
@@ -346,10 +410,20 @@ fn las_firmas_de_java_se_creen_aqui_sobre_los_mismos_textos() {
 fn las_claves_de_java_se_leen_y_dan_su_mismo_secreto() {
     let max = Llaves::de(MAX_PUBLICA, MAX_PRIVADA).unwrap();
     let ana = Llaves::de(ANA_PUBLICA, ANA_PRIVADA).unwrap();
-    assert_eq!(max.clave(), MAX_PUBLICA, "la publica sale igual que en Java");
+    assert_eq!(
+        max.clave(),
+        MAX_PUBLICA,
+        "la publica sale igual que en Java"
+    );
     let hex = |b: [u8; 32]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-    assert_eq!(hex(max.acordar(&desde_b64(ANA_PUBLICA).unwrap()).unwrap()), SECRETO);
-    assert_eq!(hex(ana.acordar(&desde_b64(MAX_PUBLICA).unwrap()).unwrap()), SECRETO);
+    assert_eq!(
+        hex(max.acordar(&desde_b64(ANA_PUBLICA).unwrap()).unwrap()),
+        SECRETO
+    );
+    assert_eq!(
+        hex(ana.acordar(&desde_b64(MAX_PUBLICA).unwrap()).unwrap()),
+        SECRETO
+    );
     // Una firma hecha aqui con la privada de Java se cree con su publica.
     assert!(Llaves::verificar(MAX_PUBLICA, b"x", &max.firmar(b"x")));
     // Caso negativo: la publica de uno con la privada de otro no se acepta.
@@ -455,8 +529,14 @@ fn las_claves_de_la_conversacion_entre_personas_son_las_de_java() {
         true,
     );
     let hex = |b: [u8; 32]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-    assert_eq!(hex(c.salida), "2ebf223f65a92053e3562745c3c027c67ecfe764212115b0a75d90234c592485");
-    assert_eq!(hex(c.entrada), "9a49a4851bdfc2b5540f8611ad4413647457843a05cc460b760524a41101399f");
+    assert_eq!(
+        hex(c.salida),
+        "2ebf223f65a92053e3562745c3c027c67ecfe764212115b0a75d90234c592485"
+    );
+    assert_eq!(
+        hex(c.entrada),
+        "9a49a4851bdfc2b5540f8611ad4413647457843a05cc460b760524a41101399f"
+    );
     // Ana, que responde, las tiene al reves.
     let ana = Llaves::de(ANA_PUBLICA, ANA_PRIVADA).unwrap();
     let suyas = crate::canal::claves_entre_personas(

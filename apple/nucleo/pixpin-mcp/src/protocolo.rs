@@ -61,8 +61,15 @@ pub fn error(id: Value, codigo: i64, mensaje: impl Into<String>) -> Value {
 
 /// Lo que se contesta a `initialize`.
 fn inicio(params: &Value) -> Value {
-    let pedida = params.get("protocolVersion").and_then(Value::as_str).unwrap_or("");
-    let version = VERSIONES.iter().find(|v| **v == pedida).copied().unwrap_or(VERSIONES[0]);
+    let pedida = params
+        .get("protocolVersion")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let version = VERSIONES
+        .iter()
+        .find(|v| **v == pedida)
+        .copied()
+        .unwrap_or(VERSIONES[0]);
     json!({
         "protocolVersion": version,
         "capabilities": {"tools": {"listChanged": false}},
@@ -82,10 +89,20 @@ fn inicio(params: &Value) -> Value {
 pub fn atender(linea: &str) -> Salida {
     let v: Value = match serde_json::from_str(linea) {
         Ok(v) => v,
-        Err(e) => return Salida::Responder(error(Value::Null, codigo::NO_ES_JSON, format!("no es JSON: {e}"))),
+        Err(e) => {
+            return Salida::Responder(error(
+                Value::Null,
+                codigo::NO_ES_JSON,
+                format!("no es JSON: {e}"),
+            ));
+        }
     };
     let Value::Object(m) = v else {
-        return Salida::Responder(error(Value::Null, codigo::PETICION_MALA, "se espera un objeto JSON-RPC (sin lotes)"));
+        return Salida::Responder(error(
+            Value::Null,
+            codigo::PETICION_MALA,
+            "se espera un objeto JSON-RPC (sin lotes)",
+        ));
     };
     let id = m.get("id").cloned();
     let Some(metodo) = m.get("method").and_then(Value::as_str) else {
@@ -103,18 +120,31 @@ pub fn atender(linea: &str) -> Salida {
     match metodo {
         "initialize" => Salida::Responder(respuesta(id, inicio(&params))),
         "ping" => Salida::Responder(respuesta(id, json!({}))),
-        "tools/list" => Salida::Responder(respuesta(id, json!({"tools": crate::herramientas::lista()}))),
+        "tools/list" => Salida::Responder(respuesta(
+            id,
+            json!({"tools": crate::herramientas::lista()}),
+        )),
         "tools/call" => {
             let Some(nombre) = params.get("name").and_then(Value::as_str) else {
                 return Salida::Responder(error(id, codigo::PARAMETROS, "falta «name»"));
             };
             if !crate::herramientas::existe(nombre) {
-                return Salida::Responder(error(id, codigo::PARAMETROS, format!("Herramienta desconocida: {nombre}")));
+                return Salida::Responder(error(
+                    id,
+                    codigo::PARAMETROS,
+                    format!("Herramienta desconocida: {nombre}"),
+                ));
             }
             let argumentos = match params.get("arguments") {
                 None | Some(Value::Null) => Map::new(),
                 Some(Value::Object(a)) => a.clone(),
-                Some(_) => return Salida::Responder(error(id, codigo::PARAMETROS, "«arguments» tiene que ser un objeto")),
+                Some(_) => {
+                    return Salida::Responder(error(
+                        id,
+                        codigo::PARAMETROS,
+                        "«arguments» tiene que ser un objeto",
+                    ));
+                }
             };
             Salida::Herramienta {
                 id,
@@ -125,9 +155,15 @@ pub fn atender(linea: &str) -> Salida {
         // Sin recursos ni plantillas: listas vacias en vez de un error, que
         // algunos clientes las piden aunque no se anuncien.
         "resources/list" => Salida::Responder(respuesta(id, json!({"resources": []}))),
-        "resources/templates/list" => Salida::Responder(respuesta(id, json!({"resourceTemplates": []}))),
+        "resources/templates/list" => {
+            Salida::Responder(respuesta(id, json!({"resourceTemplates": []})))
+        }
         "prompts/list" => Salida::Responder(respuesta(id, json!({"prompts": []}))),
-        otro => Salida::Responder(error(id, codigo::SIN_METODO, format!("metodo desconocido: {otro}"))),
+        otro => Salida::Responder(error(
+            id,
+            codigo::SIN_METODO,
+            format!("metodo desconocido: {otro}"),
+        )),
     }
 }
 
@@ -144,40 +180,73 @@ mod pruebas {
 
     #[test]
     fn el_saludo_dice_version_y_capacidades() {
-        let r = contestar(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"x","version":"1"}}}"#);
+        let r = contestar(
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"x","version":"1"}}}"#,
+        );
         assert_eq!(r["id"], 1);
         assert_eq!(r["result"]["protocolVersion"], "2025-06-18");
         assert!(r["result"]["capabilities"]["tools"].is_object());
         assert_eq!(r["result"]["serverInfo"]["name"], "pixpin");
         // Una version que no se conoce: la nuestra mas nueva.
-        let r = contestar(r#"{"jsonrpc":"2.0","id":"a","method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#);
+        let r = contestar(
+            r#"{"jsonrpc":"2.0","id":"a","method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#,
+        );
         assert_eq!(r["result"]["protocolVersion"], VERSIONES[0]);
     }
 
     #[test]
     fn las_notificaciones_no_se_contestan() {
-        assert_eq!(atender(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#), Salida::Nada);
-        assert_eq!(atender(r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":3}}"#), Salida::Nada);
+        assert_eq!(
+            atender(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#),
+            Salida::Nada
+        );
+        assert_eq!(
+            atender(
+                r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":3}}"#
+            ),
+            Salida::Nada
+        );
         // Una respuesta del cliente tampoco.
-        assert_eq!(atender(r#"{"jsonrpc":"2.0","id":9,"result":{}}"#), Salida::Nada);
+        assert_eq!(
+            atender(r#"{"jsonrpc":"2.0","id":9,"result":{}}"#),
+            Salida::Nada
+        );
     }
 
     #[test]
     fn lo_roto_da_su_codigo() {
         assert_eq!(contestar("no json")["error"]["code"], codigo::NO_ES_JSON);
         assert_eq!(contestar("[1,2]")["error"]["code"], codigo::PETICION_MALA);
-        assert_eq!(contestar(r#"{"jsonrpc":"2.0","id":2,"method":"cosas/raras"}"#)["error"]["code"], codigo::SIN_METODO);
-        let r = contestar(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"no_existe","arguments":{}}}"#);
+        assert_eq!(
+            contestar(r#"{"jsonrpc":"2.0","id":2,"method":"cosas/raras"}"#)["error"]["code"],
+            codigo::SIN_METODO
+        );
+        let r = contestar(
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"no_existe","arguments":{}}}"#,
+        );
         assert_eq!(r["error"]["code"], codigo::PARAMETROS);
-        assert!(r["error"]["message"].as_str().unwrap().contains("no_existe"));
-        let r = contestar(r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"consultar_tareas","arguments":[1]}}"#);
+        assert!(
+            r["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("no_existe")
+        );
+        let r = contestar(
+            r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"consultar_tareas","arguments":[1]}}"#,
+        );
         assert_eq!(r["error"]["code"], codigo::PARAMETROS);
     }
 
     #[test]
     fn una_llamada_buena_se_hace_aparte() {
-        match atender(r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"consultar_tareas"}}"#) {
-            Salida::Herramienta { id, nombre, argumentos } => {
+        match atender(
+            r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"consultar_tareas"}}"#,
+        ) {
+            Salida::Herramienta {
+                id,
+                nombre,
+                argumentos,
+            } => {
                 assert_eq!(id, 5);
                 assert_eq!(nombre, "consultar_tareas");
                 assert!(argumentos.is_empty());

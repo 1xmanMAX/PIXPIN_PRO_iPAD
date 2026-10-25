@@ -43,7 +43,10 @@ impl Obstaculo {
             return None;
         }
         let (x0, y0, x1, y1) = caja;
-        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) || x1 <= x0 || y1 <= y0 {
+        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite())
+            || x1 <= x0
+            || y1 <= y0
+        {
             return None;
         }
         let [arriba, abajo, izq, der] = f.margen;
@@ -52,7 +55,12 @@ impl Obstaculo {
             .contorno
             .as_ref()
             .filter(|_| f.ajuste == Ajuste::Cuadrado)
-            .map(|c| c.iter().map(|(u, v)| (x0 + u * (x1 - x0), y0 + v * (y1 - y0))).collect::<Vec<_>>().into());
+            .map(|c| {
+                c.iter()
+                    .map(|(u, v)| (x0 + u * (x1 - x0), y0 + v * (y1 - y0)))
+                    .collect::<Vec<_>>()
+                    .into()
+            });
         // Con contorno, la zona es la de sus puntos (puede salirse de la caja).
         let (mut a0, mut b0, mut a1, mut b1) = (x0, y0, x1, y1);
         if let Some(c) = &contorno {
@@ -123,7 +131,10 @@ impl Obstaculo {
         }
         // La distancia a los lados ensancha cada trozo; los que se tocan se
         // juntan.
-        let mut trozos: Vec<(f32, f32)> = trozos.into_iter().map(|(a, b)| (a - d_izq, b + d_der)).collect();
+        let mut trozos: Vec<(f32, f32)> = trozos
+            .into_iter()
+            .map(|(a, b)| (a - d_izq, b + d_der))
+            .collect();
         trozos.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut juntos: Vec<(f32, f32)> = Vec::with_capacity(trozos.len());
         for (a, b) in trozos {
@@ -143,25 +154,49 @@ impl Obstaculo {
 /// Los trozos de un renglon en `arriba` (de unos `alto` puntos) entre `lo` y
 /// `hi` donde puede ir el texto, de izquierda a derecha. `Err(y)`: aqui no
 /// cabe, hay que probar mas abajo, en `y` (debajo de lo que estorba).
-pub fn tramos(obst: &[Obstaculo], arriba: f32, alto: f32, lo: f32, hi: f32) -> Result<Vec<(f32, f32)>, f32> {
-    let aqui: Vec<&Obstaculo> = obst.iter().filter(|o| o.abajo > arriba && o.arriba < arriba + alto && o.x1 > lo && o.x0 < hi).collect();
+pub fn tramos(
+    obst: &[Obstaculo],
+    arriba: f32,
+    alto: f32,
+    lo: f32,
+    hi: f32,
+) -> Result<Vec<(f32, f32)>, f32> {
+    let aqui: Vec<&Obstaculo> = obst
+        .iter()
+        .filter(|o| o.abajo > arriba && o.arriba < arriba + alto && o.x1 > lo && o.x0 < hi)
+        .collect();
     if aqui.is_empty() {
         return Ok(vec![(lo, hi)]);
     }
-    if let Some(debajo) = aqui.iter().filter(|o| o.arriba_abajo).map(|o| o.abajo).reduce(f32::max) {
+    if let Some(debajo) = aqui
+        .iter()
+        .filter(|o| o.arriba_abajo)
+        .map(|o| o.abajo)
+        .reduce(f32::max)
+    {
         return Err(debajo);
     }
     // Lo que cada dibujo quita del renglon: (izquierda, derecha, abajo).
     let mut quitado: Vec<(f32, f32, f32)> = Vec::new();
     for o in &aqui {
         let desde = quitado.len();
-        quitado.extend(o.ocupado(arriba, arriba + alto).into_iter().map(|(a, b)| (a, b, o.abajo)));
+        quitado.extend(
+            o.ocupado(arriba, arriba + alto)
+                .into_iter()
+                .map(|(a, b)| (a, b, o.abajo)),
+        );
         if quitado.len() == desde || o.lado == Lado::Ambos {
             continue;
         }
         // Texto a un solo lado: el otro lado del renglon tambien se quita.
-        let izq = quitado[desde..].iter().map(|t| t.0).fold(f32::INFINITY, f32::min);
-        let der = quitado[desde..].iter().map(|t| t.1).fold(f32::NEG_INFINITY, f32::max);
+        let izq = quitado[desde..]
+            .iter()
+            .map(|t| t.0)
+            .fold(f32::INFINITY, f32::min);
+        let der = quitado[desde..]
+            .iter()
+            .map(|t| t.1)
+            .fold(f32::NEG_INFINITY, f32::max);
         let texto_a_la_izquierda = match o.lado {
             Lado::Izquierda => true,
             Lado::Derecha => false,
@@ -169,7 +204,11 @@ pub fn tramos(obst: &[Obstaculo], arriba: f32, alto: f32, lo: f32, hi: f32) -> R
             _ => izq - lo >= hi - der,
         };
         quitado.truncate(desde);
-        quitado.push(if texto_a_la_izquierda { (izq, hi.max(der), o.abajo) } else { (lo.min(izq), der, o.abajo) });
+        quitado.push(if texto_a_la_izquierda {
+            (izq, hi.max(der), o.abajo)
+        } else {
+            (lo.min(izq), der, o.abajo)
+        });
     }
     quitado.retain(|(a, b, _)| *b > lo && *a < hi);
     if quitado.is_empty() {
@@ -179,14 +218,24 @@ pub fn tramos(obst: &[Obstaculo], arriba: f32, alto: f32, lo: f32, hi: f32) -> R
     for &(a, b, _) in &quitado {
         libres = libres
             .into_iter()
-            .flat_map(|(x, y)| if b <= x || a >= y { vec![(x, y)] } else { vec![(x, a.min(y)), (b.max(x), y)] })
+            .flat_map(|(x, y)| {
+                if b <= x || a >= y {
+                    vec![(x, y)]
+                } else {
+                    vec![(x, a.min(y)), (b.max(x), y)]
+                }
+            })
             .collect();
     }
     libres.retain(|(a, b)| b - a >= TRAMO_MINIMO);
     if libres.is_empty() {
         // Nada lo bastante ancho: el renglon baja hasta donde acaba el
         // primer dibujo que estorba.
-        return Err(quitado.iter().map(|t| t.2).reduce(f32::min).unwrap_or(arriba));
+        return Err(quitado
+            .iter()
+            .map(|t| t.2)
+            .reduce(f32::min)
+            .unwrap_or(arriba));
     }
     Ok(libres)
 }
@@ -210,7 +259,11 @@ pub fn sitio(obst: &[Obstaculo], y: f32, alto: f32, lo: f32, hi: f32) -> (f32, V
 pub fn debajo(obst: &[Obstaculo], y: f32, alto: f32, x0: f32, x1: f32) -> f32 {
     let mut y = y;
     for _ in 0..50 {
-        let b = obst.iter().filter(|o| o.abajo > y && o.arriba < y + alto && o.x1 > x0 && o.x0 < x1).map(|o| o.abajo).reduce(f32::max);
+        let b = obst
+            .iter()
+            .filter(|o| o.abajo > y && o.arriba < y + alto && o.x1 > x0 && o.x0 < x1)
+            .map(|o| o.abajo)
+            .reduce(f32::max);
         match b {
             Some(b) if b > y => y = b,
             _ => break,
@@ -224,7 +277,17 @@ mod pruebas {
     use super::*;
 
     fn caja(x0: f32, y0: f32, x1: f32, y1: f32, lado: Lado) -> Obstaculo {
-        Obstaculo { arriba: y0, abajo: y1, x0, x1, arriba_abajo: false, lado, contorno: None, traspasa: false, dist: [0.0; 4] }
+        Obstaculo {
+            arriba: y0,
+            abajo: y1,
+            x0,
+            x1,
+            arriba_abajo: false,
+            lado,
+            contorno: None,
+            traspasa: false,
+            dist: [0.0; 4],
+        }
     }
 
     #[test]
@@ -239,7 +302,10 @@ mod pruebas {
     #[test]
     fn a_los_dos_lados_o_al_mayor() {
         let mut o = [caja(100.0, 0.0, 200.0, 100.0, Lado::Ambos)];
-        assert_eq!(tramos(&o, 10.0, 12.0, 0.0, 400.0), Ok(vec![(0.0, 100.0), (200.0, 400.0)]));
+        assert_eq!(
+            tramos(&o, 10.0, 12.0, 0.0, 400.0),
+            Ok(vec![(0.0, 100.0), (200.0, 400.0)])
+        );
         o[0].lado = Lado::Mayor;
         assert_eq!(tramos(&o, 10.0, 12.0, 0.0, 400.0), Ok(vec![(200.0, 400.0)]));
         o[0].lado = Lado::Izquierda;
@@ -253,7 +319,10 @@ mod pruebas {
         let mut o = [caja(150.0, 0.0, 250.0, 100.0, Lado::Ambos)];
         o[0].arriba_abajo = true;
         assert_eq!(tramos(&o, 10.0, 12.0, 0.0, 400.0), Err(100.0));
-        assert_eq!(sitio(&o, 10.0, 12.0, 0.0, 400.0), (100.0, vec![(0.0, 400.0)]));
+        assert_eq!(
+            sitio(&o, 10.0, 12.0, 0.0, 400.0),
+            (100.0, vec![(0.0, 400.0)])
+        );
         // Un dibujo que deja menos de 20 pt a cada lado: el renglon baja.
         let o = [caja(10.0, 0.0, 390.0, 50.0, Lado::Ambos)];
         assert_eq!(sitio(&o, 0.0, 12.0, 0.0, 400.0).0, 50.0);
@@ -262,13 +331,20 @@ mod pruebas {
     #[test]
     fn el_contorno_estrecho_sigue_el_poligono() {
         // Un rombo de 0..100 x 0..100: en la banda de arriba ocupa poco.
-        let rombo: Arc<[(f32, f32)]> = Arc::from(vec![(50.0, 0.0), (100.0, 50.0), (50.0, 100.0), (0.0, 50.0)]);
+        let rombo: Arc<[(f32, f32)]> =
+            Arc::from(vec![(50.0, 0.0), (100.0, 50.0), (50.0, 100.0), (0.0, 50.0)]);
         let mut o = caja(0.0, 0.0, 100.0, 100.0, Lado::Derecha);
         o.contorno = Some(rombo);
         let arriba = tramos(std::slice::from_ref(&o), 0.0, 10.0, 0.0, 400.0).unwrap();
         let medio = tramos(std::slice::from_ref(&o), 45.0, 10.0, 0.0, 400.0).unwrap();
-        assert!(arriba[0].0 < 70.0, "arriba el rombo es estrecho: {arriba:?}");
-        assert!((medio[0].0 - 100.0).abs() < 0.5, "en medio llega al ancho entero: {medio:?}");
+        assert!(
+            arriba[0].0 < 70.0,
+            "arriba el rombo es estrecho: {arriba:?}"
+        );
+        assert!(
+            (medio[0].0 - 100.0).abs() < 0.5,
+            "en medio llega al ancho entero: {medio:?}"
+        );
     }
 
     #[test]

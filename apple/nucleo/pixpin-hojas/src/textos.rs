@@ -33,7 +33,11 @@ impl Textos {
         loop {
             let antes = pos;
             match xml::siguiente(d, &mut pos, true) {
-                Paso::Evento(Evento::Abre { nombre: b"si", vacia, .. }) => {
+                Paso::Evento(Evento::Abre {
+                    nombre: b"si",
+                    vacia,
+                    ..
+                }) => {
                     if vacia {
                         rangos.push((pos as u32, pos as u32));
                     } else {
@@ -77,7 +81,13 @@ impl Textos {
     }
 
     /// Los tramos si el texto es rico (`<r>`); `None` si es plano.
-    pub fn rico(&self, i: u32, base: &Fuente, tema: &Tema, paleta: &[u32]) -> Option<Vec<TramoRico>> {
+    pub fn rico(
+        &self,
+        i: u32,
+        base: &Fuente,
+        tema: &Tema,
+        paleta: &[u32],
+    ) -> Option<Vec<TramoRico>> {
         let d = self.trozo(i)?;
         if !d.windows(2).any(|w| w == b"<r" || w == b":r") {
             return None;
@@ -90,12 +100,21 @@ impl Textos {
         let mut v = Vec::new();
         // Texto suelto antes de los tramos (`<si><t>a</t><r>...`).
         if let Some(t) = raiz.hijo("t") {
-            v.push(TramoRico { texto: xml::sin_escapes_ooxml(&t.texto).into_owned(), fuente: base.clone() });
+            v.push(TramoRico {
+                texto: xml::sin_escapes_ooxml(&t.texto).into_owned(),
+                fuente: base.clone(),
+            });
         }
         for r in rs {
-            let fuente = r.hijo("rPr").map(|p| fuente_de(p, tema, paleta, base)).unwrap_or_else(|| base.clone());
+            let fuente = r
+                .hijo("rPr")
+                .map(|p| fuente_de(p, tema, paleta, base))
+                .unwrap_or_else(|| base.clone());
             let texto: String = r.hijos_de("t").map(|t| t.texto.as_str()).collect();
-            v.push(TramoRico { texto: xml::sin_escapes_ooxml(&texto).into_owned(), fuente });
+            v.push(TramoRico {
+                texto: xml::sin_escapes_ooxml(&texto).into_owned(),
+                fuente,
+            });
         }
         Some(v)
     }
@@ -109,7 +128,11 @@ pub fn texto_de_t(d: &[u8]) -> String {
     let mut s = String::new();
     loop {
         match xml::siguiente(d, &mut pos, true) {
-            Paso::Evento(Evento::Abre { nombre, vacia: false, .. }) => match nombre {
+            Paso::Evento(Evento::Abre {
+                nombre,
+                vacia: false,
+                ..
+            }) => match nombre {
                 b"t" => en_t += 1,
                 b"rPh" => en_fonetica += 1,
                 _ => {}
@@ -119,8 +142,12 @@ pub fn texto_de_t(d: &[u8]) -> String {
                 b"rPh" => en_fonetica = en_fonetica.saturating_sub(1),
                 _ => {}
             },
-            Paso::Evento(Evento::Texto(t)) if en_t > 0 && en_fonetica == 0 => s.push_str(&xml::desescapar(t)),
-            Paso::Evento(Evento::Cdata(t)) if en_t > 0 && en_fonetica == 0 => s.push_str(&String::from_utf8_lossy(t)),
+            Paso::Evento(Evento::Texto(t)) if en_t > 0 && en_fonetica == 0 => {
+                s.push_str(&xml::desescapar(t))
+            }
+            Paso::Evento(Evento::Cdata(t)) if en_t > 0 && en_fonetica == 0 => {
+                s.push_str(&String::from_utf8_lossy(t))
+            }
             Paso::Evento(_) => {}
             _ => break,
         }
@@ -145,11 +172,26 @@ mod pruebas {
         assert_eq!(t.texto(2), "Neg normal");
         assert_eq!(t.texto(3), "a\rb");
         assert_eq!(t.texto(99), "");
-        let r = t.rico(2, &Fuente::default(), &Tema::default(), &crate::estilos::PALETA).unwrap();
+        let r = t
+            .rico(
+                2,
+                &Fuente::default(),
+                &Tema::default(),
+                &crate::estilos::PALETA,
+            )
+            .unwrap();
         assert_eq!(r.len(), 2);
         assert!(r[0].fuente.negrita && r[0].fuente.tam == 14.0);
         assert!(!r[1].fuente.negrita);
-        assert!(t.rico(0, &Fuente::default(), &Tema::default(), &crate::estilos::PALETA).is_none());
+        assert!(
+            t.rico(
+                0,
+                &Fuente::default(),
+                &Tema::default(),
+                &crate::estilos::PALETA
+            )
+            .is_none()
+        );
     }
 
     #[test]

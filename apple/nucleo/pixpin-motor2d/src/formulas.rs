@@ -27,17 +27,33 @@ pub enum Pieza {
     /// Uno encima de otro, con su raya.
     Fraccion(Box<Pieza>, Box<Pieza>),
     /// Lo de arriba y lo de abajo pegados a una base: `x^2_i`.
-    ConIndices { base: Box<Pieza>, arriba: Option<Box<Pieza>>, abajo: Option<Box<Pieza>> },
+    ConIndices {
+        base: Box<Pieza>,
+        arriba: Option<Box<Pieza>>,
+        abajo: Option<Box<Pieza>>,
+    },
     /// Una raiz, con su indice si lo lleva.
-    Raiz { dentro: Box<Pieza>, indice: Option<Box<Pieza>> },
+    Raiz {
+        dentro: Box<Pieza>,
+        indice: Option<Box<Pieza>>,
+    },
     /// Entre parentesis que crecen con lo de dentro.
-    Agrupado { dentro: Box<Pieza>, abre: String, cierra: String },
+    Agrupado {
+        dentro: Box<Pieza>,
+        abre: String,
+        cierra: String,
+    },
     /// **Una matriz o un sistema** (`\begin{bmatrix}`, `pmatrix`,
     /// `vmatrix`, `cases`, `aligned`...): filas de celdas y lo que la abre y
     /// la cierra (`[` `]`, `(` `)`, `|` `|`, `{` sin cierre en un sistema, o
     /// nada). `izquierda`: las celdas pegadas a la izquierda (sistemas y
     /// alineados), si no centradas (matrices).
-    Tabla { filas: Vec<Vec<Pieza>>, abre: String, cierra: String, izquierda: bool },
+    Tabla {
+        filas: Vec<Vec<Pieza>>,
+        abre: String,
+        cierra: String,
+        izquierda: bool,
+    },
     /// **Una marca que crece con lo que cubre** (15-oct-2026, para las
     /// laminas de geometria): la raya de un segmento (`\overline{AB}`), el
     /// arco (`\overset{\frown}{AC}`, `\wideparen{AC}`), la flecha de un
@@ -54,7 +70,10 @@ pub enum Pieza {
     /// Dentro de un recuadro (`\boxed{}`, `\fbox{}`): el resultado final.
     Recuadro(Box<Pieza>),
     /// Algo pequeno encima de otra cosa (`\overset{a}{=}`, `\stackrel`).
-    Encima { base: Box<Pieza>, arriba: Box<Pieza> },
+    Encima {
+        base: Box<Pieza>,
+        arriba: Box<Pieza>,
+    },
     /// Lo pequeno centrado debajo: `\underset{n}{x}`, el rotulo de
     /// `\underbrace{SS...S}_{n veces}` (18-oct).
     Debajo { base: Box<Pieza>, abajo: Box<Pieza> },
@@ -83,81 +102,245 @@ pub enum Adorno {
 }
 
 fn texto(t: &str) -> Pieza {
-    Pieza::Texto { texto: t.to_string(), cursiva: false }
+    Pieza::Texto {
+        texto: t.to_string(),
+        cursiva: false,
+    }
 }
 
 /// Los simbolos que se escriben con barra invertida.
 const SIMBOLOS: &[(&str, &str)] = &[
-    ("alpha", "α"), ("beta", "β"), ("gamma", "γ"), ("delta", "δ"),
-    ("epsilon", "ε"), ("zeta", "ζ"), ("eta", "η"), ("theta", "θ"),
-    ("iota", "ι"), ("kappa", "κ"), ("lambda", "λ"), ("mu", "μ"),
-    ("nu", "ν"), ("xi", "ξ"), ("pi", "π"), ("rho", "ρ"),
-    ("sigma", "σ"), ("tau", "τ"), ("upsilon", "υ"), ("phi", "φ"),
-    ("chi", "χ"), ("psi", "ψ"), ("omega", "ω"),
-    ("Gamma", "Γ"), ("Delta", "Δ"), ("Theta", "Θ"), ("Lambda", "Λ"),
-    ("Xi", "Ξ"), ("Pi", "Π"), ("Sigma", "Σ"), ("Phi", "Φ"),
-    ("Psi", "Ψ"), ("Omega", "Ω"),
-    ("times", "×"), ("div", "÷"), ("pm", "±"), ("mp", "∓"),
-    ("cdot", "·"), ("ast", "∗"), ("star", "⋆"),
-    ("leq", "≤"), ("le", "≤"), ("geq", "≥"), ("ge", "≥"),
-    ("neq", "≠"), ("ne", "≠"), ("approx", "≈"), ("equiv", "≡"),
-    ("sim", "∼"), ("propto", "∝"),
-    ("infty", "∞"), ("partial", "∂"), ("nabla", "∇"),
-    ("sum", "∑"), ("prod", "∏"), ("int", "∫"), ("oint", "∮"),
-    ("sqrt", "√"), ("angle", "∠"), ("degree", "°"),
-    ("in", "∈"), ("notin", "∉"), ("subset", "⊂"), ("supset", "⊃"),
-    ("cup", "∪"), ("cap", "∩"), ("emptyset", "∅"), ("forall", "∀"),
-    ("exists", "∃"), ("neg", "¬"), ("land", "∧"), ("lor", "∨"),
-    ("rightarrow", "→"), ("to", "→"), ("leftarrow", "←"),
-    ("leftrightarrow", "↔"), ("Rightarrow", "⇒"), ("Leftarrow", "⇐"),
-    ("ldots", "…"), ("cdots", "⋯"), ("perp", "⊥"), ("parallel", "∥"),
+    ("alpha", "α"),
+    ("beta", "β"),
+    ("gamma", "γ"),
+    ("delta", "δ"),
+    ("epsilon", "ε"),
+    ("zeta", "ζ"),
+    ("eta", "η"),
+    ("theta", "θ"),
+    ("iota", "ι"),
+    ("kappa", "κ"),
+    ("lambda", "λ"),
+    ("mu", "μ"),
+    ("nu", "ν"),
+    ("xi", "ξ"),
+    ("pi", "π"),
+    ("rho", "ρ"),
+    ("sigma", "σ"),
+    ("tau", "τ"),
+    ("upsilon", "υ"),
+    ("phi", "φ"),
+    ("chi", "χ"),
+    ("psi", "ψ"),
+    ("omega", "ω"),
+    ("Gamma", "Γ"),
+    ("Delta", "Δ"),
+    ("Theta", "Θ"),
+    ("Lambda", "Λ"),
+    ("Xi", "Ξ"),
+    ("Pi", "Π"),
+    ("Sigma", "Σ"),
+    ("Phi", "Φ"),
+    ("Psi", "Ψ"),
+    ("Omega", "Ω"),
+    ("times", "×"),
+    ("div", "÷"),
+    ("pm", "±"),
+    ("mp", "∓"),
+    ("cdot", "·"),
+    ("ast", "∗"),
+    ("star", "⋆"),
+    ("leq", "≤"),
+    ("le", "≤"),
+    ("geq", "≥"),
+    ("ge", "≥"),
+    ("neq", "≠"),
+    ("ne", "≠"),
+    ("approx", "≈"),
+    ("equiv", "≡"),
+    ("sim", "∼"),
+    ("propto", "∝"),
+    ("infty", "∞"),
+    ("partial", "∂"),
+    ("nabla", "∇"),
+    ("sum", "∑"),
+    ("prod", "∏"),
+    ("int", "∫"),
+    ("oint", "∮"),
+    ("sqrt", "√"),
+    ("angle", "∠"),
+    ("degree", "°"),
+    ("in", "∈"),
+    ("notin", "∉"),
+    ("subset", "⊂"),
+    ("supset", "⊃"),
+    ("cup", "∪"),
+    ("cap", "∩"),
+    ("emptyset", "∅"),
+    ("forall", "∀"),
+    ("exists", "∃"),
+    ("neg", "¬"),
+    ("land", "∧"),
+    ("lor", "∨"),
+    ("rightarrow", "→"),
+    ("to", "→"),
+    ("leftarrow", "←"),
+    ("leftrightarrow", "↔"),
+    ("Rightarrow", "⇒"),
+    ("Leftarrow", "⇐"),
+    ("ldots", "…"),
+    ("cdots", "⋯"),
+    ("perp", "⊥"),
+    ("parallel", "∥"),
     // Lo que tambien escriben los modelos al pasar una hoja (banco del
     // 15-oct): sin esto salia con su barra.
-    ("dots", "…"), ("dotsc", "…"), ("dotsb", "⋯"), ("vdots", "⋮"), ("ddots", "⋱"),
-    ("circ", "∘"), ("prime", "′"), ("iff", "⇔"), ("implies", "⇒"), ("impliedby", "⇐"),
-    ("mid", "|"), ("vert", "|"), ("lvert", "|"), ("rvert", "|"), ("Vert", "‖"),
-    ("langle", "⟨"), ("rangle", "⟩"), ("setminus", "∖"), ("ell", "ℓ"), ("hbar", "ℏ"),
-    ("therefore", "∴"), ("because", "∵"), ("triangle", "△"), ("square", "□"),
-    ("simeq", "≃"), ("cong", "≅"), ("ll", "≪"), ("gg", "≫"), ("subseteq", "⊆"),
-    ("supseteq", "⊇"), ("varepsilon", "ε"), ("vartheta", "ϑ"), ("varphi", "φ"),
-    ("varrho", "ϱ"), ("varsigma", "ς"), ("mapsto", "↦"), ("longrightarrow", "⟶"),
-    ("uparrow", "↑"), ("downarrow", "↓"), ("bullet", "•"), ("checkmark", "✓"),
-    ("leqslant", "≤"), ("geqslant", "≥"), ("lceil", "⌈"), ("rceil", "⌉"),
-    ("lfloor", "⌊"), ("rfloor", "⌋"), ("aleph", "ℵ"), ("Re", "ℜ"), ("Im", "ℑ"),
+    ("dots", "…"),
+    ("dotsc", "…"),
+    ("dotsb", "⋯"),
+    ("vdots", "⋮"),
+    ("ddots", "⋱"),
+    ("circ", "∘"),
+    ("prime", "′"),
+    ("iff", "⇔"),
+    ("implies", "⇒"),
+    ("impliedby", "⇐"),
+    ("mid", "|"),
+    ("vert", "|"),
+    ("lvert", "|"),
+    ("rvert", "|"),
+    ("Vert", "‖"),
+    ("langle", "⟨"),
+    ("rangle", "⟩"),
+    ("setminus", "∖"),
+    ("ell", "ℓ"),
+    ("hbar", "ℏ"),
+    ("therefore", "∴"),
+    ("because", "∵"),
+    ("triangle", "△"),
+    ("square", "□"),
+    ("simeq", "≃"),
+    ("cong", "≅"),
+    ("ll", "≪"),
+    ("gg", "≫"),
+    ("subseteq", "⊆"),
+    ("supseteq", "⊇"),
+    ("varepsilon", "ε"),
+    ("vartheta", "ϑ"),
+    ("varphi", "φ"),
+    ("varrho", "ϱ"),
+    ("varsigma", "ς"),
+    ("mapsto", "↦"),
+    ("longrightarrow", "⟶"),
+    ("uparrow", "↑"),
+    ("downarrow", "↓"),
+    ("bullet", "•"),
+    ("checkmark", "✓"),
+    ("leqslant", "≤"),
+    ("geqslant", "≥"),
+    ("lceil", "⌈"),
+    ("rceil", "⌉"),
+    ("lfloor", "⌊"),
+    ("rfloor", "⌋"),
+    ("aleph", "ℵ"),
+    ("Re", "ℜ"),
+    ("Im", "ℑ"),
     // Geometria (laminas del 15-oct): «m∢AOB», arcos, perpendiculares. Sin
     // estos salia «m\getsCOD» o el mandato con su barra.
-    ("measuredangle", "∡"), ("sphericalangle", "∢"), ("angulo", "∢"), ("frown", "⌢"), ("smile", "⌣"),
-    ("gets", "←"), ("nparallel", "∦"), ("ncong", "≇"), ("nsim", "≁"), ("doteq", "≐"), ("odot", "⊙"),
-    ("oplus", "⊕"), ("otimes", "⊗"), ("blacksquare", "■"), ("lozenge", "◊"), ("diamond", "⋄"),
-    ("textdegree", "°"), ("cdotp", "·"), ("backsim", "∽"),
+    ("measuredangle", "∡"),
+    ("sphericalangle", "∢"),
+    ("angulo", "∢"),
+    ("frown", "⌢"),
+    ("smile", "⌣"),
+    ("gets", "←"),
+    ("nparallel", "∦"),
+    ("ncong", "≇"),
+    ("nsim", "≁"),
+    ("doteq", "≐"),
+    ("odot", "⊙"),
+    ("oplus", "⊕"),
+    ("otimes", "⊗"),
+    ("blacksquare", "■"),
+    ("lozenge", "◊"),
+    ("diamond", "⋄"),
+    ("textdegree", "°"),
+    ("cdotp", "·"),
+    ("backsim", "∽"),
 ];
 
 /// Los mandatos que no se ven (tamaños, estilo): se quitan.
 const MUDOS: &[&str] = &[
-    "left", "right", "displaystyle", "textstyle", "scriptstyle", "limits", "nolimits", "big", "Big", "bigg", "Bigg", "bigl", "bigr",
-    "Bigl", "Bigr", "biggl", "biggr", "middle", "hline", "noindent", "centering", "nonumber", "notag",
+    "left",
+    "right",
+    "displaystyle",
+    "textstyle",
+    "scriptstyle",
+    "limits",
+    "nolimits",
+    "big",
+    "Big",
+    "bigg",
+    "Bigg",
+    "bigl",
+    "bigr",
+    "Bigl",
+    "Bigr",
+    "biggl",
+    "biggr",
+    "middle",
+    "hline",
+    "noindent",
+    "centering",
+    "nonumber",
+    "notag",
 ];
 
 /// Las letras de pizarra (`\mathbb{R}`).
-const PIZARRA: &[(char, &str)] = &[('R', "ℝ"), ('N', "ℕ"), ('Z', "ℤ"), ('Q', "ℚ"), ('C', "ℂ"), ('P', "ℙ"), ('E', "𝔼")];
+const PIZARRA: &[(char, &str)] = &[
+    ('R', "ℝ"),
+    ('N', "ℕ"),
+    ('Z', "ℤ"),
+    ('Q', "ℚ"),
+    ('C', "ℂ"),
+    ('P', "ℙ"),
+    ('E', "𝔼"),
+];
 
 /// Las palabras que van derechas y no en cursiva.
 const FUNCIONES: &[&str] = &[
-    "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "log", "ln", "exp", "lim", "max", "min",
-    "det", "gcd", "mod", "sen", "tg", "ctg", "cosec", "arcsen", "arctg", "lg", "arg", "sup", "Pr", "dim", "ker", "coth", "arcsinh",
-    "arccosh", "arctanh",
+    "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh",
+    "log", "ln", "exp", "lim", "max", "min", "det", "gcd", "mod", "sen", "tg", "ctg", "cosec",
+    "arcsen", "arctg", "lg", "arg", "sup", "Pr", "dim", "ker", "coth", "arcsinh", "arccosh",
+    "arctanh",
 ];
 
 /// Lo que se escribe de forma corriente y significa un simbolo.
 const PALABRAS: &[(&str, &str)] = &[
-    ("inf", "∞"), ("infinito", "∞"), ("infinity", "∞"), ("grados", "°"), ("deg", "°"), ("sum", "∑"), ("suma", "∑"), ("prod", "∏"),
-    ("int", "∫"), ("raiz", "√"),
+    ("inf", "∞"),
+    ("infinito", "∞"),
+    ("infinity", "∞"),
+    ("grados", "°"),
+    ("deg", "°"),
+    ("sum", "∑"),
+    ("suma", "∑"),
+    ("prod", "∏"),
+    ("int", "∫"),
+    ("raiz", "√"),
 ];
 
 /// Parejas de signos que se escriben con dos teclas y significan una.
 const PAREJAS: &[(&str, &str)] = &[
-    ("<=", "≤"), (">=", "≥"), ("!=", "≠"), ("/=", "≠"), ("+-", "±"), ("-+", "∓"), ("==", "≡"), ("~=", "≈"), ("->", "→"), ("=>", "⇒"),
-    ("<-", "←"), ("<->", "↔"),
+    ("<=", "≤"),
+    (">=", "≥"),
+    ("!=", "≠"),
+    ("/=", "≠"),
+    ("+-", "±"),
+    ("-+", "∓"),
+    ("==", "≡"),
+    ("~=", "≈"),
+    ("->", "→"),
+    ("=>", "⇒"),
+    ("<-", "←"),
+    ("<->", "↔"),
 ];
 
 fn simbolo(p: &str) -> Option<&'static str> {
@@ -166,7 +349,10 @@ fn simbolo(p: &str) -> Option<&'static str> {
 
 /// **Lee una formula** a su arbol. Nunca falla: lo raro sale tal cual.
 pub fn leer(formula: &str) -> Pieza {
-    let mut l = Lector { s: formula.chars().collect(), i: 0 };
+    let mut l = Lector {
+        s: formula.chars().collect(),
+        i: 0,
+    };
     let mut partes = vec![l.expresion(None)];
     // Lo que corta la expresion (una coma, un `)` suelto) se escribe y se
     // sigue: antes se perdia todo lo de detras («x ∈ ℝ, rang(A) = 3» se
@@ -174,10 +360,18 @@ pub fn leer(formula: &str) -> Pieza {
     while l.i < l.s.len() {
         let c = l.s[l.i];
         l.i += 1;
-        partes.push(texto(&if c == ',' || c == ';' { format!("{c} ") } else { c.to_string() }));
+        partes.push(texto(&if c == ',' || c == ';' {
+            format!("{c} ")
+        } else {
+            c.to_string()
+        }));
         partes.push(l.expresion(None));
     }
-    if partes.len() == 1 { partes.pop().unwrap() } else { Pieza::Fila(partes) }
+    if partes.len() == 1 {
+        partes.pop().unwrap()
+    } else {
+        Pieza::Fila(partes)
+    }
 }
 
 struct Lector {
@@ -213,7 +407,11 @@ impl Lector {
                     // `_{50°}` tambien dejaba la llave suelta.)
                     (Some(f), Some(c)) if c != f => {
                         self.i += 1;
-                        partes.push(texto(&if c == ',' || c == ';' { format!("{c} ") } else { c.to_string() }));
+                        partes.push(texto(&if c == ',' || c == ';' {
+                            format!("{c} ")
+                        } else {
+                            c.to_string()
+                        }));
                         partes.push(self.termino(fin));
                         continue;
                     }
@@ -223,7 +421,11 @@ impl Lector {
             partes.push(texto(&format!(" {signo} ")));
             partes.push(self.termino(fin));
         }
-        if partes.len() == 1 { partes.pop().unwrap() } else { Pieza::Fila(partes) }
+        if partes.len() == 1 {
+            partes.pop().unwrap()
+        } else {
+            Pieza::Fila(partes)
+        }
     }
 
     fn saltar_espacios(&mut self) {
@@ -328,7 +530,10 @@ impl Lector {
 
     fn numero(&mut self) -> Pieza {
         let mut n = String::new();
-        while let Some(c) = self.en(self.i).filter(|c| c.is_ascii_digit() || *c == '.' || *c == ',') {
+        while let Some(c) = self
+            .en(self.i)
+            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == ',')
+        {
             n.push(c);
             self.i += 1;
         }
@@ -346,7 +551,10 @@ impl Lector {
         }
         let minus = w.to_lowercase();
         if w == "sqrt" || minus == "raiz" || minus == "raíz" {
-            return Pieza::Raiz { dentro: Box::new(self.argumento()), indice: None };
+            return Pieza::Raiz {
+                dentro: Box::new(self.argumento()),
+                indice: None,
+            };
         }
         if FUNCIONES.contains(&minus.as_str()) {
             // `sin(3t)` conserva sus parentesis (sin ellos salia «sin3·t»);
@@ -367,7 +575,10 @@ impl Lector {
         }
         // Letras sueltas: cada una es una variable.
         self.i = desde + 1;
-        Pieza::Texto { texto: w.chars().next().unwrap_or(' ').to_string(), cursiva: true }
+        Pieza::Texto {
+            texto: w.chars().next().unwrap_or(' ').to_string(),
+            cursiva: true,
+        }
     }
 
     /// Lo que va detras de una funcion o de una raiz.
@@ -387,7 +598,9 @@ impl Lector {
 
     /// Un grupo entre llaves, o el siguiente caracter suelto.
     fn grupo(&mut self) -> Pieza {
-        let Some(c) = self.en(self.i) else { return texto("") };
+        let Some(c) = self.en(self.i) else {
+            return texto("");
+        };
         if c == '{' {
             self.i += 1;
             let dentro = self.expresion(Some('}'));
@@ -400,7 +613,10 @@ impl Lector {
             return self.mandato();
         }
         self.i += 1;
-        Pieza::Texto { texto: c.to_string(), cursiva: c.is_alphabetic() }
+        Pieza::Texto {
+            texto: c.to_string(),
+            cursiva: c.is_alphabetic(),
+        }
     }
 
     fn mandato(&mut self) -> Pieza {
@@ -435,16 +651,24 @@ impl Lector {
                     // consume quien lo abrio.
                     self.expresion(Some('}'))
                 };
-                Pieza::Color { color, dentro: Box::new(dentro) }
+                Pieza::Color {
+                    color,
+                    dentro: Box::new(dentro),
+                }
             }
             "boxed" | "fbox" | "framebox" => {
                 let crudo = self.grupo_crudo();
-                let dentro = if palabra == "boxed" { leer(&crudo) } else { texto(&crudo) };
+                let dentro = if palabra == "boxed" {
+                    leer(&crudo)
+                } else {
+                    texto(&crudo)
+                };
                 Pieza::Recuadro(Box::new(dentro))
             }
             // **Arcos, rayas y flechas encima**, del ancho de lo que cubren.
-            "overline" | "bar" | "widebar" | "overarc" | "wideparen" | "arc" | "overparen" | "vec" | "overrightarrow"
-            | "hat" | "widehat" | "tilde" | "widetilde" | "underline" => {
+            "overline" | "bar" | "widebar" | "overarc" | "wideparen" | "arc" | "overparen"
+            | "vec" | "overrightarrow" | "hat" | "widehat" | "tilde" | "widetilde"
+            | "underline" => {
                 let base = self.grupo();
                 let adorno = match palabra.as_str() {
                     "overline" | "bar" | "widebar" => Adorno::RayaEncima,
@@ -454,17 +678,26 @@ impl Lector {
                     "underline" => Adorno::RayaDebajo,
                     _ => Adorno::ArcoEncima,
                 };
-                Pieza::Adorno { dentro: Box::new(base), adorno }
+                Pieza::Adorno {
+                    dentro: Box::new(base),
+                    adorno,
+                }
             }
             // `\underbrace{SS...S}_{"n" veces}`: la llave debajo y su rotulo
             // debajo de ella; `\underset{n}{x}`, lo pequeno debajo.
             "underbrace" => {
-                let base = Pieza::Adorno { dentro: Box::new(self.grupo()), adorno: Adorno::LlaveDebajo };
+                let base = Pieza::Adorno {
+                    dentro: Box::new(self.grupo()),
+                    adorno: Adorno::LlaveDebajo,
+                };
                 self.saltar_espacios();
                 if self.en(self.i) == Some('_') {
                     self.i += 1;
                     let abajo = self.grupo();
-                    Pieza::Debajo { base: Box::new(base), abajo: Box::new(abajo) }
+                    Pieza::Debajo {
+                        base: Box::new(base),
+                        abajo: Box::new(abajo),
+                    }
                 } else {
                     base
                 }
@@ -472,7 +705,10 @@ impl Lector {
             "underset" => {
                 let abajo = self.grupo();
                 let base = self.grupo();
-                Pieza::Debajo { base: Box::new(base), abajo: Box::new(abajo) }
+                Pieza::Debajo {
+                    base: Box::new(base),
+                    abajo: Box::new(abajo),
+                }
             }
             // `\overset{\frown}{AC}` es el arco; `\overset{?}{=}`, lo
             // pequeno encima.
@@ -480,10 +716,22 @@ impl Lector {
                 let arriba = self.grupo();
                 let base = self.grupo();
                 match plano(&arriba).trim() {
-                    "⌢" => Pieza::Adorno { dentro: Box::new(base), adorno: Adorno::ArcoEncima },
-                    "‾" | "-" | "—" => Pieza::Adorno { dentro: Box::new(base), adorno: Adorno::RayaEncima },
-                    "→" | "⟶" => Pieza::Adorno { dentro: Box::new(base), adorno: Adorno::Flecha },
-                    _ => Pieza::Encima { base: Box::new(base), arriba: Box::new(arriba) },
+                    "⌢" => Pieza::Adorno {
+                        dentro: Box::new(base),
+                        adorno: Adorno::ArcoEncima,
+                    },
+                    "‾" | "-" | "—" => Pieza::Adorno {
+                        dentro: Box::new(base),
+                        adorno: Adorno::RayaEncima,
+                    },
+                    "→" | "⟶" => Pieza::Adorno {
+                        dentro: Box::new(base),
+                        adorno: Adorno::Flecha,
+                    },
+                    _ => Pieza::Encima {
+                        base: Box::new(base),
+                        arriba: Box::new(arriba),
+                    },
                 }
             }
             "displaystyle" => Pieza::Grande(Box::new(self.expresion(Some('}')))),
@@ -496,7 +744,10 @@ impl Lector {
                         self.i += 1;
                     }
                 }
-                Pieza::Raiz { dentro: Box::new(self.grupo()), indice }
+                Pieza::Raiz {
+                    dentro: Box::new(self.grupo()),
+                    indice,
+                }
             }
             p if MUDOS.contains(&p) => texto(""),
             // `\ln x` con su hueco (salia «lnx»); `\sin(x)`, `\sin^2` pegados.
@@ -512,9 +763,8 @@ impl Lector {
             }
             p if simbolo(p).is_some() => texto(simbolo(p).unwrap_or_default()),
             // Texto derecho, con sus espacios: `\text{si } x > 0`.
-            "text" | "textrm" | "textup" | "mbox" | "textnormal" | "mathrm" | "operatorname" | "mathsf" | "texttt" | "mathtt" => {
-                texto(&self.grupo_crudo())
-            }
+            "text" | "textrm" | "textup" | "mbox" | "textnormal" | "mathrm" | "operatorname"
+            | "mathsf" | "texttt" | "mathtt" => texto(&self.grupo_crudo()),
             // Negrita: lo de dentro de un `\mathbf{x^2}` es formula y se
             // lee; lo de un `\textbf{}` es texto tal cual.
             "textbf" | "mathbf" | "boldsymbol" | "bm" => {
@@ -522,18 +772,29 @@ impl Lector {
                 let dentro = if palabra != "textbf" && crudo.contains(['^', '_', '\\', '{']) {
                     leer(&crudo)
                 } else if palabra == "boldsymbol" || palabra == "bm" {
-                    Pieza::Texto { texto: crudo, cursiva: true }
+                    Pieza::Texto {
+                        texto: crudo,
+                        cursiva: true,
+                    }
                 } else {
                     texto(&crudo)
                 };
                 Pieza::Negrita(Box::new(dentro))
             }
-            "textit" | "mathit" | "emph" => Pieza::Texto { texto: self.grupo_crudo(), cursiva: true },
+            "textit" | "mathit" | "emph" => Pieza::Texto {
+                texto: self.grupo_crudo(),
+                cursiva: true,
+            },
             "mathbb" | "mathcal" | "mathscr" | "mathfrak" => {
                 let crudo = self.grupo_crudo();
                 let t: String = crudo
                     .chars()
-                    .map(|c| PIZARRA.iter().find(|(k, _)| *k == c).map_or(c.to_string(), |(_, v)| v.to_string()))
+                    .map(|c| {
+                        PIZARRA
+                            .iter()
+                            .find(|(k, _)| *k == c)
+                            .map_or(c.to_string(), |(_, v)| v.to_string())
+                    })
                     .collect();
                 texto(&t)
             }
@@ -541,7 +802,11 @@ impl Lector {
             "dot" | "ddot" => {
                 let base = self.grupo();
                 let marca = if palabra == "dot" { "˙" } else { "¨" };
-                Pieza::ConIndices { base: Box::new(base), arriba: Some(Box::new(texto(marca))), abajo: None }
+                Pieza::ConIndices {
+                    base: Box::new(base),
+                    arriba: Some(Box::new(texto(marca))),
+                    abajo: None,
+                }
             }
             "quad" => texto("  "),
             // `\phantom{xx}`: su hueco, sin tinta (18-oct, salia como codigo).
@@ -551,12 +816,18 @@ impl Lector {
             }
             // `\overbrace{...}^{...}`: el arco encima y lo de arriba, encima.
             "overbrace" => {
-                let base = Pieza::Adorno { dentro: Box::new(self.grupo()), adorno: Adorno::ArcoEncima };
+                let base = Pieza::Adorno {
+                    dentro: Box::new(self.grupo()),
+                    adorno: Adorno::ArcoEncima,
+                };
                 self.saltar_espacios();
                 if self.en(self.i) == Some('^') {
                     self.i += 1;
                     let arriba = self.grupo();
-                    Pieza::Encima { base: Box::new(base), arriba: Box::new(arriba) }
+                    Pieza::Encima {
+                        base: Box::new(base),
+                        arriba: Box::new(arriba),
+                    }
                 } else {
                     base
                 }
@@ -594,7 +865,11 @@ impl Lector {
         // Sin cierre no hay grupo: se devuelve tal cual para no perder nada.
         if self.en(self.i) == Some(cierra) {
             self.i += 1;
-            Pieza::Agrupado { dentro: Box::new(dentro), abre: abre.to_string(), cierra: cierra.to_string() }
+            Pieza::Agrupado {
+                dentro: Box::new(dentro),
+                abre: abre.to_string(),
+                cierra: cierra.to_string(),
+            }
         } else {
             self.i = desde + 1;
             texto(&abre.to_string())
@@ -690,7 +965,12 @@ impl Lector {
                 }
             })
             .collect();
-        Pieza::Tabla { filas, abre: abre.into(), cierra: cierra.into(), izquierda }
+        Pieza::Tabla {
+            filas,
+            abre: abre.into(),
+            cierra: cierra.into(),
+            izquierda,
+        }
     }
 }
 
@@ -742,7 +1022,11 @@ fn partir_tabla(cuerpo: &str) -> Vec<Vec<String>> {
     filas.push(fila);
     filas
         .into_iter()
-        .map(|f| f.into_iter().map(|c| c.replace("\\hline", "").trim().to_string()).collect::<Vec<_>>())
+        .map(|f| {
+            f.into_iter()
+                .map(|c| c.replace("\\hline", "").trim().to_string())
+                .collect::<Vec<_>>()
+        })
         .filter(|f| f.iter().any(|c| !c.is_empty()))
         .collect()
 }
@@ -754,18 +1038,38 @@ fn es_de_factor(c: char) -> bool {
 /// Junta indices sobre la misma base: `x^2_i` es una sola cosa.
 fn con_indice(base: Pieza, indice: Pieza, arriba: bool) -> Pieza {
     match base {
-        Pieza::ConIndices { base, arriba: a, abajo: b } => {
+        Pieza::ConIndices {
+            base,
+            arriba: a,
+            abajo: b,
+        } => {
             if arriba {
-                Pieza::ConIndices { base, arriba: Some(Box::new(indice)), abajo: b }
+                Pieza::ConIndices {
+                    base,
+                    arriba: Some(Box::new(indice)),
+                    abajo: b,
+                }
             } else {
-                Pieza::ConIndices { base, arriba: a, abajo: Some(Box::new(indice)) }
+                Pieza::ConIndices {
+                    base,
+                    arriba: a,
+                    abajo: Some(Box::new(indice)),
+                }
             }
         }
         otra => {
             if arriba {
-                Pieza::ConIndices { base: Box::new(otra), arriba: Some(Box::new(indice)), abajo: None }
+                Pieza::ConIndices {
+                    base: Box::new(otra),
+                    arriba: Some(Box::new(indice)),
+                    abajo: None,
+                }
             } else {
-                Pieza::ConIndices { base: Box::new(otra), arriba: None, abajo: Some(Box::new(indice)) }
+                Pieza::ConIndices {
+                    base: Box::new(otra),
+                    arriba: None,
+                    abajo: Some(Box::new(indice)),
+                }
             }
         }
     }
@@ -778,7 +1082,11 @@ pub fn plano(p: &Pieza) -> String {
         Pieza::Texto { texto, .. } => texto.clone(),
         Pieza::Fila(v) => v.iter().map(plano).collect(),
         Pieza::Fraccion(a, b) => format!("({}/{})", plano(a), plano(b)),
-        Pieza::ConIndices { base, arriba, abajo } => {
+        Pieza::ConIndices {
+            base,
+            arriba,
+            abajo,
+        } => {
             let mut s = plano(base);
             if let Some(a) = arriba {
                 s.push('^');
@@ -791,9 +1099,21 @@ pub fn plano(p: &Pieza) -> String {
             s
         }
         Pieza::Raiz { dentro, .. } => format!("sqrt({})", plano(dentro)),
-        Pieza::Agrupado { dentro, abre, cierra } => format!("{abre}{}{cierra}", plano(dentro)),
-        Pieza::Tabla { filas, abre, cierra, .. } => {
-            let f: Vec<String> = filas.iter().map(|f| f.iter().map(plano).collect::<Vec<_>>().join(", ")).collect();
+        Pieza::Agrupado {
+            dentro,
+            abre,
+            cierra,
+        } => format!("{abre}{}{cierra}", plano(dentro)),
+        Pieza::Tabla {
+            filas,
+            abre,
+            cierra,
+            ..
+        } => {
+            let f: Vec<String> = filas
+                .iter()
+                .map(|f| f.iter().map(plano).collect::<Vec<_>>().join(", "))
+                .collect();
             format!("{abre}{}{cierra}", f.join("; "))
         }
         // Como antes (y como Android): la marca de indice de arriba.
@@ -810,7 +1130,9 @@ pub fn plano(p: &Pieza) -> String {
                 Adorno::LlaveDebajo => "",
             }
         ),
-        Pieza::Color { dentro, .. } | Pieza::Negrita(dentro) | Pieza::Grande(dentro) => plano(dentro),
+        Pieza::Color { dentro, .. } | Pieza::Negrita(dentro) | Pieza::Grande(dentro) => {
+            plano(dentro)
+        }
         Pieza::Recuadro(dentro) => format!("[{}]", plano(dentro)),
         Pieza::Encima { base, arriba } => format!("{}^{}", plano(base), plano(arriba)),
         Pieza::Debajo { base, abajo } => format!("{} ({})", plano(base), plano(abajo)),
@@ -821,11 +1143,19 @@ pub fn plano(p: &Pieza) -> String {
 /// avisar al asistente y para las pruebas del caso negativo.
 pub fn desconocidos(p: &Pieza) -> Vec<String> {
     match p {
-        Pieza::Texto { texto, .. } if texto.starts_with('\\') && texto.len() > 1 => vec![texto.clone()],
+        Pieza::Texto { texto, .. } if texto.starts_with('\\') && texto.len() > 1 => {
+            vec![texto.clone()]
+        }
         Pieza::Texto { .. } => Vec::new(),
         Pieza::Fila(l) => l.iter().flat_map(desconocidos).collect(),
-        Pieza::Fraccion(a, b) | Pieza::Encima { base: a, arriba: b } | Pieza::Debajo { base: a, abajo: b } => [desconocidos(a), desconocidos(b)].concat(),
-        Pieza::ConIndices { base, arriba, abajo } => {
+        Pieza::Fraccion(a, b)
+        | Pieza::Encima { base: a, arriba: b }
+        | Pieza::Debajo { base: a, abajo: b } => [desconocidos(a), desconocidos(b)].concat(),
+        Pieza::ConIndices {
+            base,
+            arriba,
+            abajo,
+        } => {
             let mut v = desconocidos(base);
             v.extend(arriba.iter().flat_map(|a| desconocidos(a)));
             v.extend(abajo.iter().flat_map(|a| desconocidos(a)));
@@ -870,26 +1200,65 @@ pub fn legible(p: &Pieza) -> String {
         s.chars().count() > 1 && s.chars().any(|c| "+-−=·×÷ /".contains(c))
     }
     fn entre(p: &Pieza) -> String {
-        if compuesto(p) { format!("({})", legible(p)) } else { legible(p) }
+        if compuesto(p) {
+            format!("({})", legible(p))
+        } else {
+            legible(p)
+        }
     }
     fn alzado(s: &str, arriba: bool) -> Option<String> {
         const ARRIBA: [(char, char); 16] = [
-            ('0', '⁰'), ('1', '¹'), ('2', '²'), ('3', '³'), ('4', '⁴'), ('5', '⁵'), ('6', '⁶'), ('7', '⁷'),
-            ('8', '⁸'), ('9', '⁹'), ('+', '⁺'), ('-', '⁻'), ('n', 'ⁿ'), ('i', 'ⁱ'), ('(', '⁽'), (')', '⁾'),
+            ('0', '⁰'),
+            ('1', '¹'),
+            ('2', '²'),
+            ('3', '³'),
+            ('4', '⁴'),
+            ('5', '⁵'),
+            ('6', '⁶'),
+            ('7', '⁷'),
+            ('8', '⁸'),
+            ('9', '⁹'),
+            ('+', '⁺'),
+            ('-', '⁻'),
+            ('n', 'ⁿ'),
+            ('i', 'ⁱ'),
+            ('(', '⁽'),
+            (')', '⁾'),
         ];
         const ABAJO: [(char, char); 18] = [
-            ('0', '₀'), ('1', '₁'), ('2', '₂'), ('3', '₃'), ('4', '₄'), ('5', '₅'), ('6', '₆'), ('7', '₇'),
-            ('8', '₈'), ('9', '₉'), ('+', '₊'), ('-', '₋'), ('a', 'ₐ'), ('e', 'ₑ'), ('o', 'ₒ'), ('x', 'ₓ'),
-            ('i', 'ᵢ'), ('n', 'ₙ'),
+            ('0', '₀'),
+            ('1', '₁'),
+            ('2', '₂'),
+            ('3', '₃'),
+            ('4', '₄'),
+            ('5', '₅'),
+            ('6', '₆'),
+            ('7', '₇'),
+            ('8', '₈'),
+            ('9', '₉'),
+            ('+', '₊'),
+            ('-', '₋'),
+            ('a', 'ₐ'),
+            ('e', 'ₑ'),
+            ('o', 'ₒ'),
+            ('x', 'ₓ'),
+            ('i', 'ᵢ'),
+            ('n', 'ₙ'),
         ];
         let tabla: &[(char, char)] = if arriba { &ARRIBA } else { &ABAJO };
-        s.chars().map(|c| tabla.iter().find(|(k, _)| *k == c).map(|(_, v)| *v)).collect()
+        s.chars()
+            .map(|c| tabla.iter().find(|(k, _)| *k == c).map(|(_, v)| *v))
+            .collect()
     }
     match p {
         Pieza::Texto { texto, .. } => texto.clone(),
         Pieza::Fila(v) => v.iter().map(legible).collect(),
         Pieza::Fraccion(a, b) => format!("{}/{}", entre(a), entre(b)),
-        Pieza::ConIndices { base, arriba, abajo } => {
+        Pieza::ConIndices {
+            base,
+            arriba,
+            abajo,
+        } => {
             let mut s = legible(base);
             for (k, sube) in [(abajo, false), (arriba, true)] {
                 if let Some(k) = k {
@@ -903,24 +1272,47 @@ pub fn legible(p: &Pieza) -> String {
             s
         }
         Pieza::Raiz { dentro, indice } => {
-            let i = indice.as_ref().map(|i| alzado(&legible(i), true).unwrap_or_default()).unwrap_or_default();
+            let i = indice
+                .as_ref()
+                .map(|i| alzado(&legible(i), true).unwrap_or_default())
+                .unwrap_or_default();
             format!("{i}√{}", entre(dentro))
         }
-        Pieza::Agrupado { dentro, abre, cierra } => format!("{abre}{}{cierra}", legible(dentro)),
-        Pieza::Tabla { filas, abre, cierra, .. } => {
-            let f: Vec<String> = filas.iter().map(|f| f.iter().map(legible).collect::<Vec<_>>().join(", ")).collect();
+        Pieza::Agrupado {
+            dentro,
+            abre,
+            cierra,
+        } => format!("{abre}{}{cierra}", legible(dentro)),
+        Pieza::Tabla {
+            filas,
+            abre,
+            cierra,
+            ..
+        } => {
+            let f: Vec<String> = filas
+                .iter()
+                .map(|f| f.iter().map(legible).collect::<Vec<_>>().join(", "))
+                .collect();
             format!("{abre}{}{cierra}", f.join("; "))
         }
-        Pieza::Adorno { dentro, adorno: Adorno::ArcoEncima } => format!("{}⌒", legible(dentro)),
+        Pieza::Adorno {
+            dentro,
+            adorno: Adorno::ArcoEncima,
+        } => format!("{}⌒", legible(dentro)),
         Pieza::Adorno { dentro, adorno } => {
             // Una marca combinante detras de cada letra: A̅B̅.
             let m = marca_de(*adorno);
             legible(dentro).chars().map(|c| format!("{c}{m}")).collect()
         }
-        Pieza::Color { dentro, .. } | Pieza::Negrita(dentro) | Pieza::Grande(dentro) | Pieza::Recuadro(dentro) => {
-            legible(dentro)
-        }
-        Pieza::Encima { base, arriba } => format!("{}{}", legible(base), alzado(&legible(arriba), true).unwrap_or_default()),
+        Pieza::Color { dentro, .. }
+        | Pieza::Negrita(dentro)
+        | Pieza::Grande(dentro)
+        | Pieza::Recuadro(dentro) => legible(dentro),
+        Pieza::Encima { base, arriba } => format!(
+            "{}{}",
+            legible(base),
+            alzado(&legible(arriba), true).unwrap_or_default()
+        ),
         Pieza::Debajo { base, abajo } => format!("{} ({})", legible(base), legible(abajo)),
     }
 }
@@ -981,7 +1373,11 @@ pub fn toques(formula: &str) -> Vec<(usize, usize, Toque)> {
     while i < c.len() {
         match c[i] {
             m @ ('^' | '_') => {
-                let toque = if m == '^' { Toque::Arriba } else { Toque::Abajo };
+                let toque = if m == '^' {
+                    Toque::Arriba
+                } else {
+                    Toque::Abajo
+                };
                 if let Some((a, b, llaves)) = indice(i + 1) {
                     v.push((u[i], u[i + 1], Toque::Oculto));
                     if llaves {
@@ -1049,21 +1445,27 @@ mod pruebas {
 
     #[test]
     fn arriba_y_abajo_a_la_vez_sobre_la_misma_base() {
-        let Pieza::ConIndices { arriba, abajo, .. } = l("x^2_i") else { panic!() };
+        let Pieza::ConIndices { arriba, abajo, .. } = l("x^2_i") else {
+            panic!()
+        };
         assert_eq!(t(&arriba.unwrap()), "2");
         assert_eq!(t(&abajo.unwrap()), "i");
     }
 
     #[test]
     fn un_subindice_solo() {
-        let Pieza::ConIndices { arriba, abajo, .. } = l("a_1") else { panic!() };
+        let Pieza::ConIndices { arriba, abajo, .. } = l("a_1") else {
+            panic!()
+        };
         assert_eq!(t(&abajo.unwrap()), "1");
         assert!(arriba.is_none());
     }
 
     #[test]
     fn una_fraccion_tiene_arriba_y_abajo() {
-        let Pieza::Fraccion(a, b) = l("\\frac{a}{b}") else { panic!() };
+        let Pieza::Fraccion(a, b) = l("\\frac{a}{b}") else {
+            panic!()
+        };
         assert_eq!(t(&a), "a");
         assert_eq!(t(&b), "b");
     }
@@ -1084,7 +1486,9 @@ mod pruebas {
     #[test]
     fn una_raiz_normal_y_una_con_indice() {
         assert_eq!(t(&l("\\sqrt{x+1}")), "sqrt(x+1)");
-        let Pieza::Raiz { dentro, indice } = l("\\sqrt[3]{x}") else { panic!() };
+        let Pieza::Raiz { dentro, indice } = l("\\sqrt[3]{x}") else {
+            panic!()
+        };
         assert_eq!(t(&indice.unwrap()), "3");
         assert_eq!(t(&dentro), "x");
     }
@@ -1127,7 +1531,9 @@ mod pruebas {
 
     #[test]
     fn los_parentesis_agrupan() {
-        let Pieza::ConIndices { base, arriba, .. } = l("(a+b)^2") else { panic!() };
+        let Pieza::ConIndices { base, arriba, .. } = l("(a+b)^2") else {
+            panic!()
+        };
         assert!(matches!(*base, Pieza::Agrupado { .. }));
         assert_eq!(t(&arriba.unwrap()), "2");
     }
@@ -1203,12 +1609,17 @@ mod pruebas {
     #[test]
     fn una_formula_de_verdad_escrita_a_lo_facil() {
         let p = t(&l("x = (-b +- sqrt(b^2 - 4ac)) / (2a)"));
-        assert!(p.contains('±') && p.contains("sqrt(") && p.contains("b^2"), "{p}");
+        assert!(
+            p.contains('±') && p.contains("sqrt(") && p.contains("b^2"),
+            "{p}"
+        );
     }
 
     #[test]
     fn nada_de_esto_revienta() {
-        for s in ["", "^", "_", "{", "}", "\\", "\\frac", "\\sqrt[", "((((", "x^^2", "a/", "/b", "x_{"] {
+        for s in [
+            "", "^", "_", "{", "}", "\\", "\\frac", "\\sqrt[", "((((", "x^^2", "a/", "/b", "x_{",
+        ] {
             leer(s);
             toques(s);
         }
@@ -1223,12 +1634,25 @@ mod pruebas {
 
     #[test]
     fn el_exponente_sube_y_sus_marcas_se_esconden() {
-        assert_eq!(toques("x^2"), vec![(1, 2, Toque::Oculto), (2, 3, Toque::Arriba)]);
+        assert_eq!(
+            toques("x^2"),
+            vec![(1, 2, Toque::Oculto), (2, 3, Toque::Arriba)]
+        );
         assert_eq!(
             toques("x^{n+1}_i"),
-            vec![(1, 2, Toque::Oculto), (2, 3, Toque::Oculto), (3, 6, Toque::Arriba), (6, 7, Toque::Oculto), (7, 8, Toque::Oculto), (8, 9, Toque::Abajo)]
+            vec![
+                (1, 2, Toque::Oculto),
+                (2, 3, Toque::Oculto),
+                (3, 6, Toque::Arriba),
+                (6, 7, Toque::Oculto),
+                (7, 8, Toque::Oculto),
+                (8, 9, Toque::Abajo)
+            ]
         );
-        assert_eq!(toques("1/2"), vec![(0, 1, Toque::Arriba), (2, 3, Toque::Abajo)]);
+        assert_eq!(
+            toques("1/2"),
+            vec![(0, 1, Toque::Arriba), (2, 3, Toque::Abajo)]
+        );
     }
 
     #[test]
@@ -1239,7 +1663,10 @@ mod pruebas {
         assert!(toques("a / b").is_empty());
         assert!(toques("x^{2").is_empty());
         // Las posiciones van en UTF-16 (una letra de dos unidades delante).
-        assert_eq!(toques("𝑥^2"), vec![(2, 3, Toque::Oculto), (3, 4, Toque::Arriba)]);
+        assert_eq!(
+            toques("𝑥^2"),
+            vec![(2, 3, Toque::Oculto), (3, 4, Toque::Arriba)]
+        );
     }
 
     // ---- Lo que faltaba (banco del 15-oct): salia con su barra ----
@@ -1262,7 +1689,10 @@ mod pruebas {
     #[test]
     fn el_texto_y_los_nombres_salen_derechos_y_con_sus_espacios() {
         assert_eq!(sin_barras(r"\text{si } x > 0").replace(' ', ""), "six>0");
-        assert!(matches!(l(r"\mathrm{d}"), Pieza::Texto { cursiva: false, .. }));
+        assert!(matches!(
+            l(r"\mathrm{d}"),
+            Pieza::Texto { cursiva: false, .. }
+        ));
         assert_eq!(sin_barras(r"\operatorname{rang}(A)"), "rang(A)");
         assert_eq!(sin_barras(r"\mathbf{v}"), "v");
         assert_eq!(sin_barras(r"\mathbb{R}"), "ℝ");
@@ -1277,31 +1707,73 @@ mod pruebas {
 
     #[test]
     fn las_matrices_salen_como_tabla_con_sus_corchetes() {
-        let p = ultima(l(r"A = \begin{bmatrix} 2 & -1 & 0 \\ 1 & 3 & 2 \\ 0 & 1 & 4 \end{bmatrix}"));
-        let Pieza::Tabla { filas, abre, cierra, izquierda } = &p else { panic!("{p:?}") };
-        assert_eq!((abre.as_str(), cierra.as_str(), *izquierda), ("[", "]", false));
+        let p = ultima(l(
+            r"A = \begin{bmatrix} 2 & -1 & 0 \\ 1 & 3 & 2 \\ 0 & 1 & 4 \end{bmatrix}",
+        ));
+        let Pieza::Tabla {
+            filas,
+            abre,
+            cierra,
+            izquierda,
+        } = &p
+        else {
+            panic!("{p:?}")
+        };
+        assert_eq!(
+            (abre.as_str(), cierra.as_str(), *izquierda),
+            ("[", "]", false)
+        );
         assert_eq!(filas.len(), 3);
         assert!(filas.iter().all(|f| f.len() == 3));
         assert_eq!(t(&filas[0][1]), "-1");
-        for (env, a, c) in [("pmatrix", "(", ")"), ("vmatrix", "|", "|"), ("matrix", "", "")] {
-            let Pieza::Tabla { abre, cierra, filas, .. } = l(&format!(r"\begin{{{env}}} a & b \\ c & d \end{{{env}}}")) else { panic!() };
-            assert_eq!((abre.as_str(), cierra.as_str(), filas.len()), (a, c, 2), "{env}");
+        for (env, a, c) in [
+            ("pmatrix", "(", ")"),
+            ("vmatrix", "|", "|"),
+            ("matrix", "", ""),
+        ] {
+            let Pieza::Tabla {
+                abre,
+                cierra,
+                filas,
+                ..
+            } = l(&format!(r"\begin{{{env}}} a & b \\ c & d \end{{{env}}}"))
+            else {
+                panic!()
+            };
+            assert_eq!(
+                (abre.as_str(), cierra.as_str(), filas.len()),
+                (a, c, 2),
+                "{env}"
+            );
         }
     }
 
     #[test]
     fn un_sistema_con_cases_lleva_llave_y_va_a_la_izquierda() {
-        let Pieza::Tabla { filas, abre, cierra, izquierda } = l(r"\begin{cases} 2x + y = 5 \\ x - y = 1 \end{cases}") else { panic!() };
+        let Pieza::Tabla {
+            filas,
+            abre,
+            cierra,
+            izquierda,
+        } = l(r"\begin{cases} 2x + y = 5 \\ x - y = 1 \end{cases}")
+        else {
+            panic!()
+        };
         assert_eq!((abre.as_str(), cierra.as_str(), izquierda), ("{", "", true));
         assert_eq!(filas.len(), 2);
         assert_eq!(t(&filas[1][0]), "x-y=1");
         // Con condiciones: dos celdas por fila.
-        let Pieza::Tabla { filas, .. } = ultima(l(r"f(x) = \begin{cases} x^2 & \text{si } x < 0 \\ x & \text{si } x \ge 0 \end{cases}")) else {
+        let Pieza::Tabla { filas, .. } = ultima(l(
+            r"f(x) = \begin{cases} x^2 & \text{si } x < 0 \\ x & \text{si } x \ge 0 \end{cases}",
+        )) else {
             panic!()
         };
         assert_eq!(filas[0].len(), 2);
         // Un alineado: cada renglon entero, sin los `&`.
-        let Pieza::Tabla { filas, abre, .. } = l(r"\begin{aligned} x &= 2 \\ y &= 3 \end{aligned}") else { panic!() };
+        let Pieza::Tabla { filas, abre, .. } = l(r"\begin{aligned} x &= 2 \\ y &= 3 \end{aligned}")
+        else {
+            panic!()
+        };
         assert!(abre.is_empty() && filas.len() == 2 && filas[0].len() == 1);
         assert_eq!(t(&filas[0][0]), "x=2");
     }

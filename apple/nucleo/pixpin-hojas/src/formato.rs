@@ -45,7 +45,9 @@ impl Regional {
             decimal: '.',
             miles: ',',
             fecha_corta: "m/d/yyyy".into(),
-            meses: arr("January,February,March,April,May,June,July,August,September,October,November,December"),
+            meses: arr(
+                "January,February,March,April,May,June,July,August,September,October,November,December",
+            ),
             meses_cortos: arr("Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec"),
             dias: arr("Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday"),
             dias_cortos: arr("Sun,Mon,Tue,Wed,Thu,Fri,Sat"),
@@ -65,7 +67,9 @@ impl Regional {
             fecha_corta: "dd/mm/yyyy".into(),
             // Asi los pinta Excel en espanol (medido): meses con mayuscula y
             // dias en minuscula.
-            meses: arr("Enero,Febrero,Marzo,Abril,Mayo,Junio,Julio,Agosto,Setiembre,Octubre,Noviembre,Diciembre"),
+            meses: arr(
+                "Enero,Febrero,Marzo,Abril,Mayo,Junio,Julio,Agosto,Setiembre,Octubre,Noviembre,Diciembre",
+            ),
             meses_cortos: arr("Ene,Feb,Mar,Abr,May,Jun,Jul,Ago,Set,Oct,Nov,Dic"),
             dias: arr("domingo,lunes,martes,miércoles,jueves,viernes,sábado"),
             dias_cortos: arr("dom,lun,mar,mié,jue,vie,sáb"),
@@ -231,35 +235,67 @@ impl Formato {
         let es_general = secciones.len() == 1 && secciones[0].fichas == [Ficha::General];
         let es_fecha = secciones[0].es_fecha;
         let es_texto = secciones.len() == 1 && secciones[0].fichas.contains(&Ficha::Arroba);
-        Formato { secciones, es_fecha, es_texto, es_general }
+        Formato {
+            secciones,
+            es_fecha,
+            es_texto,
+            es_general,
+        }
     }
 
     pub fn general() -> Formato {
-        Formato { secciones: vec![seccion("General")], es_fecha: false, es_texto: false, es_general: true }
+        Formato {
+            secciones: vec![seccion("General")],
+            es_fecha: false,
+            es_texto: false,
+            es_general: true,
+        }
     }
 
     /// Formatea un numero.
     pub fn numero(&self, v: f64, fecha_1904: bool, r: &Regional) -> Mostrado {
         if !v.is_finite() {
-            return Mostrado { texto: "#NUM!".into(), ..Default::default() };
+            return Mostrado {
+                texto: "#NUM!".into(),
+                ..Default::default()
+            };
         }
         let (sec, abs) = self.elegir(v);
         let Some(s) = sec else {
-            return Mostrado { texto: general(v, r), ..Default::default() };
+            return Mostrado {
+                texto: general(v, r),
+                ..Default::default()
+            };
         };
         let valor = if abs { v.abs() } else { v };
-        let mut m = if s.es_fecha { fecha(s, valor, fecha_1904, r) } else { numerica(s, valor, r) };
+        let mut m = if s.es_fecha {
+            fecha(s, valor, fecha_1904, r)
+        } else {
+            numerica(s, valor, r)
+        };
         m.color = s.color;
         m
     }
 
     /// Formatea un texto con la seccion de texto, si la hay.
     pub fn texto(&self, t: &str) -> Mostrado {
-        let s = if self.secciones.len() >= 4 { Some(&self.secciones[3]) } else { self.secciones.iter().find(|s| s.fichas.contains(&Ficha::Arroba)) };
-        let Some(s) = s else {
-            return Mostrado { texto: t.to_string(), ..Default::default() };
+        let s = if self.secciones.len() >= 4 {
+            Some(&self.secciones[3])
+        } else {
+            self.secciones
+                .iter()
+                .find(|s| s.fichas.contains(&Ficha::Arroba))
         };
-        let mut m = Mostrado { color: s.color, ..Default::default() };
+        let Some(s) = s else {
+            return Mostrado {
+                texto: t.to_string(),
+                ..Default::default()
+            };
+        };
+        let mut m = Mostrado {
+            color: s.color,
+            ..Default::default()
+        };
         for f in &s.fichas {
             match f {
                 Ficha::Arroba => m.texto.push_str(t),
@@ -275,7 +311,12 @@ impl Formato {
     /// La seccion que toca a `v` y si se formatea su valor absoluto (la
     /// seccion de negativos ya trae su propio signo).
     fn elegir(&self, v: f64) -> (Option<&Seccion>, bool) {
-        let num: Vec<&Seccion> = self.secciones.iter().take(3).filter(|s| !es_solo_texto(s)).collect();
+        let num: Vec<&Seccion> = self
+            .secciones
+            .iter()
+            .take(3)
+            .filter(|s| !es_solo_texto(s))
+            .collect();
         if num.is_empty() {
             return (None, false);
         }
@@ -363,7 +404,13 @@ fn partir_secciones(c: &str) -> Vec<String> {
 }
 
 fn seccion(codigo: &str) -> Seccion {
-    let mut s = Seccion { fichas: Vec::new(), color: None, condicion: None, es_fecha: false, ingles: false };
+    let mut s = Seccion {
+        fichas: Vec::new(),
+        color: None,
+        condicion: None,
+        es_fecha: false,
+        ingles: false,
+    };
     let ch: Vec<char> = codigo.chars().collect();
     // ¿Es de fecha? Letras de fecha fuera de comillas y corchetes de color.
     let mut i = 0;
@@ -382,13 +429,24 @@ fn seccion(codigo: &str) -> Seccion {
                 while i < ch.len() && ch[i] != ']' {
                     i += 1;
                 }
-                let dentro: String = ch[ini + 1..i.min(ch.len())].iter().collect::<String>().to_ascii_lowercase();
+                let dentro: String = ch[ini + 1..i.min(ch.len())]
+                    .iter()
+                    .collect::<String>()
+                    .to_ascii_lowercase();
                 if !dentro.is_empty() && dentro.chars().all(|c| matches!(c, 'h' | 'm' | 's')) {
                     fecha = true;
                 }
             }
             'y' | 'Y' | 'd' | 'D' | 'h' | 'H' | 's' | 'S' | 'm' | 'M' => fecha = true,
-            'G' | 'g' if ch[i..].iter().take(7).collect::<String>().eq_ignore_ascii_case("general") => i += 6,
+            'G' | 'g'
+                if ch[i..]
+                    .iter()
+                    .take(7)
+                    .collect::<String>()
+                    .eq_ignore_ascii_case("general") =>
+            {
+                i += 6
+            }
             'e' | 'E' if i + 1 < ch.len() && (ch[i + 1] == '+' || ch[i + 1] == '-') => {}
             _ => {}
         }
@@ -465,7 +523,8 @@ fn seccion(codigo: &str) -> Seccion {
                 } else if !bajo.is_empty() && bajo.chars().all(|c| matches!(c, 'h' | 'm' | 's')) {
                     soltar(&mut lit, &mut s.fichas);
                     let letra = bajo.chars().next().unwrap_or('h');
-                    s.fichas.push(Ficha::Transcurrido(letra, bajo.len().min(255) as u8));
+                    s.fichas
+                        .push(Ficha::Transcurrido(letra, bajo.len().min(255) as u8));
                 } else if let Some(cond) = condicion(&dentro) {
                     s.condicion = Some(cond);
                 }
@@ -508,22 +567,44 @@ fn seccion(codigo: &str) -> Seccion {
                 soltar(&mut lit, &mut s.fichas);
                 s.fichas.push(Ficha::Arroba);
             }
-            'E' | 'e' if !s.es_fecha && i + 1 < ch.len() && (ch[i + 1] == '+' || ch[i + 1] == '-') => {
+            'E' | 'e'
+                if !s.es_fecha && i + 1 < ch.len() && (ch[i + 1] == '+' || ch[i + 1] == '-') =>
+            {
                 soltar(&mut lit, &mut s.fichas);
                 s.fichas.push(Ficha::Exponente(ch[i + 1] == '+'));
                 i += 1;
             }
-            'G' | 'g' if ch[i..].iter().take(7).collect::<String>().eq_ignore_ascii_case("general") => {
+            'G' | 'g'
+                if ch[i..]
+                    .iter()
+                    .take(7)
+                    .collect::<String>()
+                    .eq_ignore_ascii_case("general") =>
+            {
                 soltar(&mut lit, &mut s.fichas);
                 s.fichas.push(Ficha::General);
                 i += 6;
             }
-            'A' | 'a' if s.es_fecha && ch[i..].iter().take(5).collect::<String>().eq_ignore_ascii_case("am/pm") => {
+            'A' | 'a'
+                if s.es_fecha
+                    && ch[i..]
+                        .iter()
+                        .take(5)
+                        .collect::<String>()
+                        .eq_ignore_ascii_case("am/pm") =>
+            {
                 soltar(&mut lit, &mut s.fichas);
                 s.fichas.push(Ficha::AmPm(0));
                 i += 4;
             }
-            'A' | 'a' if s.es_fecha && ch[i..].iter().take(3).collect::<String>().eq_ignore_ascii_case("a/p") => {
+            'A' | 'a'
+                if s.es_fecha
+                    && ch[i..]
+                        .iter()
+                        .take(3)
+                        .collect::<String>()
+                        .eq_ignore_ascii_case("a/p") =>
+            {
                 soltar(&mut lit, &mut s.fichas);
                 s.fichas.push(Ficha::AmPm(1));
                 i += 2;
@@ -545,7 +626,9 @@ fn seccion(codigo: &str) -> Seccion {
                 });
                 continue;
             }
-            'B' | 'b' if s.es_fecha && i + 1 < ch.len() && (ch[i + 1] == '1' || ch[i + 1] == '2') => {
+            'B' | 'b'
+                if s.es_fecha && i + 1 < ch.len() && (ch[i + 1] == '1' || ch[i + 1] == '2') =>
+            {
                 // Calendario (b1/b2): se ignora.
                 i += 1;
             }
@@ -566,7 +649,15 @@ fn seccion(codigo: &str) -> Seccion {
         // `m` es minuto si va justo despues de una hora o justo antes de
         // unos segundos (mirando solo las fichas de fecha).
         let idx: Vec<usize> = (0..s.fichas.len())
-            .filter(|&k| !matches!(s.fichas[k], Ficha::Literal(_) | Ficha::Hueco(_) | Ficha::SeparadorFecha | Ficha::SeparadorGuion))
+            .filter(|&k| {
+                !matches!(
+                    s.fichas[k],
+                    Ficha::Literal(_)
+                        | Ficha::Hueco(_)
+                        | Ficha::SeparadorFecha
+                        | Ficha::SeparadorGuion
+                )
+            })
             .collect();
         for (p, &k) in idx.iter().enumerate() {
             if let Ficha::Mes(n) = s.fichas[k] {
@@ -575,9 +666,13 @@ fn seccion(codigo: &str) -> Seccion {
                 }
                 let antes = p.checked_sub(1).map(|q| &s.fichas[idx[q]]);
                 let despues = idx.get(p + 1).map(|&q| &s.fichas[q]);
-                if matches!(antes, Some(Ficha::Hora(_)) | Some(Ficha::Transcurrido('h', _)))
-                    || matches!(despues, Some(Ficha::Segundo(_)) | Some(Ficha::Transcurrido('s', _)))
-                {
+                if matches!(
+                    antes,
+                    Some(Ficha::Hora(_)) | Some(Ficha::Transcurrido('h', _))
+                ) || matches!(
+                    despues,
+                    Some(Ficha::Segundo(_)) | Some(Ficha::Transcurrido('s', _))
+                ) {
                     s.fichas[k] = Ficha::Minuto(n);
                 }
             }
@@ -587,7 +682,11 @@ fn seccion(codigo: &str) -> Seccion {
 }
 
 fn ultima_es_segundo(f: &[Ficha], lit: &str) -> bool {
-    lit == "." && matches!(f.last(), Some(Ficha::Segundo(_)) | Some(Ficha::Transcurrido('s', _)))
+    lit == "."
+        && matches!(
+            f.last(),
+            Some(Ficha::Segundo(_)) | Some(Ficha::Transcurrido('s', _))
+        )
 }
 
 fn condicion(s: &str) -> Option<(Op, f64)> {
@@ -619,13 +718,27 @@ pub fn digitos(v: f64, dec: usize) -> (String, String) {
     let e = format!("{v:.14e}");
     let (mant, exp) = e.split_once('e').unwrap_or((&e, "0"));
     let exp: i32 = exp.parse().unwrap_or(0);
-    let cifras: Vec<u8> = mant.bytes().filter(u8::is_ascii_digit).map(|b| b - b'0').collect();
+    let cifras: Vec<u8> = mant
+        .bytes()
+        .filter(u8::is_ascii_digit)
+        .map(|b| b - b'0')
+        .collect();
     // valor = 0.cifras * 10^(exp+1)
     let punto = exp + 1; // cuantas cifras van antes del punto
     // Cifras hasta `dec` decimales.
     let corte = punto + dec as i32;
-    let mut d: Vec<u8> = if corte <= 0 { Vec::new() } else { (0..corte as usize).map(|k| cifras.get(k).copied().unwrap_or(0)).collect() };
-    let siguiente = if corte < 0 { 0 } else { cifras.get(corte as usize).copied().unwrap_or(0) };
+    let mut d: Vec<u8> = if corte <= 0 {
+        Vec::new()
+    } else {
+        (0..corte as usize)
+            .map(|k| cifras.get(k).copied().unwrap_or(0))
+            .collect()
+    };
+    let siguiente = if corte < 0 {
+        0
+    } else {
+        cifras.get(corte as usize).copied().unwrap_or(0)
+    };
     // `d` es el entero round(v * 10^dec), cifra a cifra.
     if siguiente >= 5 {
         let mut k = d.len();
@@ -678,8 +791,16 @@ pub fn general_en(v: f64, r: &Regional, max: usize) -> String {
             (e, f) = digitos(m, dec);
         }
         let f = f.trim_end_matches('0');
-        let mant = if f.is_empty() { e } else { format!("{e}{}{f}", r.decimal) };
-        format!("{signo}{mant}E{}{:02}", if exp < 0 { '-' } else { '+' }, exp.abs())
+        let mant = if f.is_empty() {
+            e
+        } else {
+            format!("{e}{}{f}", r.decimal)
+        };
+        format!(
+            "{signo}{mant}E{}{:02}",
+            if exp < 0 { '-' } else { '+' },
+            exp.abs()
+        )
     };
     let max = max.max(5);
     if a >= 1e11_f64.min(10f64.powi(max as i32 - neg as i32)) || a < 1e-9 {
@@ -695,7 +816,11 @@ pub fn general_en(v: f64, r: &Regional, max: usize) -> String {
         // Tan pequeno que no se ve a esta anchura: cientifico.
         return cientifico(max.saturating_sub(6 + neg as usize).min(5));
     }
-    if f.is_empty() { format!("{signo}{e}") } else { format!("{signo}{e}{}{f}", r.decimal) }
+    if f.is_empty() {
+        format!("{signo}{e}")
+    } else {
+        format!("{signo}{e}{}{f}", r.decimal)
+    }
 }
 
 fn numerica(s: &Seccion, v: f64, r: &Regional) -> Mostrado {
@@ -721,7 +846,9 @@ fn numerica(s: &Seccion, v: f64, r: &Regional) -> Mostrado {
         v *= 100.0;
     }
     // Posiciones clave.
-    let pos_digitos: Vec<usize> = (0..f.len()).filter(|&k| matches!(f[k], Ficha::Digito(_))).collect();
+    let pos_digitos: Vec<usize> = (0..f.len())
+        .filter(|&k| matches!(f[k], Ficha::Digito(_)))
+        .collect();
     if pos_digitos.is_empty() {
         // Solo literales: «"Total"». El signo se pierde salvo en la primera
         // seccion de un formato de una sola.
@@ -746,15 +873,26 @@ fn numerica(s: &Seccion, v: f64, r: &Regional) -> Mostrado {
     // Comas: de escala (justo detras del ultimo digito de la parte entera)
     // o de miles (entre digitos).
     let fin_entera = punto.or(exp_pos).unwrap_or(ultimo_digito + 1);
-    let ultimo_entero = pos_digitos.iter().copied().filter(|&k| k < fin_entera).max();
+    let ultimo_entero = pos_digitos
+        .iter()
+        .copied()
+        .filter(|&k| k < fin_entera)
+        .max();
     let primer_digito = pos_digitos[0];
     let mut escala = 0;
     let mut miles = false;
     for (k, x) in f.iter().enumerate() {
         if *x == Ficha::Coma {
-            let tras_ultimo = ultimo_entero.is_some_and(|u| k > u) && (k < fin_entera || punto.is_none());
-            let siguientes_son_comas = f[k + 1..].iter().take_while(|y| !matches!(y, Ficha::Digito(_))).all(|y| !matches!(y, Ficha::Digito(_)));
-            if tras_ultimo && siguientes_son_comas && !pos_digitos.iter().any(|&d| d > k && d < fin_entera) {
+            let tras_ultimo =
+                ultimo_entero.is_some_and(|u| k > u) && (k < fin_entera || punto.is_none());
+            let siguientes_son_comas = f[k + 1..]
+                .iter()
+                .take_while(|y| !matches!(y, Ficha::Digito(_)))
+                .all(|y| !matches!(y, Ficha::Digito(_)));
+            if tras_ultimo
+                && siguientes_son_comas
+                && !pos_digitos.iter().any(|&d| d > k && d < fin_entera)
+            {
                 escala += 1;
             } else if k > primer_digito && k < fin_entera {
                 miles = true;
@@ -770,12 +908,20 @@ fn numerica(s: &Seccion, v: f64, r: &Regional) -> Mostrado {
     // Cientifico.
     let mut exponente: Option<i32> = None;
     if let Some(ep) = exp_pos {
-        let ent_ph = pos_digitos.iter().filter(|&&k| k < punto.unwrap_or(ep).min(ep)).count().max(1) as i32;
+        let ent_ph = pos_digitos
+            .iter()
+            .filter(|&&k| k < punto.unwrap_or(ep).min(ep))
+            .count()
+            .max(1) as i32;
         let dec_ph = match punto {
             Some(p) if p < ep => pos_digitos.iter().filter(|&&k| k > p && k < ep).count(),
             _ => 0,
         };
-        let mut e = if v == 0.0 { 0 } else { v.log10().floor() as i32 };
+        let mut e = if v == 0.0 {
+            0
+        } else {
+            v.log10().floor() as i32
+        };
         if ent_ph > 1 {
             // Ingenieria: exponente multiplo de los digitos enteros.
             e = e.div_euclid(ent_ph) * ent_ph;
@@ -791,12 +937,24 @@ fn numerica(s: &Seccion, v: f64, r: &Regional) -> Mostrado {
     }
     let fin_mant = exp_pos.unwrap_or(f.len());
     let dec_ph: Vec<usize> = match punto {
-        Some(p) => pos_digitos.iter().copied().filter(|&k| k > p && k < fin_mant).collect(),
+        Some(p) => pos_digitos
+            .iter()
+            .copied()
+            .filter(|&k| k > p && k < fin_mant)
+            .collect(),
         None => Vec::new(),
     };
-    let ent_ph: Vec<usize> = pos_digitos.iter().copied().filter(|&k| k < punto.unwrap_or(fin_mant).min(fin_mant)).collect();
+    let ent_ph: Vec<usize> = pos_digitos
+        .iter()
+        .copied()
+        .filter(|&k| k < punto.unwrap_or(fin_mant).min(fin_mant))
+        .collect();
     let (ent, frac) = digitos(v, dec_ph.len());
-    let ent = if ent == "0" && ent_ph.iter().all(|&k| f[k] != Ficha::Digito(b'0')) { String::new() } else { ent };
+    let ent = if ent == "0" && ent_ph.iter().all(|&k| f[k] != Ficha::Digito(b'0')) {
+        String::new()
+    } else {
+        ent
+    };
     // Parte entera: de derecha a izquierda.
     let mut salida_ent: Vec<(usize, String)> = Vec::new(); // (ficha, texto)
     {
@@ -903,7 +1061,11 @@ fn numerica(s: &Seccion, v: f64, r: &Regional) -> Mostrado {
                 } else if *mas {
                     m.texto.push('+');
                 }
-                let ancho = f[k + 1..].iter().filter(|y| matches!(y, Ficha::Digito(_))).count().max(1);
+                let ancho = f[k + 1..]
+                    .iter()
+                    .filter(|y| matches!(y, Ficha::Digito(_)))
+                    .count()
+                    .max(1);
                 m.texto.push_str(&format!("{:0ancho$}", e.abs()));
                 // Lo que siga tras los digitos del exponente (literales).
                 for y in &f[k + 1..] {
@@ -943,14 +1105,20 @@ fn fraccion(s: &Seccion, v: f64, negativo: bool, barra: usize, r: &Regional) -> 
         }
     }
     // ¿Hay parte entera? Digitos separados del numerador por un literal.
-    let antes: Vec<usize> = (0..barra).filter(|&k| matches!(f[k], Ficha::Digito(_))).collect();
+    let antes: Vec<usize> = (0..barra)
+        .filter(|&k| matches!(f[k], Ficha::Digito(_)))
+        .collect();
     // Grupo del numerador: los digitos contiguos justo antes de la barra.
     let mut k = barra;
     while k > 0 && matches!(f[k - 1], Ficha::Digito(_)) {
         k -= 1;
     }
     let hay_entero = antes.iter().any(|&a| a < k);
-    let (entero, resto) = if hay_entero { (v.trunc(), v.fract()) } else { (0.0, v) };
+    let (entero, resto) = if hay_entero {
+        (v.trunc(), v.fract())
+    } else {
+        (0.0, v)
+    };
     let max_den = 10u64.pow(den_digitos.clamp(1, 7) as u32) - 1;
     let (mut num, mut den) = match den_fijo {
         Some(d) if d > 0 => (((resto * d as f64).round()) as u64, d),
@@ -1072,7 +1240,18 @@ fn fecha(s: &Seccion, v: f64, fecha_1904: bool, r: &Regional) -> Mostrado {
         return m;
     }
     let f = &s.fichas;
-    let dec_seg = f.iter().filter_map(|x| if let Ficha::FraccionSegundo(n) = x { Some(*n as i32) } else { None }).max().unwrap_or(0).min(3);
+    let dec_seg = f
+        .iter()
+        .filter_map(|x| {
+            if let Ficha::FraccionSegundo(n) = x {
+                Some(*n as i32)
+            } else {
+                None
+            }
+        })
+        .max()
+        .unwrap_or(0)
+        .min(3);
     let paso = 10f64.powi(dec_seg);
     // Redondeo al segundo (o a la decima que se muestre).
     let total = (v * 86400.0 * paso).round() / paso;
@@ -1085,7 +1264,13 @@ fn fecha(s: &Seccion, v: f64, fecha_1904: bool, r: &Regional) -> Mostrado {
     let mi = (seg_ent / 60) % 60;
     let ss = seg_ent % 60;
     let fr = seg_dia - seg_ent as f64;
-    let ampm = f.iter().find_map(|x| if let Ficha::AmPm(k) = x { Some(*k) } else { None });
+    let ampm = f.iter().find_map(|x| {
+        if let Ficha::AmPm(k) = x {
+            Some(*k)
+        } else {
+            None
+        }
+    });
     let ingles = s.ingles;
     let en = Regional::en_us();
     let nombres = if ingles { &en } else { r };
@@ -1093,7 +1278,11 @@ fn fecha(s: &Seccion, v: f64, fecha_1904: bool, r: &Regional) -> Mostrado {
         match x {
             Ficha::Literal(l) => m.texto.push_str(l),
             Ficha::SeparadorFecha => m.texto.push(r.separador_fecha),
-            Ficha::SeparadorGuion => m.texto.push(if r.separador_fecha == '/' { '-' } else { r.separador_fecha }),
+            Ficha::SeparadorGuion => m.texto.push(if r.separador_fecha == '/' {
+                '-'
+            } else {
+                r.separador_fecha
+            }),
             Ficha::Hueco(_) => m.texto.push(' '),
             Ficha::Relleno(_) => m.relleno = Some(m.texto.len()),
             Ficha::Ano(n) => {
@@ -1199,7 +1388,9 @@ mod pruebas {
     use super::*;
 
     fn n(codigo: &str, v: f64) -> String {
-        Formato::nuevo(codigo, &Regional::en_us()).numero(v, false, &Regional::en_us()).texto
+        Formato::nuevo(codigo, &Regional::en_us())
+            .numero(v, false, &Regional::en_us())
+            .texto
     }
 
     #[test]
@@ -1240,7 +1431,10 @@ mod pruebas {
 
     #[test]
     fn contable_con_relleno_y_color() {
-        let f = Formato::nuevo("_(* #,##0.00_);[Red]_(* (#,##0.00);_(* \"-\"??_);_(@_)", &Regional::en_us());
+        let f = Formato::nuevo(
+            "_(* #,##0.00_);[Red]_(* (#,##0.00);_(* \"-\"??_);_(@_)",
+            &Regional::en_us(),
+        );
         let m = f.numero(-1234.5, false, &Regional::en_us());
         assert_eq!(m.texto, " (1,234.50)");
         assert_eq!(m.color, Some([255, 0, 0]));
@@ -1261,9 +1455,17 @@ mod pruebas {
         assert_eq!(n("mm:ss.0", 0.000_011_574_07 * 1.5), "00:01.5");
         assert_eq!(n("mmm-yy", 45000.0), "Mar-23");
         let r = Regional::en_us();
-        assert_eq!(Formato::nuevo("yyyy-mm-dd", &r).numero(0.0, true, &r).texto, "1904-01-01");
+        assert_eq!(
+            Formato::nuevo("yyyy-mm-dd", &r).numero(0.0, true, &r).texto,
+            "1904-01-01"
+        );
         let es = Regional::es_pe();
-        assert_eq!(Formato::nuevo(integrado(14).unwrap(), &es).numero(45000.0, false, &es).texto, "15/03/2023");
+        assert_eq!(
+            Formato::nuevo(integrado(14).unwrap(), &es)
+                .numero(45000.0, false, &es)
+                .texto,
+            "15/03/2023"
+        );
     }
 
     #[test]
@@ -1283,12 +1485,32 @@ mod pruebas {
         assert_eq!(f("mm:ss.0", 0.000123), "00:10.6");
         assert_eq!(f("# ??/??", 1234.5678), "1234 46/81");
         let en = Regional::en_us();
-        assert_eq!(Formato::nuevo(integrado(15).unwrap(), &en).numero(45000.0, false, &en).texto, "15-Mar-23");
+        assert_eq!(
+            Formato::nuevo(integrado(15).unwrap(), &en)
+                .numero(45000.0, false, &en)
+                .texto,
+            "15-Mar-23"
+        );
     }
 
     #[test]
     fn codigos_raros_no_revientan() {
-        for c in ["", ";;;;;;", "[", "\"", "0.0.0", "E+", "#/", "[h", "\\", "*", "_", "[Color99]0", "0,,,,,,", "?/0"] {
+        for c in [
+            "",
+            ";;;;;;",
+            "[",
+            "\"",
+            "0.0.0",
+            "E+",
+            "#/",
+            "[h",
+            "\\",
+            "*",
+            "_",
+            "[Color99]0",
+            "0,,,,,,",
+            "?/0",
+        ] {
             let f = Formato::nuevo(c, &Regional::en_us());
             let _ = f.numero(1234.5, false, &Regional::en_us());
             let _ = f.numero(-1e300, false, &Regional::en_us());

@@ -38,7 +38,10 @@ impl Color {
     }
 
     pub fn con_alfa(self, a: f32) -> Color {
-        Color { a: (a.clamp(0.0, 1.0) * self.a as f32).round() as u8, ..self }
+        Color {
+            a: (a.clamp(0.0, 1.0) * self.a as f32).round() as u8,
+            ..self
+        }
     }
 }
 
@@ -54,7 +57,12 @@ pub struct Letra {
 
 impl Letra {
     pub fn nueva(familia: &str, tam: f32) -> Letra {
-        Letra { familia: Arc::from(familia), tam, negrita: false, cursiva: false }
+        Letra {
+            familia: Arc::from(familia),
+            tam,
+            negrita: false,
+            cursiva: false,
+        }
     }
 }
 
@@ -101,7 +109,11 @@ pub struct Trazo {
 
 impl Trazo {
     pub fn solido(color: Color, grosor: f32) -> Trazo {
-        Trazo { color, grosor, discontinuo: Discontinuo::Solida }
+        Trazo {
+            color,
+            grosor,
+            discontinuo: Discontinuo::Solida,
+        }
     }
 }
 
@@ -131,8 +143,20 @@ impl Relleno {
                     return Color::BLANCO;
                 }
                 let n = paradas.len() as u32;
-                let s = paradas.iter().fold([0u32; 4], |a, (_, c)| [a[0] + c.r as u32, a[1] + c.g as u32, a[2] + c.b as u32, a[3] + c.a as u32]);
-                Color { r: (s[0] / n) as u8, g: (s[1] / n) as u8, b: (s[2] / n) as u8, a: (s[3] / n) as u8 }
+                let s = paradas.iter().fold([0u32; 4], |a, (_, c)| {
+                    [
+                        a[0] + c.r as u32,
+                        a[1] + c.g as u32,
+                        a[2] + c.b as u32,
+                        a[3] + c.a as u32,
+                    ]
+                });
+                Color {
+                    r: (s[0] / n) as u8,
+                    g: (s[1] / n) as u8,
+                    b: (s[2] / n) as u8,
+                    a: (s[3] / n) as u8,
+                }
             }
         }
     }
@@ -235,9 +259,22 @@ pub enum Efecto {
     /// desplazada `dx`, `dy`, escalada (`sx`, `sy`) y sesgada (`kx`, `ky`
     /// en grados) respecto al punto `ancla` (fracciones de la caja: el
     /// `algn`).
-    SombraExterior { color: Color, desenfoque: f32, dx: f32, dy: f32, escala: (f32, f32), sesgo: (f32, f32), ancla: (f32, f32) },
+    SombraExterior {
+        color: Color,
+        desenfoque: f32,
+        dx: f32,
+        dy: f32,
+        escala: (f32, f32),
+        sesgo: (f32, f32),
+        ancla: (f32, f32),
+    },
     /// `a:innerShdw`: sombra por dentro del borde, hacia `dx`, `dy`.
-    SombraInterior { color: Color, desenfoque: f32, dx: f32, dy: f32 },
+    SombraInterior {
+        color: Color,
+        desenfoque: f32,
+        dx: f32,
+        dy: f32,
+    },
     /// `a:glow`: un halo de `color` de `radio` puntos alrededor.
     Brillo { color: Color, radio: f32 },
     /// `a:softEdge`: el borde se desvanece hacia dentro `radio` puntos.
@@ -302,7 +339,14 @@ impl Elemento {
     /// Envuelve `self` en un [`Elemento::Efecto`] si hay efectos; si no, lo
     /// deja como esta.
     pub fn con_efectos(self, efectos: Vec<Efecto>) -> Elemento {
-        if efectos.is_empty() { self } else { Elemento::Efecto { efectos, elementos: vec![self] } }
+        if efectos.is_empty() {
+            self
+        } else {
+            Elemento::Efecto {
+                efectos,
+                elementos: vec![self],
+            }
+        }
     }
 
     /// Mueve el elemento `dx`, `dy` puntos.
@@ -362,9 +406,15 @@ impl Elemento {
             Elemento::Texto(t) => t.y - 0.01,
             Elemento::Rect { rect, .. } | Elemento::Imagen { rect, .. } => rect.y,
             Elemento::Linea { desde, hasta, .. } => desde.1.min(hasta.1),
-            Elemento::Trayecto { figuras, .. } => figuras.first().map(|f| f.inicio.1).unwrap_or(0.0),
+            Elemento::Trayecto { figuras, .. } => {
+                figuras.first().map(|f| f.inicio.1).unwrap_or(0.0)
+            }
             Elemento::Grupo { transformada, .. } => transformada[5],
-            Elemento::Efecto { elementos, .. } => elementos.iter().map(|e| e.y_referencia()).reduce(f32::min).unwrap_or(0.0),
+            Elemento::Efecto { elementos, .. } => elementos
+                .iter()
+                .map(|e| e.y_referencia())
+                .reduce(f32::min)
+                .unwrap_or(0.0),
         }
     }
 }
@@ -396,7 +446,11 @@ impl Pagina {
                         let r = Rect::nuevo(t.x + dx, t.y + dy - t.letra.tam * 0.9, t.ancho, alto);
                         v.push((t, r));
                     }
-                    Elemento::Grupo { transformada, elementos, .. } => bajar(elementos, dx + transformada[4], dy + transformada[5], v),
+                    Elemento::Grupo {
+                        transformada,
+                        elementos,
+                        ..
+                    } => bajar(elementos, dx + transformada[4], dy + transformada[5], v),
                     Elemento::Efecto { elementos, .. } => bajar(elementos, dx, dy, v),
                     _ => {}
                 }
@@ -408,7 +462,10 @@ impl Pagina {
 
     /// El texto que hay en un punto de la pagina (en puntos), si lo hay.
     pub fn texto_en(&self, x: f32, y: f32) -> Option<&Texto> {
-        self.textos().into_iter().find(|(_, r)| r.contiene(x, y)).map(|(t, _)| t)
+        self.textos()
+            .into_iter()
+            .find(|(_, r)| r.contiene(x, y))
+            .map(|(t, _)| t)
     }
 }
 
@@ -432,7 +489,10 @@ impl Recursos {
     }
 
     pub fn tiene(&self, id: &str) -> bool {
-        self.imagenes.lock().map(|m| m.contains_key(id)).unwrap_or(false)
+        self.imagenes
+            .lock()
+            .map(|m| m.contains_key(id))
+            .unwrap_or(false)
     }
 
     /// Los bytes de una imagen, si ya se leyeron del paquete.
@@ -462,7 +522,11 @@ mod pruebas {
 
     #[test]
     fn el_texto_de_un_punto_se_encuentra() {
-        let mut p = Pagina { ancho: 100.0, alto: 100.0, ..Default::default() };
+        let mut p = Pagina {
+            ancho: 100.0,
+            alto: 100.0,
+            ..Default::default()
+        };
         p.elementos.push(Elemento::Texto(Texto {
             x: 10.0,
             y: 20.0,
@@ -477,7 +541,10 @@ mod pruebas {
             campo: None,
             enlace: None,
         }));
-        assert_eq!(p.texto_en(15.0, 18.0).map(|t| t.texto.as_str()), Some("hola"));
+        assert_eq!(
+            p.texto_en(15.0, 18.0).map(|t| t.texto.as_str()),
+            Some("hola")
+        );
         assert!(p.texto_en(50.0, 18.0).is_none());
     }
 }

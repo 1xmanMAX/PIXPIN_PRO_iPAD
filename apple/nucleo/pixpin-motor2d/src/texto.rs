@@ -593,7 +593,11 @@ impl EdicionTexto {
     pub fn nueva(texto: impl Into<String>) -> Self {
         let texto = texto.into();
         let cursor = texto.chars().count();
-        Self { texto, cursor, ..Default::default() }
+        Self {
+            texto,
+            cursor,
+            ..Default::default()
+        }
     }
 
     pub fn vacia() -> Self {
@@ -734,7 +738,8 @@ impl EdicionTexto {
         let Some((t, c)) = self.atras.pop() else {
             return false;
         };
-        self.adelante.push((std::mem::replace(&mut self.texto, t), self.cursor));
+        self.adelante
+            .push((std::mem::replace(&mut self.texto, t), self.cursor));
         self.cursor = c.min(self.largo());
         self.ancla = None;
         self.escribiendo_letras = false;
@@ -746,7 +751,8 @@ impl EdicionTexto {
         let Some((t, c)) = self.adelante.pop() else {
             return false;
         };
-        self.atras.push((std::mem::replace(&mut self.texto, t), self.cursor));
+        self.atras
+            .push((std::mem::replace(&mut self.texto, t), self.cursor));
         self.cursor = c.min(self.largo());
         self.ancla = None;
         self.escribiendo_letras = false;
@@ -756,7 +762,10 @@ impl EdicionTexto {
     /// Una flecha, Inicio o Fin **con Mayus**: mueve el cursor y deja
     /// elegido lo recorrido. Las demas teclas van como sin Mayus.
     pub fn tecla_con_mayus(&mut self, t: TeclaTexto) -> bool {
-        if !matches!(t, TeclaTexto::Izquierda | TeclaTexto::Derecha | TeclaTexto::Inicio | TeclaTexto::Fin) {
+        if !matches!(
+            t,
+            TeclaTexto::Izquierda | TeclaTexto::Derecha | TeclaTexto::Inicio | TeclaTexto::Fin
+        ) {
             return self.tecla(t);
         }
         let ancla = self.ancla.unwrap_or(self.cursor);
@@ -869,7 +878,15 @@ impl EdicionTexto {
 
     /// Lo que va delante de `pos` en su renglon (para medir donde cae).
     pub fn prefijo_de(&self, pos: usize) -> &str {
-        let inicio = self.texto.chars().take(pos).enumerate().filter(|(_, c)| *c == '\n').map(|(i, _)| i + 1).last().unwrap_or(0);
+        let inicio = self
+            .texto
+            .chars()
+            .take(pos)
+            .enumerate()
+            .filter(|(_, c)| *c == '\n')
+            .map(|(i, _)| i + 1)
+            .last()
+            .unwrap_or(0);
         &self.texto[self.byte_de(inicio)..self.byte_de(pos)]
     }
 
@@ -959,7 +976,9 @@ pub fn atajo_de_tecla(vk: u32, ctrl: bool, shift: bool, alt: bool) -> Option<Ata
         (Some('U'), false) => AtajoTexto::Subrayado,
         (Some('X'), true) => AtajoTexto::Tachado,
         (Some('M'), false) => AtajoTexto::Formula,
-        (Some(d @ '1'..='6'), true) => AtajoTexto::Color(COLORES_DE_ATAJO[d as usize - '1' as usize]),
+        (Some(d @ '1'..='6'), true) => {
+            AtajoTexto::Color(COLORES_DE_ATAJO[d as usize - '1' as usize])
+        }
         (Some('0'), true) => AtajoTexto::Color("negro"),
         _ => return None,
     })

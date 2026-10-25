@@ -24,9 +24,9 @@ use crate::paquete::{ErrorOffice, Paquete, Relaciones, attr_num, twips};
 use crate::tema::Tema;
 use bloques::{Caja, Ctx, Franja, Salto};
 use dibujo::{Flotante, Referencia};
-use rodear::Obstaculo;
 use estilos::Estilos;
 use numeracion::Numeracion;
+use rodear::Obstaculo;
 
 /// Una seccion de Word (`w:sectPr`): tamano de hoja, margenes, columnas,
 /// encabezados y pies.
@@ -85,7 +85,12 @@ impl Seccion {
                     "pgMar" => {
                         let m = |k: &str, d: f32| attr_num(e, k, 20.0).map(twips).unwrap_or(d);
                         let gutter = m("gutter", 0.0);
-                        s.margen = [m("top", 72.0).abs(), m("right", 72.0), m("bottom", 72.0).abs(), m("left", 72.0) + gutter];
+                        s.margen = [
+                            m("top", 72.0).abs(),
+                            m("right", 72.0),
+                            m("bottom", 72.0).abs(),
+                            m("left", 72.0) + gutter,
+                        ];
                         s.cabecera = m("header", 36.0);
                         s.pie = m("footer", 36.0);
                     }
@@ -97,7 +102,12 @@ impl Seccion {
                             cols.2 = e
                                 .elementos()
                                 .filter(|c| c.nombre == "col")
-                                .map(|c| (attr_num(c, "w", 20.0).map(twips).unwrap_or(0.0), attr_num(c, "space", 20.0).map(twips).unwrap_or(0.0)))
+                                .map(|c| {
+                                    (
+                                        attr_num(c, "w", 20.0).map(twips).unwrap_or(0.0),
+                                        attr_num(c, "space", 20.0).map(twips).unwrap_or(0.0),
+                                    )
+                                })
                                 .collect();
                         }
                     }
@@ -226,8 +236,21 @@ impl Datos {
         let rel = self.rels.get(rid)?.clone();
         let raiz = self.paquete.xml(&rel.destino)?;
         let rels = self.paquete.relaciones(&rel.destino);
-        let bloques = raiz.hijos.into_iter().filter_map(|h| if let pixpin_docs::xml::Hijo::Elemento(e) = h { Some(e) } else { None }).collect();
-        let p = Arc::new(Parte { bloques, rels: Arc::new(rels) });
+        let bloques = raiz
+            .hijos
+            .into_iter()
+            .filter_map(|h| {
+                if let pixpin_docs::xml::Hijo::Elemento(e) = h {
+                    Some(e)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let p = Arc::new(Parte {
+            bloques,
+            rels: Arc::new(rels),
+        });
         self.partes.insert(rid.to_string(), p.clone());
         Some(p)
     }
@@ -251,7 +274,12 @@ impl Datos {
             let ultima = self.secciones.len().saturating_sub(1);
             for k in desde..self.bloques.len() {
                 self.seccion_de.push(self.seccion_lectura.min(ultima));
-                if self.bloques[k].nombre == "p" && self.bloques[k].hijo("pPr").and_then(|p| p.hijo("sectPr")).is_some() {
+                if self.bloques[k].nombre == "p"
+                    && self.bloques[k]
+                        .hijo("pPr")
+                        .and_then(|p| p.hijo("sectPr"))
+                        .is_some()
+                {
                     self.seccion_lectura += 1;
                 }
             }
@@ -263,15 +291,29 @@ impl Datos {
             return;
         }
         self.notas_leidas = true;
-        let Some(rel) = self.rels.values().find(|r| r.tipo == "footnotes").cloned() else { return };
-        let Some(raiz) = self.paquete.xml(&rel.destino) else { return };
+        let Some(rel) = self.rels.values().find(|r| r.tipo == "footnotes").cloned() else {
+            return;
+        };
+        let Some(raiz) = self.paquete.xml(&rel.destino) else {
+            return;
+        };
         self.notas_rels = Arc::new(self.paquete.relaciones(&rel.destino));
         for n in raiz.hijos {
             if let pixpin_docs::xml::Hijo::Elemento(e) = n
                 && e.nombre == "footnote"
             {
                 let id = e.atributo("id").to_string();
-                let bloques = e.hijos.into_iter().filter_map(|h| if let pixpin_docs::xml::Hijo::Elemento(e) = h { Some(e) } else { None }).collect();
+                let bloques = e
+                    .hijos
+                    .into_iter()
+                    .filter_map(|h| {
+                        if let pixpin_docs::xml::Hijo::Elemento(e) = h {
+                            Some(e)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 self.notas.insert(id, Arc::new(bloques));
             }
         }
@@ -354,28 +396,50 @@ impl DocumentoWord {
         let t0 = std::time::Instant::now();
         let marca = |que: &str| {
             if medir {
-                eprintln!("  [docx] {que}: {:.1} ms", t0.elapsed().as_secs_f64() * 1000.0);
+                eprintln!(
+                    "  [docx] {que}: {:.1} ms",
+                    t0.elapsed().as_secs_f64() * 1000.0
+                );
             }
         };
-        let principal = paquete.principal().unwrap_or_else(|| "word/document.xml".into());
-        let fuente = paquete.texto(&principal).ok_or(ErrorOffice::SinParte("word/document.xml"))?;
+        let principal = paquete
+            .principal()
+            .unwrap_or_else(|| "word/document.xml".into());
+        let fuente = paquete
+            .texto(&principal)
+            .ok_or(ErrorOffice::SinParte("word/document.xml"))?;
         marca("document.xml descomprimido");
         let rels = paquete.relaciones(&principal);
-        let ruta_de = |tipo: &str| rels.values().find(|r| r.tipo == tipo && !r.externa).map(|r| r.destino.clone());
-        let tema = ruta_de("theme").and_then(|r| paquete.xml(&r)).map(|t| Tema::leer(&t)).unwrap_or_else(|| Tema::leer(&Nodo::default()));
+        let ruta_de = |tipo: &str| {
+            rels.values()
+                .find(|r| r.tipo == tipo && !r.externa)
+                .map(|r| r.destino.clone())
+        };
+        let tema = ruta_de("theme")
+            .and_then(|r| paquete.xml(&r))
+            .map(|t| Tema::leer(&t))
+            .unwrap_or_else(|| Tema::leer(&Nodo::default()));
         let x_estilos = ruta_de("styles").and_then(|r| paquete.xml(&r));
         marca("styles.xml leido");
         let estilos = Estilos::leer(x_estilos.as_ref(), &tema);
         marca("estilos");
-        let numeracion = Numeracion::leer(ruta_de("numbering").and_then(|r| paquete.xml(&r)).as_ref(), &tema);
+        let numeracion = Numeracion::leer(
+            ruta_de("numbering").and_then(|r| paquete.xml(&r)).as_ref(),
+            &tema,
+        );
         let mut tope_defecto = 36.0;
         let mut compat = 12;
         let mut pares_impares = false;
         if let Some(s) = ruta_de("settings").and_then(|r| paquete.xml(&r)) {
-            if let Some(t) = s.hijo("defaultTabStop").and_then(|t| attr_num(t, "val", 20.0)) {
+            if let Some(t) = s
+                .hijo("defaultTabStop")
+                .and_then(|t| attr_num(t, "val", 20.0))
+            {
                 tope_defecto = twips(t).max(1.0);
             }
-            pares_impares = s.hijo("evenAndOddHeaders").is_some_and(crate::paquete::interruptor);
+            pares_impares = s
+                .hijo("evenAndOddHeaders")
+                .is_some_and(crate::paquete::interruptor);
             if let Some(c) = s.hijo("compat") {
                 for cs in c.elementos().filter(|e| e.nombre == "compatSetting") {
                     if cs.atributo("name") == "compatibilityMode" {
@@ -384,8 +448,10 @@ impl DocumentoWord {
                 }
             }
         }
-        let total_estimado =
-            paquete.xml("docProps/app.xml").and_then(|a| a.hijo("Pages").and_then(|p| p.texto().trim().parse().ok())).unwrap_or(1usize);
+        let total_estimado = paquete
+            .xml("docProps/app.xml")
+            .and_then(|a| a.hijo("Pages").and_then(|p| p.texto().trim().parse().ok()))
+            .unwrap_or(1usize);
 
         // Las letras que el documento pide y sus alternativas.
         let mut alternas = HashMap::new();
@@ -417,10 +483,13 @@ impl DocumentoWord {
             return Err(ErrorOffice::SinParte("word/document.xml"));
         }
         let cuerpo_en = crate::xml::dentro_de(&fuente, "body", 0);
-        let fondo = crate::xml::aperturas(&fuente[..cuerpo_en.unwrap_or(0).min(fuente.len())], "background")
-            .first()
-            .and_then(|&i| crate::xml::elemento_en(&fuente, i))
-            .and_then(|(b, _)| Color::hex(b.atributo("color")));
+        let fondo = crate::xml::aperturas(
+            &fuente[..cuerpo_en.unwrap_or(0).min(fuente.len())],
+            "background",
+        )
+        .first()
+        .and_then(|&i| crate::xml::elemento_en(&fuente, i))
+        .and_then(|(b, _)| Color::hex(b.atributo("color")));
         let mut secciones: Vec<Seccion> = crate::xml::aperturas(&fuente, "sectPr")
             .into_iter()
             .filter_map(|i| crate::xml::elemento_en(&fuente, i))
@@ -499,7 +568,11 @@ impl DocumentoWord {
 
     /// El total, o la estimacion de Word mientras no se acabe.
     pub fn total(&self) -> usize {
-        if self.terminado { self.paginas.len() } else { self.d.total_estimado.max(self.paginas.len()) }
+        if self.terminado {
+            self.paginas.len()
+        } else {
+            self.d.total_estimado.max(self.paginas.len())
+        }
     }
 
     /// Las secciones del documento.
@@ -553,9 +626,16 @@ impl DocumentoWord {
         self.siguiente += 1;
         let s = self.d.seccion_de[i];
         if i == 0 || self.d.seccion_de[i - 1] != s {
-            self.cola.push_back(Franja { seccion: Some(s), ..Default::default() });
+            self.cola.push_back(Franja {
+                seccion: Some(s),
+                ..Default::default()
+            });
         }
-        let ancho = self.d.secciones[s].columnas.first().map(|c| c.1).unwrap_or(self.d.secciones[s].util());
+        let ancho = self.d.secciones[s]
+            .columnas
+            .first()
+            .map(|c| c.1)
+            .unwrap_or(self.d.secciones[s].util());
         let mut salida = Vec::new();
         let bloques = std::mem::take(&mut self.d.bloques);
         {
@@ -563,7 +643,14 @@ impl DocumentoWord {
             let numero = self.numero.max(1);
             let mut ctx = ctx!(self.d, &rels, medidor, numero);
             let previo = if i > 0 { bloques.get(i - 1) } else { None };
-            bloques::bloque(&mut ctx, &bloques[i], ancho, previo, bloques.get(i + 1), &mut salida);
+            bloques::bloque(
+                &mut ctx,
+                &bloques[i],
+                ancho,
+                previo,
+                bloques.get(i + 1),
+                &mut salida,
+            );
             self.d.contador_notas = ctx.notas;
         }
         self.d.bloques = bloques;
@@ -581,9 +668,19 @@ impl DocumentoWord {
             _ => self.numero + 1,
         };
         let mut ec = EnCurso {
-            pagina: Pagina { ancho: sec.ancho, alto: sec.alto, fondo: self.d.fondo.map(Relleno::Solido), elementos: Vec::new(), numero: self.numero },
+            pagina: Pagina {
+                ancho: sec.ancho,
+                alto: sec.alto,
+                fondo: self.d.fondo.map(Relleno::Solido),
+                elementos: Vec::new(),
+                numero: self.numero,
+            },
             seccion: s,
-            cols: sec.columnas.iter().map(|(x, w)| (sec.margen[3] + x, *w)).collect(),
+            cols: sec
+                .columnas
+                .iter()
+                .map(|(x, w)| (sec.margen[3] + x, *w))
+                .collect(),
             columna: 0,
             zona_y: sec.margen[0],
             zona_max: sec.margen[0],
@@ -614,10 +711,19 @@ impl DocumentoWord {
                 }
             };
             let (arriba, der, abajo, izq) = (pos(0), sec.ancho - pos(1), sec.alto - pos(2), pos(3));
-            let lados = [((izq, arriba), (der, arriba)), ((der, arriba), (der, abajo)), ((izq, abajo), (der, abajo)), ((izq, arriba), (izq, abajo))];
+            let lados = [
+                ((izq, arriba), (der, arriba)),
+                ((der, arriba), (der, abajo)),
+                ((izq, abajo), (der, abajo)),
+                ((izq, arriba), (izq, abajo)),
+            ];
             for (i, (a, b)) in lados.into_iter().enumerate() {
                 if let Some((t, _)) = sec.bordes[i] {
-                    ec.detras.push(Elemento::Linea { desde: a, hasta: b, trazo: t });
+                    ec.detras.push(Elemento::Linea {
+                        desde: a,
+                        hasta: b,
+                        trazo: t,
+                    });
                 }
             }
         }
@@ -675,9 +781,19 @@ impl DocumentoWord {
 
     /// Coloca un dibujo anclado en la pagina. Devuelve su caja y, si aparta
     /// el texto, lo que le estorba a este.
-    fn poner_flotante(&self, ec: &mut EnCurso, f: Flotante, y_parrafo: f32, de_cabecera: bool) -> ((f32, f32, f32, f32), Option<Obstaculo>) {
+    fn poner_flotante(
+        &self,
+        ec: &mut EnCurso,
+        f: Flotante,
+        y_parrafo: f32,
+        de_cabecera: bool,
+    ) -> ((f32, f32, f32, f32), Option<Obstaculo>) {
         let sec = &self.d.secciones[ec.seccion];
-        let (cx, cw) = ec.cols.get(ec.columna).copied().unwrap_or((sec.margen[3], sec.util()));
+        let (cx, cw) = ec
+            .cols
+            .get(ec.columna)
+            .copied()
+            .unwrap_or((sec.margen[3], sec.util()));
         let (o_ancho, o_alto) = (f.objeto.ancho, f.objeto.alto);
         let (base_x, ancho_ref) = match f.h.referencia {
             Referencia::Pagina => (0.0, sec.ancho),
@@ -707,7 +823,11 @@ impl DocumentoWord {
         };
         let caja = (x, y, x + o_ancho, y + o_alto);
         let obstaculo = Obstaculo::de_flotante(caja, &f);
-        let destino = if f.detras || de_cabecera { &mut ec.detras } else { &mut ec.delante };
+        let destino = if f.detras || de_cabecera {
+            &mut ec.detras
+        } else {
+            &mut ec.delante
+        };
         for mut e in f.objeto.elementos {
             e.trasladar(x, y);
             destino.push(e);
@@ -735,18 +855,31 @@ impl DocumentoWord {
         }
         let (y, t) = rodear::sitio(&ec.obstaculos, y, f.alto, lo, hi);
         let entero = t.len() == 1 && (t[0].0 - lo).abs() < 0.01 && (t[0].1 - hi).abs() < 0.01;
-        (y, (!entero).then(|| t.into_iter().map(|(a, b)| (a - cx, b - cx)).collect()))
+        (
+            y,
+            (!entero).then(|| t.into_iter().map(|(a, b)| (a - cx, b - cx)).collect()),
+        )
     }
 
     /// Si el renglon `f` se partio para otros trozos que los que le tocan
     /// (`tramos`), lo vuelve a partir: deja en `f` el renglon nuevo y en la
     /// cola los que le siguen, en lugar de los viejos de su parrafo.
-    fn rehacer_si_hace_falta(&mut self, f: &mut Franja, tramos: &Option<Vec<(f32, f32)>>, medidor: &dyn Medidor) -> bool {
-        let Some(rh) = f.rehacer.clone() else { return false };
+    fn rehacer_si_hace_falta(
+        &mut self,
+        f: &mut Franja,
+        tramos: &Option<Vec<(f32, f32)>>,
+        medidor: &dyn Medidor,
+    ) -> bool {
+        let Some(rh) = f.rehacer.clone() else {
+            return false;
+        };
         let iguales = match tramos {
             None => f.limites.is_empty(),
             Some(t) => {
-                t.len() == f.limites.len() && t.iter().zip(&f.limites).all(|(a, b)| (a.0 - b.0).abs() < 0.5 && (a.1 - b.1).abs() < 0.5)
+                t.len() == f.limites.len()
+                    && t.iter()
+                        .zip(&f.limites)
+                        .all(|(a, b)| (a.0 - b.0).abs() < 0.5 && (a.1 - b.1).abs() < 0.5)
             }
         };
         if iguales {
@@ -757,7 +890,11 @@ impl DocumentoWord {
             return false;
         }
         // Los renglones viejos que seguian a este.
-        while self.cola.front().is_some_and(|g| g.rehacer.as_ref().is_some_and(|r| Arc::ptr_eq(r, &rh))) {
+        while self
+            .cola
+            .front()
+            .is_some_and(|g| g.rehacer.as_ref().is_some_and(|r| Arc::ptr_eq(r, &rh)))
+        {
             self.cola.pop_front();
         }
         let mut primera = nuevas.remove(0);
@@ -842,7 +979,11 @@ impl DocumentoWord {
                 ec.zona_max = y;
                 ec.y = y;
                 ec.columna = 0;
-                ec.cols = sec.columnas.iter().map(|(x, w)| (sec.margen[3] + x, *w)).collect();
+                ec.cols = sec
+                    .columnas
+                    .iter()
+                    .map(|(x, w)| (sec.margen[3] + x, *w))
+                    .collect();
                 ec.seccion = s;
             }
             "nextColumn" if ec.columna + 1 < ec.cols.len() => {
@@ -979,7 +1120,12 @@ impl DocumentoWord {
             let cadena = self.alto_cadena(&f, alto_col, medidor) - f.antes + antes;
             // (Una fila suelta que se puede partir no salta entera: se parte abajo.)
             let partible_suelta = f.fila.as_ref().is_some_and(|x| !x.no_partir) && !f.pegada;
-            if !vacia && !partible_suelta && cadena > disponible + 0.5 && cadena <= alto_col && intentos < 4 {
+            if !vacia
+                && !partible_suelta
+                && cadena > disponible + 0.5
+                && cadena <= alto_col
+                && intentos < 4
+            {
                 self.siguiente_columna(medidor);
                 continue;
             }
@@ -989,9 +1135,19 @@ impl DocumentoWord {
                     && disponible - antes > 12.0
                     && let Some((a, alto_a, b, alto_b)) = fila.partir(disponible - antes)
                 {
-                    let resto =
-                        Franja { alto: alto_b, fila: Some(Box::new(b)), cabecera: f.cabecera.clone(), despues: f.despues, ..Default::default() };
-                    let primera = Franja { alto: alto_a, fila: Some(Box::new(a)), antes: f.antes, ..Default::default() };
+                    let resto = Franja {
+                        alto: alto_b,
+                        fila: Some(Box::new(b)),
+                        cabecera: f.cabecera.clone(),
+                        despues: f.despues,
+                        ..Default::default()
+                    };
+                    let primera = Franja {
+                        alto: alto_a,
+                        fila: Some(Box::new(a)),
+                        antes: f.antes,
+                        ..Default::default()
+                    };
                     self.poner(primera, medidor);
                     self.cola.push_front(resto);
                     self.siguiente_columna(medidor);
@@ -1057,7 +1213,9 @@ impl DocumentoWord {
             self.d.leer_notas();
             let sec_ancho = self.d.secciones[ec.seccion].util();
             for (id, num) in &f.notas {
-                let Some(bloques) = self.d.notas.get(id).cloned() else { continue };
+                let Some(bloques) = self.d.notas.get(id).cloned() else {
+                    continue;
+                };
                 let rels = self.d.notas_rels.clone();
                 let numero = self.numero;
                 let previo = self.d.contador_notas;
@@ -1076,7 +1234,12 @@ impl DocumentoWord {
         }
         // Una franja sin alto ni nada (lo que deja un salto de pagina al
         // final de un parrafo) no ocupa la columna.
-        if f.alto <= 0.0 && f.despues <= 0.0 && f.elementos.is_empty() && f.fila.is_none() && f.flotantes.is_empty() {
+        if f.alto <= 0.0
+            && f.despues <= 0.0
+            && f.elementos.is_empty()
+            && f.fila.is_none()
+            && f.flotantes.is_empty()
+        {
             self.en_curso = Some(ec);
             return;
         }
@@ -1127,7 +1290,11 @@ fn aplanar_en(e: Nodo, v: &mut Vec<Nodo>) {
         }
         "AlternateContent" => {
             if let Some(c) = e.hijos.into_iter().find_map(|h| match h {
-                pixpin_docs::xml::Hijo::Elemento(x) if x.nombre == "Choice" || x.nombre == "Fallback" => Some(x),
+                pixpin_docs::xml::Hijo::Elemento(x)
+                    if x.nombre == "Choice" || x.nombre == "Fallback" =>
+                {
+                    Some(x)
+                }
                 _ => None,
             }) {
                 for h in c.hijos {

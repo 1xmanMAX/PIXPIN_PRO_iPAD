@@ -109,12 +109,19 @@ pub fn origen_de(f: &str) -> Option<Origen> {
     let (hoja, r) = match f.rfind('!') {
         Some(i) => {
             let h = f[..i].trim();
-            let h = h.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')).map(|x| x.replace("''", "'")).unwrap_or_else(|| h.to_string());
+            let h = h
+                .strip_prefix('\'')
+                .and_then(|x| x.strip_suffix('\''))
+                .map(|x| x.replace("''", "'"))
+                .unwrap_or_else(|| h.to_string());
             (Some(h), &f[i + 1..])
         }
         None => (None, f),
     };
-    Some(Origen { hoja, rango: Rango::leer(r)? })
+    Some(Origen {
+        hoja,
+        rango: Rango::leer(r)?,
+    })
 }
 
 /// Lee los grupos de minigraficos de la cola de una hoja. Devuelve los
@@ -125,7 +132,11 @@ pub fn leer(raiz: &Nodo, tema: &Tema, paleta: &[u32]) -> (Vec<GrupoMini>, Vec<Mi
     let mut nodos = Vec::new();
     raiz.todos("sparklineGroup", &mut nodos);
     for g in nodos {
-        let col = |nombre: &str, defecto: u32| g.hijo(nombre).and_then(|c| color_de(c, tema, paleta)).unwrap_or(Rgb::de_u32(defecto));
+        let col = |nombre: &str, defecto: u32| {
+            g.hijo(nombre)
+                .and_then(|c| color_de(c, tema, paleta))
+                .unwrap_or(Rgb::de_u32(defecto))
+        };
         let tipo = match g.attr("type") {
             Some("column") => TipoMini::Columna,
             Some("stacked") => TipoMini::GananciaPerdida,
@@ -136,7 +147,12 @@ pub fn leer(raiz: &Nodo, tema: &Tema, paleta: &[u32]) -> (Vec<GrupoMini>, Vec<Mi
             Some("span") => Vacias::Unir,
             _ => Vacias::Hueco,
         };
-        let numero = |a: &str| g.attr(a).and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite()).unwrap_or(0.0);
+        let numero = |a: &str| {
+            g.attr(a)
+                .and_then(|v| v.parse::<f64>().ok())
+                .filter(|v| v.is_finite())
+                .unwrap_or(0.0)
+        };
         let indice = grupos.len() as u32;
         grupos.push(GrupoMini {
             tipo,
@@ -147,7 +163,12 @@ pub fn leer(raiz: &Nodo, tema: &Tema, paleta: &[u32]) -> (Vec<GrupoMini>, Vec<Mi
             primero: si(g, "first"),
             ultimo: si(g, "last"),
             negativos: si(g, "negative"),
-            peso: g.attr("lineWeight").and_then(|v| v.parse::<f32>().ok()).filter(|v| *v > 0.0).unwrap_or(0.75).min(10.0),
+            peso: g
+                .attr("lineWeight")
+                .and_then(|v| v.parse::<f32>().ok())
+                .filter(|v| *v > 0.0)
+                .unwrap_or(0.75)
+                .min(10.0),
             min_tipo: limite(g, "minAxisType"),
             max_tipo: limite(g, "maxAxisType"),
             min_manual: numero("manualMin"),
@@ -163,14 +184,25 @@ pub fn leer(raiz: &Nodo, tema: &Tema, paleta: &[u32]) -> (Vec<GrupoMini>, Vec<Mi
             c_alto: col("colorHigh", 0xD00000),
             c_bajo: col("colorLow", 0xD00000),
         });
-        let Some(lista) = g.hijo("sparklines") else { continue };
+        let Some(lista) = g.hijo("sparklines") else {
+            continue;
+        };
         for s in lista.hijos_de("sparkline") {
             if minis.len() >= MAX_MINIGRAFICOS {
                 break;
             }
-            let Some(origen) = s.hijo("f").and_then(|f| origen_de(&f.texto)) else { continue };
-            let Some(destino) = s.hijo("sqref").and_then(|f| Rango::leer(&f.texto)) else { continue };
-            minis.push(Minigrafico { fila: destino.fila0, col: destino.col0, grupo: indice, origen });
+            let Some(origen) = s.hijo("f").and_then(|f| origen_de(&f.texto)) else {
+                continue;
+            };
+            let Some(destino) = s.hijo("sqref").and_then(|f| Rango::leer(&f.texto)) else {
+                continue;
+            };
+            minis.push(Minigrafico {
+                fila: destino.fila0,
+                col: destino.col0,
+                grupo: indice,
+                origen,
+            });
         }
     }
     minis.sort_by_key(|m| (m.fila, m.col));
@@ -182,15 +214,22 @@ pub fn leer(raiz: &Nodo, tema: &Tema, paleta: &[u32]) -> (Vec<GrupoMini>, Vec<Mi
 pub fn valores_de(hoja: &Hoja, r: Rango) -> Vec<Option<f64>> {
     let mut v = Vec::new();
     for fila in r.fila0..=r.fila1.min(r.fila0.saturating_add(MAX_PUNTOS as u32)) {
-        let celdas = hoja.filas_entre(fila, fila).first().map(|f| hoja.celdas_de(f)).unwrap_or(&[]);
+        let celdas = hoja
+            .filas_entre(fila, fila)
+            .first()
+            .map(|f| hoja.celdas_de(f))
+            .unwrap_or(&[]);
         for col in r.col0..=r.col1.min(r.col0.saturating_add(MAX_PUNTOS as u32)) {
             if v.len() >= MAX_PUNTOS {
                 return v;
             }
-            let x = celdas.binary_search_by_key(&col, |c| c.col).ok().and_then(|i| match celdas[i].valor {
-                Valor::Numero(n) if n.is_finite() => Some(n),
-                _ => None,
-            });
+            let x = celdas
+                .binary_search_by_key(&col, |c| c.col)
+                .ok()
+                .and_then(|i| match celdas[i].valor {
+                    Valor::Numero(n) if n.is_finite() => Some(n),
+                    _ => None,
+                });
             v.push(x);
         }
     }
@@ -220,11 +259,17 @@ pub fn extremos(p: &[Option<f64>]) -> Option<(f64, f64)> {
 /// El eje vertical (minimo, maximo) de un minigrafico: el propio, el de su
 /// grupo (`del_grupo`) o el escrito a mano. Las columnas parten de cero. Si
 /// el rango queda plano se abre un poco para no dividir por cero.
-pub fn eje_vertical(g: &GrupoMini, propios: Option<(f64, f64)>, del_grupo: Option<(f64, f64)>) -> Option<(f64, f64)> {
+pub fn eje_vertical(
+    g: &GrupoMini,
+    propios: Option<(f64, f64)>,
+    del_grupo: Option<(f64, f64)>,
+) -> Option<(f64, f64)> {
     let base = |tipo: LimiteEje, manual: f64, es_min: bool| -> Option<f64> {
         match tipo {
             LimiteEje::Manual => Some(manual),
-            LimiteEje::Grupo => del_grupo.or(propios).map(|e| if es_min { e.0 } else { e.1 }),
+            LimiteEje::Grupo => del_grupo
+                .or(propios)
+                .map(|e| if es_min { e.0 } else { e.1 }),
             LimiteEje::Individual => propios.map(|e| if es_min { e.0 } else { e.1 }),
         }
     };
@@ -262,25 +307,71 @@ mod pruebas {
         assert_eq!(g.len(), 2);
         assert_eq!(g[0].tipo, TipoMini::Columna);
         assert_eq!(g[0].vacias, Vacias::Cero);
-        assert!(g[0].marcadores && g[0].alto && g[0].negativos && g[0].eje_x && g[0].derecha_a_izquierda);
+        assert!(
+            g[0].marcadores
+                && g[0].alto
+                && g[0].negativos
+                && g[0].eje_x
+                && g[0].derecha_a_izquierda
+        );
         assert!(!g[0].bajo && !g[0].primero);
         assert_eq!(g[0].peso, 1.5);
-        assert_eq!((g[0].min_tipo, g[0].max_tipo, g[0].max_manual), (LimiteEje::Grupo, LimiteEje::Manual, 9.0));
-        assert_eq!(g[0].c_serie, Rgb { r: 0, g: 0xB0, b: 0x50 });
+        assert_eq!(
+            (g[0].min_tipo, g[0].max_tipo, g[0].max_manual),
+            (LimiteEje::Grupo, LimiteEje::Manual, 9.0)
+        );
+        assert_eq!(
+            g[0].c_serie,
+            Rgb {
+                r: 0,
+                g: 0xB0,
+                b: 0x50
+            }
+        );
         assert_eq!(g[1].tipo, TipoMini::GananciaPerdida);
-        assert_eq!(g[1].c_serie, Rgb { r: 0x37, g: 0x60, b: 0x92 }, "color por defecto");
+        assert_eq!(
+            g[1].c_serie,
+            Rgb {
+                r: 0x37,
+                g: 0x60,
+                b: 0x92
+            },
+            "color por defecto"
+        );
         // Los dos sin destino o sin origen valido se descartan; sale ordenado por celda.
         assert_eq!(m.len(), 3);
         assert_eq!((m[0].fila, m[0].col, m[0].grupo), (0, 2, 1));
         assert_eq!((m[1].fila, m[1].col), (0, 6));
-        assert_eq!(m[1].origen, Origen { hoja: Some("Mi hoja".into()), rango: Rango { fila0: 0, col0: 1, fila1: 4, col1: 1 } });
+        assert_eq!(
+            m[1].origen,
+            Origen {
+                hoja: Some("Mi hoja".into()),
+                rango: Rango {
+                    fila0: 0,
+                    col0: 1,
+                    fila1: 4,
+                    col1: 1
+                }
+            }
+        );
         assert_eq!(m[2].origen.hoja.as_deref(), Some("Datos"));
     }
 
     #[test]
     fn origenes_raros() {
-        assert_eq!(origen_de("A1").unwrap().rango, Rango { fila0: 0, col0: 0, fila1: 0, col1: 0 });
-        assert_eq!(origen_de("'O''Neil'!C3:D4").unwrap().hoja.as_deref(), Some("O'Neil"));
+        assert_eq!(
+            origen_de("A1").unwrap().rango,
+            Rango {
+                fila0: 0,
+                col0: 0,
+                fila1: 0,
+                col1: 0
+            }
+        );
+        assert_eq!(
+            origen_de("'O''Neil'!C3:D4").unwrap().hoja.as_deref(),
+            Some("O'Neil")
+        );
         assert!(origen_de("Hoja1!").is_none());
         assert!(origen_de("").is_none());
         assert!(origen_de("!!!").is_none());
@@ -317,12 +408,36 @@ mod pruebas {
     fn valores_de_un_rango_de_la_hoja() {
         let mut h = Hoja::vacia_para_pruebas();
         h.poner_numeros_para_pruebas(&[5.0, 6.0, 7.0]);
-        let v = valores_de(&h, Rango { fila0: 0, col0: 0, fila1: 3, col1: 0 });
+        let v = valores_de(
+            &h,
+            Rango {
+                fila0: 0,
+                col0: 0,
+                fila1: 3,
+                col1: 0,
+            },
+        );
         assert_eq!(v, vec![Some(5.0), Some(6.0), Some(7.0), None]);
-        let v = valores_de(&h, Rango { fila0: 0, col0: 1, fila1: 0, col1: 2 });
+        let v = valores_de(
+            &h,
+            Rango {
+                fila0: 0,
+                col0: 1,
+                fila1: 0,
+                col1: 2,
+            },
+        );
         assert_eq!(v, vec![None, None]);
         // Un rango enorme se corta.
-        let v = valores_de(&h, Rango { fila0: 0, col0: 0, fila1: 1_000_000, col1: 3 });
+        let v = valores_de(
+            &h,
+            Rango {
+                fila0: 0,
+                col0: 0,
+                fila1: 1_000_000,
+                col1: 3,
+            },
+        );
         assert!(v.len() <= MAX_PUNTOS);
     }
 }

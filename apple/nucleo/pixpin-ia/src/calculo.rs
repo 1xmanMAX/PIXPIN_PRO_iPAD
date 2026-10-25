@@ -44,7 +44,11 @@ fn biseccion(g: &dyn Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
 /// La escala tipica de `f` en `[a, b]` (la mediana de |f|), para que las
 /// tolerancias no dependan de las unidades.
 pub fn escala(f: &dyn Fn(f64) -> f64, a: f64, b: f64) -> f64 {
-    let mut v: Vec<f64> = linspace(a, b, 400).map(f).filter(|y| y.is_finite()).map(f64::abs).collect();
+    let mut v: Vec<f64> = linspace(a, b, 400)
+        .map(f)
+        .filter(|y| y.is_finite())
+        .map(f64::abs)
+        .collect();
     if v.is_empty() {
         return 1.0;
     }
@@ -69,7 +73,9 @@ pub fn derivable(f: &dyn Fn(f64) -> f64, x: f64) -> bool {
     let h = 1e-4 * (1.0 + x.abs());
     let izq = (f(x) - f(x - h)) / h;
     let der = (f(x + h) - f(x)) / h;
-    izq.is_finite() && der.is_finite() && (izq - der).abs() <= 1e-2 * (1.0 + izq.abs().max(der.abs()))
+    izq.is_finite()
+        && der.is_finite()
+        && (izq - der).abs() <= 1e-2 * (1.0 + izq.abs().max(der.abs()))
 }
 
 /// **Los ceros de `f` en `[a, b]`**, y aparte los «cambios de signo» que
@@ -85,7 +91,12 @@ pub fn ceros(f: &dyn Fn(f64) -> f64, a: f64, b: f64) -> (Vec<f64>, Vec<f64>) {
             raices.push(xs[i]);
             continue;
         }
-        if i + 1 < xs.len() && ys[i].is_finite() && ys[i + 1].is_finite() && ys[i + 1] != 0.0 && (ys[i] > 0.0) != (ys[i + 1] > 0.0) {
+        if i + 1 < xs.len()
+            && ys[i].is_finite()
+            && ys[i + 1].is_finite()
+            && ys[i + 1] != 0.0
+            && (ys[i] > 0.0) != (ys[i + 1] > 0.0)
+        {
             let r = biseccion(f, xs[i], xs[i + 1]);
             let fr = f(r);
             if fr.is_finite() && fr.abs() <= tol.max(1e-9) {
@@ -104,13 +115,20 @@ pub fn ceros(f: &dyn Fn(f64) -> f64, a: f64, b: f64) -> (Vec<f64>, Vec<f64>) {
     let cerca = (b - a) * 1e-6;
     sin_repetir(&mut raices, cerca.max(1e-9));
     sin_repetir(&mut polos, cerca.max(1e-9));
-    (raices.into_iter().map(limpio).collect(), polos.into_iter().map(limpio).collect())
+    (
+        raices.into_iter().map(limpio).collect(),
+        polos.into_iter().map(limpio).collect(),
+    )
 }
 
 /// Un valor casi entero, entero (las cuentas de biseccion dejan 1.9999999).
 pub fn limpio(v: f64) -> f64 {
     let r = v.round();
-    if (v - r).abs() < 1e-7 * (1.0 + v.abs()) { r } else { v }
+    if (v - r).abs() < 1e-7 * (1.0 + v.abs()) {
+        r
+    } else {
+        v
+    }
 }
 
 /// **Los extremos locales** de `f` en `[a, b]`: `(x, es_maximo)`.
@@ -127,11 +145,19 @@ pub fn extremos(f: &dyn Fn(f64) -> f64, a: f64, b: f64) -> Vec<(f64, bool)> {
             continue;
         }
         if (g0 > 0.0) != (g1 > 0.0) || g1 == 0.0 {
-            let r = if g1 == 0.0 { xs[i + 1] } else { biseccion(&g, xs[i], xs[i + 1]) };
+            let r = if g1 == 0.0 {
+                xs[i + 1]
+            } else {
+                biseccion(&g, xs[i], xs[i + 1])
+            };
             let fr = f(r);
             let paso = (b - a) / n as f64;
             // Que exista alrededor y no sea un polo.
-            if !fr.is_finite() || !f(r - paso).is_finite() || !f(r + paso).is_finite() || fr.abs() > 1e4 * (1.0 + s) {
+            if !fr.is_finite()
+                || !f(r - paso).is_finite()
+                || !f(r + paso).is_finite()
+                || fr.abs() > 1e4 * (1.0 + s)
+            {
                 continue;
             }
             let maximo = f(r - paso) <= fr && f(r + paso) <= fr;
@@ -160,7 +186,11 @@ pub fn polos(f: &dyn Fn(f64) -> f64, a: f64, b: f64) -> Vec<f64> {
             y > grande && y >= ys[i - 1] && y >= ys[i + 1]
         } else {
             // Un hueco entre dos valores enormes: el centro de un polo.
-            y.is_infinite() || ys[i - 1].is_finite() && ys[i + 1].is_finite() && ys[i - 1] > grande && ys[i + 1] > grande
+            y.is_infinite()
+                || ys[i - 1].is_finite()
+                    && ys[i + 1].is_finite()
+                    && ys[i - 1] > grande
+                    && ys[i + 1] > grande
         };
         if !pico {
             continue;
@@ -171,7 +201,10 @@ pub fn polos(f: &dyn Fn(f64) -> f64, a: f64, b: f64) -> Vec<f64> {
             let m1 = lo + (hi - lo) / 3.0;
             let m2 = hi - (hi - lo) / 3.0;
             let (f1, f2) = (f(m1).abs(), f(m2).abs());
-            let (f1, f2) = (if f1.is_finite() { f1 } else { f64::MAX }, if f2.is_finite() { f2 } else { f64::MAX });
+            let (f1, f2) = (
+                if f1.is_finite() { f1 } else { f64::MAX },
+                if f2.is_finite() { f2 } else { f64::MAX },
+            );
             if f1 < f2 {
                 lo = m1;
             } else {
@@ -202,7 +235,11 @@ pub fn asintota_al_infinito(f: &dyn Fn(f64) -> f64, lado: f64) -> Option<(f64, f
     if (pred - f1).abs() > 1e-3 * (1.0 + f1.abs().min(1e9)) {
         return None;
     }
-    let m = if m.abs() < 1e-6 { 0.0 } else { limpio((m * 1e4).round() / 1e4) };
+    let m = if m.abs() < 1e-6 {
+        0.0
+    } else {
+        limpio((m * 1e4).round() / 1e4)
+    };
     let b = if m == 0.0 { f3 } else { b };
     let b = limpio((b * 1e4).round() / 1e4);
     Some((m, if b == 0.0 { 0.0 } else { b }))
@@ -228,7 +265,13 @@ pub fn area_entre(f: &dyn Fn(f64) -> f64, g: &dyn Fn(f64) -> f64, a: f64, b: f64
         if !d.is_finite() {
             return None;
         }
-        let peso = if i == 0 || i == n { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 };
+        let peso = if i == 0 || i == n {
+            1.0
+        } else if i % 2 == 1 {
+            4.0
+        } else {
+            2.0
+        };
         s += peso * d;
     }
     let area = s * h / 3.0;
@@ -255,26 +298,42 @@ mod pruebas {
         assert!(r.is_empty(), "{r:?}");
         assert_eq!(p.len(), 1);
         assert!(p[0].abs() < 1e-6);
-        assert_eq!(polos(&|x| 1.0 / x, -4.0, 4.0), vec![0.0], "con el cero en una muestra");
+        assert_eq!(
+            polos(&|x| 1.0 / x, -4.0, 4.0),
+            vec![0.0],
+            "con el cero en una muestra"
+        );
         let v = polos(&|x| 1.0 / (x * x), -3.0, 3.0);
         assert_eq!(v.len(), 1, "{v:?}");
         let v = polos(&|x: f64| x.tan(), -3.0, 3.0);
         assert_eq!(v.len(), 2, "{v:?}");
         assert!(polos(&|x| x * x, -3.0, 3.0).is_empty());
-        assert!(polos(&|x: f64| x.sqrt(), -3.0, 3.0).is_empty(), "un hueco no es un polo");
+        assert!(
+            polos(&|x: f64| x.sqrt(), -3.0, 3.0).is_empty(),
+            "un hueco no es un polo"
+        );
     }
 
     #[test]
     fn extremos_con_su_clase() {
         let e = extremos(&|x| x * x * x - 3.0 * x, -3.0, 3.0);
         assert_eq!(e, vec![(-1.0, true), (1.0, false)]);
-        assert!(extremos(&|x| 1.0 / (x * x), -3.0, 3.0).is_empty(), "el polo no es un maximo");
+        assert!(
+            extremos(&|x| 1.0 / (x * x), -3.0, 3.0).is_empty(),
+            "el polo no es un maximo"
+        );
     }
 
     #[test]
     fn asintotas_y_area() {
-        assert_eq!(asintota_al_infinito(&|x| (2.0 * x + 1.0) / (x - 1.0), 1.0), Some((0.0, 2.0)));
-        assert_eq!(asintota_al_infinito(&|x| x + 1.0 / x, 1.0), Some((1.0, 0.0)));
+        assert_eq!(
+            asintota_al_infinito(&|x| (2.0 * x + 1.0) / (x - 1.0), 1.0),
+            Some((0.0, 2.0))
+        );
+        assert_eq!(
+            asintota_al_infinito(&|x| x + 1.0 / x, 1.0),
+            Some((1.0, 0.0))
+        );
         assert_eq!(asintota_al_infinito(&|x| x * x, 1.0), None);
         assert!(es_la_recta(&|x| 2.0 * x + 1.0, (2.0, 1.0), -5.0, 5.0));
         let a = area_entre(&|x| x + 2.0, &|x| x * x, -1.0, 2.0).unwrap();

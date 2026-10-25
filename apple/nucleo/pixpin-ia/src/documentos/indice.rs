@@ -115,7 +115,10 @@ pub enum Abrir {
     Fichero { ruta: PathBuf, pagina: Option<u32> },
     /// El chat en ese mensaje, resaltado. `proyecto: None` es «Mensajes
     /// guardados».
-    Mensaje { proyecto: Option<String>, codigo: String },
+    Mensaje {
+        proyecto: Option<String>,
+        codigo: String,
+    },
 }
 
 impl Abrir {
@@ -136,7 +139,9 @@ impl Abrir {
 
     fn a_json(&self) -> Value {
         match self {
-            Abrir::Fichero { ruta, pagina } => json!({"ruta": ruta.display().to_string(), "pagina": pagina}),
+            Abrir::Fichero { ruta, pagina } => {
+                json!({"ruta": ruta.display().to_string(), "pagina": pagina})
+            }
             Abrir::Mensaje { proyecto, codigo } => json!({"proyecto": proyecto, "codigo": codigo}),
         }
     }
@@ -149,7 +154,10 @@ impl Abrir {
             });
         }
         Some(Abrir::Mensaje {
-            proyecto: v.get("proyecto").and_then(Value::as_str).map(str::to_string),
+            proyecto: v
+                .get("proyecto")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             codigo: v.get("codigo")?.as_str()?.to_string(),
         })
     }
@@ -348,8 +356,15 @@ impl Indice {
         if lista.get("version").and_then(Value::as_u64) != Some(VERSION) {
             return ix;
         }
-        for f in lista.get("fuentes").and_then(Value::as_array).into_iter().flatten() {
-            let Some(fuente) = fuente_de_json(f) else { continue };
+        for f in lista
+            .get("fuentes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(fuente) = fuente_de_json(f) else {
+                continue;
+            };
             let fallo = f.get("fallo").and_then(Value::as_str).map(str::to_string);
             let trozos = if fallo.is_some() {
                 Some(Vec::new())
@@ -370,7 +385,10 @@ impl Indice {
 
     /// Cuantas fuentes y trozos vivos hay.
     pub fn tamano(&self) -> (usize, usize) {
-        (self.fuentes.iter().filter(|f| f.viva).count(), self.vivos as usize)
+        (
+            self.fuentes.iter().filter(|f| f.viva).count(),
+            self.vivos as usize,
+        )
     }
 
     /// Si ya esta esa fuente con esa firma.
@@ -378,14 +396,24 @@ impl Indice {
         self.por_clave
             .get(&f.clave)
             .map(|&i| &self.fuentes[i as usize])
-            .is_some_and(|g| g.viva && g.fuente.firma == f.firma && g.fuente.abrir == f.abrir && g.fuente.nombre == f.nombre && g.fuente.proyecto_nombre == f.proyecto_nombre)
+            .is_some_and(|g| {
+                g.viva
+                    && g.fuente.firma == f.firma
+                    && g.fuente.abrir == f.abrir
+                    && g.fuente.nombre == f.nombre
+                    && g.fuente.proyecto_nombre == f.proyecto_nombre
+            })
     }
 
     /// **Que hay que hacer** para que el indice sea `fuentes`: las que leer
     /// (nuevas o cambiadas) y las claves que quitar (ya no estan).
     pub fn pendientes(&self, fuentes: &[Fuente]) -> (Vec<Fuente>, Vec<String>) {
         let nuevas: HashSet<&str> = fuentes.iter().map(|f| f.clave.as_str()).collect();
-        let leer = fuentes.iter().filter(|f| !self.al_dia(f)).cloned().collect();
+        let leer = fuentes
+            .iter()
+            .filter(|f| !self.al_dia(f))
+            .cloned()
+            .collect();
         let quitar = self
             .fuentes
             .iter()
@@ -419,7 +447,9 @@ impl Indice {
 
     /// Quita una fuente (si estaba).
     pub fn quitar(&mut self, clave: &str) {
-        let Some(&i) = self.por_clave.get(clave) else { return };
+        let Some(&i) = self.por_clave.get(clave) else {
+            return;
+        };
         let g = &mut self.fuentes[i as usize];
         if !g.viva {
             return;
@@ -548,7 +578,11 @@ impl Indice {
         self.vivos = 0;
         self.suma_largos = 0;
         for g in viejas.into_iter().filter(|g| g.viva) {
-            let ts = g.trozos.iter().map(|&t| trozos[t as usize].clone()).collect();
+            let ts = g
+                .trozos
+                .iter()
+                .map(|&t| trozos[t as usize].clone())
+                .collect();
             self.meter(g.fuente, g.fallo, ts);
         }
     }
@@ -563,19 +597,23 @@ impl Indice {
         }
         let n = self.vivos as f32;
         let medio = (self.suma_largos as f32 / n).max(1.0);
-        let deja = |t: &Trozo| t.vivo && alcance.deja(&self.fuentes[t.fuente as usize].fuente.proyecto);
+        let deja =
+            |t: &Trozo| t.vivo && alcance.deja(&self.fuentes[t.fuente as usize].fuente.proyecto);
         // Lo raro que es cada palabra (una que no esta en ningun texto, como
         // el nombre de un plano, es la mas rara de todas).
         let idf = |p: &str| -> f32 {
-            let df = self
-                .terminos
-                .get(p)
-                .map_or(0, |l| l.iter().filter(|(t, _)| self.trozos[*t as usize].vivo).count()) as f32;
+            let df = self.terminos.get(p).map_or(0, |l| {
+                l.iter()
+                    .filter(|(t, _)| self.trozos[*t as usize].vivo)
+                    .count()
+            }) as f32;
             ((n - df + 0.5) / (df + 0.5) + 1.0).ln()
         };
         let mut puntos: HashMap<u32, f32> = HashMap::new();
         for p in &q {
-            let Some(lista) = self.terminos.get(p) else { continue };
+            let Some(lista) = self.terminos.get(p) else {
+                continue;
+            };
             let idf = idf(p);
             for &(t, tf) in lista {
                 let tr = &self.trozos[t as usize];
@@ -597,7 +635,11 @@ impl Indice {
             if !g.viva || !alcance.deja(&g.fuente.proyecto) {
                 continue;
             }
-            let e: f32 = q.iter().filter(|p| g.nombre.contains(*p)).map(|p| EMPUJON_NOMBRE * idf(p)).sum();
+            let e: f32 = q
+                .iter()
+                .filter(|p| g.nombre.contains(*p))
+                .map(|p| EMPUJON_NOMBRE * idf(p))
+                .sum();
             if e > 0.0 {
                 por_nombre.insert(i as u32, e);
             }
@@ -644,7 +686,10 @@ impl Indice {
                 seccion: tr.seccion.clone(),
                 cuando: tr.cuando,
                 fragmento: fragmento(&tr.texto, &q, LARGO_FRAGMENTO),
-                abrir: tr.abrir.clone().unwrap_or_else(|| g.fuente.abrir.en_pagina(tr.pagina)),
+                abrir: tr
+                    .abrir
+                    .clone()
+                    .unwrap_or_else(|| g.fuente.abrir.en_pagina(tr.pagina)),
                 puntos: s,
             });
             if fuera.len() >= max {
@@ -712,7 +757,10 @@ pub fn fragmento(texto: &str, consulta: &[String], largo: usize) -> String {
                 i += 1;
             }
             let palabra: String = letras[ini..i].iter().collect();
-            if texto::palabras(&palabra).iter().any(|p| consulta.contains(p)) {
+            if texto::palabras(&palabra)
+                .iter()
+                .any(|p| consulta.contains(p))
+            {
                 aciertos.push(ini);
             }
         } else {
@@ -722,7 +770,10 @@ pub fn fragmento(texto: &str, consulta: &[String], largo: usize) -> String {
     let mut mejor = (0usize, 0usize);
     for &a in &aciertos {
         let desde = a.saturating_sub(largo / 4);
-        let n = aciertos.iter().filter(|&&b| b >= desde && b < desde + largo).count();
+        let n = aciertos
+            .iter()
+            .filter(|&&b| b >= desde && b < desde + largo)
+            .count();
         if n > mejor.1 {
             mejor = (desde, n);
         }

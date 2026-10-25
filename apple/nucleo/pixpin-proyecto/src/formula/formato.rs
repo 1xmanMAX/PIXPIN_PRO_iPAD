@@ -57,7 +57,8 @@ fn es_fecha(f: &str) -> bool {
     for c in f.chars() {
         if c == '"' {
             entre_comillas = !entre_comillas;
-        } else if !entre_comillas && matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'y' | 'a' | 'h' | 's')
+        } else if !entre_comillas
+            && matches!(c.to_ascii_lowercase(), 'd' | 'm' | 'y' | 'a' | 'h' | 's')
         {
             return true;
         }
@@ -222,7 +223,7 @@ const DIAS: [&str; 7] = [
 ];
 
 fn fecha_con_formato(n: f64, formato: &str) -> Result<String, ErrorFormula> {
-    if n < 0.0 || n > 2_958_465.999_999 {
+    if !(0.0..=2_958_465.999_999).contains(&n) {
         return Err(ErrorFormula::Numero);
     }
     let chars: Vec<char> = formato.chars().collect();

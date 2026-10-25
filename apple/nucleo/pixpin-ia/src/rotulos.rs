@@ -24,7 +24,12 @@ pub struct Rotulo {
 
 impl Rotulo {
     pub fn en(ancla: (f64, f64), ancho: f64, alto: f64) -> Rotulo {
-        Rotulo { ancla, ancho, alto, preferida: None }
+        Rotulo {
+            ancla,
+            ancho,
+            alto,
+            preferida: None,
+        }
     }
 }
 
@@ -53,7 +58,12 @@ pub fn cajas_de_linea(puntos: &[(f64, f64)], grosor: f64) -> Vec<Caja> {
             let p = (a.0 + (b.0 - a.0) * s0, a.1 + (b.1 - a.1) * s0);
             let q = (a.0 + (b.0 - a.0) * s1, a.1 + (b.1 - a.1) * s1);
             let (x0, y0) = (p.0.min(q.0) - grosor / 2.0, p.1.min(q.1) - grosor / 2.0);
-            v.push([x0, y0, (p.0 - q.0).abs() + grosor, (p.1 - q.1).abs() + grosor]);
+            v.push([
+                x0,
+                y0,
+                (p.0 - q.0).abs() + grosor,
+                (p.1 - q.1).abs() + grosor,
+            ]);
         }
     }
     v
@@ -69,14 +79,14 @@ fn candidatos(r: &Rotulo) -> Vec<Caja> {
     for d in [8.0, 16.0, 28.0, 44.0, 66.0] {
         let k = d * 0.7;
         v.extend([
-            [ax + k, ay - k - h, w, h],          // arriba a la derecha
-            [ax - k - w, ay - k - h, w, h],      // arriba a la izquierda
-            [ax + k, ay + k, w, h],              // abajo a la derecha
-            [ax - k - w, ay + k, w, h],          // abajo a la izquierda
-            [ax + d, ay - h / 2.0, w, h],        // a la derecha
-            [ax - d - w, ay - h / 2.0, w, h],    // a la izquierda
-            [ax - w / 2.0, ay - d - h, w, h],    // encima
-            [ax - w / 2.0, ay + d, w, h],        // debajo
+            [ax + k, ay - k - h, w, h],       // arriba a la derecha
+            [ax - k - w, ay - k - h, w, h],   // arriba a la izquierda
+            [ax + k, ay + k, w, h],           // abajo a la derecha
+            [ax - k - w, ay + k, w, h],       // abajo a la izquierda
+            [ax + d, ay - h / 2.0, w, h],     // a la derecha
+            [ax - d - w, ay - h / 2.0, w, h], // a la izquierda
+            [ax - w / 2.0, ay - d - h, w, h], // encima
+            [ax - w / 2.0, ay + d, w, h],     // debajo
         ]);
     }
     v
@@ -89,13 +99,23 @@ pub fn colocar(rotulos: &[Rotulo], ocupado: &[Caja], dentro: Option<Caja>) -> Ve
     let mut puestos: Vec<Caja> = Vec::new();
     // Los anclas de todos tapan un poco: un rotulo no se pone encima del
     // punto de otro.
-    let anclas: Vec<Caja> = rotulos.iter().map(|r| [r.ancla.0 - 5.0, r.ancla.1 - 5.0, 10.0, 10.0]).collect();
+    let anclas: Vec<Caja> = rotulos
+        .iter()
+        .map(|r| [r.ancla.0 - 5.0, r.ancla.1 - 5.0, 10.0, 10.0])
+        .collect();
     let mut salida = Vec::with_capacity(rotulos.len());
     for r in rotulos {
         let mut mejor: Option<(f64, Caja)> = None;
         for c in candidatos(r) {
-            let fuera = dentro.is_some_and(|d| c[0] < d[0] || c[1] < d[1] || c[0] + c[2] > d[0] + d[2] || c[1] + c[3] > d[1] + d[3]);
-            let pisa: f64 = puestos.iter().chain(&anclas).chain(ocupado).map(|o| solape(&c, o)).sum::<f64>()
+            let fuera = dentro.is_some_and(|d| {
+                c[0] < d[0] || c[1] < d[1] || c[0] + c[2] > d[0] + d[2] || c[1] + c[3] > d[1] + d[3]
+            });
+            let pisa: f64 = puestos
+                .iter()
+                .chain(&anclas)
+                .chain(ocupado)
+                .map(|o| solape(&c, o))
+                .sum::<f64>()
                 + if fuera { c[2] * c[3] } else { 0.0 };
             if pisa <= 1e-6 {
                 mejor = Some((0.0, c));
@@ -119,13 +139,26 @@ mod pruebas {
     #[test]
     fn rotulos_juntos_no_se_pisan() {
         // Tres raices pegadas en el eje x (como x^3 - 3x con zoom).
-        let rs: Vec<Rotulo> = [0.0, 30.0, 60.0].iter().map(|&x| Rotulo::en((x, 100.0), 70.0, 16.0)).collect();
+        let rs: Vec<Rotulo> = [0.0, 30.0, 60.0]
+            .iter()
+            .map(|&x| Rotulo::en((x, 100.0), 70.0, 16.0))
+            .collect();
         let eje = cajas_de_linea(&[(-100.0, 100.0), (200.0, 100.0)], 2.0);
         let p = colocar(&rs, &eje, None);
-        let cajas: Vec<Caja> = p.iter().zip(&rs).map(|(&(x, y), r)| [x, y, r.ancho, r.alto]).collect();
+        let cajas: Vec<Caja> = p
+            .iter()
+            .zip(&rs)
+            .map(|(&(x, y), r)| [x, y, r.ancho, r.alto])
+            .collect();
         for i in 0..cajas.len() {
             for j in i + 1..cajas.len() {
-                assert_eq!(solape(&cajas[i], &cajas[j]), 0.0, "{:?} {:?}", cajas[i], cajas[j]);
+                assert_eq!(
+                    solape(&cajas[i], &cajas[j]),
+                    0.0,
+                    "{:?} {:?}",
+                    cajas[i],
+                    cajas[j]
+                );
             }
             for e in &eje {
                 assert_eq!(solape(&cajas[i], e), 0.0, "pisa el eje: {:?}", cajas[i]);

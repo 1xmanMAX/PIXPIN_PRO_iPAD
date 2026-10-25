@@ -109,12 +109,19 @@ pub const EN_EL_CHAT: &str = "(en el chat)";
 
 /// Las capturas que sabe empezar `capturar_pantalla` (las del menu de la
 /// bandeja, `pixpin_store::comandos`; el pedido `capturar`).
-pub const MODOS_DE_CAPTURA: &[&str] = &["zona", "copiar", "pin", "en_vivo", "anotar", "texto", "scroll", "repetir", "retardo"];
+pub const MODOS_DE_CAPTURA: &[&str] = &[
+    "zona", "copiar", "pin", "en_vivo", "anotar", "texto", "scroll", "repetir", "retardo",
+];
 
 /// Lo que hace `manejar_pines` (comandos de los pines; el pedido `pines`).
 pub const OPERACIONES_DE_PINES: &[&str] = &["ocultar_mostrar", "devolver_ultimo", "paso_de_clics"];
 
-const fn p(nombre: &'static str, tipo: Tipo, obligatorio: bool, descripcion: &'static str) -> Param {
+const fn p(
+    nombre: &'static str,
+    tipo: Tipo,
+    obligatorio: bool,
+    descripcion: &'static str,
+) -> Param {
     Param {
         nombre,
         destino: "",
@@ -189,7 +196,18 @@ pub const ACCIONES: &[Accion] = &[
         accion: "abrir",
         descripcion: "Abre un fichero en PixPin (PDF, Word, Excel, imagen, plano...), como «Abrir con PixPin».",
         categoria: Categoria::Abrir,
-        claves: &["abre", "abrir", "archivo", "fichero", "documento", "pdf", "docx", "xlsx", "dwg", ":\\"],
+        claves: &[
+            "abre",
+            "abrir",
+            "archivo",
+            "fichero",
+            "documento",
+            "pdf",
+            "docx",
+            "xlsx",
+            "dwg",
+            ":\\",
+        ],
         fijos: r#"{"que":{"tipo":"fichero"}}"#,
         params: &[a("que.ruta", p("ruta", Tipo::Ruta, true, RUTA))],
         confirmar: None,
@@ -202,7 +220,10 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Abrir,
         claves: &["mensaje"],
         fijos: r#"{"que":{"tipo":"mensaje"}}"#,
-        params: &[a("que.codigo", p("codigo", Tipo::Texto, true, "id del mensaje"))],
+        params: &[a(
+            "que.codigo",
+            p("codigo", Tipo::Texto, true, "id del mensaje"),
+        )],
         confirmar: None,
         hecho: "Abriendo el mensaje.",
     },
@@ -213,7 +234,10 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Notas,
         claves: &["abre la nota", "editar nota", "abrir nota"],
         fijos: r#"{"que":{"tipo":"nota"}}"#,
-        params: &[a("que.codigo", p("codigo", Tipo::Texto, true, "id del mensaje de la nota"))],
+        params: &[a(
+            "que.codigo",
+            p("codigo", Tipo::Texto, true, "id del mensaje de la nota"),
+        )],
         confirmar: None,
         hecho: "Abriendo la nota.",
     },
@@ -224,7 +248,15 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Abrir,
         claves: &["hoja", "abre el lienzo", "abrir lienzo"],
         fijos: r#"{"que":{"tipo":"hoja"}}"#,
-        params: &[a("que.referencia", p("referencia", Tipo::Texto, true, "referencia de la hoja o lienzo"))],
+        params: &[a(
+            "que.referencia",
+            p(
+                "referencia",
+                Tipo::Texto,
+                true,
+                "referencia de la hoja o lienzo",
+            ),
+        )],
         confirmar: None,
         hecho: "Abriendo «{referencia}».",
     },
@@ -233,7 +265,13 @@ pub const ACCIONES: &[Accion] = &[
         accion: "chat",
         descripcion: "Deja un mensaje de texto en el chat de «Mensajes guardados».",
         categoria: Categoria::Notas,
-        claves: &["guarda en el chat", "escribe en el chat", "manda al chat", "mensaje al chat", "apunta en el chat"],
+        claves: &[
+            "guarda en el chat",
+            "escribe en el chat",
+            "manda al chat",
+            "mensaje al chat",
+            "apunta en el chat",
+        ],
         fijos: "{}",
         params: &[l(LARGO_LARGO, p("texto", Tipo::Texto, true, "el mensaje"))],
         confirmar: None,
@@ -246,7 +284,10 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Notas,
         claves: &["nota", "apunte", "markdown", "escribe una nota"],
         fijos: "{}",
-        params: &[l(LARGO_LARGO, p("texto", Tipo::Texto, false, "el contenido de la nota"))],
+        params: &[l(
+            LARGO_LARGO,
+            p("texto", Tipo::Texto, false, "el contenido de la nota"),
+        )],
         confirmar: None,
         hecho: "Nota nueva creada[: «{texto}»].",
     },
@@ -255,7 +296,13 @@ pub const ACCIONES: &[Accion] = &[
         accion: "lienzo_nuevo",
         descripcion: "Crea un lienzo nuevo, vacio, y lo abre.",
         categoria: Categoria::Notas,
-        claves: &["lienzo nuevo", "nuevo lienzo", "crea un lienzo", "pizarra nueva", "lienzo llamado"],
+        claves: &[
+            "lienzo nuevo",
+            "nuevo lienzo",
+            "crea un lienzo",
+            "pizarra nueva",
+            "lienzo llamado",
+        ],
         fijos: "{}",
         params: &[p("nombre", Tipo::Texto, false, "nombre del lienzo")],
         confirmar: None,
@@ -277,9 +324,20 @@ pub const ACCIONES: &[Accion] = &[
         accion: "reproducir",
         descripcion: "Hace sonar un audio (m4a, mp3, wav) en el reproductor flotante.",
         categoria: Categoria::Audio,
-        claves: &["reproduc", "escucha", "suena", "pon el audio", "mp3", "m4a", "wav"],
+        claves: &[
+            "reproduc",
+            "escucha",
+            "suena",
+            "pon el audio",
+            "mp3",
+            "m4a",
+            "wav",
+        ],
         fijos: "{}",
-        params: &[p("ruta", Tipo::Ruta, true, RUTA), p("titulo", Tipo::Texto, false, "lo que se lee en la barra")],
+        params: &[
+            p("ruta", Tipo::Ruta, true, RUTA),
+            p("titulo", Tipo::Texto, false, "lo que se lee en la barra"),
+        ],
         confirmar: None,
         hecho: "Reproduciendo[ «{titulo}»].",
     },
@@ -291,7 +349,10 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Tareas,
         claves: &["lista", "checklist"],
         fijos: "{}",
-        params: &[p("titulo", Tipo::Texto, true, "titulo de la lista"), r(p("chat", Tipo::Texto, false, CHAT))],
+        params: &[
+            p("titulo", Tipo::Texto, true, "titulo de la lista"),
+            r(p("chat", Tipo::Texto, false, CHAT)),
+        ],
         confirmar: None,
         hecho: "Lista «{titulo}» creada[ en «{chat}»].",
     },
@@ -300,10 +361,26 @@ pub const ACCIONES: &[Accion] = &[
         accion: "anadir_tarea",
         descripcion: "Apunta UNA tarea pendiente, con su fecha si la dice (va al Inbox si no se dice la lista).",
         categoria: Categoria::Tareas,
-        claves: &["tarea", "pendiente", "apunta", "recuerdame", "por hacer", "inbox", "to do", "todo", "anade", "agrega"],
+        claves: &[
+            "tarea",
+            "pendiente",
+            "apunta",
+            "recuerdame",
+            "por hacer",
+            "inbox",
+            "to do",
+            "todo",
+            "anade",
+            "agrega",
+        ],
         fijos: "{}",
         params: &[
-            p("texto", Tipo::Texto, true, "lo que hay que hacer, sin la fecha"),
+            p(
+                "texto",
+                Tipo::Texto,
+                true,
+                "lo que hay que hacer, sin la fecha",
+            ),
             r(p("lista", Tipo::Texto, false, LISTA)),
             r(p("fecha", Tipo::Texto, false, FECHA)),
             r(p("chat", Tipo::Texto, false, CHAT)),
@@ -316,12 +393,29 @@ pub const ACCIONES: &[Accion] = &[
         accion: "anadir_tarea",
         descripcion: "Apunta VARIAS tareas (de un acta, foto o documento) en una lista existente o nueva.",
         categoria: Categoria::Tareas,
-        claves: &["tareas de", "saca las tareas", "acta", "varias tareas", "estas tareas", "pendientes de"],
+        claves: &[
+            "tareas de",
+            "saca las tareas",
+            "acta",
+            "varias tareas",
+            "estas tareas",
+            "pendientes de",
+        ],
         fijos: "{}",
         params: &[
-            r(p("tareas", Tipo::Textos, true, "las tareas, una por elemento, cortas y sin numerar")),
+            r(p(
+                "tareas",
+                Tipo::Textos,
+                true,
+                "las tareas, una por elemento, cortas y sin numerar",
+            )),
             r(p("lista", Tipo::Texto, false, LISTA)),
-            r(p("lista_nueva", Tipo::Texto, false, "titulo de una lista NUEVA, si la pide")),
+            r(p(
+                "lista_nueva",
+                Tipo::Texto,
+                false,
+                "titulo de una lista NUEVA, si la pide",
+            )),
             r(p("chat", Tipo::Texto, false, CHAT)),
         ],
         confirmar: None,
@@ -332,12 +426,22 @@ pub const ACCIONES: &[Accion] = &[
         accion: "marcar_tarea",
         descripcion: "Marca una tarea como hecha (o la vuelve a dejar pendiente).",
         categoria: Categoria::Tareas,
-        claves: &["marca", "hecha", "completa", "termin", "tacha", "desmarca", "acabe", "hice"],
+        claves: &[
+            "marca", "hecha", "completa", "termin", "tacha", "desmarca", "acabe", "hice",
+        ],
         fijos: "{}",
         params: &[
             r(p("tarea", Tipo::Texto, true, TAREA)),
             r(p("lista", Tipo::Texto, false, LISTA)),
-            d("true", p("hecha", Tipo::SiNo, false, "true hecha, false pendiente otra vez")),
+            d(
+                "true",
+                p(
+                    "hecha",
+                    Tipo::SiNo,
+                    false,
+                    "true hecha, false pendiente otra vez",
+                ),
+            ),
         ],
         confirmar: None,
         hecho: "«{tarea}» marcada como {estado}.",
@@ -351,8 +455,18 @@ pub const ACCIONES: &[Accion] = &[
         fijos: "{}",
         params: &[
             r(p("tarea", Tipo::Texto, true, TAREA)),
-            r(p("lista", Tipo::Texto, false, "lista donde esta ahora; omitir si no la dice")),
-            r(p("a_lista", Tipo::Texto, true, "nombre de la lista de destino")),
+            r(p(
+                "lista",
+                Tipo::Texto,
+                false,
+                "lista donde esta ahora; omitir si no la dice",
+            )),
+            r(p(
+                "a_lista",
+                Tipo::Texto,
+                true,
+                "nombre de la lista de destino",
+            )),
         ],
         confirmar: None,
         hecho: "«{tarea}» movida a «{a_lista}».",
@@ -362,12 +476,26 @@ pub const ACCIONES: &[Accion] = &[
         accion: "corregir_tarea",
         descripcion: "Cambia el texto de una tarea o le pone otra fecha.",
         categoria: Categoria::Tareas,
-        claves: &["cambia la tarea", "edita", "renombra", "corrige", "cambiale", "pon la tarea", "posterga", "aplaza"],
+        claves: &[
+            "cambia la tarea",
+            "edita",
+            "renombra",
+            "corrige",
+            "cambiale",
+            "pon la tarea",
+            "posterga",
+            "aplaza",
+        ],
         fijos: "{}",
         params: &[
             r(p("tarea", Tipo::Texto, true, TAREA)),
             r(p("lista", Tipo::Texto, false, LISTA)),
-            p("texto", Tipo::Texto, false, "el texto nuevo; omitir si solo cambia la fecha"),
+            p(
+                "texto",
+                Tipo::Texto,
+                false,
+                "el texto nuevo; omitir si solo cambia la fecha",
+            ),
             r(p("fecha", Tipo::Texto, false, FECHA)),
         ],
         confirmar: None,
@@ -380,7 +508,10 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Tareas,
         claves: &["quita", "elimina la tarea", "borra la tarea"],
         fijos: "{}",
-        params: &[r(p("tarea", Tipo::Texto, true, TAREA)), r(p("lista", Tipo::Texto, false, LISTA))],
+        params: &[
+            r(p("tarea", Tipo::Texto, true, TAREA)),
+            r(p("lista", Tipo::Texto, false, LISTA)),
+        ],
         confirmar: Some("¿Quito la tarea «{tarea}» de «{lista}»?"),
         hecho: "Quitada «{tarea}» de «{lista}».",
     },
@@ -391,8 +522,18 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Tareas,
         claves: &["borra", "elimina", "borrar lista"],
         fijos: "{}",
-        params: &[r(p("lista", Tipo::Texto, true, "nombre de la lista que hay que borrar")), r(p("chat", Tipo::Texto, false, CHAT))],
-        confirmar: Some("¿Borro la lista «{lista}» entera, con todas sus tareas? No se puede deshacer."),
+        params: &[
+            r(p(
+                "lista",
+                Tipo::Texto,
+                true,
+                "nombre de la lista que hay que borrar",
+            )),
+            r(p("chat", Tipo::Texto, false, CHAT)),
+        ],
+        confirmar: Some(
+            "¿Borro la lista «{lista}» entera, con todas sus tareas? No se puede deshacer.",
+        ),
         hecho: "Lista «{lista}» borrada.",
     },
     Accion {
@@ -400,14 +541,45 @@ pub const ACCIONES: &[Accion] = &[
         accion: CONSULTA,
         descripcion: "Lee las tareas: pendientes, hechas o vencidas, por periodo, lista o chat.",
         categoria: Categoria::Tareas,
-        claves: &["que tengo", "pendientes", "vencid", "venc", "atrasad", "mis tareas", "que tareas", "cuantas tareas", "que me falta"],
+        claves: &[
+            "que tengo",
+            "pendientes",
+            "vencid",
+            "venc",
+            "atrasad",
+            "mis tareas",
+            "que tareas",
+            "cuantas tareas",
+            "que me falta",
+        ],
         fijos: "{}",
         params: &[
-            r(d(r#""pendientes""#, p("estado", Tipo::Opciones(&["pendientes", "hechas", "vencidas", "todas"]), false, "que tareas"))),
-            r(d(r#""todo""#, p("periodo", Tipo::Opciones(&["hoy", "semana", "mes", "todo"]), false, "por su fecha: hoy, esta semana, este mes o todas"))),
+            r(d(
+                r#""pendientes""#,
+                p(
+                    "estado",
+                    Tipo::Opciones(&["pendientes", "hechas", "vencidas", "todas"]),
+                    false,
+                    "que tareas",
+                ),
+            )),
+            r(d(
+                r#""todo""#,
+                p(
+                    "periodo",
+                    Tipo::Opciones(&["hoy", "semana", "mes", "todo"]),
+                    false,
+                    "por su fecha: hoy, esta semana, este mes o todas",
+                ),
+            )),
             r(p("lista", Tipo::Texto, false, LISTA)),
             r(p("chat", Tipo::Texto, false, CHAT)),
-            r(p("buscar", Tipo::Texto, false, "palabras que deben tener las tareas")),
+            r(p(
+                "buscar",
+                Tipo::Texto,
+                false,
+                "palabras que deben tener las tareas",
+            )),
         ],
         confirmar: None,
         hecho: "",
@@ -417,7 +589,16 @@ pub const ACCIONES: &[Accion] = &[
         accion: "ventana",
         descripcion: "Abre una ventana de PixPin: tareas, galeria (de capturas), lecciones o sincronizar.",
         categoria: Categoria::Abrir,
-        claves: &["ventana", "galeria", "tareas", "lecciones", "sincronizar", "abre", "ensena", "muestra"],
+        claves: &[
+            "ventana",
+            "galeria",
+            "tareas",
+            "lecciones",
+            "sincronizar",
+            "abre",
+            "ensena",
+            "muestra",
+        ],
         fijos: "{}",
         params: &[p(
             "cual",
@@ -433,7 +614,13 @@ pub const ACCIONES: &[Accion] = &[
         accion: "capturar",
         descripcion: "Empieza una captura de una zona de la pantalla (el usuario elige la zona).",
         categoria: Categoria::Capturas,
-        claves: &["captura", "capturar", "pantallazo", "screenshot", "recorta la pantalla"],
+        claves: &[
+            "captura",
+            "capturar",
+            "pantallazo",
+            "screenshot",
+            "recorta la pantalla",
+        ],
         fijos: r#"{"modo":"zona"}"#,
         params: &[],
         confirmar: None,
@@ -446,9 +633,21 @@ pub const ACCIONES: &[Accion] = &[
         accion: "capturar",
         descripcion: "Empieza una captura de pantalla de otra clase (el usuario elige la zona). modo: copiar (directo al portapapeles), pin (dejarla flotando), en_vivo (pin que se actualiza), anotar, texto (copiar el texto que se lea), scroll (captura larga), repetir (la ultima zona, sin elegir), retardo (tras una cuenta atras), zona (la de siempre, con barra).",
         categoria: Categoria::Capturas,
-        claves: &["captura", "copia el texto de la pantalla", "captura larga", "con scroll", "zona de la pantalla", "texto que sale"],
+        claves: &[
+            "captura",
+            "copia el texto de la pantalla",
+            "captura larga",
+            "con scroll",
+            "zona de la pantalla",
+            "texto que sale",
+        ],
         fijos: "{}",
-        params: &[p("modo", Tipo::Opciones(MODOS_DE_CAPTURA), true, "que captura")],
+        params: &[p(
+            "modo",
+            Tipo::Opciones(MODOS_DE_CAPTURA),
+            true,
+            "que captura",
+        )],
         confirmar: None,
         hecho: "Hecho: captura en marcha ({modo}); el usuario elige la zona.",
     },
@@ -459,7 +658,12 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Abrir,
         claves: &["ajustes", "configuracion", "timeline", "buscador"],
         fijos: "{}",
-        params: &[p("cual", Tipo::Opciones(&["ajustes", "timeline", "buscar"]), true, "que ventana")],
+        params: &[p(
+            "cual",
+            Tipo::Opciones(&["ajustes", "timeline", "buscar"]),
+            true,
+            "que ventana",
+        )],
         confirmar: None,
         hecho: "Abriendo la ventana de {cual}.",
     },
@@ -485,8 +689,14 @@ pub const ACCIONES: &[Accion] = &[
         fijos: r#"{"que":{"tipo":"fichero"}}"#,
         params: &[
             a("que.ruta", p("ruta", Tipo::Ruta, true, RUTA)),
-            a("que.pagina", p("pagina", Tipo::Entero, false, "pagina, desde 1")),
-            a("que.buscar", p("buscar", Tipo::Texto, false, "texto que buscar y marcar")),
+            a(
+                "que.pagina",
+                p("pagina", Tipo::Entero, false, "pagina, desde 1"),
+            ),
+            a(
+                "que.buscar",
+                p("buscar", Tipo::Texto, false, "texto que buscar y marcar"),
+            ),
         ],
         confirmar: None,
         hecho: "Llevando {ruta}[ a la página {pagina}][ a «{buscar}»].",
@@ -496,7 +706,16 @@ pub const ACCIONES: &[Accion] = &[
         accion: "capturar",
         descripcion: "Graba como GIF animado una zona de la pantalla: sale el marco, el usuario lo ajusta y pulsa Grabar.",
         categoria: Categoria::Capturas,
-        claves: &["graba la pantalla", "grabar la pantalla", "grabar pantalla", "graba un video", "video de la pantalla", "gif", "screencast", "graba lo que hago"],
+        claves: &[
+            "graba la pantalla",
+            "grabar la pantalla",
+            "grabar pantalla",
+            "graba un video",
+            "video de la pantalla",
+            "gif",
+            "screencast",
+            "graba lo que hago",
+        ],
         fijos: r#"{"modo":"gif"}"#,
         params: &[],
         confirmar: None,
@@ -507,7 +726,17 @@ pub const ACCIONES: &[Accion] = &[
         accion: "pines",
         descripcion: "Cierra todos los pines de la pantalla.",
         categoria: Categoria::Capturas,
-        claves: &["cierra los pines", "cierra todos los pines", "quita los pines", "cerrar pines", "borra los pines", "todos los pines", "los pines que", "quitame", "cierra"],
+        claves: &[
+            "cierra los pines",
+            "cierra todos los pines",
+            "quita los pines",
+            "cerrar pines",
+            "borra los pines",
+            "todos los pines",
+            "los pines que",
+            "quitame",
+            "cierra",
+        ],
         fijos: r#"{"operacion":"cerrar"}"#,
         params: &[],
         confirmar: Some("¿Cierro todos los pines de la pantalla?"),
@@ -518,9 +747,22 @@ pub const ACCIONES: &[Accion] = &[
         accion: "pines",
         descripcion: "Los pines de la pantalla (para cerrarlos: cerrar_pines): ocultar_mostrar (esconderlos todos o devolverlos), devolver_ultimo (el ultimo que se cerro), paso_de_clics (que dejen pasar el clic).",
         categoria: Categoria::Capturas,
-        claves: &["oculta los pines", "esconde los pines", "muestra los pines", "devuelve el pin", "ultimo pin", "pines", "paso de clics"],
+        claves: &[
+            "oculta los pines",
+            "esconde los pines",
+            "muestra los pines",
+            "devuelve el pin",
+            "ultimo pin",
+            "pines",
+            "paso de clics",
+        ],
         fijos: "{}",
-        params: &[p("operacion", Tipo::Opciones(OPERACIONES_DE_PINES), true, "que hacer")],
+        params: &[p(
+            "operacion",
+            Tipo::Opciones(OPERACIONES_DE_PINES),
+            true,
+            "que hacer",
+        )],
         confirmar: None,
         hecho: "Hecho ({operacion}).",
     },
@@ -597,7 +839,10 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Lecciones,
         claves: &["leccion nueva", "nueva leccion", "aprendi", "aprendida"],
         fijos: "{}",
-        params: &[l(LARGO_LARGO, p("texto", Tipo::Texto, false, "lo que paso y lo aprendido"))],
+        params: &[l(
+            LARGO_LARGO,
+            p("texto", Tipo::Texto, false, "lo que paso y lo aprendido"),
+        )],
         confirmar: None,
         hecho: "Ficha de lección nueva abierta.",
     },
@@ -617,9 +862,24 @@ pub const ACCIONES: &[Accion] = &[
         accion: "sincronizar",
         descripcion: "Sincroniza ahora con el movil (o con todos los aparatos del grupo).",
         categoria: Categoria::Movil,
-        claves: &["sincroniz", "sync", "movil", "celular", "telefono", "android"],
+        claves: &[
+            "sincroniz",
+            "sync",
+            "movil",
+            "celular",
+            "telefono",
+            "android",
+        ],
         fijos: "{}",
-        params: &[d(r#""todos""#, p("aparato", Tipo::Texto, false, "id del aparato; omitir para todos"))],
+        params: &[d(
+            r#""todos""#,
+            p(
+                "aparato",
+                Tipo::Texto,
+                false,
+                "id del aparato; omitir para todos",
+            ),
+        )],
         confirmar: Some("¿Sincronizo ahora con el movil?"),
         hecho: "Sincronizando con el móvil.",
     },
@@ -631,8 +891,21 @@ pub const ACCIONES: &[Accion] = &[
         claves: &["envia", "manda", "pasa", "movil", "celular", "telefono"],
         fijos: "{}",
         params: &[
-            p("imagenes", Tipo::Rutas, true, "rutas absolutas de las imagenes"),
-            d(r#""todos""#, p("aparato", Tipo::Texto, false, "id del aparato; omitir para todos")),
+            p(
+                "imagenes",
+                Tipo::Rutas,
+                true,
+                "rutas absolutas de las imagenes",
+            ),
+            d(
+                r#""todos""#,
+                p(
+                    "aparato",
+                    Tipo::Texto,
+                    false,
+                    "id del aparato; omitir para todos",
+                ),
+            ),
         ],
         confirmar: Some("¿Mando {imagenes} al movil?"),
         hecho: "Enviado al móvil.",
@@ -660,7 +933,10 @@ pub const ACCIONES: &[Accion] = &[
         ],
         fijos: r#"{"operacion":"crear"}"#,
         params: &[
-            a("receta.nombre", p("nombre", Tipo::Texto, true, "nombre corto")),
+            a(
+                "receta.nombre",
+                p("nombre", Tipo::Texto, true, "nombre corto"),
+            ),
             a(
                 "receta.disparador.tipo",
                 p(
@@ -670,10 +946,26 @@ pub const ACCIONES: &[Accion] = &[
                     "cuando",
                 ),
             ),
-            a("receta.disparador.hora", p("hora", Tipo::Texto, false, "HH:MM")),
-            a("receta.pasos", l(LARGO_LARGO, p("pasos", Tipo::Texto, true, "lista JSON: texto para el asistente u {herramienta,args,proyecto}; {captura} {resultado}"))),
+            a(
+                "receta.disparador.hora",
+                p("hora", Tipo::Texto, false, "HH:MM"),
+            ),
+            a(
+                "receta.pasos",
+                l(
+                    LARGO_LARGO,
+                    p(
+                        "pasos",
+                        Tipo::Texto,
+                        true,
+                        "lista JSON: texto para el asistente u {herramienta,args,proyecto}; {captura} {resultado}",
+                    ),
+                ),
+            ),
         ],
-        confirmar: Some("¿Creo la automatización «{nombre}» ({disparador}) con estos pasos: {pasos}?"),
+        confirmar: Some(
+            "¿Creo la automatización «{nombre}» ({disparador}) con estos pasos: {pasos}?",
+        ),
         hecho: "Automatización «{nombre}» creada.",
     },
     // --- 15-oct: «que la gente pueda hacer TODO con PixPin a traves del
@@ -685,9 +977,23 @@ pub const ACCIONES: &[Accion] = &[
         accion: "timeline",
         descripcion: "Apunta un momento en el timeline (lo que pasa ahora, con su hora).",
         categoria: Categoria::Notas,
-        claves: &["timeline", "linea de tiempo", "bitacora", "diario de obra", "momento"],
+        claves: &[
+            "timeline",
+            "linea de tiempo",
+            "bitacora",
+            "diario de obra",
+            "momento",
+        ],
         fijos: "{}",
-        params: &[l(LARGO_LARGO, p("texto", Tipo::Texto, true, "lo que paso; la primera frase es el titulo"))],
+        params: &[l(
+            LARGO_LARGO,
+            p(
+                "texto",
+                Tipo::Texto,
+                true,
+                "lo que paso; la primera frase es el titulo",
+            ),
+        )],
         confirmar: None,
         hecho: "Apuntado en el timeline: «{texto}».",
     },
@@ -696,11 +1002,34 @@ pub const ACCIONES: &[Accion] = &[
         accion: EN_EL_CHAT,
         descripcion: "Lee en voz alta un texto o un documento del chat (PDF, Word, nota...) con la voz de PixPin.",
         categoria: Categoria::Audio,
-        claves: &["en voz alta", "leemelo", "lee en voz", "leelo en voz", "dimelo en voz", "escuchar el", "escuchar la", "narra", "voz alta"],
+        claves: &[
+            "en voz alta",
+            "leemelo",
+            "lee en voz",
+            "leelo en voz",
+            "dimelo en voz",
+            "escuchar el",
+            "escuchar la",
+            "narra",
+            "voz alta",
+        ],
         fijos: "{}",
         params: &[
-            l(LARGO_LARGO, p("texto", Tipo::Texto, false, "el texto que leer; omitir para leer un documento")),
-            p("archivo", Tipo::Texto, false, "nombre o descripcion del documento; omitir: el adjunto mas reciente"),
+            l(
+                LARGO_LARGO,
+                p(
+                    "texto",
+                    Tipo::Texto,
+                    false,
+                    "el texto que leer; omitir para leer un documento",
+                ),
+            ),
+            p(
+                "archivo",
+                Tipo::Texto,
+                false,
+                "nombre o descripcion del documento; omitir: el adjunto mas reciente",
+            ),
         ],
         confirmar: None,
         hecho: "Leyendo en voz alta.",
@@ -710,7 +1039,14 @@ pub const ACCIONES: &[Accion] = &[
         accion: "leer_en_voz",
         descripcion: "Calla la lectura en voz alta que este sonando («deja de leer», «callate», «basta»).",
         categoria: Categoria::Audio,
-        claves: &["para de leer", "deja de leer", "callate", "deja de hablar", "para la voz", "deten la lectura"],
+        claves: &[
+            "para de leer",
+            "deja de leer",
+            "callate",
+            "deja de hablar",
+            "para la voz",
+            "deten la lectura",
+        ],
         fijos: r#"{"parar":true}"#,
         params: &[],
         confirmar: None,
@@ -721,9 +1057,26 @@ pub const ACCIONES: &[Accion] = &[
         accion: EN_EL_CHAT,
         descripcion: "Comprime (aligera) un PDF y deja la copia ligera en el chat; el original no se toca.",
         categoria: Categoria::Abrir,
-        claves: &["comprime", "comprimir", "aligera", "aligerar", "reduce el pdf", "menos pesado", "pesa mucho", "achica el pdf", "ligero", "pesa", "por correo"],
+        claves: &[
+            "comprime",
+            "comprimir",
+            "aligera",
+            "aligerar",
+            "reduce el pdf",
+            "menos pesado",
+            "pesa mucho",
+            "achica el pdf",
+            "ligero",
+            "pesa",
+            "por correo",
+        ],
         fijos: "{}",
-        params: &[p("archivo", Tipo::Texto, false, "nombre o descripcion del PDF; omitir: el PDF mas reciente del chat")],
+        params: &[p(
+            "archivo",
+            Tipo::Texto,
+            false,
+            "nombre o descripcion del PDF; omitir: el PDF mas reciente del chat",
+        )],
         confirmar: None,
         hecho: "PDF aligerado.",
     },
@@ -732,9 +1085,24 @@ pub const ACCIONES: &[Accion] = &[
         accion: EN_EL_CHAT,
         descripcion: "Pasa a texto un audio o nota de voz del chat (Whisper, en este PC) y te devuelve lo dicho.",
         categoria: Categoria::Audio,
-        claves: &["transcrib", "pasa a texto", "pasalo a texto", "que dice el audio", "que dice la nota de voz", "audio a texto", "este audio", "el audio de", "dictado"],
+        claves: &[
+            "transcrib",
+            "pasa a texto",
+            "pasalo a texto",
+            "que dice el audio",
+            "que dice la nota de voz",
+            "audio a texto",
+            "este audio",
+            "el audio de",
+            "dictado",
+        ],
         fijos: "{}",
-        params: &[p("archivo", Tipo::Texto, false, "nombre o descripcion del audio; omitir: el audio mas reciente del chat")],
+        params: &[p(
+            "archivo",
+            Tipo::Texto,
+            false,
+            "nombre o descripcion del audio; omitir: el audio mas reciente del chat",
+        )],
         confirmar: None,
         hecho: "Audio pasado a texto.",
     },
@@ -743,12 +1111,38 @@ pub const ACCIONES: &[Accion] = &[
         accion: EN_EL_CHAT,
         descripcion: "Lee las celdas de un Excel del chat (una hoja o un rango A1:D20) para contestar, calcular o hacer una grafica.",
         categoria: Categoria::Notas,
-        claves: &["del excel", "el excel", "en el excel", "xlsx", "hoja de calculo", "celda", "rango", "columna", "suma de la", "total de la"],
+        claves: &[
+            "del excel",
+            "el excel",
+            "en el excel",
+            "xlsx",
+            "hoja de calculo",
+            "celda",
+            "rango",
+            "columna",
+            "suma de la",
+            "total de la",
+        ],
         fijos: "{}",
         params: &[
-            p("archivo", Tipo::Texto, false, "nombre o descripcion del Excel; omitir: el mas reciente del chat"),
-            p("hoja", Tipo::Texto, false, "nombre de la hoja; omitir: la activa"),
-            p("rango", Tipo::Texto, false, "rango como A1:D20; omitir: lo usado de la hoja"),
+            p(
+                "archivo",
+                Tipo::Texto,
+                false,
+                "nombre o descripcion del Excel; omitir: el mas reciente del chat",
+            ),
+            p(
+                "hoja",
+                Tipo::Texto,
+                false,
+                "nombre de la hoja; omitir: la activa",
+            ),
+            p(
+                "rango",
+                Tipo::Texto,
+                false,
+                "rango como A1:D20; omitir: lo usado de la hoja",
+            ),
         ],
         confirmar: None,
         hecho: "Excel leído.",
@@ -769,8 +1163,18 @@ pub const ACCIONES: &[Accion] = &[
         claves: &[],
         fijos: "{}",
         params: &[
-            p("archivo", Tipo::Texto, false, "nombre o descripcion del archivo; omitir: el mas reciente del chat"),
-            p("paginas", Tipo::Texto, false, "paginas o diapositivas, como \"3\" o \"2-5\"; omitir: todo"),
+            p(
+                "archivo",
+                Tipo::Texto,
+                false,
+                "nombre o descripcion del archivo; omitir: el mas reciente del chat",
+            ),
+            p(
+                "paginas",
+                Tipo::Texto,
+                false,
+                "paginas o diapositivas, como \"3\" o \"2-5\"; omitir: todo",
+            ),
         ],
         confirmar: None,
         hecho: "Documento leído.",
@@ -780,9 +1184,26 @@ pub const ACCIONES: &[Accion] = &[
         accion: EN_EL_CHAT,
         descripcion: "Cuenta lo hecho en PixPin hoy, esta semana o este mes: mensajes y notas, fotos, capturas, momentos del timeline y tareas.",
         categoria: Categoria::Tareas,
-        claves: &["cuanto hice", "que hice hoy", "mi actividad", "resumen del dia", "estadistic", "cuantas capturas", "cuantos mensajes", "productiv"],
+        claves: &[
+            "cuanto hice",
+            "que hice hoy",
+            "mi actividad",
+            "resumen del dia",
+            "estadistic",
+            "cuantas capturas",
+            "cuantos mensajes",
+            "productiv",
+        ],
         fijos: "{}",
-        params: &[d(r#""hoy""#, p("periodo", Tipo::Opciones(&["hoy", "semana", "mes"]), false, "de cuando"))],
+        params: &[d(
+            r#""hoy""#,
+            p(
+                "periodo",
+                Tipo::Opciones(&["hoy", "semana", "mes"]),
+                false,
+                "de cuando",
+            ),
+        )],
         confirmar: None,
         hecho: "Hecho.",
     },
@@ -819,9 +1240,46 @@ pub const ACCIONES: &[Accion] = &[
         categoria: Categoria::Notas,
         claves: &[],
         fijos: "{}",
-        params: &[p("nombre", Tipo::Texto, true, "nombre del lienzo (o un trozo)")],
+        params: &[p(
+            "nombre",
+            Tipo::Texto,
+            true,
+            "nombre del lienzo (o un trozo)",
+        )],
         confirmar: None,
         hecho: "Trabajando en «{nombre}».",
+    },
+    // 26-oct: las carpetas de paginas del chat (un cuaderno con nombre: «Dia
+    // 1», «Dia 2»...). Tambien las hace el ejecutor del chat ([`LIENZOS`]).
+    Accion {
+        herramienta: ANADIR_A_CARPETA,
+        accion: EN_EL_CHAT,
+        descripcion: "Mete un lienzo de este chat en una carpeta de páginas (un cuaderno con nombre, como un PDF), al final y con el título que le toca («Día 3» tras «Día 2»). Si la carpeta no existe, la crea. Sin lienzo, el lienzo destino.",
+        categoria: Categoria::Notas,
+        claves: &[],
+        fijos: "{}",
+        params: &[
+            p("carpeta", Tipo::Texto, true, "nombre de la carpeta"),
+            p(
+                "lienzo",
+                Tipo::Texto,
+                false,
+                "nombre del lienzo; omitir para el lienzo destino",
+            ),
+        ],
+        confirmar: None,
+        hecho: "Añadido a la carpeta «{carpeta}».",
+    },
+    Accion {
+        herramienta: PAGINA_DE_CARPETA,
+        accion: EN_EL_CHAT,
+        descripcion: "Crea la página siguiente de una carpeta de páginas de este chat: un lienzo nuevo con la plantilla de la última página, vacía, y el título siguiente («Día 3» tras «Día 2»). La deja como lienzo destino, para escribir o dibujar en ella.",
+        categoria: Categoria::Notas,
+        claves: &[],
+        fijos: "{}",
+        params: &[p("carpeta", Tipo::Texto, true, "nombre de la carpeta")],
+        confirmar: None,
+        hecho: "Página nueva en «{carpeta}».",
     },
 ];
 
@@ -830,7 +1288,16 @@ pub const ACCIONES: &[Accion] = &[
 pub const LIENZOS_DEL_CHAT: &str = "lienzos_del_chat";
 pub const CREAR_LIENZO: &str = "crear_lienzo";
 pub const USAR_LIENZO: &str = "usar_lienzo";
-pub const LIENZOS: &[&str] = &[LIENZOS_DEL_CHAT, CREAR_LIENZO, USAR_LIENZO];
+/// Las carpetas de paginas del chat (26-oct).
+pub const ANADIR_A_CARPETA: &str = "anadir_a_carpeta";
+pub const PAGINA_DE_CARPETA: &str = "pagina_nueva_de_carpeta";
+pub const LIENZOS: &[&str] = &[
+    LIENZOS_DEL_CHAT,
+    CREAR_LIENZO,
+    USAR_LIENZO,
+    ANADIR_A_CARPETA,
+    PAGINA_DE_CARPETA,
+];
 
 /// Si es una de las herramientas de los lienzos del chat ([`LIENZOS`]).
 pub fn es_de_lienzos(herramienta: &str) -> bool {
@@ -860,6 +1327,8 @@ pub const SOLO_NUBE: &[&str] = &[
     LIENZOS_DEL_CHAT,
     CREAR_LIENZO,
     USAR_LIENZO,
+    ANADIR_A_CARPETA,
+    PAGINA_DE_CARPETA,
     // Las conexiones (17-oct, `crate::conexiones`): Google Drive y los que vengan.
     crate::conexiones::acciones::BUSCAR,
     crate::conexiones::acciones::LEER,
@@ -873,18 +1342,25 @@ pub const SOLO_NUBE: &[&str] = &[
 /// `edicion`: misma fila y mismo `hacer`; el esquema del local no cambia
 /// y el local no las manda. 16-oct: la tabla de una foto, al LIENZO con su
 /// aspecto medido (no solo a la tabla del chat o al Excel).
-pub const OPCIONES_NUBE: &[(&str, &str, &[&str])] = &[(crate::acciones_documentos::TABLA, "destino", &["lienzo"])];
+pub const OPCIONES_NUBE: &[(&str, &str, &[&str])] =
+    &[(crate::acciones_documentos::TABLA, "destino", &["lienzo"])];
 
 fn opcion_de_la_nube(herramienta: &str, param: &str, valor: &str) -> bool {
     let v = normalizar(valor.trim());
-    OPCIONES_NUBE.iter().any(|(h, p, vs)| *h == herramienta && *p == param && vs.contains(&v.as_str()))
+    OPCIONES_NUBE
+        .iter()
+        .any(|(h, p, vs)| *h == herramienta && *p == param && vs.contains(&v.as_str()))
 }
 
 /// Pone en el esquema de la nube sus [`OPCIONES_NUBE`] (lo llama
 /// `herramientas::para_la_nube`).
 pub fn para_la_nube(h: &mut crate::herramientas::Herramienta) {
     for (_, param, valores) in OPCIONES_NUBE.iter().filter(|(n, _, _)| *n == h.nombre) {
-        if let Some(e) = h.parametros.pointer_mut(&format!("/properties/{param}/enum")).and_then(Value::as_array_mut) {
+        if let Some(e) = h
+            .parametros
+            .pointer_mut(&format!("/properties/{param}/enum"))
+            .and_then(Value::as_array_mut)
+        {
             for v in *valores {
                 if !e.iter().any(|x| x == v) {
                     e.push(json!(v));
@@ -924,7 +1400,9 @@ pub fn herramienta(a: &Accion) -> Herramienta {
     let mut obligatorios = Vec::new();
     for p in a.params {
         let mut esquema = match p.tipo {
-            Tipo::Texto | Tipo::Ruta => json!({"type": "string", "maxLength": p.largo.unwrap_or(LARGO_TEXTO)}),
+            Tipo::Texto | Tipo::Ruta => {
+                json!({"type": "string", "maxLength": p.largo.unwrap_or(LARGO_TEXTO)})
+            }
             Tipo::Rutas | Tipo::Textos => {
                 json!({"type": "array", "items": {"type": "string", "maxLength": p.largo.unwrap_or(LARGO_TEXTO)}})
             }
@@ -988,7 +1466,13 @@ impl AccionApp {
                 self.por_resolver.get(p.nombre).cloned()
             } else {
                 let mut actual = &self.pedido;
-                for t in (if p.destino.is_empty() { p.nombre } else { p.destino }).split('.') {
+                for t in (if p.destino.is_empty() {
+                    p.nombre
+                } else {
+                    p.destino
+                })
+                .split('.')
+                {
                     actual = &actual[t];
                 }
                 (!actual.is_null()).then(|| actual.clone())
@@ -1021,7 +1505,9 @@ pub fn rellenar(plantilla: &str, valores: &[(String, String)]) -> String {
             out.push_str(&resto[..i]);
             let j = resto[i..].find('}')? + i;
             let campo = &resto[i + 1..j];
-            let v = valores.iter().find(|(k, v)| k == campo && !v.trim().is_empty())?;
+            let v = valores
+                .iter()
+                .find(|(k, v)| k == campo && !v.trim().is_empty())?;
             out.push_str(&v.1);
             resto = &resto[j + 1..];
         }
@@ -1031,7 +1517,9 @@ pub fn rellenar(plantilla: &str, valores: &[(String, String)]) -> String {
     let mut out = String::new();
     let mut resto = plantilla;
     while let Some(i) = resto.find('[') {
-        let Some(j) = resto[i..].find(']').map(|j| j + i) else { break };
+        let Some(j) = resto[i..].find(']').map(|j| j + i) else {
+            break;
+        };
         out.push_str(&resto[..i]);
         if let Some(s) = sustituir(&resto[i + 1..j], valores) {
             out.push_str(&s);
@@ -1048,7 +1536,10 @@ pub fn rellenar(plantilla: &str, valores: &[(String, String)]) -> String {
             }
             s.replace_range(i..=j, "");
         }
-        s.replace("«»", "").split_whitespace().collect::<Vec<_>>().join(" ")
+        s.replace("«»", "")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
     })
 }
 
@@ -1076,13 +1567,20 @@ fn valor(p: &Param, v: &Value) -> Result<Value, ErrorHerramienta> {
     let campo = p.nombre;
     Ok(match p.tipo {
         Tipo::Texto => match v {
-            Value::String(s) if !s.trim().is_empty() => json!(s.trim().chars().take(p.largo.unwrap_or(LARGO_TEXTO)).collect::<String>()),
+            Value::String(s) if !s.trim().is_empty() => json!(
+                s.trim()
+                    .chars()
+                    .take(p.largo.unwrap_or(LARGO_TEXTO))
+                    .collect::<String>()
+            ),
             Value::Number(n) => json!(n.to_string()),
             _ => return Err(mal(format!("«{campo}» tiene que ser un texto"))),
         },
         Tipo::Ruta => match v {
             Value::String(s) => {
-                let r = s.trim().trim_matches(|c| c == '"' || c == '\'' || c == '«' || c == '»');
+                let r = s
+                    .trim()
+                    .trim_matches(|c| c == '"' || c == '\'' || c == '«' || c == '»');
                 if r.is_empty() {
                     return Err(mal(format!("«{campo}» esta vacio")));
                 }
@@ -1093,8 +1591,10 @@ fn valor(p: &Param, v: &Value) -> Result<Value, ErrorHerramienta> {
         Tipo::Rutas | Tipo::Textos => match v {
             Value::String(s) if !s.trim().is_empty() => json!([s.trim()]),
             Value::Array(l) if !l.is_empty() => {
-                let todos: Option<Vec<&str>> = l.iter().map(|r| r.as_str().map(str::trim)).collect();
-                let mut todos = todos.ok_or_else(|| mal(format!("«{campo}» tiene que ser una lista de textos")))?;
+                let todos: Option<Vec<&str>> =
+                    l.iter().map(|r| r.as_str().map(str::trim)).collect();
+                let mut todos = todos
+                    .ok_or_else(|| mal(format!("«{campo}» tiene que ser una lista de textos")))?;
                 todos.retain(|t| !t.is_empty());
                 if todos.is_empty() {
                     return Err(mal(format!("«{campo}» esta vacio")));
@@ -1111,7 +1611,11 @@ fn valor(p: &Param, v: &Value) -> Result<Value, ErrorHerramienta> {
             };
             match n {
                 Some(n) if n >= 0.0 && n.fract() == 0.0 && n < 100_000.0 => json!(n as u64),
-                _ => return Err(mal(format!("«{campo}» tiene que ser un numero entero desde 0"))),
+                _ => {
+                    return Err(mal(format!(
+                        "«{campo}» tiene que ser un numero entero desde 0"
+                    )));
+                }
             }
         }
         Tipo::SiNo => match v {
@@ -1132,8 +1636,17 @@ fn valor(p: &Param, v: &Value) -> Result<Value, ErrorHerramienta> {
             let mut n: Vec<f64> = Vec::new();
             let bien = match &lista {
                 Value::Array(l) if !l.is_empty() => l.iter().all(|e| match e {
-                    Value::Array(par) => par.iter().all(|x| x.as_f64().filter(|f| f.is_finite()).map(|f| n.push(f)).is_some()),
-                    x => x.as_f64().filter(|f| f.is_finite()).map(|f| n.push(f)).is_some(),
+                    Value::Array(par) => par.iter().all(|x| {
+                        x.as_f64()
+                            .filter(|f| f.is_finite())
+                            .map(|f| n.push(f))
+                            .is_some()
+                    }),
+                    x => x
+                        .as_f64()
+                        .filter(|f| f.is_finite())
+                        .map(|f| n.push(f))
+                        .is_some(),
                 }),
                 _ => false,
             };
@@ -1144,9 +1657,17 @@ fn valor(p: &Param, v: &Value) -> Result<Value, ErrorHerramienta> {
         }
         Tipo::Opciones(o) => {
             let s = v.as_str().map(|s| normalizar(s.trim())).unwrap_or_default();
-            match o.iter().find(|x| **x == s || (s.len() >= 4 && x.starts_with(&s[..4]))) {
+            match o
+                .iter()
+                .find(|x| **x == s || (s.len() >= 4 && x.starts_with(&s[..4])))
+            {
                 Some(x) => json!(x),
-                None => return Err(mal(format!("«{campo}» tiene que ser una de: {}", o.join(", ")))),
+                None => {
+                    return Err(mal(format!(
+                        "«{campo}» tiene que ser una de: {}",
+                        o.join(", ")
+                    )));
+                }
             }
         }
     })
@@ -1169,26 +1690,47 @@ fn poner(pedido: &mut Value, destino: &str, v: Value) {
 }
 
 /// **Valida** los argumentos del modelo contra la fila y arma el pedido.
-pub fn validar(a: &'static Accion, args: &Map<String, Value>) -> Result<AccionApp, ErrorHerramienta> {
+pub fn validar(
+    a: &'static Accion,
+    args: &Map<String, Value>,
+) -> Result<AccionApp, ErrorHerramienta> {
     let mut pedido: Value = serde_json::from_str(a.fijos).unwrap_or_else(|_| json!({}));
     pedido["pixpin"] = json!(1);
     pedido["accion"] = json!(a.accion);
     let mut por_resolver = Map::new();
     for p in a.params {
-        let v = match args.get(p.nombre).filter(|v| !v.is_null() && v.as_str().is_none_or(|s| !s.trim().is_empty())) {
+        let v = match args
+            .get(p.nombre)
+            .filter(|v| !v.is_null() && v.as_str().is_none_or(|s| !s.trim().is_empty()))
+        {
             // Una opcion que solo ofrece la nube ([`OPCIONES_NUBE`]).
-            Some(v) if v.as_str().is_some_and(|s| opcion_de_la_nube(a.herramienta, p.nombre, s)) => json!(normalizar(v.as_str().unwrap_or_default().trim())),
+            Some(v)
+                if v.as_str()
+                    .is_some_and(|s| opcion_de_la_nube(a.herramienta, p.nombre, s)) =>
+            {
+                json!(normalizar(v.as_str().unwrap_or_default().trim()))
+            }
             Some(v) => valor(p, v)?,
             None => match p.defecto {
                 Some(d) => serde_json::from_str(d).unwrap_or(Value::Null),
-                None if p.obligatorio => return Err(mal(format!("falta «{}» ({})", p.nombre, p.descripcion))),
+                None if p.obligatorio => {
+                    return Err(mal(format!("falta «{}» ({})", p.nombre, p.descripcion)));
+                }
                 None => continue,
             },
         };
         if p.destino.starts_with(POR_RESOLVER) {
             por_resolver.insert(p.nombre.to_string(), v);
         } else {
-            poner(&mut pedido, if p.destino.is_empty() { p.nombre } else { p.destino }, v);
+            poner(
+                &mut pedido,
+                if p.destino.is_empty() {
+                    p.nombre
+                } else {
+                    p.destino
+                },
+                v,
+            );
         }
     }
     let mut hecha = AccionApp {
@@ -1220,15 +1762,30 @@ mod pruebas {
         let protocolo = include_str!("../../../../docs/protocolo-pedidos.md");
         for a in ACCIONES {
             assert!(
-                a.accion == CONSULTA || a.accion == EN_EL_CHAT || protocolo.contains(&format!("| `{}` |", a.accion)),
+                a.accion == CONSULTA
+                    || a.accion == EN_EL_CHAT
+                    || protocolo.contains(&format!("| `{}` |", a.accion)),
                 "{} no esta en el protocolo",
                 a.accion
             );
-            assert!(serde_json::from_str::<Value>(a.fijos).is_ok(), "{}", a.herramienta);
-            assert!(a.accion == CONSULTA || !a.hecho.is_empty(), "{} sin frase de hecho", a.herramienta);
+            assert!(
+                serde_json::from_str::<Value>(a.fijos).is_ok(),
+                "{}",
+                a.herramienta
+            );
+            assert!(
+                a.accion == CONSULTA || !a.hecho.is_empty(),
+                "{} sin frase de hecho",
+                a.herramienta
+            );
             for p in a.params {
                 if let Some(d) = p.defecto {
-                    assert!(serde_json::from_str::<Value>(d).is_ok(), "{}.{}", a.herramienta, p.nombre);
+                    assert!(
+                        serde_json::from_str::<Value>(d).is_ok(),
+                        "{}.{}",
+                        a.herramienta,
+                        p.nombre
+                    );
                 }
             }
         }
@@ -1242,38 +1799,81 @@ mod pruebas {
         let sin = herramienta(por_nombre("capturar_pantalla").unwrap());
         assert!(sin.parametros.get("required").is_none());
         let varias = herramienta(por_nombre("anadir_tareas").unwrap());
-        assert_eq!(varias.parametros["properties"]["tareas"]["items"]["type"], "string");
+        assert_eq!(
+            varias.parametros["properties"]["tareas"]["items"]["type"],
+            "string"
+        );
     }
 
     #[test]
     fn el_pedido_sale_bien_armado() {
-        let a = validar(por_nombre("abrir_fichero").unwrap(), &args(r#"{"ruta":" «C:\\x\\plano.pdf» "}"#)).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"abrir","que":{"tipo":"fichero","ruta":"C:\\x\\plano.pdf"}}));
+        let a = validar(
+            por_nombre("abrir_fichero").unwrap(),
+            &args(r#"{"ruta":" «C:\\x\\plano.pdf» "}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"abrir","que":{"tipo":"fichero","ruta":"C:\\x\\plano.pdf"}})
+        );
         assert!(a.confirmar.is_none() && a.por_resolver.is_empty());
         let a = validar(por_nombre("capturar_pantalla").unwrap(), &Map::new()).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"capturar","modo":"zona"}));
-        let a = validar(por_nombre("abrir_ventana").unwrap(), &args(r#"{"cual":"Galería"}"#)).unwrap();
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"capturar","modo":"zona"})
+        );
+        let a = validar(
+            por_nombre("abrir_ventana").unwrap(),
+            &args(r#"{"cual":"Galería"}"#),
+        )
+        .unwrap();
         assert_eq!(a.pedido["cual"], "galeria");
     }
 
     #[test]
     fn las_tareas_se_piden_por_su_nombre() {
-        let a = validar(por_nombre("marcar_tarea").unwrap(), &args(r#"{"tarea":"comprar pan","lista":"Compras"}"#)).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"marcar_tarea","hecha":true}));
-        assert_eq!(a.por_resolver, args(r#"{"tarea":"comprar pan","lista":"Compras"}"#));
-        let a = validar(por_nombre("anadir_tarea").unwrap(), &args(r#"{"texto":"pan","fecha":"mañana","lista":"  "}"#)).unwrap();
+        let a = validar(
+            por_nombre("marcar_tarea").unwrap(),
+            &args(r#"{"tarea":"comprar pan","lista":"Compras"}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"marcar_tarea","hecha":true})
+        );
+        assert_eq!(
+            a.por_resolver,
+            args(r#"{"tarea":"comprar pan","lista":"Compras"}"#)
+        );
+        let a = validar(
+            por_nombre("anadir_tarea").unwrap(),
+            &args(r#"{"texto":"pan","fecha":"mañana","lista":"  "}"#),
+        )
+        .unwrap();
         assert_eq!(a.pedido["texto"], "pan");
-        assert_eq!(a.por_resolver, args(r#"{"fecha":"mañana"}"#), "lo vacio es como no ponerlo");
+        assert_eq!(
+            a.por_resolver,
+            args(r#"{"fecha":"mañana"}"#),
+            "lo vacio es como no ponerlo"
+        );
         let a = validar(por_nombre("consultar_tareas").unwrap(), &Map::new()).unwrap();
         assert!(a.es_consulta());
         assert_eq!(a.por_resolver["estado"], "pendientes");
-        let a = validar(por_nombre("anadir_tareas").unwrap(), &args(r#"{"tareas":["a"," ","b"]}"#)).unwrap();
+        let a = validar(
+            por_nombre("anadir_tareas").unwrap(),
+            &args(r#"{"tareas":["a"," ","b"]}"#),
+        )
+        .unwrap();
         assert_eq!(a.por_resolver["tareas"], json!(["a", "b"]));
     }
 
     #[test]
     fn lo_que_borra_o_sale_del_pc_pregunta() {
-        let a = validar(por_nombre("borrar_lista").unwrap(), &args(r#"{"lista":"Obra"}"#)).unwrap();
+        let a = validar(
+            por_nombre("borrar_lista").unwrap(),
+            &args(r#"{"lista":"Obra"}"#),
+        )
+        .unwrap();
         assert_eq!(
             a.confirmar.as_deref(),
             Some("¿Borro la lista «Obra» entera, con todas sus tareas? No se puede deshacer.")
@@ -1288,11 +1888,22 @@ mod pruebas {
 
     #[test]
     fn las_frases_se_rellenan_sin_huecos() {
-        let v = |x: &[(&str, &str)]| x.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>();
+        let v = |x: &[(&str, &str)]| {
+            x.iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect::<Vec<_>>()
+        };
         let h = por_nombre("anadir_tarea").unwrap().hecho;
         assert_eq!(rellenar(h, &v(&[("texto", "pan")])), "Apuntada «pan».");
         assert_eq!(
-            rellenar(h, &v(&[("texto", "pan"), ("lista", "Compras"), ("fecha", "mañana 10:00")])),
+            rellenar(
+                h,
+                &v(&[
+                    ("texto", "pan"),
+                    ("lista", "Compras"),
+                    ("fecha", "mañana 10:00")
+                ])
+            ),
             "Apuntada «pan» en «Compras» para mañana 10:00."
         );
         assert_eq!(rellenar("Abriendo {ruta}.", &v(&[])), "Abriendo .");
@@ -1302,55 +1913,168 @@ mod pruebas {
     fn lo_mal_puesto_se_rechaza_con_el_motivo() {
         let e = validar(por_nombre("lista_nueva").unwrap(), &Map::new()).unwrap_err();
         assert!(e.to_string().contains("«titulo»"), "{e}");
-        let e = validar(por_nombre("abrir_ventana").unwrap(), &args(r#"{"cual":"cocina"}"#)).unwrap_err();
+        let e = validar(
+            por_nombre("abrir_ventana").unwrap(),
+            &args(r#"{"cual":"cocina"}"#),
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("tareas, galeria"), "{e}");
-        assert!(validar(por_nombre("marcar_tarea").unwrap(), &args(r#"{"lista":"x"}"#)).is_err(), "sin tarea");
-        assert!(validar(por_nombre("anadir_tarea").unwrap(), &args(r#"{"texto":"  "}"#)).is_err());
-        assert!(validar(por_nombre("anadir_tareas").unwrap(), &args(r#"{"tareas":[" "]}"#)).is_err());
-        assert!(validar(por_nombre("enviar_al_movil").unwrap(), &args(r#"{"imagenes":[]}"#)).is_err());
+        assert!(
+            validar(
+                por_nombre("marcar_tarea").unwrap(),
+                &args(r#"{"lista":"x"}"#)
+            )
+            .is_err(),
+            "sin tarea"
+        );
+        assert!(
+            validar(
+                por_nombre("anadir_tarea").unwrap(),
+                &args(r#"{"texto":"  "}"#)
+            )
+            .is_err()
+        );
+        assert!(
+            validar(
+                por_nombre("anadir_tareas").unwrap(),
+                &args(r#"{"tareas":[" "]}"#)
+            )
+            .is_err()
+        );
+        assert!(
+            validar(
+                por_nombre("enviar_al_movil").unwrap(),
+                &args(r#"{"imagenes":[]}"#)
+            )
+            .is_err()
+        );
     }
 
     /// 15-oct: las filas nuevas arman su pedido (o se quedan en el chat) y
     /// solo pregunta lo que cierra algo.
     #[test]
     fn las_filas_del_15_oct_arman_su_pedido() {
-        let a = validar(por_nombre("capturar_con_modo").unwrap(), &args(r#"{"modo":"Scroll"}"#)).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"capturar","modo":"scroll"}));
+        let a = validar(
+            por_nombre("capturar_con_modo").unwrap(),
+            &args(r#"{"modo":"Scroll"}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"capturar","modo":"scroll"})
+        );
         let a = validar(por_nombre("grabar_pantalla").unwrap(), &Map::new()).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"capturar","modo":"gif"}));
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"capturar","modo":"gif"})
+        );
         let a = validar(por_nombre("cerrar_pines").unwrap(), &Map::new()).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"pines","operacion":"cerrar"}));
-        assert_eq!(a.confirmar.as_deref(), Some("¿Cierro todos los pines de la pantalla?"));
-        let a = validar(por_nombre("manejar_pines").unwrap(), &args(r#"{"operacion":"ocultar_mostrar"}"#)).unwrap();
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"pines","operacion":"cerrar"})
+        );
+        assert_eq!(
+            a.confirmar.as_deref(),
+            Some("¿Cierro todos los pines de la pantalla?")
+        );
+        let a = validar(
+            por_nombre("manejar_pines").unwrap(),
+            &args(r#"{"operacion":"ocultar_mostrar"}"#),
+        )
+        .unwrap();
         assert!(a.confirmar.is_none());
         let a = validar(por_nombre("parar_lectura").unwrap(), &Map::new()).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"leer_en_voz","parar":true}));
-        let a = validar(por_nombre("apuntar_en_timeline").unwrap(), &args(r#"{"texto":"Llego el camion"}"#)).unwrap();
-        assert_eq!(a.pedido, json!({"pixpin":1,"accion":"timeline","texto":"Llego el camion"}));
-        let a = validar(por_nombre("ir_a_pagina").unwrap(), &args(r#"{"ruta":"C:\\t.pdf","pagina":12,"buscar":"cunetas"}"#)).unwrap();
-        assert_eq!(a.pedido["que"], json!({"tipo":"fichero","ruta":"C:\\t.pdf","pagina":12,"buscar":"cunetas"}));
-        assert_eq!(rellenar(a.fila().hecho, &a.valores()), "Llevando C:\\t.pdf a la página 12 a «cunetas».");
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"leer_en_voz","parar":true})
+        );
+        let a = validar(
+            por_nombre("apuntar_en_timeline").unwrap(),
+            &args(r#"{"texto":"Llego el camion"}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            a.pedido,
+            json!({"pixpin":1,"accion":"timeline","texto":"Llego el camion"})
+        );
+        let a = validar(
+            por_nombre("ir_a_pagina").unwrap(),
+            &args(r#"{"ruta":"C:\\t.pdf","pagina":12,"buscar":"cunetas"}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            a.pedido["que"],
+            json!({"tipo":"fichero","ruta":"C:\\t.pdf","pagina":12,"buscar":"cunetas"})
+        );
+        assert_eq!(
+            rellenar(a.fila().hecho, &a.valores()),
+            "Llevando C:\\t.pdf a la página 12 a «cunetas»."
+        );
         // Las de antes, para el modelo local, siguen igual que en main.
-        assert!(herramienta(por_nombre("abrir_fichero").unwrap()).parametros["properties"].get("pagina").is_none());
-        assert_eq!(validar(por_nombre("capturar_pantalla").unwrap(), &Map::new()).unwrap().pedido["modo"], "zona");
+        assert!(
+            herramienta(por_nombre("abrir_fichero").unwrap()).parametros["properties"]
+                .get("pagina")
+                .is_none()
+        );
+        assert_eq!(
+            validar(por_nombre("capturar_pantalla").unwrap(), &Map::new())
+                .unwrap()
+                .pedido["modo"],
+            "zona"
+        );
         for n in SOLO_NUBE {
             assert!(por_nombre(n).is_some(), "{n}");
         }
         assert!(!es_solo_nube("abrir_ventana"));
-        let a = validar(por_nombre("ir_al_chat").unwrap(), &args(r#"{"chat":"Obra"}"#)).unwrap();
+        let a = validar(
+            por_nombre("ir_al_chat").unwrap(),
+            &args(r#"{"chat":"Obra"}"#),
+        )
+        .unwrap();
         assert_eq!(a.por_resolver["chat"], "Obra");
         let a = validar(por_nombre("resumen_de_actividad").unwrap(), &Map::new()).unwrap();
         assert_eq!(a.pedido["periodo"], "hoy");
-        for n in ["leer_en_voz_alta", "comprimir_pdf", "transcribir_audio", "leer_excel", "resumen_de_actividad", "leer_documento"] {
+        for n in [
+            "leer_en_voz_alta",
+            "comprimir_pdf",
+            "transcribir_audio",
+            "leer_excel",
+            "resumen_de_actividad",
+            "leer_documento",
+        ] {
             assert!(es_en_el_chat(n), "{n}");
             assert!(por_nombre(n).unwrap().confirmar.is_none(), "{n}");
         }
         assert!(!es_en_el_chat("abrir_fichero"));
         // Negativos: un modo o una operacion que no existen, un timeline vacio.
-        assert!(validar(por_nombre("capturar_con_modo").unwrap(), &args(r#"{"modo":"pantalla entera"}"#)).is_err());
-        assert!(validar(por_nombre("manejar_pines").unwrap(), &args(r#"{"operacion":"cerrar"}"#)).is_err());
+        assert!(
+            validar(
+                por_nombre("capturar_con_modo").unwrap(),
+                &args(r#"{"modo":"pantalla entera"}"#)
+            )
+            .is_err()
+        );
+        assert!(
+            validar(
+                por_nombre("manejar_pines").unwrap(),
+                &args(r#"{"operacion":"cerrar"}"#)
+            )
+            .is_err()
+        );
         assert!(validar(por_nombre("manejar_pines").unwrap(), &Map::new()).is_err());
-        assert!(validar(por_nombre("apuntar_en_timeline").unwrap(), &args(r#"{"texto":"  "}"#)).is_err());
-        assert!(validar(por_nombre("resumen_de_actividad").unwrap(), &args(r#"{"periodo":"siglo"}"#)).is_err());
+        assert!(
+            validar(
+                por_nombre("apuntar_en_timeline").unwrap(),
+                &args(r#"{"texto":"  "}"#)
+            )
+            .is_err()
+        );
+        assert!(
+            validar(
+                por_nombre("resumen_de_actividad").unwrap(),
+                &args(r#"{"periodo":"siglo"}"#)
+            )
+            .is_err()
+        );
     }
 }

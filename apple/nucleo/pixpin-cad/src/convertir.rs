@@ -11,9 +11,9 @@
 
 use std::collections::HashSet;
 
+use opencadcodec::CadDocument;
 use opencadcodec::entities::{BoundaryEdge, EntityType};
 use opencadcodec::types::{Color, LineWeight, Matrix3, Vector3};
-use opencadcodec::CadDocument;
 
 use crate::modelo::{Constructor, Modelo};
 use crate::teselar;
@@ -98,7 +98,14 @@ impl Afin {
 /// **El volteo de un TEXT** (DXF 71): 2 al reves (espejo en x), 4 cabeza
 /// abajo (espejo en y), alrededor de su punto de justificacion y en su giro,
 /// como AutoCAD. Va en el sistema del texto (OCS). Como PixPin Android v0.111.
-pub fn volteo_de_texto(flags: i16, ins: [f64; 3], alineado: Option<[f64; 3]>, h: u8, v: u8, giro: f64) -> Afin {
+pub fn volteo_de_texto(
+    flags: i16,
+    ins: [f64; 3],
+    alineado: Option<[f64; 3]>,
+    h: u8,
+    v: u8,
+    giro: f64,
+) -> Afin {
     let fx = if flags & 2 != 0 { -1.0 } else { 1.0 };
     let fy = if flags & 4 != 0 { -1.0 } else { 1.0 };
     if fx > 0.0 && fy > 0.0 {
@@ -119,7 +126,8 @@ pub fn volteo_de_texto(flags: i16, ins: [f64; 3], alineado: Option<[f64; 3]>, h:
 pub fn ocs(normal: &Vector3) -> Afin {
     let n = normal;
     let largo = (n.x * n.x + n.y * n.y + n.z * n.z).sqrt();
-    if !largo.is_finite() || largo < 1e-12 || (n.x.abs() < 1e-12 && n.y.abs() < 1e-12 && n.z > 0.0) {
+    if !largo.is_finite() || largo < 1e-12 || (n.x.abs() < 1e-12 && n.y.abs() < 1e-12 && n.z > 0.0)
+    {
         return Afin::IDENTIDAD;
     }
     Afin::de_matriz3(&Matrix3::arbitrary_axis(*normal))
@@ -267,7 +275,11 @@ impl<'d> Convertidor<'d> {
     /// apagadas, que en la pagina se pueden encender.
     pub fn por_capas(doc: &'d CadDocument) -> Self {
         let mut c = Self::nuevo(doc);
-        c.por_capas = Some(PorCapas { actual: ("0".into(), GROSOR_NORMAL), aparcados: Default::default(), imagenes: Vec::new() });
+        c.por_capas = Some(PorCapas {
+            actual: ("0".into(), GROSOR_NORMAL),
+            aparcados: Default::default(),
+            imagenes: Vec::new(),
+        });
         c
     }
 
@@ -275,10 +287,16 @@ impl<'d> Convertidor<'d> {
     /// (cada uno con su origen). Ordenados por capa y grosor.
     pub fn convertir_por_capas(mut self) -> PlanoPorCapas {
         if self.por_capas.is_none() {
-            self.por_capas = Some(PorCapas { actual: ("0".into(), GROSOR_NORMAL), aparcados: Default::default(), imagenes: Vec::new() });
+            self.por_capas = Some(PorCapas {
+                actual: ("0".into(), GROSOR_NORMAL),
+                aparcados: Default::default(),
+                imagenes: Vec::new(),
+            });
         }
         self.recorrer();
-        let Some(pc) = self.por_capas.take() else { return PlanoPorCapas::default() };
+        let Some(pc) = self.por_capas.take() else {
+            return PlanoPorCapas::default();
+        };
         let unidades = self.c.unidades;
         let doc = self.doc;
         let mut todos: Vec<((String, i16), Constructor)> = pc.aparcados.into_iter().collect();
@@ -288,12 +306,25 @@ impl<'d> Convertidor<'d> {
             .map(|((capa, grosor), mut c)| {
                 c.unidades = unidades;
                 let encendida = doc.layers.get(&capa).is_none_or(|l| l.is_visible());
-                Grupo { capa, grosor, encendida, modelo: c.terminar() }
+                Grupo {
+                    capa,
+                    grosor,
+                    encendida,
+                    modelo: c.terminar(),
+                }
             })
             .filter(|g| !g.modelo.vacio())
             .collect();
-        grupos.sort_by(|a, b| a.capa.to_lowercase().cmp(&b.capa.to_lowercase()).then(a.grosor.cmp(&b.grosor)));
-        PlanoPorCapas { grupos, imagenes: pc.imagenes }
+        grupos.sort_by(|a, b| {
+            a.capa
+                .to_lowercase()
+                .cmp(&b.capa.to_lowercase())
+                .then(a.grosor.cmp(&b.grosor))
+        });
+        PlanoPorCapas {
+            grupos,
+            imagenes: pc.imagenes,
+        }
     }
 
     /// Pasa a dibujar en el constructor de `clave` (la conversion por capas)
@@ -303,7 +334,10 @@ impl<'d> Convertidor<'d> {
         if pc.actual == clave {
             return None;
         }
-        let nuevo = pc.aparcados.remove(&clave).unwrap_or_else(Constructor::nuevo);
+        let nuevo = pc
+            .aparcados
+            .remove(&clave)
+            .unwrap_or_else(Constructor::nuevo);
         let viejo = std::mem::replace(&mut self.c, nuevo);
         let antes = std::mem::replace(&mut pc.actual, clave);
         pc.aparcados.insert(antes.clone(), viejo);
@@ -316,10 +350,12 @@ impl<'d> Convertidor<'d> {
             LineWeight::ByBlock => del_bloque,
             LineWeight::Default => GROSOR_NORMAL,
             LineWeight::Value(v) if *v >= 0 => *v,
-            LineWeight::Value(_) | LineWeight::ByLayer => match self.doc.layers.get(capa).map(|l| &l.line_weight) {
-                Some(LineWeight::Value(v)) if *v >= 0 => *v,
-                _ => GROSOR_NORMAL,
-            },
+            LineWeight::Value(_) | LineWeight::ByLayer => {
+                match self.doc.layers.get(capa).map(|l| &l.line_weight) {
+                    Some(LineWeight::Value(v)) if *v >= 0 => *v,
+                    _ => GROSOR_NORMAL,
+                }
+            }
         }
     }
 
@@ -340,9 +376,16 @@ impl<'d> Convertidor<'d> {
         };
         // Lo que mide el plano (de su cabecera, si es creible): para trocear
         // las curvas solo lo que se vea.
-        let (a, b) = (&self.doc.header.model_space_extents_min, &self.doc.header.model_space_extents_max);
+        let (a, b) = (
+            &self.doc.header.model_space_extents_min,
+            &self.doc.header.model_space_extents_max,
+        );
         let lado = (b.x - a.x).max(b.y - a.y);
-        teselar::poner_tamano_del_plano(if lado.is_finite() && lado > 0.0 && lado < 1e9 { lado } else { 0.0 });
+        teselar::poner_tamano_del_plano(if lado.is_finite() && lado > 0.0 && lado < 1e9 {
+            lado
+        } else {
+            0.0
+        });
         self.c.unidades = self.doc.header.insertion_units.max(0) as u32;
         let entidades: Vec<&EntityType> = self.doc.model_space_entities().collect();
         let espacio: Vec<&EntityType> = if entidades.iter().any(|e| dibujable(e)) {
@@ -408,7 +451,10 @@ impl<'d> Convertidor<'d> {
             // Cada cosa a lo de su capa y su grosor, y lo de despues (los
             // atributos de un INSERT, la entidad siguiente) a lo de antes.
             let grosor = self.grosor_de(&e.common().line_weight, capa, cx.grosor);
-            let cx = &Contexto { grosor, ..cx.clone() };
+            let cx = &Contexto {
+                grosor,
+                ..cx.clone()
+            };
             let antes = self.cambiar_a((capa.to_string(), grosor));
             self.entidad_sin_medir(e, cx, capa, color);
             if let Some(a) = antes {
@@ -419,12 +465,21 @@ impl<'d> Convertidor<'d> {
         let antes = self.c.vertices();
         self.entidad_sin_medir(e, cx, capa, color);
         if !matches!(e, EntityType::Insert(_) | EntityType::Dimension(_)) {
-            *self.cuentas.vertices_por_tipo.entry(e.as_entity().entity_type().to_string()).or_default() += self.c.vertices() - antes;
+            *self
+                .cuentas
+                .vertices_por_tipo
+                .entry(e.as_entity().entity_type().to_string())
+                .or_default() += self.c.vertices() - antes;
         }
     }
 
-    fn entidad_sin_medir<'a>(&mut self, e: &'a EntityType, cx: &Contexto<'a>, capa: &'a str, color: u32)
-    where
+    fn entidad_sin_medir<'a>(
+        &mut self,
+        e: &'a EntityType,
+        cx: &Contexto<'a>,
+        capa: &'a str,
+        color: u32,
+    ) where
         'd: 'a,
     {
         let m = cx.m;
@@ -437,13 +492,21 @@ impl<'d> Convertidor<'d> {
                 // Un punto: una cruz diminuta, que de cerca se ve.
                 let c = m.p3(&p.location);
                 let r = 1e-3 * m.escala_media();
-                self.c.polilinea(&[[c[0] - r, c[1]], [c[0] + r, c[1]]], color, Some(r));
-                self.c.polilinea(&[[c[0], c[1] - r], [c[0], c[1] + r]], color, Some(r));
+                self.c
+                    .polilinea(&[[c[0] - r, c[1]], [c[0] + r, c[1]]], color, Some(r));
+                self.c
+                    .polilinea(&[[c[0], c[1] - r], [c[0], c[1] + r]], color, Some(r));
             }
             EntityType::Circle(k) => {
                 let t = m.por(&ocs(&k.normal));
                 let z = k.center.z;
-                if let Some((c, r, _)) = como_circulo(&t, [k.center.x, k.center.y, z], k.radius, 0.0, std::f64::consts::TAU) {
+                if let Some((c, r, _)) = como_circulo(
+                    &t,
+                    [k.center.x, k.center.y, z],
+                    k.radius,
+                    0.0,
+                    std::f64::consts::TAU,
+                ) {
                     self.c.arco(c, r, 0.0, std::f64::consts::TAU, color);
                     return;
                 }
@@ -460,38 +523,64 @@ impl<'d> Convertidor<'d> {
                 while barrido <= 0.0 {
                     barrido += std::f64::consts::TAU;
                 }
-                if let Some((c, r, inicio)) = como_circulo(&t, [a.center.x, a.center.y, z], a.radius, a.start_angle, barrido.min(std::f64::consts::TAU)) {
-                    self.c.arco(c, r, inicio, barrido.min(std::f64::consts::TAU), color);
+                if let Some((c, r, inicio)) = como_circulo(
+                    &t,
+                    [a.center.x, a.center.y, z],
+                    a.radius,
+                    a.start_angle,
+                    barrido.min(std::f64::consts::TAU),
+                ) {
+                    self.c
+                        .arco(c, r, inicio, barrido.min(std::f64::consts::TAU), color);
                     return;
                 }
-                let pts: Vec<_> = teselar::arco([a.center.x, a.center.y], a.radius, a.start_angle, a.end_angle)
-                    .into_iter()
-                    .map(|p| t.punto(p[0], p[1], z))
-                    .collect();
+                let pts: Vec<_> = teselar::arco(
+                    [a.center.x, a.center.y],
+                    a.radius,
+                    a.start_angle,
+                    a.end_angle,
+                )
+                .into_iter()
+                .map(|p| t.punto(p[0], p[1], z))
+                .collect();
                 self.linea(&pts, color);
             }
             EntityType::Ellipse(el) => {
                 // En WCS: el eje menor sale de la normal por el mayor.
                 let n = &el.normal;
                 let a = &el.major_axis;
-                let menor = Vector3::new(n.y * a.z - n.z * a.y, n.z * a.x - n.x * a.z, n.x * a.y - n.y * a.x);
+                let menor = Vector3::new(
+                    n.y * a.z - n.z * a.y,
+                    n.z * a.x - n.x * a.z,
+                    n.x * a.y - n.y * a.x,
+                );
                 let r = el.minor_axis_ratio;
-                let pts: Vec<_> = teselar::elipse([0.0, 0.0], [1.0, 0.0], 1.0, el.start_parameter, el.end_parameter)
-                    .into_iter()
-                    .map(|p| {
-                        let (k, s) = (p[0], p[1]);
-                        m.punto(
-                            el.center.x + a.x * k + menor.x * r * s,
-                            el.center.y + a.y * k + menor.y * r * s,
-                            el.center.z + a.z * k + menor.z * r * s,
-                        )
-                    })
-                    .collect();
+                let pts: Vec<_> = teselar::elipse(
+                    [0.0, 0.0],
+                    [1.0, 0.0],
+                    1.0,
+                    el.start_parameter,
+                    el.end_parameter,
+                )
+                .into_iter()
+                .map(|p| {
+                    let (k, s) = (p[0], p[1]);
+                    m.punto(
+                        el.center.x + a.x * k + menor.x * r * s,
+                        el.center.y + a.y * k + menor.y * r * s,
+                        el.center.z + a.z * k + menor.z * r * s,
+                    )
+                })
+                .collect();
                 self.linea(&pts, color);
             }
             EntityType::LwPolyline(p) => {
                 let t = m.por(&ocs(&p.normal));
-                let v: Vec<([f64; 2], f64)> = p.vertices.iter().map(|v| ([v.location.x, v.location.y], v.bulge)).collect();
+                let v: Vec<([f64; 2], f64)> = p
+                    .vertices
+                    .iter()
+                    .map(|v| ([v.location.x, v.location.y], v.bulge))
+                    .collect();
                 let pts = polilinea_2d(&v, p.is_closed);
                 let z = p.elevation;
                 let pts: Vec<_> = pts.into_iter().map(|q| t.punto(q[0], q[1], z)).collect();
@@ -523,7 +612,8 @@ impl<'d> Convertidor<'d> {
             }
             EntityType::Spline(s) => {
                 let pts = if s.control_points.len() >= 2 {
-                    let cp: Vec<[f64; 3]> = s.control_points.iter().map(|c| [c.x, c.y, c.z]).collect();
+                    let cp: Vec<[f64; 3]> =
+                        s.control_points.iter().map(|c| [c.x, c.y, c.z]).collect();
                     // De Boor da x,y; la z se pierde: el plano se ve desde arriba.
                     teselar::spline(s.degree.max(1) as usize, &s.knots, &cp, &s.weights)
                 } else {
@@ -535,25 +625,42 @@ impl<'d> Convertidor<'d> {
             }
             EntityType::Solid(s) => {
                 let t = m.por(&ocs(&s.normal));
-                let p: Vec<[f64; 2]> = [&s.first_corner, &s.second_corner, &s.third_corner, &s.fourth_corner]
-                    .iter()
-                    .map(|v| t.p3(v))
-                    .collect();
+                let p: Vec<[f64; 2]> = [
+                    &s.first_corner,
+                    &s.second_corner,
+                    &s.third_corner,
+                    &s.fourth_corner,
+                ]
+                .iter()
+                .map(|v| t.p3(v))
+                .collect();
                 // El orden de un SOLID es 1-2-4-3.
-                self.c.triangulos(&[p[0], p[1], p[2], p[1], p[3], p[2]], color, None);
+                self.c
+                    .triangulos(&[p[0], p[1], p[2], p[1], p[3], p[2]], color, None);
             }
             EntityType::Face3D(f) => {
-                let p: Vec<[f64; 2]> = [&f.first_corner, &f.second_corner, &f.third_corner, &f.fourth_corner, &f.first_corner]
-                    .iter()
-                    .map(|v| m.p3(v))
-                    .collect();
+                let p: Vec<[f64; 2]> = [
+                    &f.first_corner,
+                    &f.second_corner,
+                    &f.third_corner,
+                    &f.fourth_corner,
+                    &f.first_corner,
+                ]
+                .iter()
+                .map(|v| m.p3(v))
+                .collect();
                 self.linea(&p, color);
             }
             EntityType::Leader(l) => {
                 let pts: Vec<_> = l.vertices.iter().map(|v| m.p3(v)).collect();
                 self.linea(&pts, color);
                 if l.arrow_enabled && pts.len() >= 2 {
-                    self.flecha(pts[1], pts[0], l.arrow_size.max(0.0) * m.escala_media(), color);
+                    self.flecha(
+                        pts[1],
+                        pts[0],
+                        l.arrow_size.max(0.0) * m.escala_media(),
+                        color,
+                    );
                 }
             }
             EntityType::MultiLeader(ml) => {
@@ -565,7 +672,19 @@ impl<'d> Convertidor<'d> {
                 }
                 let t = &ml.context;
                 if !t.text_string.is_empty() {
-                    self.texto_mtext(&t.text_string, "", &t.text_location, t.text_height, 0.0, None, 1, 0.0, &Vector3::new(0., 0., 1.), color, &m);
+                    self.texto_mtext(
+                        &t.text_string,
+                        "",
+                        &t.text_location,
+                        t.text_height,
+                        0.0,
+                        None,
+                        1,
+                        0.0,
+                        &Vector3::new(0., 0., 1.),
+                        color,
+                        &m,
+                    );
                 }
             }
             EntityType::Insert(ins) => self.insertar(ins, capa, color, cx),
@@ -585,11 +704,38 @@ impl<'d> Convertidor<'d> {
             EntityType::Hatch(h) => self.sombreado(h, color, &m),
             EntityType::Text(t) => {
                 let alt = t.alignment_point.as_ref();
-                self.texto_simple(&t.value, &t.insertion_point, alt, t.height, t.rotation, t.width_factor, t.oblique_angle, &t.style, t.horizontal_alignment as u8, t.vertical_alignment as u8, &t.normal, color, &m, t.generation_flags);
+                self.texto_simple(
+                    &t.value,
+                    &t.insertion_point,
+                    alt,
+                    t.height,
+                    t.rotation,
+                    t.width_factor,
+                    t.oblique_angle,
+                    &t.style,
+                    t.horizontal_alignment as u8,
+                    t.vertical_alignment as u8,
+                    &t.normal,
+                    color,
+                    &m,
+                    t.generation_flags,
+                );
             }
             EntityType::MText(t) => {
                 let ap = t.attachment_point as u8;
-                self.texto_mtext(&t.value, &t.style, &t.insertion_point, t.height, t.rotation, t.dwg_x_direction.as_ref(), ap, t.rectangle_width, &t.normal, color, &m);
+                self.texto_mtext(
+                    &t.value,
+                    &t.style,
+                    &t.insertion_point,
+                    t.height,
+                    t.rotation,
+                    t.dwg_x_direction.as_ref(),
+                    ap,
+                    t.rectangle_width,
+                    &t.normal,
+                    color,
+                    &m,
+                );
             }
             EntityType::AttributeEntity(a) => self.atributo(a, color, &m),
             EntityType::Block(_)
@@ -598,9 +744,16 @@ impl<'d> Convertidor<'d> {
             | EntityType::AttributeDefinition(_)
             | EntityType::Viewport(_) => {}
             // Los objetos de otras aplicaciones (Civil 3D...): su dibujo de reserva.
-            EntityType::Unknown(u) => match u.common.graphic_data.as_deref().and_then(crate::proxy::leer) {
+            EntityType::Unknown(u) => match u
+                .common
+                .graphic_data
+                .as_deref()
+                .and_then(crate::proxy::leer)
+            {
                 Some(crate::proxy::Reserva::Dibujo(prims)) => self.reserva(&prims, color, &m),
-                Some(crate::proxy::Reserva::SoloCaja(clase)) => self.c.no_dibujado(&format!("{PROXY_SIN_DIBUJO}{clase}")),
+                Some(crate::proxy::Reserva::SoloCaja(clase)) => {
+                    self.c.no_dibujado(&format!("{PROXY_SIN_DIBUJO}{clase}"))
+                }
                 None => self.c.no_dibujado(&u.dxf_name),
             },
             EntityType::PolyfaceMesh(p) => {
@@ -613,14 +766,19 @@ impl<'d> Convertidor<'d> {
                         if a <= 0 || b == 0 {
                             continue;
                         }
-                        if let (Some(pa), Some(pb)) = (v.get(a as usize - 1), v.get(b.unsigned_abs() as usize - 1)) {
+                        if let (Some(pa), Some(pb)) =
+                            (v.get(a as usize - 1), v.get(b.unsigned_abs() as usize - 1))
+                        {
                             self.linea(&[*pa, *pb], color);
                         }
                     }
                 }
             }
             EntityType::PolygonMesh(p) => {
-                let (fm, cn) = (p.m_vertex_count.max(0) as usize, p.n_vertex_count.max(0) as usize);
+                let (fm, cn) = (
+                    p.m_vertex_count.max(0) as usize,
+                    p.n_vertex_count.max(0) as usize,
+                );
                 let v: Vec<[f64; 2]> = p.vertices.iter().map(|v| m.p3(&v.location)).collect();
                 if fm * cn == v.len() {
                     for i in 0..fm {
@@ -635,7 +793,11 @@ impl<'d> Convertidor<'d> {
             EntityType::Mesh(me) => {
                 let v: Vec<[f64; 2]> = me.vertices.iter().map(|q| m.p3(q)).collect();
                 for f in &me.faces {
-                    let mut pts: Vec<[f64; 2]> = f.vertices.iter().filter_map(|&i| v.get(i).copied()).collect();
+                    let mut pts: Vec<[f64; 2]> = f
+                        .vertices
+                        .iter()
+                        .filter_map(|&i| v.get(i).copied())
+                        .collect();
                     if pts.len() > 2 {
                         pts.push(pts[0]);
                         self.linea(&pts, color);
@@ -657,7 +819,13 @@ impl<'d> Convertidor<'d> {
                     && h > 0.0
                     && !im.file_path.trim().is_empty()
                 {
-                    pc.imagenes.push(ImagenDelPlano { capa: capa.to_string(), ruta: im.file_path.clone(), esquina: o, u, v });
+                    pc.imagenes.push(ImagenDelPlano {
+                        capa: capa.to_string(),
+                        ruta: im.file_path.clone(),
+                        esquina: o,
+                        u,
+                        v,
+                    });
                 }
             }
             otro => self.c.no_dibujado(otro.as_entity().entity_type()),
@@ -670,18 +838,42 @@ impl<'d> Convertidor<'d> {
         for p in prims {
             match p {
                 Primitiva::Raya { puntos, color: c } => {
-                    let pts: Vec<[f64; 2]> = puntos.iter().map(|q| m.punto(q[0], q[1], q[2])).collect();
+                    let pts: Vec<[f64; 2]> =
+                        puntos.iter().map(|q| m.punto(q[0], q[1], q[2])).collect();
                     self.linea(&pts, c.unwrap_or(color));
                 }
                 Primitiva::Caras { puntos, color: c } => {
-                    let pts: Vec<[f64; 2]> = puntos.iter().map(|q| m.punto(q[0], q[1], q[2])).collect();
+                    let pts: Vec<[f64; 2]> =
+                        puntos.iter().map(|q| m.punto(q[0], q[1], q[2])).collect();
                     self.c.triangulos(&pts, c.unwrap_or(color), None);
                 }
-                Primitiva::Texto { pos, dir, alto, ancho, texto, color: c } => {
+                Primitiva::Texto {
+                    pos,
+                    dir,
+                    alto,
+                    ancho,
+                    texto,
+                    color: c,
+                } => {
                     let giro = dir[1].atan2(dir[0]);
                     let ancho = if *ancho > 0.0 { *ancho } else { 1.0 };
                     let z = Vector3::new(0.0, 0.0, 1.0);
-                    self.texto_simple(texto, &Vector3::new(pos[0], pos[1], pos[2]), None, *alto, giro, ancho, 0.0, "", 0, 0, &z, c.unwrap_or(color), m, 0);
+                    self.texto_simple(
+                        texto,
+                        &Vector3::new(pos[0], pos[1], pos[2]),
+                        None,
+                        *alto,
+                        giro,
+                        ancho,
+                        0.0,
+                        "",
+                        0,
+                        0,
+                        &z,
+                        c.unwrap_or(color),
+                        m,
+                        0,
+                    );
                 }
             }
         }
@@ -692,21 +884,61 @@ impl<'d> Convertidor<'d> {
             return;
         }
         if let Some(mt) = &a.embedded_mtext {
-            self.texto_mtext(&mt.value, &mt.style, &mt.insertion_point, mt.height, mt.rotation, mt.dwg_x_direction.as_ref(), mt.attachment_point as u8, mt.rectangle_width, &mt.normal, color, m);
+            self.texto_mtext(
+                &mt.value,
+                &mt.style,
+                &mt.insertion_point,
+                mt.height,
+                mt.rotation,
+                mt.dwg_x_direction.as_ref(),
+                mt.attachment_point as u8,
+                mt.rectangle_width,
+                &mt.normal,
+                color,
+                m,
+            );
             return;
         }
         let alt = Some(&a.alignment_point);
-        self.texto_simple(&a.value, &a.insertion_point, alt, a.height, a.rotation, a.width_factor, a.oblique_angle, &a.text_style, a.horizontal_alignment as u8, a.vertical_alignment as u8, &a.normal, color, m, 0);
+        self.texto_simple(
+            &a.value,
+            &a.insertion_point,
+            alt,
+            a.height,
+            a.rotation,
+            a.width_factor,
+            a.oblique_angle,
+            &a.text_style,
+            a.horizontal_alignment as u8,
+            a.vertical_alignment as u8,
+            &a.normal,
+            color,
+            m,
+            0,
+        );
     }
 
-    fn insertar<'a>(&mut self, ins: &'a opencadcodec::entities::Insert, capa: &'a str, color: u32, cx: &Contexto<'a>)
-    where
+    fn insertar<'a>(
+        &mut self,
+        ins: &'a opencadcodec::entities::Insert,
+        capa: &'a str,
+        color: u32,
+        cx: &Contexto<'a>,
+    ) where
         'd: 'a,
     {
         // Los atributos van en el sistema de quien contiene al INSERT.
         for a in &ins.attributes {
             if self.estilo_attr(a, cx).is_some() {
-                self.atributo(a, if matches!(a.common.color, Color::ByBlock) { color } else { self.color_de(&a.common.color, capa, color) }, &cx.m);
+                self.atributo(
+                    a,
+                    if matches!(a.common.color, Color::ByBlock) {
+                        color
+                    } else {
+                        self.color_de(&a.common.color, capa, color)
+                    },
+                    &cx.m,
+                );
             }
         }
         if cx.profundidad >= PROFUNDIDAD_MAX || self.abiertos.contains(&ins.block_name) {
@@ -715,8 +947,13 @@ impl<'d> Convertidor<'d> {
         let Some(br) = self.doc.block_records.get(&ins.block_name) else {
             return;
         };
-        let base = &self.bloque_base(&ins.block_name).unwrap_or(Vector3::new(0., 0., 0.));
-        let (filas, cols) = (ins.row_count.max(1) as usize, ins.column_count.max(1) as usize);
+        let base = &self
+            .bloque_base(&ins.block_name)
+            .unwrap_or(Vector3::new(0., 0., 0.));
+        let (filas, cols) = (
+            ins.row_count.max(1) as usize,
+            ins.column_count.max(1) as usize,
+        );
         let _ = br;
         let mut copias = filas * cols;
         if copias > 1 {
@@ -725,17 +962,25 @@ impl<'d> Convertidor<'d> {
                 copias = 1;
             }
         }
-        let comun = cx
-            .m
-            .por(&ocs(&ins.normal))
-            .por(&Afin::traslacion(ins.insert_point.x, ins.insert_point.y, ins.insert_point.z))
-            .por(&Afin::giro_z(ins.rotation));
-        let escala = Afin::escala(ins.x_scale(), ins.y_scale(), ins.z_scale()).por(&Afin::traslacion(-base.x, -base.y, -base.z));
+        let comun =
+            cx.m.por(&ocs(&ins.normal))
+                .por(&Afin::traslacion(
+                    ins.insert_point.x,
+                    ins.insert_point.y,
+                    ins.insert_point.z,
+                ))
+                .por(&Afin::giro_z(ins.rotation));
+        let escala = Afin::escala(ins.x_scale(), ins.y_scale(), ins.z_scale())
+            .por(&Afin::traslacion(-base.x, -base.y, -base.z));
         self.abiertos.insert(ins.block_name.clone());
         for i in 0..copias {
             let (f, c) = (i / cols, i % cols);
             let m = comun
-                .por(&Afin::traslacion(c as f64 * ins.column_spacing, f as f64 * ins.row_spacing, 0.0))
+                .por(&Afin::traslacion(
+                    c as f64 * ins.column_spacing,
+                    f as f64 * ins.row_spacing,
+                    0.0,
+                ))
                 .por(&escala);
             let hijo = Contexto {
                 m,
@@ -749,7 +994,11 @@ impl<'d> Convertidor<'d> {
         self.abiertos.remove(&ins.block_name);
     }
 
-    fn estilo_attr(&self, a: &opencadcodec::entities::AttributeEntity, cx: &Contexto) -> Option<()> {
+    fn estilo_attr(
+        &self,
+        a: &opencadcodec::entities::AttributeEntity,
+        cx: &Contexto,
+    ) -> Option<()> {
         if a.common.invisible {
             return None;
         }
@@ -763,7 +1012,12 @@ impl<'d> Convertidor<'d> {
     fn color_de(&self, c: &Color, capa: &str, del_bloque: u32) -> u32 {
         match c {
             Color::ByBlock => del_bloque,
-            Color::ByLayer | Color::None => self.doc.layers.get(capa).and_then(|l| de_color(&l.color)).unwrap_or(COLOR_7),
+            Color::ByLayer | Color::None => self
+                .doc
+                .layers
+                .get(capa)
+                .and_then(|l| de_color(&l.color))
+                .unwrap_or(COLOR_7),
             c => de_color(c).unwrap_or(COLOR_7),
         }
     }
@@ -803,7 +1057,12 @@ impl<'d> Convertidor<'d> {
                 continue;
             }
             let (nx, ny) = (-dy / l * h, dx / l * h);
-            let (a1, a2, b1, b2) = ([a[0] + nx, a[1] + ny], [a[0] - nx, a[1] - ny], [b[0] + nx, b[1] + ny], [b[0] - nx, b[1] - ny]);
+            let (a1, a2, b1, b2) = (
+                [a[0] + nx, a[1] + ny],
+                [a[0] - nx, a[1] - ny],
+                [b[0] + nx, b[1] + ny],
+                [b[0] - nx, b[1] - ny],
+            );
             tri.extend_from_slice(&[a1, a2, b1, a2, b2, b1]);
         }
         self.c.triangulos(&tri, color, None);
@@ -818,7 +1077,15 @@ impl<'d> Convertidor<'d> {
         let (ux, uy) = (dx / l, dy / l);
         let base = [punta[0] - ux * largo, punta[1] - uy * largo];
         let a = largo / 6.0;
-        self.c.triangulos(&[punta, [base[0] - uy * a, base[1] + ux * a], [base[0] + uy * a, base[1] - ux * a]], color, None);
+        self.c.triangulos(
+            &[
+                punta,
+                [base[0] - uy * a, base[1] + ux * a],
+                [base[0] + uy * a, base[1] - ux * a],
+            ],
+            color,
+            None,
+        );
     }
 
     // ----------------------------------------------------------- sombreados
@@ -840,29 +1107,69 @@ impl<'d> Convertidor<'d> {
                         a.push([l.end.x, l.end.y]);
                     }
                     BoundaryEdge::CircularArc(c) => {
-                        let (a0, a1) = if c.counter_clockwise { (c.start_angle, c.end_angle) } else { (-c.start_angle, -c.end_angle) };
-                        let mut p = if c.counter_clockwise { teselar::arco([c.center.x, c.center.y], c.radius, a0, a1) } else { let mut v = teselar::arco([c.center.x, c.center.y], c.radius, a1, a0); v.reverse(); v };
+                        let (a0, a1) = if c.counter_clockwise {
+                            (c.start_angle, c.end_angle)
+                        } else {
+                            (-c.start_angle, -c.end_angle)
+                        };
+                        let mut p = if c.counter_clockwise {
+                            teselar::arco([c.center.x, c.center.y], c.radius, a0, a1)
+                        } else {
+                            let mut v = teselar::arco([c.center.x, c.center.y], c.radius, a1, a0);
+                            v.reverse();
+                            v
+                        };
                         a.append(&mut p);
                     }
                     BoundaryEdge::EllipticArc(e) => {
                         let ccw = e.counter_clockwise;
-                        let (t0, t1) = if ccw { (e.start_angle, e.end_angle) } else { (-e.start_angle, -e.end_angle) };
+                        let (t0, t1) = if ccw {
+                            (e.start_angle, e.end_angle)
+                        } else {
+                            (-e.start_angle, -e.end_angle)
+                        };
                         let mayor = [e.major_axis_endpoint.x, e.major_axis_endpoint.y];
-                        let mut p = if ccw { teselar::elipse([e.center.x, e.center.y], mayor, e.minor_axis_ratio, t0, t1) } else { let mut v = teselar::elipse([e.center.x, e.center.y], mayor, e.minor_axis_ratio, t1, t0); v.reverse(); v };
+                        let mut p = if ccw {
+                            teselar::elipse(
+                                [e.center.x, e.center.y],
+                                mayor,
+                                e.minor_axis_ratio,
+                                t0,
+                                t1,
+                            )
+                        } else {
+                            let mut v = teselar::elipse(
+                                [e.center.x, e.center.y],
+                                mayor,
+                                e.minor_axis_ratio,
+                                t1,
+                                t0,
+                            );
+                            v.reverse();
+                            v
+                        };
                         a.append(&mut p);
                     }
                     BoundaryEdge::Spline(s) => {
-                        let cp: Vec<[f64; 3]> = s.control_points.iter().map(|c| [c.x, c.y, 0.0]).collect();
-                        let pesos: Vec<f64> = if s.rational { s.control_points.iter().map(|c| c.z).collect() } else { Vec::new() };
+                        let cp: Vec<[f64; 3]> =
+                            s.control_points.iter().map(|c| [c.x, c.y, 0.0]).collect();
+                        let pesos: Vec<f64> = if s.rational {
+                            s.control_points.iter().map(|c| c.z).collect()
+                        } else {
+                            Vec::new()
+                        };
                         let mut p = if cp.len() >= 2 {
                             teselar::spline(s.degree.max(1) as usize, &s.knots, &cp, &pesos)
                         } else {
-                            teselar::por_puntos(&s.fit_points.iter().map(|f| [f.x, f.y]).collect::<Vec<_>>())
+                            teselar::por_puntos(
+                                &s.fit_points.iter().map(|f| [f.x, f.y]).collect::<Vec<_>>(),
+                            )
                         };
                         a.append(&mut p);
                     }
                     BoundaryEdge::Polyline(p) => {
-                        let v: Vec<([f64; 2], f64)> = p.vertices.iter().map(|v| ([v.x, v.y], v.z)).collect();
+                        let v: Vec<([f64; 2], f64)> =
+                            p.vertices.iter().map(|v| ([v.x, v.y], v.z)).collect();
                         a.extend(polilinea_2d(&v, p.is_closed));
                     }
                 }
@@ -910,31 +1217,98 @@ impl<'d> Convertidor<'d> {
     // ---------------------------------------------------------------- textos
 
     #[allow(clippy::too_many_arguments)]
-    fn texto_simple(&mut self, valor: &str, ins: &Vector3, alineado: Option<&Vector3>, alto: f64, giro: f64, ancho: f64, oblicuo: f64, estilo: &str, h: u8, v: u8, normal: &Vector3, color: u32, m: &Afin, volteo: i16) {
+    fn texto_simple(
+        &mut self,
+        valor: &str,
+        ins: &Vector3,
+        alineado: Option<&Vector3>,
+        alto: f64,
+        giro: f64,
+        ancho: f64,
+        oblicuo: f64,
+        estilo: &str,
+        h: u8,
+        v: u8,
+        normal: &Vector3,
+        color: u32,
+        m: &Afin,
+        volteo: i16,
+    ) {
         let texto = crate::texto::texto_plano(valor);
         self.cuentas.letras += texto.chars().count();
-        let t = m.por(&ocs(normal)).por(&volteo_de_texto(volteo, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), h, v, giro));
+        let t = m.por(&ocs(normal)).por(&volteo_de_texto(
+            volteo,
+            [ins.x, ins.y, ins.z],
+            alineado.map(|a| [a.x, a.y, a.z]),
+            h,
+            v,
+            giro,
+        ));
         if let Some(r) = self.recogidos.as_mut()
             && !texto.trim().is_empty()
         {
             let p = t.punto(ins.x, ins.y, ins.z);
-            r.push(TextoDelPlano { texto: texto.trim().to_string(), x: p[0], y: p[1], alto: alto * t.escala_media() });
+            r.push(TextoDelPlano {
+                texto: texto.trim().to_string(),
+                x: p[0],
+                y: p[1],
+                alto: alto * t.escala_media(),
+            });
         }
         let fuente = self.fuente_de(estilo);
-        self.textos.simple(&mut self.c, &texto, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), alto, giro, ancho, oblicuo, h, v, &fuente, color, &t);
+        self.textos.simple(
+            &mut self.c,
+            &texto,
+            [ins.x, ins.y, ins.z],
+            alineado.map(|a| [a.x, a.y, a.z]),
+            alto,
+            giro,
+            ancho,
+            oblicuo,
+            h,
+            v,
+            &fuente,
+            color,
+            &t,
+        );
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn texto_mtext(&mut self, valor: &str, estilo: &str, ins: &Vector3, alto: f64, giro: f64, dir_x: Option<&Vector3>, ap: u8, caja: f64, normal: &Vector3, color: u32, m: &Afin) {
+    fn texto_mtext(
+        &mut self,
+        valor: &str,
+        estilo: &str,
+        ins: &Vector3,
+        alto: f64,
+        giro: f64,
+        dir_x: Option<&Vector3>,
+        ap: u8,
+        caja: f64,
+        normal: &Vector3,
+        color: u32,
+        m: &Afin,
+    ) {
         let mut lineas = crate::texto::parrafos_de_mtext(valor);
         // El ancho de letra del estilo vale para todo el MTEXT salvo un \W.
-        let ancho_estilo = self.doc.text_styles.get(if estilo.is_empty() { "Standard" } else { estilo }).map_or(1.0, |s| s.width_factor);
+        let ancho_estilo = self
+            .doc
+            .text_styles
+            .get(if estilo.is_empty() {
+                "Standard"
+            } else {
+                estilo
+            })
+            .map_or(1.0, |s| s.width_factor);
         if ancho_estilo > 0.0 && (ancho_estilo - 1.0).abs() > 1e-6 {
             for t in lineas.iter_mut().flatten() {
                 t.ancho.get_or_insert(ancho_estilo);
             }
         }
-        self.cuentas.letras += lineas.iter().flatten().map(|l| l.texto.chars().count()).sum::<usize>();
+        self.cuentas.letras += lineas
+            .iter()
+            .flatten()
+            .map(|l| l.texto.chars().count())
+            .sum::<usize>();
         let (t, giro) = match dir_x {
             // `dwg_x_direction` va en WCS: el giro sale de ella.
             Some(d) if d.x.abs() + d.y.abs() > 1e-12 => (*m, d.y.atan2(d.x)),
@@ -948,17 +1322,37 @@ impl<'d> Convertidor<'d> {
                 .collect();
             if !junto.is_empty() {
                 let p = t.punto(ins.x, ins.y, ins.z);
-                r.push(TextoDelPlano { texto: junto.join(" ").trim().to_string(), x: p[0], y: p[1], alto: alto * t.escala_media() });
+                r.push(TextoDelPlano {
+                    texto: junto.join(" ").trim().to_string(),
+                    x: p[0],
+                    y: p[1],
+                    alto: alto * t.escala_media(),
+                });
             }
         }
         let fuente = self.fuente_de(estilo);
-        self.textos.multilinea(&mut self.c, &lineas, [ins.x, ins.y, ins.z], alto, giro, ap, caja, &fuente, color, &t);
+        self.textos.multilinea(
+            &mut self.c,
+            &lineas,
+            [ins.x, ins.y, ins.z],
+            alto,
+            giro,
+            ap,
+            caja,
+            &fuente,
+            color,
+            &t,
+        );
     }
 
     /// La fuente de un estilo: su SHX, o su TrueType por el nombre de la
     /// familia (el registro de Windows dice que fichero es), o su fichero.
     fn fuente_de(&self, estilo: &str) -> String {
-        let Some(s) = self.doc.text_styles.get(if estilo.is_empty() { "Standard" } else { estilo }) else {
+        let Some(s) = self.doc.text_styles.get(if estilo.is_empty() {
+            "Standard"
+        } else {
+            estilo
+        }) else {
             return String::new();
         };
         let f = s.font_file.trim().to_lowercase();
@@ -970,7 +1364,8 @@ impl<'d> Convertidor<'d> {
         {
             return k;
         }
-        if !f.is_empty() && !f.contains('.')
+        if !f.is_empty()
+            && !f.contains('.')
             && let Some(k) = crate::texto::clave_de_familia(&f, false)
         {
             return k;
@@ -982,7 +1377,13 @@ impl<'d> Convertidor<'d> {
 /// Si `t` lleva un circulo a un circulo (giro, escala igual en los dos ejes,
 /// espejo), su centro, su radio y donde empieza el arco en el plano. Si no
 /// (escala distinta en x e y, o inclinado en 3D), `None`: se trocea.
-fn como_circulo(t: &Afin, centro: [f64; 3], radio: f64, inicio: f64, barrido: f64) -> Option<([f64; 2], f64, f64)> {
+fn como_circulo(
+    t: &Afin,
+    centro: [f64; 3],
+    radio: f64,
+    inicio: f64,
+    barrido: f64,
+) -> Option<([f64; 2], f64, f64)> {
     let (a, b, c, d) = (t.m[0][0], t.m[0][1], t.m[1][0], t.m[1][1]);
     let s = (a * a + c * c).sqrt();
     if !(s > 0.0) || !s.is_finite() {
@@ -995,13 +1396,23 @@ fn como_circulo(t: &Afin, centro: [f64; 3], radio: f64, inicio: f64, barrido: f6
         return None;
     }
     let psi = c.atan2(a);
-    let inicio_plano = if giro { inicio + psi } else { psi - (inicio + barrido) };
+    let inicio_plano = if giro {
+        inicio + psi
+    } else {
+        psi - (inicio + barrido)
+    };
     let cen = t.punto(centro[0], centro[1], centro[2]);
     Some((cen, radio * s, inicio_plano))
 }
 
 fn dibujable(e: &EntityType) -> bool {
-    !matches!(e, EntityType::Viewport(_) | EntityType::Block(_) | EntityType::BlockEnd(_) | EntityType::Seqend(_))
+    !matches!(
+        e,
+        EntityType::Viewport(_)
+            | EntityType::Block(_)
+            | EntityType::BlockEnd(_)
+            | EntityType::Seqend(_)
+    )
 }
 
 /// Los puntos de una polilinea 2D con sus *bulges*.
@@ -1071,11 +1482,25 @@ mod pruebas {
 
     #[test]
     fn un_circulo_girado_o_en_espejo_sigue_siendo_circulo_y_estirado_no() {
-        let (c, r, a) = como_circulo(&Afin::giro_z(1.0).por(&Afin::escala(2.0, 2.0, 1.0)), [1.0, 0.0, 0.0], 3.0, 0.5, 1.0).unwrap();
+        let (c, r, a) = como_circulo(
+            &Afin::giro_z(1.0).por(&Afin::escala(2.0, 2.0, 1.0)),
+            [1.0, 0.0, 0.0],
+            3.0,
+            0.5,
+            1.0,
+        )
+        .unwrap();
         assert!((r - 6.0).abs() < 1e-9 && (a - 1.5).abs() < 1e-9);
         assert!((c[0] - 2.0 * 1f64.cos()).abs() < 1e-9);
         // En espejo (x -> -x): un arco de 0 a 90 queda de 90 a 180.
-        let (_, _, a) = como_circulo(&Afin::escala(-1.0, 1.0, 1.0), [0.0; 3], 1.0, 0.0, std::f64::consts::FRAC_PI_2).unwrap();
+        let (_, _, a) = como_circulo(
+            &Afin::escala(-1.0, 1.0, 1.0),
+            [0.0; 3],
+            1.0,
+            0.0,
+            std::f64::consts::FRAC_PI_2,
+        )
+        .unwrap();
         assert!((a - std::f64::consts::FRAC_PI_2).abs() < 1e-9, "{a}");
         // Caso negativo: estirado no es un circulo.
         assert!(como_circulo(&Afin::escala(2.0, 1.0, 1.0), [0.0; 3], 1.0, 0.0, 1.0).is_none());
@@ -1091,7 +1516,10 @@ mod pruebas {
     #[test]
     #[ignore = "convierte los planos de muestra de E:/pixpin-cad/muestras"]
     fn convierte_las_muestras() {
-        for e in std::fs::read_dir("E:/pixpin-cad/muestras").unwrap().flatten() {
+        for e in std::fs::read_dir("E:/pixpin-cad/muestras")
+            .unwrap()
+            .flatten()
+        {
             let t = std::time::Instant::now();
             match convertir_fichero(&e.path()) {
                 Ok((m, c)) => println!(

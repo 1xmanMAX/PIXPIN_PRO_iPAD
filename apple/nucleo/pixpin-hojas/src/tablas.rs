@@ -26,9 +26,17 @@ pub struct Tabla {
 pub fn leer(raiz: &Nodo) -> Option<Tabla> {
     let t = raiz.hijo("table")?;
     let rango = Rango::leer(t.attr("ref")?)?;
-    let n = |a: &str, def: u32| t.attr(a).and_then(|v| v.parse::<u32>().ok()).unwrap_or(def).min(1);
+    let n = |a: &str, def: u32| {
+        t.attr(a)
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(def)
+            .min(1)
+    };
     let info = t.hijo("tableStyleInfo");
-    let si = |a: &str| info.and_then(|i| i.attr(a)).is_some_and(|v| v == "1" || v == "true");
+    let si = |a: &str| {
+        info.and_then(|i| i.attr(a))
+            .is_some_and(|v| v == "1" || v == "true")
+    };
     Some(Tabla {
         rango,
         estilo: info.and_then(|i| i.attr("name")).unwrap_or("").to_string(),
@@ -38,16 +46,24 @@ pub fn leer(raiz: &Nodo) -> Option<Tabla> {
         bandas_columnas: si("showColumnStripes"),
         primera_columna: si("showFirstColumn"),
         ultima_columna: si("showLastColumn"),
-        filtro: t.hijo("autoFilter").and_then(|a| crate::filtros::AutoFiltro::leer(a, Some(rango))),
+        filtro: t
+            .hijo("autoFilter")
+            .and_then(|a| crate::filtros::AutoFiltro::leer(a, Some(rango))),
     })
 }
 
 fn fino(c: Rgb) -> Option<Linea> {
-    Some(Linea { estilo: EstiloLinea::Fino, color: c })
+    Some(Linea {
+        estilo: EstiloLinea::Fino,
+        color: c,
+    })
 }
 
 fn doble(c: Rgb) -> Option<Linea> {
-    Some(Linea { estilo: EstiloLinea::Doble, color: c })
+    Some(Linea {
+        estilo: EstiloLinea::Doble,
+        color: c,
+    })
 }
 
 /// Un estilo integrado por su nombre (`TableStyleLight1`..`21`,
@@ -60,7 +76,10 @@ pub fn integrado(nombre: &str, tema: &Tema) -> Option<EstiloTabla> {
     } else if let Some(r) = nombre.strip_prefix("TableStyleMedium") {
         ("medium", r.parse::<u32>().ok()?)
     } else {
-        ("dark", nombre.strip_prefix("TableStyleDark")?.parse::<u32>().ok()?)
+        (
+            "dark",
+            nombre.strip_prefix("TableStyleDark")?.parse::<u32>().ok()?,
+        )
     };
     if n == 0 {
         return None;
@@ -69,28 +88,90 @@ pub fn integrado(nombre: &str, tema: &Tema) -> Option<EstiloTabla> {
     let k = (n - 1) % 7;
     let negro = tema.colores[1];
     let blanco = tema.colores[0];
-    let c = if k == 0 { negro } else { tema.colores[3 + k as usize] };
+    let c = if k == 0 {
+        negro
+    } else {
+        tema.colores[3 + k as usize]
+    };
     // Los «negros» de los estilos claros son grises.
-    let claro = |t: f64| if k == 0 { con_matiz(Rgb { r: 0x80, g: 0x80, b: 0x80 }, t) } else { con_matiz(c, t) };
-    let mut e = EstiloTabla { alto_banda: 1, ..Default::default() };
-    let negrita = Dxf { negrita: Some(true), ..Default::default() };
+    let claro = |t: f64| {
+        if k == 0 {
+            con_matiz(
+                Rgb {
+                    r: 0x80,
+                    g: 0x80,
+                    b: 0x80,
+                },
+                t,
+            )
+        } else {
+            con_matiz(c, t)
+        }
+    };
+    let mut e = EstiloTabla {
+        alto_banda: 1,
+        ..Default::default()
+    };
+    let negrita = Dxf {
+        negrita: Some(true),
+        ..Default::default()
+    };
     match (familia, grupo) {
         ("light", 0) => {
             let texto = if k == 0 { negro } else { con_matiz(c, -0.25) };
-            e.todo = Some(Dxf { color_fuente: Some(texto), arriba: fino(c), abajo: fino(c), ..Default::default() });
-            e.encabezado = Some(Dxf { negrita: Some(true), abajo: fino(c), ..Default::default() });
-            e.total = Some(Dxf { negrita: Some(true), arriba: fino(c), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(claro(0.8)), ..Default::default() });
+            e.todo = Some(Dxf {
+                color_fuente: Some(texto),
+                arriba: fino(c),
+                abajo: fino(c),
+                ..Default::default()
+            });
+            e.encabezado = Some(Dxf {
+                negrita: Some(true),
+                abajo: fino(c),
+                ..Default::default()
+            });
+            e.total = Some(Dxf {
+                negrita: Some(true),
+                arriba: fino(c),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(claro(0.8)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
             e.primera_columna = Some(negrita.clone());
             e.ultima_columna = Some(negrita);
         }
         ("light", 1) => {
-            e.todo = Some(Dxf { izquierda: fino(c), derecha: fino(c), arriba: fino(c), abajo: fino(c), ..Default::default() });
-            e.encabezado = Some(Dxf { relleno: Some(c), color_fuente: Some(blanco), negrita: Some(true), ..Default::default() });
-            e.total = Some(Dxf { negrita: Some(true), arriba: doble(c), ..Default::default() });
-            e.banda_fila = Some(Dxf { arriba: fino(c), abajo: fino(c), ..Default::default() });
-            e.banda_columna = Some(Dxf { izquierda: fino(c), derecha: fino(c), ..Default::default() });
+            e.todo = Some(Dxf {
+                izquierda: fino(c),
+                derecha: fino(c),
+                arriba: fino(c),
+                abajo: fino(c),
+                ..Default::default()
+            });
+            e.encabezado = Some(Dxf {
+                relleno: Some(c),
+                color_fuente: Some(blanco),
+                negrita: Some(true),
+                ..Default::default()
+            });
+            e.total = Some(Dxf {
+                negrita: Some(true),
+                arriba: doble(c),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                arriba: fino(c),
+                abajo: fino(c),
+                ..Default::default()
+            });
+            e.banda_columna = Some(Dxf {
+                izquierda: fino(c),
+                derecha: fino(c),
+                ..Default::default()
+            });
             e.primera_columna = Some(negrita.clone());
             e.ultima_columna = Some(negrita);
         }
@@ -104,9 +185,20 @@ pub fn integrado(nombre: &str, tema: &Tema) -> Option<EstiloTabla> {
                 vertical: fino(c),
                 ..Default::default()
             });
-            e.encabezado = Some(Dxf { negrita: Some(true), abajo: fino(c), ..Default::default() });
-            e.total = Some(Dxf { negrita: Some(true), arriba: doble(c), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(claro(0.8)), ..Default::default() });
+            e.encabezado = Some(Dxf {
+                negrita: Some(true),
+                abajo: fino(c),
+                ..Default::default()
+            });
+            e.total = Some(Dxf {
+                negrita: Some(true),
+                arriba: doble(c),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(claro(0.8)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
             e.primera_columna = Some(negrita.clone());
             e.ultima_columna = Some(negrita);
@@ -121,34 +213,84 @@ pub fn integrado(nombre: &str, tema: &Tema) -> Option<EstiloTabla> {
                 horizontal: fino(linea),
                 ..Default::default()
             });
-            e.encabezado = Some(Dxf { relleno: Some(c), color_fuente: Some(blanco), negrita: Some(true), ..Default::default() });
-            e.total = Some(Dxf { negrita: Some(true), arriba: doble(c), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(claro(0.8)), ..Default::default() });
+            e.encabezado = Some(Dxf {
+                relleno: Some(c),
+                color_fuente: Some(blanco),
+                negrita: Some(true),
+                ..Default::default()
+            });
+            e.total = Some(Dxf {
+                negrita: Some(true),
+                arriba: doble(c),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(claro(0.8)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
             e.primera_columna = Some(negrita.clone());
             e.ultima_columna = Some(negrita);
         }
         ("medium", 1) => {
             let blanca = fino(blanco);
-            e.todo = Some(Dxf { relleno: Some(claro(0.8)), horizontal: blanca, vertical: blanca, ..Default::default() });
+            e.todo = Some(Dxf {
+                relleno: Some(claro(0.8)),
+                horizontal: blanca,
+                vertical: blanca,
+                ..Default::default()
+            });
             e.encabezado = Some(Dxf {
                 relleno: Some(c),
                 color_fuente: Some(blanco),
                 negrita: Some(true),
-                abajo: Some(Linea { estilo: EstiloLinea::Grueso, color: blanco }),
+                abajo: Some(Linea {
+                    estilo: EstiloLinea::Grueso,
+                    color: blanco,
+                }),
                 ..Default::default()
             });
-            e.total = Some(Dxf { relleno: Some(c), color_fuente: Some(blanco), negrita: Some(true), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(claro(0.6)), ..Default::default() });
+            e.total = Some(Dxf {
+                relleno: Some(c),
+                color_fuente: Some(blanco),
+                negrita: Some(true),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(claro(0.6)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
-            e.primera_columna = Some(Dxf { relleno: Some(c), color_fuente: Some(blanco), negrita: Some(true), ..Default::default() });
+            e.primera_columna = Some(Dxf {
+                relleno: Some(c),
+                color_fuente: Some(blanco),
+                negrita: Some(true),
+                ..Default::default()
+            });
             e.ultima_columna = e.primera_columna.clone();
         }
         ("medium", 2) => {
-            e.todo = Some(Dxf { arriba: fino(negro), abajo: fino(negro), horizontal: fino(negro), ..Default::default() });
-            e.encabezado = Some(Dxf { relleno: Some(c), color_fuente: Some(blanco), negrita: Some(true), ..Default::default() });
-            e.total = Some(Dxf { negrita: Some(true), arriba: doble(negro), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(claro(0.8)), ..Default::default() });
+            e.todo = Some(Dxf {
+                arriba: fino(negro),
+                abajo: fino(negro),
+                horizontal: fino(negro),
+                ..Default::default()
+            });
+            e.encabezado = Some(Dxf {
+                relleno: Some(c),
+                color_fuente: Some(blanco),
+                negrita: Some(true),
+                ..Default::default()
+            });
+            e.total = Some(Dxf {
+                negrita: Some(true),
+                arriba: doble(negro),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(claro(0.8)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
             e.primera_columna = Some(negrita.clone());
             e.ultima_columna = Some(negrita);
@@ -166,27 +308,61 @@ pub fn integrado(nombre: &str, tema: &Tema) -> Option<EstiloTabla> {
                 ..Default::default()
             });
             e.encabezado = Some(negrita.clone());
-            e.total = Some(Dxf { negrita: Some(true), arriba: doble(c), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(claro(0.6)), ..Default::default() });
+            e.total = Some(Dxf {
+                negrita: Some(true),
+                arriba: doble(c),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(claro(0.6)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
             e.primera_columna = Some(negrita.clone());
             e.ultima_columna = Some(negrita);
         }
         _ => {
             // Oscuros.
-            let cuerpo = if k == 0 { Rgb { r: 0x73, g: 0x73, b: 0x73 } } else { con_matiz(c, -0.25) };
-            e.todo = Some(Dxf { relleno: Some(cuerpo), color_fuente: Some(blanco), ..Default::default() });
+            let cuerpo = if k == 0 {
+                Rgb {
+                    r: 0x73,
+                    g: 0x73,
+                    b: 0x73,
+                }
+            } else {
+                con_matiz(c, -0.25)
+            };
+            e.todo = Some(Dxf {
+                relleno: Some(cuerpo),
+                color_fuente: Some(blanco),
+                ..Default::default()
+            });
             e.encabezado = Some(Dxf {
                 relleno: Some(negro),
                 color_fuente: Some(blanco),
                 negrita: Some(true),
-                abajo: Some(Linea { estilo: EstiloLinea::Medio, color: blanco }),
+                abajo: Some(Linea {
+                    estilo: EstiloLinea::Medio,
+                    color: blanco,
+                }),
                 ..Default::default()
             });
-            e.total = Some(Dxf { relleno: Some(con_matiz(cuerpo, -0.5)), negrita: Some(true), arriba: doble(blanco), ..Default::default() });
-            e.banda_fila = Some(Dxf { relleno: Some(con_matiz(cuerpo, -0.25)), ..Default::default() });
+            e.total = Some(Dxf {
+                relleno: Some(con_matiz(cuerpo, -0.5)),
+                negrita: Some(true),
+                arriba: doble(blanco),
+                ..Default::default()
+            });
+            e.banda_fila = Some(Dxf {
+                relleno: Some(con_matiz(cuerpo, -0.25)),
+                ..Default::default()
+            });
             e.banda_columna = e.banda_fila.clone();
-            e.primera_columna = Some(Dxf { negrita: Some(true), relleno: Some(con_matiz(cuerpo, -0.25)), ..Default::default() });
+            e.primera_columna = Some(Dxf {
+                negrita: Some(true),
+                relleno: Some(con_matiz(cuerpo, -0.25)),
+                ..Default::default()
+            });
             e.ultima_columna = e.primera_columna.clone();
         }
     }
@@ -225,16 +401,30 @@ pub fn formato_en(t: &Tabla, e: &EstiloTabla, fila: u32, col: u32) -> Dxf {
     if !es_enc && !es_tot && fila >= ini_datos {
         if t.bandas_columnas {
             let i = (col - r.col0) / alto;
-            let (c0, c1) = (r.col0 + i * alto, (r.col0 + i * alto + alto - 1).min(r.col1));
-            let el = if i % 2 == 0 { &e.banda_columna } else { &e.banda_columna2 };
+            let (c0, c1) = (
+                r.col0 + i * alto,
+                (r.col0 + i * alto + alto - 1).min(r.col1),
+            );
+            let el = if i % 2 == 0 {
+                &e.banda_columna
+            } else {
+                &e.banda_columna2
+            };
             if let Some(el) = el {
                 aplicar(&mut d, el, fila, col, ini_datos, fin_datos, c0, c1);
             }
         }
         if t.bandas_filas {
             let i = (fila - ini_datos) / alto;
-            let (f0, f1) = (ini_datos + i * alto, (ini_datos + i * alto + alto - 1).min(fin_datos));
-            let el = if i % 2 == 0 { &e.banda_fila } else { &e.banda_fila2 };
+            let (f0, f1) = (
+                ini_datos + i * alto,
+                (ini_datos + i * alto + alto - 1).min(fin_datos),
+            );
+            let el = if i % 2 == 0 {
+                &e.banda_fila
+            } else {
+                &e.banda_fila2
+            };
             if let Some(el) = el {
                 aplicar(&mut d, el, fila, col, f0, f1, r.col0, r.col1);
             }
@@ -252,12 +442,30 @@ pub fn formato_en(t: &Tabla, e: &EstiloTabla, fila: u32, col: u32) -> Dxf {
     }
     if es_enc {
         if let Some(el) = &e.encabezado {
-            aplicar(&mut d, el, fila, col, r.fila0, ini_datos - 1, r.col0, r.col1);
+            aplicar(
+                &mut d,
+                el,
+                fila,
+                col,
+                r.fila0,
+                ini_datos - 1,
+                r.col0,
+                r.col1,
+            );
         }
     }
     if es_tot {
         if let Some(el) = &e.total {
-            aplicar(&mut d, el, fila, col, fin_datos + 1, r.fila1, r.col0, r.col1);
+            aplicar(
+                &mut d,
+                el,
+                fila,
+                col,
+                fin_datos + 1,
+                r.fila1,
+                r.col0,
+                r.col1,
+            );
         }
     }
     d
@@ -272,7 +480,12 @@ mod pruebas {
         let tema = Tema::default();
         let e = integrado("TableStyleMedium2", &tema).unwrap();
         let t = Tabla {
-            rango: Rango { fila0: 0, col0: 0, fila1: 5, col1: 2 },
+            rango: Rango {
+                fila0: 0,
+                col0: 0,
+                fila1: 5,
+                col1: 2,
+            },
             estilo: "TableStyleMedium2".into(),
             encabezado: 1,
             totales: 0,

@@ -78,18 +78,28 @@ impl TablaLeida {
     /// con numeros en las de abajo. Lo decide el modelo; esto es lo que se
     /// usa si no dice nada.
     pub fn parece_cabecera(&self) -> bool {
-        let Some(primera) = self.filas.first() else { return false };
+        let Some(primera) = self.filas.first() else {
+            return false;
+        };
         let es_numero = |s: &str| {
-            let t: String = s.chars().filter(|c| !matches!(c, ' ' | ',' | '.' | '%' | '$' | '-' | '/')).collect();
+            let t: String = s
+                .chars()
+                .filter(|c| !matches!(c, ' ' | ',' | '.' | '%' | '$' | '-' | '/'))
+                .collect();
             !t.is_empty() && t.chars().all(|c| c.is_ascii_digit())
         };
-        let sin_numeros = primera.iter().all(|c| !es_numero(c)) && primera.iter().any(|c| !c.trim().is_empty());
+        let sin_numeros =
+            primera.iter().all(|c| !es_numero(c)) && primera.iter().any(|c| !c.trim().is_empty());
         let abajo = self.filas.iter().skip(1).flatten().any(|c| es_numero(c));
         sin_numeros && (abajo || self.filas.len() > 1)
     }
     /// En TSV (lo que se pega en una hoja), para el modelo y el portapapeles.
     pub fn a_tsv(&self) -> String {
-        self.filas.iter().map(|f| f.join("\t")).collect::<Vec<_>>().join("\n")
+        self.filas
+            .iter()
+            .map(|f| f.join("\t"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -100,13 +110,24 @@ impl TablaLeida {
 /// separador seguido de 3 cifras, son miles («1.250» = 1250), como lo leeria
 /// una persona en una tabla de costos.
 pub fn como_numero(s: &str) -> Option<String> {
-    let t = s.trim().trim_start_matches(['$', '€', 'S', '/', '.']).trim();
-    let t: String = t.chars().filter(|c| !c.is_whitespace() && *c != '\u{a0}').collect();
+    let t = s
+        .trim()
+        .trim_start_matches(['$', '€', 'S', '/', '.'])
+        .trim();
+    let t: String = t
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '\u{a0}')
+        .collect();
     let (signo, t) = match t.strip_prefix('-') {
         Some(r) => ("-", r.to_string()),
         None => ("", t),
     };
-    if t.is_empty() || !t.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') || !t.starts_with(|c: char| c.is_ascii_digit()) {
+    if t.is_empty()
+        || !t
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '.' || c == ',')
+        || !t.starts_with(|c: char| c.is_ascii_digit())
+    {
         return None;
     }
     let ultimo = t.rfind(['.', ',']);
@@ -137,7 +158,11 @@ pub fn como_numero(s: &str) -> Option<String> {
     };
     limpio.parse::<f64>().ok().filter(|n| n.is_finite())?;
     let limpio = limpio.trim_start_matches('0');
-    let limpio = if limpio.is_empty() || limpio.starts_with('.') { format!("0{limpio}") } else { limpio.to_string() };
+    let limpio = if limpio.is_empty() || limpio.starts_with('.') {
+        format!("0{limpio}")
+    } else {
+        limpio.to_string()
+    };
     Some(format!("{signo}{limpio}"))
 }
 
@@ -204,7 +229,9 @@ pub fn reconstruir(palabras: &[Palabra]) -> TablaLeida {
     todas.sort_by(|a, b| (a.1 - a.0).total_cmp(&(b.1 - b.0)));
     let mut columnas: Vec<(f64, f64)> = Vec::new();
     for (a, b) in todas {
-        let pisa: Vec<usize> = (0..columnas.len()).filter(|&i| se_pisan((a, b), columnas[i])).collect();
+        let pisa: Vec<usize> = (0..columnas.len())
+            .filter(|&i| se_pisan((a, b), columnas[i]))
+            .collect();
         match pisa.as_slice() {
             [] => columnas.push((a, b)),
             [i] => {
@@ -229,8 +256,13 @@ pub fn reconstruir(palabras: &[Palabra]) -> TablaLeida {
     for (f, cs) in celdas.into_iter().enumerate() {
         let mut fila = vec![String::new(); n];
         for (a, b, texto) in cs {
-            let pisa: Vec<usize> = (0..unidas.len()).filter(|&i| se_pisan((a, b), unidas[i])).collect();
-            let primera = pisa.first().copied().unwrap_or_else(|| mas_cercana(&unidas, (a + b) / 2.0));
+            let pisa: Vec<usize> = (0..unidas.len())
+                .filter(|&i| se_pisan((a, b), unidas[i]))
+                .collect();
+            let primera = pisa
+                .first()
+                .copied()
+                .unwrap_or_else(|| mas_cercana(&unidas, (a + b) / 2.0));
             if pisa.len() > 1 {
                 tabla.combinadas.push(Combinada {
                     fila: f,
@@ -348,37 +380,77 @@ mod pruebas {
     #[test]
     fn las_celdas_vacias_y_el_desorden_no_la_rompen() {
         let mut pal = escribir(
-            &[(0, 0, "A"), (2, 0, "C"), (0, 1, "a1"), (1, 1, "b1"), (2, 1, "c1"), (1, 2, "b2")],
+            &[
+                (0, 0, "A"),
+                (2, 0, "C"),
+                (0, 1, "a1"),
+                (1, 1, "b1"),
+                (2, 1, "c1"),
+                (1, 2, "b2"),
+            ],
             &[60.0, 60.0, 60.0],
         );
         pal.reverse();
         // Una palabra torcida (2 px mas abajo) sigue en su fila.
         pal[0].y += 2.0;
         let t = reconstruir(&pal);
-        assert_eq!(t.filas, vec![vec!["A", "", "C"], vec!["a1", "b1", "c1"], vec!["", "b2", ""]]);
+        assert_eq!(
+            t.filas,
+            vec![
+                vec!["A", "", "C"],
+                vec!["a1", "b1", "c1"],
+                vec!["", "b2", ""]
+            ]
+        );
     }
 
     #[test]
     fn el_texto_de_la_pagina_alrededor_no_entra_en_la_tabla() {
         let pasos = [80.0, 80.0, 80.0];
-        let mut pal = escribir(&[(0, 1, "x"), (1, 1, "y"), (2, 1, "z"), (0, 2, "1"), (1, 2, "2"), (2, 2, "3")], &pasos);
+        let mut pal = escribir(
+            &[
+                (0, 1, "x"),
+                (1, 1, "y"),
+                (2, 1, "z"),
+                (0, 2, "1"),
+                (1, 2, "2"),
+                (2, 2, "3"),
+            ],
+            &pasos,
+        );
         // Un parrafo encima y otro debajo, en la columna A.
-        pal.extend(escribir(&[(0, 0, "Registro de notas del curso de Resistencia")], &pasos));
-        pal.extend(escribir(&[(0, 3, "Observacion: el promedio es la media de las notas")], &pasos));
+        pal.extend(escribir(
+            &[(0, 0, "Registro de notas del curso de Resistencia")],
+            &pasos,
+        ));
+        pal.extend(escribir(
+            &[(0, 3, "Observacion: el promedio es la media de las notas")],
+            &pasos,
+        ));
         let t = reconstruir(&pal);
         assert_eq!(t.filas.len(), 2, "{t:?}");
         assert_eq!(t.filas[0][0], "x");
         // Negativo: una tabla de dos columnas no se toca (podria ser
         // «concepto | importe» con conceptos largos).
         let mut dos = escribir(&[(0, 1, "a"), (1, 1, "b")], &pasos);
-        dos.extend(escribir(&[(0, 0, "Una frase larga que va encima de la tabla")], &pasos));
+        dos.extend(escribir(
+            &[(0, 0, "Una frase larga que va encima de la tabla")],
+            &pasos,
+        ));
         assert_eq!(reconstruir(&dos).filas.len(), 2);
     }
 
     #[test]
     fn un_titulo_que_abarca_varias_es_combinada_y_no_junta_columnas() {
         let mut pal = escribir(
-            &[(0, 1, "x"), (1, 1, "y"), (2, 1, "z"), (0, 2, "1"), (1, 2, "2"), (2, 2, "3")],
+            &[
+                (0, 1, "x"),
+                (1, 1, "y"),
+                (2, 1, "z"),
+                (0, 2, "1"),
+                (1, 2, "2"),
+                (2, 2, "3"),
+            ],
             &[60.0, 60.0, 60.0],
         );
         // Titulo de la fila 0, de x=5 a x=170: pisa las tres columnas.
@@ -388,7 +460,14 @@ mod pruebas {
         let t = reconstruir(&pal);
         assert_eq!(t.columnas(), 3, "{t:?}");
         assert_eq!(t.filas[0], vec!["RESUMEN DE COSTOS", "", ""]);
-        assert_eq!(t.combinadas, vec![Combinada { fila: 0, columna: 0, columnas: 3 }]);
+        assert_eq!(
+            t.combinadas,
+            vec![Combinada {
+                fila: 0,
+                columna: 0,
+                columnas: 3
+            }]
+        );
         assert_eq!(t.filas[2], vec!["1", "2", "3"]);
     }
 
@@ -411,8 +490,16 @@ mod pruebas {
     #[test]
     fn sin_palabras_no_hay_tabla_y_sin_numeros_no_hay_cabecera() {
         assert_eq!(reconstruir(&[]), TablaLeida::default());
-        assert_eq!(reconstruir(&[Palabra::nueva("  ", 0.0, 0.0, 5.0, 10.0)]).filas.len(), 0);
-        let t = reconstruir(&escribir(&[(0, 0, "12"), (1, 0, "13"), (0, 1, "4"), (1, 1, "5")], &[50.0, 50.0]));
+        assert_eq!(
+            reconstruir(&[Palabra::nueva("  ", 0.0, 0.0, 5.0, 10.0)])
+                .filas
+                .len(),
+            0
+        );
+        let t = reconstruir(&escribir(
+            &[(0, 0, "12"), (1, 0, "13"), (0, 1, "4"), (1, 1, "5")],
+            &[50.0, 50.0],
+        ));
         assert!(!t.parece_cabecera());
         assert_eq!(t.a_tsv(), "12\t13\n4\t5");
     }

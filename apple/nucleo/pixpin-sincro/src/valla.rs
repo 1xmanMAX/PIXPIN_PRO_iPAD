@@ -188,7 +188,10 @@ pub fn proyecto_seguro<D: Disco + ?Sized>(
     }
     let lista = d.anotado(chat);
     let anotado = crate::anotado::por_uid(lista.iter().map(String::as_str));
-    if referencias_de_proyecto(&p, &anotado).iter().any(|r| vedado(r)) {
+    if referencias_de_proyecto(&p, &anotado)
+        .iter()
+        .any(|r| vedado(r))
+    {
         return None;
     }
     Some(p)

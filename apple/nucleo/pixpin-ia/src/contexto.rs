@@ -18,6 +18,11 @@
 //!    objetivo mejorado) + los 2 ultimos mensajes + el nuevo. Dentro de un
 //!    turno largo (muchas herramientas), [`podar_en_turno`] recorta los
 //!    resultados viejos de herramientas, que son lo que mas pesa (un OCR).
+//!    Desde el 22-oct, en tres escalones: desde el 50 %, los resultados de
+//!    herramientas viejos se despejan ([`despejar_resultados`], quedan los
+//!    3 ultimos); al 70 %, antes de reiniciar, el modelo guarda lo duradero
+//!    en la memoria de largo plazo (`memoria::guardar_lo_duradero`); los
+//!    mensajes crudos siguen en el chat, buscables.
 //! 3. **Buscar lo viejo** ([`buscar`], herramienta `buscar_historial`): el
 //!    modelo pide «lo que dije de las ventas» y recibe los trozos que mas se
 //!    parecen de la conversacion guardada.
@@ -247,6 +252,59 @@ pub fn podar_en_turno(historial: &mut [Mensaje]) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// El primer escalon: despejar resultados viejos (22-oct)
+
+/// **Desde esta fraccion** se quitan los resultados de herramientas viejos,
+/// antes de llegar al reinicio del 70 %. Es lo mas barato (Anthropic,
+/// `clear_tool_uses`): no pregunta a ningun modelo y lo que se quita se
+/// puede volver a pedir.
+pub const UMBRAL_DESPEJAR: f32 = 0.50;
+
+/// Cuantos resultados de herramientas se quedan enteros al despejar (los
+/// ultimos; el valor por omision de Anthropic).
+pub const QUEDAN_RESULTADOS: usize = 3;
+
+/// La marca de un resultado despejado.
+const DESPEJADO: &str = "resultado quitado para ahorrar contexto";
+
+/// Si con `tokens` mas la reserva se pasa de `fraccion` de la ventana.
+pub fn pasa_de(tokens: u32, reserva_respuesta: u32, ventana: u32, fraccion: f32) -> bool {
+    ventana > 0 && (tokens + reserva_respuesta) as f32 > ventana as f32 * fraccion
+}
+
+/// **Despeja los resultados de herramientas viejos**: todos menos los
+/// `quedan` ultimos se quedan en una linea que dice de que herramienta era
+/// (asi el modelo sabe que paso y puede repetir la llamada). Los cortos no
+/// se tocan: no ahorran nada. Devuelve si cambio algo.
+pub fn despejar_resultados(historial: &mut [Mensaje], quedan: usize) -> bool {
+    let resultados: Vec<usize> = (0..historial.len())
+        .filter(|&i| historial[i].rol == Rol::Herramienta)
+        .collect();
+    let viejos = &resultados[..resultados.len().saturating_sub(quedan)];
+    let mut cambio = false;
+    for &i in viejos {
+        let t = historial[i].texto_entero();
+        if t.chars().count() <= 200 || t.contains(DESPEJADO) || t.contains(RECORTADO) {
+            continue;
+        }
+        let id = historial[i].id_llamada.clone();
+        let nombre = historial[..i]
+            .iter()
+            .rev()
+            .flat_map(|m| m.llamadas.iter())
+            .find(|l| Some(&l.id) == id.as_ref())
+            .map(|l| l.nombre.clone())
+            .unwrap_or_else(|| "herramienta".into());
+        historial[i].partes = vec![Parte::Texto(format!(
+            "({nombre}: {DESPEJADO}; empezaba «{}». Repite la llamada si lo necesitas entero.)",
+            cortar(&t, 80)
+        ))];
+        cambio = true;
+    }
+    cambio
+}
+
+// ---------------------------------------------------------------------------
 // buscar_historial
 
 pub const BUSCAR_HISTORIAL: &str = "buscar_historial";
@@ -459,6 +517,44 @@ mod pruebas {
         assert!(h[2].texto_entero().contains("buscar_historial"));
         assert_eq!(h[4].texto_entero().len(), 3000);
         assert!(!podar_en_turno(&mut h), "ya no hay nada que podar");
+    }
+
+    #[test]
+    fn despejar_deja_los_tres_ultimos_y_dice_de_que_herramienta_era() {
+        let mut h = vec![Mensaje::usuario("lee los cinco")];
+        for k in 0..5 {
+            let mut llamada = Mensaje::texto(Rol::Asistente, "");
+            llamada.llamadas = vec![LlamadaCruda {
+                id: format!("c{k}"),
+                nombre: format!("ocr{k}"),
+                argumentos: "{}".into(),
+            }];
+            h.push(llamada);
+            h.push(Mensaje::resultado(
+                &format!("c{k}"),
+                format!("texto {k} {}", "z".repeat(2000)),
+            ));
+        }
+        h.push(Mensaje::resultado("corto", "ok"));
+        let antes = estimar(&h, &[]);
+        assert!(despejar_resultados(&mut h, QUEDAN_RESULTADOS));
+        assert!(estimar(&h, &[]) < antes / 2);
+        // Los tres primeros, despejados con su nombre (el corto del final
+        // cuenta entre los tres ultimos); los dos siguientes, enteros.
+        assert!(
+            h[2].texto_entero().starts_with("(ocr0: resultado quitado"),
+            "{}",
+            h[2].texto_entero()
+        );
+        assert!(h[4].texto_entero().starts_with("(ocr1:"));
+        assert!(h[6].texto_entero().starts_with("(ocr2:"));
+        assert!(h[8].texto_entero().len() > 2000 && h[10].texto_entero().len() > 2000);
+        assert!(
+            !despejar_resultados(&mut h, QUEDAN_RESULTADOS),
+            "ya no hay nada que despejar"
+        );
+        assert!(pasa_de(5000, 0, 8192, UMBRAL_DESPEJAR) && !pasa_de(5000, 0, 8192, UMBRAL));
+        assert!(!pasa_de(5000, 0, 0, UMBRAL_DESPEJAR));
     }
 
     #[test]

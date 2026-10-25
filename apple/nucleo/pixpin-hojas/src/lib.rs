@@ -31,8 +31,8 @@
 
 #![forbid(unsafe_code)]
 
-pub mod comentarios;
 pub mod cfb;
+pub mod comentarios;
 pub mod condicional;
 pub mod dibujos;
 pub mod estilos;
@@ -44,15 +44,19 @@ pub mod minigraficos;
 pub mod paquete;
 pub mod rejilla;
 pub mod tablas;
-pub mod validacion;
 pub mod textos;
+pub mod validacion;
 pub mod xls;
 pub mod xml;
 
 pub use dibujos::{Ancla, Contenido as ContenidoDibujo, Dibujo};
-pub use estilos::{Alineacion, Borde, EstiloLinea, Fuente, Horizontal, Linea, Relleno, Rgb, Subrayado, Vertical};
+pub use estilos::{
+    Alineacion, Borde, EstiloLinea, Fuente, Horizontal, Linea, Relleno, Rgb, Subrayado, Vertical,
+};
 pub use formato::{Mostrado, Regional};
-pub use hoja::{Celda, Fila, FilaNueva, Hoja, LectorHoja, Rango, Tanda, Valor, VistaHoja, nombre_columna};
+pub use hoja::{
+    Celda, Fila, FilaNueva, Hoja, LectorHoja, Rango, Tanda, Valor, VistaHoja, nombre_columna,
+};
 pub use libro::{Clase, Contenido, InfoHoja, Libro, TipoHoja, Visibilidad};
 pub use rejilla::{Panel, Rejilla, Vista};
 

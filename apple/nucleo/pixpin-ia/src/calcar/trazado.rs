@@ -53,7 +53,11 @@ fn dist(a: P, b: P) -> f64 {
 }
 fn unitario(a: P) -> P {
     let l = largo(a);
-    if l > 1e-12 { por(a, 1.0 / l) } else { (0.0, 0.0) }
+    if l > 1e-12 {
+        por(a, 1.0 / l)
+    } else {
+        (0.0, 0.0)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -108,11 +112,15 @@ pub fn isolineas(campo: &[f32], w: usize, h: usize, umbral: f32) -> Vec<Vec<P>> 
     for j in 0..h - 1 {
         for i in 0..w - 1 {
             let (a, b, c, d) = (v(i, j), v(i + 1, j), v(i + 1, j + 1), v(i, j + 1));
-            let caso = (usize::from(a > umbral) << 3) | (usize::from(b > umbral) << 2) | (usize::from(c > umbral) << 1) | usize::from(d > umbral);
+            let caso = (usize::from(a > umbral) << 3)
+                | (usize::from(b > umbral) << 2)
+                | (usize::from(c > umbral) << 1)
+                | usize::from(d > umbral);
             if caso == 0 || caso == 15 {
                 continue;
             }
-            let (arriba, abajo, izq, der) = (id_h(i, j), id_h(i, j + 1), id_v(i, j), id_v(i + 1, j));
+            let (arriba, abajo, izq, der) =
+                (id_h(i, j), id_h(i, j + 1), id_v(i, j), id_v(i + 1, j));
             let mut une = |de: usize, a: usize| siguiente[de] = a as u32;
             let centro_dentro = (a + b + c + d) / 4.0 > umbral;
             match caso {
@@ -155,7 +163,11 @@ pub fn isolineas(campo: &[f32], w: usize, h: usize, umbral: f32) -> Vec<Vec<P>> 
     let posicion = |e: usize| -> P {
         let interp = |v0: f32, v1: f32| -> f64 {
             let d = v1 - v0;
-            if d.abs() < 1e-9 { 0.5 } else { ((umbral - v0) / d).clamp(0.0, 1.0) as f64 }
+            if d.abs() < 1e-9 {
+                0.5
+            } else {
+                ((umbral - v0) / d).clamp(0.0, 1.0) as f64
+            }
         };
         if e < horizontales {
             let (i, j) = (e % (w - 1), e / (w - 1));
@@ -220,7 +232,6 @@ pub enum Tramo {
     Cubica([P; 4]),
 }
 
-
 /// Longitud acumulada de una polilinea.
 fn acumulada(p: &[P]) -> Vec<f64> {
     let mut s = Vec::with_capacity(p.len());
@@ -236,7 +247,14 @@ fn acumulada(p: &[P]) -> Vec<f64> {
 
 /// El giro (radianes, 0..π) en el punto `i` mirando a `escala` de
 /// distancia hacia atras y hacia delante, y si llega a tanto.
-fn giro_a_escala(p: &[P], s: &[f64], total: f64, cerrado: bool, i: usize, escala: f64) -> Option<f64> {
+fn giro_a_escala(
+    p: &[P],
+    s: &[f64],
+    total: f64,
+    cerrado: bool,
+    i: usize,
+    escala: f64,
+) -> Option<f64> {
     let n = p.len();
     // Hacia atras.
     let mut j = i;
@@ -250,7 +268,11 @@ fn giro_a_escala(p: &[P], s: &[f64], total: f64, cerrado: bool, i: usize, escala
         } else {
             j - 1
         };
-        recorrido += if k + 1 == j { s[j] - s[k] } else { total - s[k] };
+        recorrido += if k + 1 == j {
+            s[j] - s[k]
+        } else {
+            total - s[k]
+        };
         j = k;
         if recorrido >= escala {
             break p[j];
@@ -270,7 +292,11 @@ fn giro_a_escala(p: &[P], s: &[f64], total: f64, cerrado: bool, i: usize, escala
         } else {
             j + 1
         };
-        recorrido += if k == j + 1 { s[k] - s[j] } else { total - s[j] };
+        recorrido += if k == j + 1 {
+            s[k] - s[j]
+        } else {
+            total - s[j]
+        };
         j = k;
         if recorrido >= escala {
             break p[j];
@@ -296,7 +322,12 @@ fn esquinas(p: &[P], cerrado: bool) -> Vec<(usize, f64)> {
     const PEQUENA: f64 = 2.0;
     let umbral = 55f64.to_radians();
     let s = acumulada(p);
-    let total = s.last().copied().unwrap_or(0.0) + if cerrado && p.len() > 1 { dist(p[p.len() - 1], p[0]) } else { 0.0 };
+    let total = s.last().copied().unwrap_or(0.0)
+        + if cerrado && p.len() > 1 {
+            dist(p[p.len() - 1], p[0])
+        } else {
+            0.0
+        };
     if total < 4.0 * GRANDE {
         return Vec::new();
     }
@@ -313,7 +344,11 @@ fn esquinas(p: &[P], cerrado: bool) -> Vec<(usize, f64)> {
             // Una esquina aguda: el chaflan le come el giro a 2 px, pero a
             // doble escala gira lo mismo (una curva cerrada giraria el doble).
             let doble = giro_a_escala(p, &s, total, cerrado, i, 2.0 * GRANDE).unwrap_or(f64::MAX);
-            if g > 100f64.to_radians() && doble < 1.25 * g { g } else { 0.0 }
+            if g > 100f64.to_radians() && doble < 1.25 * g {
+                g
+            } else {
+                0.0
+            }
         })
         .collect();
     let n = p.len();
@@ -328,7 +363,13 @@ fn esquinas(p: &[P], cerrado: bool) -> Vec<(usize, f64)> {
             let mut j = i as isize;
             loop {
                 j += paso;
-                let k = if cerrado { j.rem_euclid(n as isize) as usize } else if j < 0 || j >= n as isize { break } else { j as usize };
+                let k = if cerrado {
+                    j.rem_euclid(n as isize) as usize
+                } else if j < 0 || j >= n as isize {
+                    break;
+                } else {
+                    j as usize
+                };
                 if k == i {
                     break;
                 }
@@ -389,7 +430,14 @@ fn corte(a: (P, P), b: (P, P)) -> Option<P> {
 
 /// Los puntos entre `desde` y `hasta` (de arco desde el punto `i`, hacia
 /// delante si `paso` es 1 o hacia atras si es -1).
-fn puntos_a_distancia(p: &[P], cerrado: bool, i: usize, paso: isize, desde: f64, hasta: f64) -> Vec<P> {
+fn puntos_a_distancia(
+    p: &[P],
+    cerrado: bool,
+    i: usize,
+    paso: isize,
+    desde: f64,
+    hasta: f64,
+) -> Vec<P> {
     let n = p.len() as isize;
     let mut v = Vec::new();
     let mut j = i as isize;
@@ -454,9 +502,16 @@ pub fn ajustar(p: &[P], cerrado: bool, tol: f64) -> Vec<Tramo> {
     let cortes: Vec<(usize, P, f64)> = if cerrado {
         afiladas.collect()
     } else {
-        std::iter::once((0, p[0], 0.0)).chain(afiladas).chain(std::iter::once((n - 1, p[n - 1], 0.0))).collect()
+        std::iter::once((0, p[0], 0.0))
+            .chain(afiladas)
+            .chain(std::iter::once((n - 1, p[n - 1], 0.0)))
+            .collect()
     };
-    let pares = if cerrado { cortes.len() } else { cortes.len() - 1 };
+    let pares = if cerrado {
+        cortes.len()
+    } else {
+        cortes.len() - 1
+    };
     let mut tramos = Vec::new();
     for k in 0..pares {
         let (ia, xa, za) = cortes[k];
@@ -495,9 +550,9 @@ fn afilada_de(p: &[P], cerrado: bool, i: usize, zona: f64) -> P {
     let antes = puntos_a_distancia(p, cerrado, i, -1, zona, zona + 4.0);
     let despues = puntos_a_distancia(p, cerrado, i, 1, zona, zona + 4.0);
     match (recta_de(&antes), recta_de(&despues)) {
-        (Some(a), Some(b)) if antes.len() >= 2 && despues.len() >= 2 => {
-            corte(a, b).filter(|x| dist(*x, p[i]) < zona * 1.5 + 0.5).unwrap_or(p[i])
-        }
+        (Some(a), Some(b)) if antes.len() >= 2 && despues.len() >= 2 => corte(a, b)
+            .filter(|x| dist(*x, p[i]) < zona * 1.5 + 0.5)
+            .unwrap_or(p[i]),
         _ => p[i],
     }
 }
@@ -507,7 +562,16 @@ fn afilada_de(p: &[P], cerrado: bool, i: usize, zona: f64) -> P {
 fn tangente_centro(p: &[P], cerrado: bool, i: usize) -> P {
     let atras = puntos_a_distancia(p, cerrado, i, -1, 0.0, 2.5);
     let delante = puntos_a_distancia(p, cerrado, i, 1, 0.0, 2.5);
-    let media = |v: &[P]| if v.is_empty() { p[i] } else { por(v.iter().fold((0.0, 0.0), |a, q| suma(a, *q)), 1.0 / v.len() as f64) };
+    let media = |v: &[P]| {
+        if v.is_empty() {
+            p[i]
+        } else {
+            por(
+                v.iter().fold((0.0, 0.0), |a, q| suma(a, *q)),
+                1.0 / v.len() as f64,
+            )
+        }
+    };
     unitario(resta(media(&delante), media(&atras)))
 }
 
@@ -539,7 +603,10 @@ fn ajustar_trozo(t: &[P], t1: Option<P>, t2: Option<P>, tol: f64, salida: &mut V
         let cuerda = t.iter().map(|q| dist_a_recta(*q, a, b)).fold(0.0, f64::max);
         cuerda <= tol * 0.5
             || (cuerda <= tol
-                && recta_de(t).is_some_and(|(m, d)| t.iter().all(|q| dist_a_recta(*q, m, suma(m, d)) <= tol * 0.35)))
+                && recta_de(t).is_some_and(|(m, d)| {
+                    t.iter()
+                        .all(|q| dist_a_recta(*q, m, suma(m, d)) <= tol * 0.35)
+                }))
     };
     if n == 2 || (t1.is_none() && recto()) {
         if dist(a, b) > 1e-9 {
@@ -601,7 +668,11 @@ fn generar(t: &[P], u: &[f64], t1: P, t2: P) -> [P; 4] {
     }
     let det = c00 * c11 - c01 * c01;
     let seg = dist(p0, p3);
-    let (mut al, mut ar) = if det.abs() > 1e-12 { ((x0 * c11 - x1 * c01) / det, (c00 * x1 - c01 * x0) / det) } else { (0.0, 0.0) };
+    let (mut al, mut ar) = if det.abs() > 1e-12 {
+        ((x0 * c11 - x1 * c01) / det, (c00 * x1 - c01 * x0) / det)
+    } else {
+        (0.0, 0.0)
+    };
     // Tiradores al reves o diminutos: la heuristica de Wu y Barsky (un
     // tercio de la cuerda). Larguisimos: se recortan (el error lo vigila).
     let eps = 1e-6 * seg;
@@ -629,19 +700,30 @@ fn error_maximo(t: &[P], c: &[P; 4], u: &[f64]) -> (f64, usize) {
 /// Un paso de Newton-Raphson por punto para que su parametro sea el del
 /// punto de la curva mas cercano.
 fn reparametrizar(t: &[P], c: &[P; 4], u: &[f64]) -> Vec<f64> {
-    let d1 = [por(resta(c[1], c[0]), 3.0), por(resta(c[2], c[1]), 3.0), por(resta(c[3], c[2]), 3.0)];
+    let d1 = [
+        por(resta(c[1], c[0]), 3.0),
+        por(resta(c[2], c[1]), 3.0),
+        por(resta(c[3], c[2]), 3.0),
+    ];
     let d2 = [por(resta(d1[1], d1[0]), 2.0), por(resta(d1[2], d1[1]), 2.0)];
     t.iter()
         .zip(u)
         .map(|(q, &ui)| {
             let v = 1.0 - ui;
             let b = bezier(c, ui);
-            let b1 = suma(suma(por(d1[0], v * v), por(d1[1], 2.0 * v * ui)), por(d1[2], ui * ui));
+            let b1 = suma(
+                suma(por(d1[0], v * v), por(d1[1], 2.0 * v * ui)),
+                por(d1[2], ui * ui),
+            );
             let b2 = suma(por(d2[0], v), por(d2[1], ui));
             let dif = resta(b, *q);
             let num = punto(dif, b1);
             let den = punto(b1, b1) + punto(dif, b2);
-            if den.abs() < 1e-12 { ui } else { (ui - num / den).clamp(0.0, 1.0) }
+            if den.abs() < 1e-12 {
+                ui
+            } else {
+                (ui - num / den).clamp(0.0, 1.0)
+            }
         })
         .collect()
 }
@@ -650,7 +732,10 @@ fn schneider(t: &[P], t1: P, t2: P, tol: f64, salida: &mut Vec<Tramo>, hondo: us
     let n = t.len();
     if n == 2 {
         let l = dist(t[0], t[1]) / 3.0;
-        salida.push(recta_o_cubica([t[0], suma(t[0], por(t1, l)), suma(t[1], por(t2, l)), t[1]], tol));
+        salida.push(recta_o_cubica(
+            [t[0], suma(t[0], por(t1, l)), suma(t[1], por(t2, l)), t[1]],
+            tol,
+        ));
         return;
     }
     let mut u = cuerda(t);
@@ -760,7 +845,11 @@ mod pruebas {
         // Exterior: area negativa (lo de dentro a la izquierda, y abajo).
         assert!(area(&a[0]) < 0.0, "{}", area(&a[0]));
         // Nodo (i, j) = centro del pixel (i - 2, j - 2): sumar -1,5.
-        let err: f64 = a[0].iter().map(|p| ((p.0 - 1.5 - 30.0).powi(2) + (p.1 - 1.5 - 30.0).powi(2)).sqrt() - 20.0).map(f64::abs).fold(0.0, f64::max);
+        let err: f64 = a[0]
+            .iter()
+            .map(|p| ((p.0 - 1.5 - 30.0).powi(2) + (p.1 - 1.5 - 30.0).powi(2)).sqrt() - 20.0)
+            .map(f64::abs)
+            .fold(0.0, f64::max);
         assert!(err < 0.6, "error del contorno {err}");
         // Nada de peldanos: ningun giro de 90°.
         let n = a[0].len();
@@ -802,22 +891,32 @@ mod pruebas {
 
     #[test]
     fn un_circulo_sale_en_pocas_cubicas_y_fiel() {
-        let pts: Vec<P> = (0..200).map(|i| {
-            let t = i as f64 / 200.0 * std::f64::consts::TAU;
-            (50.0 + 30.0 * t.cos(), 50.0 + 30.0 * t.sin())
-        }).collect();
+        let pts: Vec<P> = (0..200)
+            .map(|i| {
+                let t = i as f64 / 200.0 * std::f64::consts::TAU;
+                (50.0 + 30.0 * t.cos(), 50.0 + 30.0 * t.sin())
+            })
+            .collect();
         let tr = ajustar(&pts, true, 0.3);
         assert!(tr.len() >= 4 && tr.len() <= 10, "{} tramos", tr.len());
-        assert!(tr.iter().all(|t| matches!(t, Tramo::Cubica(_))), "un circulo sin rectas");
+        assert!(
+            tr.iter().all(|t| matches!(t, Tramo::Cubica(_))),
+            "un circulo sin rectas"
+        );
         let v = aplanar(&tr, true, 0.2);
-        let e = v.iter().map(|p| (dist(*p, (50.0, 50.0)) - 30.0).abs()).fold(0.0, f64::max);
+        let e = v
+            .iter()
+            .map(|p| (dist(*p, (50.0, 50.0)) - 30.0).abs())
+            .fold(0.0, f64::max);
         assert!(e < 0.5, "{e}");
     }
 
     #[test]
     fn un_borde_recto_con_ruido_no_se_curva() {
         // Una recta con dientes de 0,2 px: un solo tramo recto.
-        let pts: Vec<P> = (0..80).map(|i| (i as f64, 10.0 + if i % 2 == 0 { 0.2 } else { -0.2 })).collect();
+        let pts: Vec<P> = (0..80)
+            .map(|i| (i as f64, 10.0 + if i % 2 == 0 { 0.2 } else { -0.2 }))
+            .collect();
         let tr = ajustar(&pts, false, 0.7);
         assert_eq!(tr.len(), 1, "{tr:?}");
         assert!(matches!(tr[0], Tramo::Recta(..)));
@@ -829,7 +928,9 @@ mod pruebas {
         // Un cuadrado de 40 px con las esquinas achaflanadas medio pixel
         // (como sale del suavizado): 4 rectas y las esquinas en su sitio.
         let (w, h) = (60, 60);
-        let m: Vec<bool> = (0..w * h).map(|i| (10..50).contains(&(i % w)) && (10..50).contains(&(i / w))).collect();
+        let m: Vec<bool> = (0..w * h)
+            .map(|i| (10..50).contains(&(i % w)) && (10..50).contains(&(i / w)))
+            .collect();
         let (c, gw, gh) = campo_suave(&m, w, h, 2);
         let a = isolineas(&c, gw, gh, 0.5);
         assert_eq!(a.len(), 1);
@@ -848,10 +949,12 @@ mod pruebas {
     #[test]
     fn una_curva_con_esquina_conserva_la_esquina_y_la_curva() {
         // Media luna: un arco y una cuerda. Dos esquinas donde se juntan.
-        let mut pts: Vec<P> = (0..=100).map(|i| {
-            let t = std::f64::consts::PI * i as f64 / 100.0;
-            (50.0 + 30.0 * t.cos(), 50.0 - 30.0 * t.sin())
-        }).collect();
+        let mut pts: Vec<P> = (0..=100)
+            .map(|i| {
+                let t = std::f64::consts::PI * i as f64 / 100.0;
+                (50.0 + 30.0 * t.cos(), 50.0 - 30.0 * t.sin())
+            })
+            .collect();
         for i in 1..60 {
             pts.push((20.0 + i as f64, 50.0));
         }
@@ -874,7 +977,10 @@ mod pruebas {
         for (pl, plano) in [(&fino, 0.1), (&grueso, 2.0)] {
             for k in 0..=400 {
                 let q = bezier(&c, k as f64 / 400.0);
-                let d = pl.windows(2).map(|s| dist_a_segmento(q, s[0], s[1])).fold(f64::MAX, f64::min);
+                let d = pl
+                    .windows(2)
+                    .map(|s| dist_a_segmento(q, s[0], s[1]))
+                    .fold(f64::MAX, f64::min);
                 assert!(d <= plano * 1.01, "{d} > {plano}");
             }
         }
@@ -883,7 +989,11 @@ mod pruebas {
     fn dist_a_segmento(p: P, a: P, b: P) -> f64 {
         let d = resta(b, a);
         let l2 = punto(d, d);
-        let t = if l2 > 0.0 { (punto(resta(p, a), d) / l2).clamp(0.0, 1.0) } else { 0.0 };
+        let t = if l2 > 0.0 {
+            (punto(resta(p, a), d) / l2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         dist(p, suma(a, por(d, t)))
     }
 }

@@ -377,10 +377,7 @@ fn hoja_de_simbolos(linea: &str) -> Hoja {
         negrita: false,
         cursiva: false,
     };
-    hoja(vec![
-        texto(linea, 10.0),
-        texto("falta: \u{10FFFD}.", 40.0),
-    ])
+    hoja(vec![texto(linea, 10.0), texto("falta: \u{10FFFD}.", 40.0)])
 }
 
 const SIMBOLOS: &str = "θ μ Ω Σ π − √ ≤ ∞ ° x² H₂O → 😀";
@@ -404,8 +401,14 @@ fn los_simbolos_de_ciencias_salen_con_su_letra_y_se_copian_tal_cual() {
         )
         .expect("una hoja");
         let s = String::from_utf8_lossy(&bytes);
-        assert!(s.contains("/CIDFontType2") && s.contains("/ToUnicode"), "{nombre}");
-        assert!(s.contains("+SegoeUIEmoji"), "{nombre}: el emoji va en su letra");
+        assert!(
+            s.contains("/CIDFontType2") && s.contains("/ToUnicode"),
+            "{nombre}"
+        );
+        assert!(
+            s.contains("+SegoeUIEmoji"),
+            "{nombre}: el emoji va en su letra"
+        );
         assert!(
             bytes.len() < 150_000,
             "{nombre}: solo los glifos usados: {} bytes",
@@ -413,7 +416,11 @@ fn los_simbolos_de_ciencias_salen_con_su_letra_y_se_copian_tal_cual() {
         );
         // El texto que se copia del PDF es el que se escribio.
         let paginas = pixpin_pdf::texto::de_bytes(&bytes).expect("se lee el texto");
-        let leido: String = paginas[0].texto.chars().filter(|c| !c.is_whitespace()).collect();
+        let leido: String = paginas[0]
+            .texto
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
         let quiero: String = SIMBOLOS.chars().filter(|c| !c.is_whitespace()).collect();
         assert!(leido.contains(&quiero), "{nombre}: {leido:?}");
         // Caso negativo: lo que no tiene nadie no se calla con un `?`: se
@@ -432,8 +439,11 @@ fn los_simbolos_de_ciencias_salen_con_su_letra_y_se_copian_tal_cual() {
         assert!(oscuros > 500, "{nombre}: el renglon se ve: {oscuros}");
         if let Ok(dir) = std::env::var("PIXPIN_PDF_IMAGENES") {
             let png = pixpin_codec::imagen::codificar_png(&p).expect("png");
-            std::fs::write(std::path::Path::new(&dir).join(format!("simbolos-{nombre}.png")), png)
-                .expect("escribir png");
+            std::fs::write(
+                std::path::Path::new(&dir).join(format!("simbolos-{nombre}.png")),
+                png,
+            )
+            .expect("escribir png");
         }
     }
 }
@@ -463,7 +473,10 @@ fn cada_simbolo_se_pinta_con_su_glifo_y_no_con_el_hueco() {
             &|_| None,
         )
         .expect("una hoja");
-        let ruta = fichero(&format!("uno-{:x}.pdf", c.chars().next().unwrap() as u32), &bytes);
+        let ruta = fichero(
+            &format!("uno-{:x}.pdf", c.chars().next().unwrap() as u32),
+            &bytes,
+        );
         let p = pixpin_pdf::Documento::abrir(&ruta)
             .and_then(|d| d.renderizar(0, 300))
             .expect("Windows lo abre");
@@ -474,7 +487,9 @@ fn cada_simbolo_se_pinta_con_su_glifo_y_no_con_el_hueco() {
     };
     let hueco = pinta("\u{10FFFD}");
     assert!(hueco.contains(&1), "el hueco se ve: un cuadrito");
-    for c in ["θ", "μ", "Ω", "Σ", "π", "−", "√", "≤", "∞", "°", "²", "₂", "→", "😀"] {
+    for c in [
+        "θ", "μ", "Ω", "Σ", "π", "−", "√", "≤", "∞", "°", "²", "₂", "→", "😀",
+    ] {
         let tinta = pinta(c);
         assert!(tinta.contains(&1), "{c} no se ve");
         assert_ne!(tinta, hueco, "{c} sale como el hueco");

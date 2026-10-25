@@ -135,7 +135,10 @@ const ESPERA_MAXIMA: Duration = Duration::from_secs(20);
 /// Lo que se hace tras un intento fallido.
 enum Intento {
     /// Algo pasajero (429, 5xx, red): otra vez tras esperar.
-    Reintentar { error: ErrorIa, esperar: Option<Duration> },
+    Reintentar {
+        error: ErrorIa,
+        esperar: Option<Duration>,
+    },
     /// Se cambio un ajuste de la peticion (sin pensar): otra
     /// vez ya.
     Cambiar(ErrorIa),
@@ -157,24 +160,51 @@ pub fn clasificar(p: Proveedor, codigo: u32, cuerpo: &str) -> (String, bool) {
         .unwrap_or_else(|| cuerpo.chars().take(160).collect());
     let bajo = detalle.to_lowercase();
     let n = p.nombre();
-    let sin_saldo = codigo == 402 || bajo.contains("credit balance") || bajo.contains("insufficient balance");
+    let sin_saldo =
+        codigo == 402 || bajo.contains("credit balance") || bajo.contains("insufficient balance");
     match codigo {
         _ if sin_saldo => (
-            format!("Tu cuenta de {n} no tiene saldo. Recargala en su web o vuelve al asistente local en Ajustes → Asistente."),
+            format!(
+                "Tu cuenta de {n} no tiene saldo. Recargala en su web o vuelve al asistente local en Ajustes → Asistente."
+            ),
             false,
         ),
         401 => (
-            format!("{n} no acepta la clave: esta mal copiada o se revoco. Pega otra en Ajustes → Asistente."),
+            format!(
+                "{n} no acepta la clave: esta mal copiada o se revoco. Pega otra en Ajustes → Asistente."
+            ),
             false,
         ),
-        403 => (format!("La clave de {n} no tiene permiso para usar este modelo. Revisa tu cuenta o usa otra clave."), false),
-        404 => (format!("{n} ya no ofrece el modelo que usa PixPin. Actualiza PixPin."), false),
-        413 => (format!("La peticion es demasiado grande para {n}; prueba con una foto mas pequena."), false),
-        429 => (format!("Demasiadas peticiones seguidas a {n}; espera un momento y vuelve a pedirlo."), true),
-        500 | 502 | 503 | 504 | 529 => (format!("{n} esta saturado o fallo; vuelve a intentarlo en un rato."), true),
+        403 => (
+            format!(
+                "La clave de {n} no tiene permiso para usar este modelo. Revisa tu cuenta o usa otra clave."
+            ),
+            false,
+        ),
+        404 => (
+            format!("{n} ya no ofrece el modelo que usa PixPin. Actualiza PixPin."),
+            false,
+        ),
+        413 => (
+            format!("La peticion es demasiado grande para {n}; prueba con una foto mas pequena."),
+            false,
+        ),
+        429 => (
+            format!("Demasiadas peticiones seguidas a {n}; espera un momento y vuelve a pedirlo."),
+            true,
+        ),
+        500 | 502 | 503 | 504 | 529 => (
+            format!("{n} esta saturado o fallo; vuelve a intentarlo en un rato."),
+            true,
+        ),
         _ => {
             tracing::warn!(codigo, %detalle, "asistente: la nube rechazo la peticion");
-            (format!("{n} no acepto la peticion. Prueba a pedirlo de otra forma o vuelve al asistente local en Ajustes → Asistente."), false)
+            (
+                format!(
+                    "{n} no acepto la peticion. Prueba a pedirlo de otra forma o vuelve al asistente local en Ajustes → Asistente."
+                ),
+                false,
+            )
         }
     }
 }
@@ -198,6 +228,9 @@ pub struct MotorNube {
     /// vuelta (el LaTeX de un recorte, `hoja::vision`), donde pensar solo
     /// anade segundos.
     ligero: bool,
+    /// Otro modelo del mismo proveedor (el critico de respaldo,
+    /// [`claude::MODELO_CRITICO`]); `None`: el de siempre.
+    modelo: Option<&'static str>,
 }
 
 /// **La web, apagada** en este proceso: la cuenta de Claude contesto que no
@@ -213,8 +246,14 @@ pub fn web_disponible() -> bool {
 /// Quita del cuerpo de Claude las herramientas de la web (y `tools` si se
 /// queda vacio, que la API no lo admite).
 fn sin_la_web(c: &mut Value) {
-    let Some(tools) = c.get_mut("tools").and_then(Value::as_array_mut) else { return };
-    tools.retain(|t| !t.get("type").and_then(Value::as_str).is_some_and(|x| x.starts_with("web_")));
+    let Some(tools) = c.get_mut("tools").and_then(Value::as_array_mut) else {
+        return;
+    };
+    tools.retain(|t| {
+        !t.get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|x| x.starts_with("web_"))
+    });
     if tools.is_empty()
         && let Some(m) = c.as_object_mut()
     {
@@ -244,6 +283,7 @@ impl MotorNube {
             pensar: AtomicBool::new(true),
             esperas: ESPERAS.to_vec(),
             ligero: false,
+            modelo: None,
         }
     }
 
@@ -276,6 +316,13 @@ impl MotorNube {
         self
     }
 
+    /// **Otro modelo** del mismo proveedor y con la misma clave (el critico
+    /// de respaldo de la revision: [`claude::MODELO_CRITICO`]).
+    pub fn con_modelo(mut self, modelo: &'static str) -> MotorNube {
+        self.modelo = Some(modelo);
+        self
+    }
+
     pub fn proveedor(&self) -> Proveedor {
         self.proveedor
     }
@@ -288,8 +335,15 @@ impl MotorNube {
         // llegan ya en las herramientas de la peticion.
         // Sin pensar no hace falta sitio para el pensamiento.
         let pensar = self.pensar.load(Ordering::Relaxed);
-        let reserva = if self.ligero || !pensar { 0 } else { RESERVA_PENSAR };
-        let max = p.max_tokens.saturating_add(reserva).min(self.proveedor.max_tokens());
+        let reserva = if self.ligero || !pensar {
+            0
+        } else {
+            RESERVA_PENSAR
+        };
+        let max = p
+            .max_tokens
+            .saturating_add(reserva)
+            .min(self.proveedor.max_tokens());
         let mut c = match self.proveedor {
             Proveedor::Claude if self.ligero => {
                 let mut c = claude::cuerpo(p, &memoria, max);
@@ -309,6 +363,9 @@ impl MotorNube {
         };
         if self.proveedor == Proveedor::Claude && !web_disponible() {
             sin_la_web(&mut c);
+        }
+        if let Some(m) = self.modelo {
+            c["model"] = Value::String(m.into());
         }
         c
     }
@@ -335,7 +392,8 @@ impl MotorNube {
         al_trozo: &mut dyn FnMut(&Trozo) -> Seguir,
         emitido: &mut bool,
     ) -> Result<Respuesta, Intento> {
-        let cuerpo = serde_json::to_vec(&self.cuerpo(p)).map_err(|e| Intento::Fallo(ErrorIa::Protocolo(e.to_string())))?;
+        let cuerpo = serde_json::to_vec(&self.cuerpo(p))
+            .map_err(|e| Intento::Fallo(ErrorIa::Protocolo(e.to_string())))?;
         let mut grabacion = Grabacion::nueva(self.proveedor, &cuerpo);
         let pedido = http::Pedido {
             url: &self.url,
@@ -369,14 +427,28 @@ impl MotorNube {
                 if let Some(e) = lector.error.clone() {
                     // `overloaded_error` y `api_error` a mitad del flujo son
                     // pasajeros; lo demas, no.
-                    let pasajero = matches!(e.tipo.as_str(), "overloaded_error" | "api_error" | "rate_limit_error");
+                    let pasajero = matches!(
+                        e.tipo.as_str(),
+                        "overloaded_error" | "api_error" | "rate_limit_error"
+                    );
                     tracing::warn!(tipo = %e.tipo, mensaje = %e.mensaje, "asistente: error a mitad del flujo");
-                    let error = self.nube(format!("{n} fallo a mitad de la respuesta; vuelve a pedirlo."));
-                    return Err(if pasajero { Intento::Reintentar { error, esperar: None } } else { Intento::Fallo(error) });
+                    let error = self.nube(format!(
+                        "{n} fallo a mitad de la respuesta; vuelve a pedirlo."
+                    ));
+                    return Err(if pasajero {
+                        Intento::Reintentar {
+                            error,
+                            esperar: None,
+                        }
+                    } else {
+                        Intento::Fallo(error)
+                    });
                 }
                 if !cortado && !lector.acabado {
                     return Err(Intento::Reintentar {
-                        error: self.nube(format!("La respuesta de {n} llego cortada; vuelve a pedirlo.")),
+                        error: self.nube(format!(
+                            "La respuesta de {n} llego cortada; vuelve a pedirlo."
+                        )),
                         esperar: None,
                     });
                 }
@@ -389,7 +461,10 @@ impl MotorNube {
                         let aviso = format!(
                             "{}{n} no quiso hacer esto{}. Prueba a pedirlo de otra forma.",
                             if r.texto.is_empty() { "" } else { "\n\n" },
-                            salida.categoria.map(|_| " (su filtro de seguridad lo paro)".to_string()).unwrap_or_default()
+                            salida
+                                .categoria
+                                .map(|_| " (su filtro de seguridad lo paro)".to_string())
+                                .unwrap_or_default()
                         );
                         let _ = al_trozo(&Trozo::Texto(aviso.clone()));
                         r.texto.push_str(&aviso);
@@ -434,12 +509,19 @@ impl MotorNube {
                 let cortado = self.resultado_http(r)?;
                 if let Some(e) = roto {
                     tracing::warn!(%e, "asistente: error a mitad del flujo");
-                    let error = self.nube(format!("{n} fallo a mitad de la respuesta; vuelve a pedirlo."));
-                    return Err(Intento::Reintentar { error, esperar: None });
+                    let error = self.nube(format!(
+                        "{n} fallo a mitad de la respuesta; vuelve a pedirlo."
+                    ));
+                    return Err(Intento::Reintentar {
+                        error,
+                        esperar: None,
+                    });
                 }
                 if !cortado && !acum.acabado() && !*emitido {
                     return Err(Intento::Reintentar {
-                        error: self.nube(format!("La respuesta de {n} llego vacia; vuelve a pedirlo.")),
+                        error: self.nube(format!(
+                            "La respuesta de {n} llego vacia; vuelve a pedirlo."
+                        )),
                         esperar: None,
                     });
                 }
@@ -467,7 +549,11 @@ impl MotorNube {
                 },
                 esperar: None,
             }),
-            Err(http::Fallo::Http { codigo, cuerpo, esperar }) => {
+            Err(http::Fallo::Http {
+                codigo,
+                cuerpo,
+                esperar,
+            }) => {
                 let bajo = cuerpo.to_lowercase();
                 if codigo == 400
                     && self.proveedor == Proveedor::Claude
@@ -476,21 +562,33 @@ impl MotorNube {
                 {
                     // La cuenta no tiene la web activada (Console →
                     // Privacidad): se sigue sin ella, sin romper el chat.
-                    tracing::warn!("asistente: la cuenta de {n} no tiene la web activada; se sigue sin la web");
-                    return Err(Intento::Cambiar(self.nube(clasificar(self.proveedor, codigo, &cuerpo).0)));
+                    tracing::warn!(
+                        "asistente: la cuenta de {n} no tiene la web activada; se sigue sin la web"
+                    );
+                    return Err(Intento::Cambiar(
+                        self.nube(clasificar(self.proveedor, codigo, &cuerpo).0),
+                    ));
                 }
                 if codigo == 400
                     && self.proveedor == Proveedor::DeepSeek
                     && bajo.contains("reasoning")
                     && self.pensar.swap(false, Ordering::Relaxed)
                 {
-                    tracing::warn!("asistente: {n} pidio un razonamiento que no habia; se sigue sin pensar");
-                    return Err(Intento::Cambiar(self.nube(clasificar(self.proveedor, codigo, &cuerpo).0)));
+                    tracing::warn!(
+                        "asistente: {n} pidio un razonamiento que no habia; se sigue sin pensar"
+                    );
+                    return Err(Intento::Cambiar(
+                        self.nube(clasificar(self.proveedor, codigo, &cuerpo).0),
+                    ));
                 }
                 let (aviso, pasajero) = clasificar(self.proveedor, codigo, &cuerpo);
                 tracing::warn!(codigo, "asistente: {n} contesto con error");
                 let error = self.nube(aviso);
-                Err(if pasajero { Intento::Reintentar { error, esperar } } else { Intento::Fallo(error) })
+                Err(if pasajero {
+                    Intento::Reintentar { error, esperar }
+                } else {
+                    Intento::Fallo(error)
+                })
             }
         }
     }
@@ -508,12 +606,17 @@ impl Motor for MotorNube {
         }
     }
 
-    /// Claude Haiku 5.5 y DeepSeek V4.1 Flash ven imagenes.
+    /// Claude Haiku 5.5, Sonnet y DeepSeek V4.1 Flash ven imagenes;
+    /// DeepSeek V4 Pro (el jefe con DeepSeek) no.
     fn ve_imagenes(&self) -> bool {
-        true
+        self.modelo != Some(deepseek::MODELO_PRO)
     }
 
-    fn completar(&self, p: &Peticion, al_trozo: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+    fn completar(
+        &self,
+        p: &Peticion,
+        al_trozo: &mut dyn FnMut(&Trozo) -> Seguir,
+    ) -> Result<Respuesta, ErrorIa> {
         if self.clave.is_empty() {
             return Err(ErrorIa::Nube(format!(
                 "Falta la clave de {}: pegala en Ajustes → Asistente.",
@@ -568,7 +671,9 @@ impl Grabacion {
         let n = N.fetch_add(1, Ordering::SeqCst);
         let base = dir.join(format!("{}-{}-{n:03}", p.id(), std::process::id()));
         let _ = std::fs::write(base.with_extension("peticion.json"), cuerpo);
-        Grabacion { respuesta: std::fs::File::create(base.with_extension("respuesta.sse")).ok() }
+        Grabacion {
+            respuesta: std::fs::File::create(base.with_extension("respuesta.sse")).ok(),
+        }
     }
 
     /// Apunta `b` y lo devuelve, para leerlo a la vez.
@@ -605,13 +710,20 @@ pub fn probar_en(p: Proveedor, clave: &str, url: &str) -> Result<String, String>
     let mut respuesta = Vec::new();
     match http::enviar(&pedido, &mut |b| {
         respuesta.extend_from_slice(b);
-        if respuesta.len() > 64 * 1024 { Seguir::Parar } else { Seguir::Si }
+        if respuesta.len() > 64 * 1024 {
+            Seguir::Parar
+        } else {
+            Seguir::Si
+        }
     }) {
         Ok(_) => {
             let v: Value = serde_json::from_slice(&respuesta)
                 .map_err(|_| format!("{} contesto algo que no se entiende", p.nombre()))?;
             let modelo = v.get("model").and_then(Value::as_str).unwrap_or(p.modelo());
-            Ok(format!("la clave funciona: {} ({modelo}) contesto.", p.nombre()))
+            Ok(format!(
+                "la clave funciona: {} ({modelo}) contesto.",
+                p.nombre()
+            ))
         }
         Err(http::Fallo::Red(d)) => {
             tracing::warn!(%d, "asistente: sin conexion al probar la clave");
@@ -627,11 +739,18 @@ pub fn probar_en(p: Proveedor, clave: &str, url: &str) -> Result<String, String>
 pub fn para_el_local(p: &Peticion) -> Peticion {
     let mut q = p.clone();
     if q.herramientas.len() > crate::seleccion::MAXIMO {
-        let ultimo = p.mensajes.iter().rev().find(|m| m.rol == crate::motor::Rol::Usuario);
-        let pedido = ultimo.map(crate::motor::Mensaje::texto_entero).unwrap_or_default();
+        let ultimo = p
+            .mensajes
+            .iter()
+            .rev()
+            .find(|m| m.rol == crate::motor::Rol::Usuario);
+        let pedido = ultimo
+            .map(crate::motor::Mensaje::texto_entero)
+            .unwrap_or_default();
         let con_imagen = p.mensajes.iter().any(crate::motor::Mensaje::tiene_imagen);
         let elegidas = crate::seleccion::para_el_pedido(&pedido, con_imagen);
-        q.herramientas.retain(|h| elegidas.iter().any(|e| e.nombre == h.nombre));
+        q.herramientas
+            .retain(|h| elegidas.iter().any(|e| e.nombre == h.nombre));
     }
     q
 }
@@ -651,7 +770,11 @@ pub struct MotorConRespaldo {
 pub const PAUSA_TRAS_FALLO: Duration = Duration::from_secs(3 * 60);
 
 impl MotorConRespaldo {
-    pub fn nuevo(nube: Arc<dyn Motor>, local: Option<Arc<dyn Motor>>, nombre: impl Into<String>) -> MotorConRespaldo {
+    pub fn nuevo(
+        nube: Arc<dyn Motor>,
+        local: Option<Arc<dyn Motor>>,
+        nombre: impl Into<String>,
+    ) -> MotorConRespaldo {
         MotorConRespaldo {
             nube,
             local,
@@ -670,7 +793,11 @@ impl MotorConRespaldo {
 }
 
 impl Motor for MotorConRespaldo {
-    fn completar(&self, p: &Peticion, al_trozo: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+    fn completar(
+        &self,
+        p: &Peticion,
+        al_trozo: &mut dyn FnMut(&Trozo) -> Seguir,
+    ) -> Result<Respuesta, ErrorIa> {
         if let Some(local) = &self.local
             && self.caido()
         {
@@ -686,7 +813,10 @@ impl Motor for MotorConRespaldo {
                 if let Ok(mut g) = self.caido_hasta.lock() {
                     *g = Some(Instant::now() + PAUSA_TRAS_FALLO);
                 }
-                let nota = format!("⚠️ {}: {aviso}\nSigo con el asistente local.\n\n", self.nombre);
+                let nota = format!(
+                    "⚠️ {}: {aviso}\nSigo con el asistente local.\n\n",
+                    self.nombre
+                );
                 if al_trozo(&Trozo::Texto(nota)) == Seguir::Parar {
                     return Ok(Respuesta {
                         fin: Fin::Cortado,

@@ -87,8 +87,14 @@ impl Ctx<'_, '_> {
         // Un rango de ida y vuelta construye el indice como efecto.
         let _ = celdas_del_rango(
             self.tabla,
-            Ref { columna: 0, fila: 0 },
-            Ref { columna: 0, fila: 0 },
+            Ref {
+                columna: 0,
+                fila: 0,
+            },
+            Ref {
+                columna: 0,
+                fila: 0,
+            },
             &mut self.m.indice,
         );
         let mut cols = 0;
@@ -347,7 +353,10 @@ impl Ctx<'_, '_> {
                 let evs: Vec<Ev> = args.iter().map(|a| self.eval(a)).collect();
                 // Los errores de los argumentos suben, salvo en las funciones
                 // cuyo oficio es mirarlos.
-                if (!canon.starts_with("ES") || canon == "ESPACIOS") && canon != "CONTARA" && canon != "CONTAR.BLANCO" {
+                if (!canon.starts_with("ES") || canon == "ESPACIOS")
+                    && canon != "CONTARA"
+                    && canon != "CONTAR.BLANCO"
+                {
                     for e in &evs {
                         if let Ev::V(Valor::Error(x)) | Ev::C(Valor::Error(x)) = e {
                             return Ev::V(Valor::Error(*x));
@@ -683,8 +692,9 @@ const CATALOGO: &[(&str, &str, usize, usize)] = &[
 fn catalogo(nombre: &str) -> Option<(&'static str, usize, usize)> {
     // Buscar entre ciento cincuenta nombres uno por uno, en cada llamada de
     // cada celda, se notaba: un mapa hecho la primera vez.
-    static MAPA: std::sync::OnceLock<std::collections::HashMap<&'static str, (&'static str, usize, usize)>> =
-        std::sync::OnceLock::new();
+    static MAPA: std::sync::OnceLock<
+        std::collections::HashMap<&'static str, (&'static str, usize, usize)>,
+    > = std::sync::OnceLock::new();
     MAPA.get_or_init(|| {
         CATALOGO
             .iter()

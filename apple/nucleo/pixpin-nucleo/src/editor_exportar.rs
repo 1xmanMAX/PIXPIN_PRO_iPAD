@@ -112,6 +112,29 @@ pub fn hojas(
         .collect()
 }
 
+/// Una hoja ya hecha (`exportar::hojas_de_cuaderno`, las carpetas de
+/// paginas) con las ordenes de lo que toca su caja.
+pub(crate) fn empaquetar_hoja(escena: &Escena, h: &ex::Hoja) -> HojaExportada {
+    let (x0, y0, x1, y1) = h.caja;
+    let ordenes: Vec<Orden> = escena
+        .a_la_vista()
+        .filter(|e| {
+            let (a, b, c, d) = e.caja();
+            let m = e.grosor * 2.0 + 40.0;
+            a - m <= x1 && c + m >= x0 && b - m <= y1 && d + m >= y0
+        })
+        .flat_map(|e| ordenes_de(escena, e))
+        .collect();
+    HojaExportada {
+        nombre: h.nombre.clone(),
+        x0,
+        y0,
+        x1,
+        y1,
+        plano: empaquetar(&ordenes, escena.fondo, Some(h.caja)),
+    }
+}
+
 /// El tipo de una imagen por sus primeros bytes (lo que admite un `data:`).
 pub(crate) fn mime_de(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG") {

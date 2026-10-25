@@ -395,5 +395,87 @@ fn el_angulo_pone_su_letra_y_las_flechas_la_cambian() {
     assert!(!ed.cambiar_letra_de_angulo(1));
     ed.guardar().unwrap();
     let texto = std::fs::read_to_string(&ruta).unwrap();
-    assert!(texto.contains("marcaAngulo") || texto.contains("angulo"), "{texto}");
+    assert!(
+        texto.contains("marcaAngulo") || texto.contains("angulo"),
+        "{texto}"
+    );
+}
+
+/// **La nube de revision dinamica** (Windows `8be02e5`): el Mac la lee del
+/// fichero (una `line` cerrada con los festones mas `nubeRadio`), la pinta
+/// con sus festones, la estira por su asa sin deformarlos (cambia la caja,
+/// el radio no, y caben mas) y la guarda sin perderla.
+#[test]
+fn la_nube_se_pinta_se_estira_por_su_asa_y_se_guarda_sin_perderse() {
+    use pixpin_motor2d::elemento::ColorRgba;
+    use pixpin_motor2d::nube_revision;
+    use pixpin_motor2d::pintado::Orden;
+
+    let t = Temporal::nueva("nube");
+    let ruta = t.0.join("n.excalidraw").display().to_string();
+    let mut escena = pixpin_motor2d::Escena::nueva();
+    escena.anadir(nube_revision::nube(
+        100.0,
+        100.0,
+        200.0,
+        100.0,
+        10.0,
+        ColorRgba::opaco(0.9, 0.1, 0.1),
+        2.0,
+    ));
+    let texto = excalidraw::escribir(&excalidraw::con_escena(
+        &excalidraw::Lienzo::vacio(),
+        &escena,
+    ));
+    std::fs::write(&ruta, &texto).unwrap();
+    let v: Value = serde_json::from_str(&texto).unwrap();
+    assert_eq!(
+        v["elements"][0]["type"], "line",
+        "viaja como linea para el movil"
+    );
+
+    let ed = EditorLienzo::de_fichero(ruta.clone(), false).unwrap();
+    assert_eq!(ed.cuantos_elementos(), 1);
+    let vertices = |ed: &EditorLienzo| -> usize {
+        decodificar(&ed.plano())
+            .unwrap()
+            .1
+            .iter()
+            .map(|o| match o {
+                Orden::Polilinea { puntos, .. } | Orden::Relleno { puntos, .. } => puntos.len(),
+                _ => 0,
+            })
+            .max()
+            .unwrap_or(0)
+    };
+    let antes = vertices(&ed);
+    assert!(antes > 40, "con sus festones, no cuatro esquinas: {antes}");
+
+    // Elegirla por el borde y estirarla el doble a lo ancho por la esquina.
+    ed.herramienta("seleccion".into()).unwrap();
+    ed.puntero(FasePuntero::Pulsar, 100.0, 150.0, None, 0, 1.0);
+    ed.puntero(FasePuntero::Soltar, 100.0, 150.0, None, 0, 1.0);
+    assert_eq!(ed.cuantos_elegidos(), 1);
+    arrastre(&ed, (300.0, 200.0), (500.0, 200.0));
+    assert!(ed.guardar().unwrap());
+
+    let leido = excalidraw::leer(&std::fs::read_to_string(&ruta).unwrap()).unwrap();
+    let e = &leido.elementos()[0];
+    assert_eq!(
+        e.extras.nube,
+        Some(10.0),
+        "el mismo radio: los festones no se deforman"
+    );
+    assert!(e.ancho > 350.0, "la caja se estiro: {}", e.ancho);
+    assert!((e.alto - 100.0).abs() < 1.0, "a lo alto igual: {}", e.alto);
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&ruta).unwrap()).unwrap();
+    assert_eq!(v["elements"][0]["nubeRadio"], 10.0);
+    assert_eq!(v["elements"][0]["nubeBase"], "rectangulo");
+    // Caben mas festones del mismo tamano.
+    let otra = EditorLienzo::de_fichero(ruta, false).unwrap();
+    assert!(
+        vertices(&otra) > antes + antes / 2,
+        "{} frente a {antes}",
+        vertices(&otra)
+    );
 }

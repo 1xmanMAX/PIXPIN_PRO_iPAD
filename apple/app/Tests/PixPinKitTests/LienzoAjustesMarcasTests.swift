@@ -174,18 +174,28 @@ final class LienzoAjustesMarcasTests: XCTestCase {
         XCTAssertEqual(ed.tablaElegida()?.celdas.count, 3)
     }
 
-    func testLosMarcadoresSeGuardanJuntoAlDibujo() throws {
+    func testLosMarcadoresSeGuardanJuntoAlDibujoConSuVista() throws {
         let raiz = try carpetaTemporal("marcas")
         defer { try? FileManager.default.removeItem(at: raiz) }
         let ruta = raiz.appendingPathComponent("d.excalidraw").path
-        let ed = try EditorLienzo.deFichero(ruta: ruta, crear: true)
-        XCTAssertTrue(ed.marcas().isEmpty)
-        let l = try ed.ponerMarca(x: 10, y: 20, emoji: "⭐")
-        XCTAssertEqual(l.count, 1)
-        let otro = try EditorLienzo.deFichero(ruta: ruta, crear: false)
-        XCTAssertEqual(otro.marcas().first?.emoji, "⭐")
-        XCTAssertTrue(try otro.quitarMarca(id: l[0].id).isEmpty)
-        XCTAssertFalse(emojisDeMarcas().isEmpty)
+        _ = try EditorLienzo.deFichero(ruta: ruta, crear: true)
+        let m = MarcasDelLienzo.juntoAlDibujo(ruta: ruta)
+        XCTAssertTrue(m.lista().isEmpty)
+        let camara = CamaraDelLienzo(x: 0, y: 0, zoom: 2)
+        let id = m.poner(x: 10, y: 20, emoji: "⭐", camara: camara, anchoPx: 800, altoPx: 600)
+        let otro = MarcasDelLienzo.juntoAlDibujo(ruta: ruta)
+        XCTAssertEqual(otro.lista().first?.emoji, "⭐")
+        XCTAssertEqual(otro.lista().first?.conVista, true, "se planta con la vista de ese momento")
+        // Volver lleva a su vista, con su aumento.
+        let d = otro.destino(id: id, camara: CamaraDelLienzo(x: 500, y: 500, zoom: 1), anchoPx: 800, altoPx: 600,
+                             bajoLaBarra: 110)
+        XCTAssertEqual(d?.zoom ?? 0, 2, accuracy: 0.01)
+        // Casos negativos: una marca que no esta no se quita ni tiene destino.
+        XCTAssertFalse(otro.quitar(id: id + 1))
+        XCTAssertNil(otro.destino(id: id + 1, camara: camara, anchoPx: 800, altoPx: 600, bajoLaBarra: 110))
+        XCTAssertTrue(otro.quitar(id: id))
+        XCTAssertTrue(otro.lista().isEmpty)
+        XCTAssertFalse(otro.emojis().isEmpty)
     }
 
     func testLaZonaVaAlChatYSuEnlaceLlevaAlSublienzo() throws {

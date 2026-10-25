@@ -83,10 +83,17 @@ pub fn a_pizarra(s: &str, polar: bool) -> String {
     while i < c.len() {
         if c[i] == '^' {
             // `^{12}`, `^12`, `^-1`, `^n`.
-            let (mut j, llaves) = if c.get(i + 1) == Some(&'{') { (i + 2, true) } else { (i + 1, false) };
+            let (mut j, llaves) = if c.get(i + 1) == Some(&'{') {
+                (i + 2, true)
+            } else {
+                (i + 1, false)
+            };
             let mut sub = String::new();
             let mut ok = true;
-            while j < c.len() && (llaves && c[j] != '}' || !llaves && (c[j].is_ascii_digit() || (c[j] == '-' && sub.is_empty()))) {
+            while j < c.len()
+                && (llaves && c[j] != '}'
+                    || !llaves && (c[j].is_ascii_digit() || (c[j] == '-' && sub.is_empty())))
+            {
                 match c[j] {
                     d @ '0'..='9' => sub.push(ARRIBA[d as usize - '0' as usize]),
                     '-' => sub.push('⁻'),
@@ -106,7 +113,19 @@ pub fn a_pizarra(s: &str, polar: bool) -> String {
             }
         }
         let mut cambio = None;
-        for (w, por) in [("pi", "π"), ("theta", "θ"), ("sqrt", "√"), ("alpha", "α"), ("phi", "φ"), ("mu", "μ"), ("omega", "ω"), ("lambda", "λ"), ("Delta", "Δ"), ("infinito", "∞"), ("inf", "∞")] {
+        for (w, por) in [
+            ("pi", "π"),
+            ("theta", "θ"),
+            ("sqrt", "√"),
+            ("alpha", "α"),
+            ("phi", "φ"),
+            ("mu", "μ"),
+            ("omega", "ω"),
+            ("lambda", "λ"),
+            ("Delta", "Δ"),
+            ("infinito", "∞"),
+            ("inf", "∞"),
+        ] {
             let con_barra = c[i] == '\\' && palabra_suelta(&c, i + 1, w);
             if palabra_suelta(&c, i, w) || con_barra {
                 cambio = Some((por, w.chars().count() + usize::from(con_barra)));
@@ -152,11 +171,17 @@ pub fn para_ver(f: &str, polar: bool) -> String {
         if ch == '*' {
             let antes = c[..i].iter().rev().find(|x| !x.is_whitespace());
             let despues = c[i + 1..].iter().find(|x| !x.is_whitespace());
-            if antes.is_some_and(|a| a.is_ascii_digit() || *a == ')') && despues.is_some_and(|d| d.is_alphabetic() || *d == '(') {
+            if antes.is_some_and(|a| a.is_ascii_digit() || *a == ')')
+                && despues.is_some_and(|d| d.is_alphabetic() || *d == '(')
+            {
                 continue;
             }
         }
-        if polar && ch == 't' && (i == 0 || !c[i - 1].is_alphabetic()) && c.get(i + 1).is_none_or(|d| !d.is_alphabetic()) {
+        if polar
+            && ch == 't'
+            && (i == 0 || !c[i - 1].is_alphabetic())
+            && c.get(i + 1).is_none_or(|d| !d.is_alphabetic())
+        {
             out.push('θ');
             continue;
         }
@@ -220,9 +245,15 @@ impl Pizarra {
         if puntos.len() < 2 {
             return;
         }
-        let estilo = Estilo { color, tam: 16.0, opacidad: 1.0, familia: LETRA.into() };
+        let estilo = Estilo {
+            color,
+            tam: 16.0,
+            opacidad: 1.0,
+            familia: LETRA.into(),
+        };
         let pts: Vec<Punto2> = puntos.iter().map(|&(x, y)| p(x, y)).collect();
-        self.el.push(liso(ecuacion::elemento_linea(pts, grosor, &estilo)));
+        self.el
+            .push(liso(ecuacion::elemento_linea(pts, grosor, &estilo)));
     }
 
     /// Lo mismo, a trazos (asintotas, componentes, guias).
@@ -238,7 +269,12 @@ impl Pizarra {
         let pts = vec![p(a.0, a.1), p(b.0, b.1)];
         let (x0, y0, x1, y1) = caja_de(&pts);
         self.el.push(Elemento {
-            figura: Figura::Flecha { puntos: pts, punta_inicio: TipoPunta::Ninguna, punta_fin: TipoPunta::Flecha, codos: false },
+            figura: Figura::Flecha {
+                puntos: pts,
+                punta_inicio: TipoPunta::Ninguna,
+                punta_fin: TipoPunta::Flecha,
+                codos: false,
+            },
             x: a.0 as f32,
             y: a.1 as f32,
             ancho: x1 - x0,
@@ -251,7 +287,13 @@ impl Pizarra {
     }
 
     /// Una flecha a trazos (las componentes de una fuerza).
-    pub fn flecha_discontinua(&mut self, a: (f64, f64), b: (f64, f64), color: ColorRgba, grosor: f32) {
+    pub fn flecha_discontinua(
+        &mut self,
+        a: (f64, f64),
+        b: (f64, f64),
+        color: ColorRgba,
+        grosor: f32,
+    ) {
         self.flecha(a, b, color, grosor);
         if let Some(e) = self.el.last_mut() {
             e.estilo = EstiloTrazo::Discontinuo;
@@ -259,10 +301,19 @@ impl Pizarra {
     }
 
     /// Un texto de una linea; devuelve lo que mide.
-    pub fn texto(&mut self, t: &str, x: f64, y: f64, tam: f32, color: ColorRgba, alinear: Alinear) -> (f32, f32) {
+    pub fn texto(
+        &mut self,
+        t: &str,
+        x: f64,
+        y: f64,
+        tam: f32,
+        color: ColorRgba,
+        alinear: Alinear,
+    ) -> (f32, f32) {
         self.texto_con(t, x, y, tam, color, alinear, false)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn texto_con(
         &mut self,
         t: &str,
@@ -282,14 +333,35 @@ impl Pizarra {
             Alinear::Centro => x as f32 - w / 2.0,
             Alinear::Derecha => x as f32 - w,
         };
-        let estilo = Estilo { color, tam, opacidad: 1.0, familia: LETRA.into() };
-        self.el.push(ecuacion::elemento_texto(t, x, y as f32, (w, h), tam, cursiva, &estilo));
+        let estilo = Estilo {
+            color,
+            tam,
+            opacidad: 1.0,
+            familia: LETRA.into(),
+        };
+        self.el.push(ecuacion::elemento_texto(
+            t,
+            x,
+            y as f32,
+            (w, h),
+            tam,
+            cursiva,
+            &estilo,
+        ));
         (w, h)
     }
 
     /// Un parrafo partido en renglones de `ancho` como mucho; devuelve el
     /// alto que ocupa.
-    pub fn parrafo(&mut self, t: &str, x: f64, y: f64, ancho: f64, tam: f32, color: ColorRgba) -> f64 {
+    pub fn parrafo(
+        &mut self,
+        t: &str,
+        x: f64,
+        y: f64,
+        ancho: f64,
+        tam: f32,
+        color: ColorRgba,
+    ) -> f64 {
         let mut alto = 0.0;
         for r in renglones(t, ancho, tam) {
             let (_, h) = self.texto(&r, x, y + alto, tam, color, Alinear::Izquierda);
@@ -299,7 +371,13 @@ impl Pizarra {
     }
 
     /// Un rectangulo, con relleno liso si se da (y su opacidad).
-    pub fn rectangulo(&mut self, [x, y, w, h]: [f64; 4], color: ColorRgba, relleno: Option<ColorRgba>, grosor: f32) {
+    pub fn rectangulo(
+        &mut self,
+        [x, y, w, h]: [f64; 4],
+        color: ColorRgba,
+        relleno: Option<ColorRgba>,
+        grosor: f32,
+    ) {
         self.el.push(Elemento {
             figura: Figura::Rectangulo,
             x: x as f32,
@@ -315,7 +393,13 @@ impl Pizarra {
         });
     }
 
-    pub fn elipse(&mut self, [x, y, w, h]: [f64; 4], color: ColorRgba, relleno: Option<ColorRgba>, grosor: f32) {
+    pub fn elipse(
+        &mut self,
+        [x, y, w, h]: [f64; 4],
+        color: ColorRgba,
+        relleno: Option<ColorRgba>,
+        grosor: f32,
+    ) {
         self.el.push(Elemento {
             figura: Figura::Elipse,
             x: x as f32,
@@ -339,7 +423,10 @@ impl Pizarra {
         let pts: Vec<Punto2> = contorno.iter().map(|&(x, y)| p(x, y)).collect();
         let (x0, y0, x1, y1) = caja_de(&pts);
         self.el.push(Elemento {
-            figura: Figura::Region { contorno: pts, huecos: Vec::new() },
+            figura: Figura::Region {
+                contorno: pts,
+                huecos: Vec::new(),
+            },
             x: x0,
             y: y0,
             ancho: x1 - x0,
@@ -372,7 +459,11 @@ impl Pizarra {
     /// derecha, -π/2 arriba).
     pub fn punto_con(&mut self, x: f64, y: f64, rotulo: &str, color: ColorRgba, angulo: f32) {
         self.el.push(Elemento {
-            figura: Figura::Punto { letra: rotulo.to_string(), angulo, radio: 12.0 },
+            figura: Figura::Punto {
+                letra: rotulo.to_string(),
+                angulo,
+                radio: 12.0,
+            },
             x: x as f32,
             y: y as f32,
             trazo: color,
@@ -385,7 +476,14 @@ impl Pizarra {
 
     /// Una ecuacion compuesta (LaTeX o escrita normal) con su esquina en
     /// `(x, y)`; devuelve lo que mide.
-    pub fn ecuacion(&mut self, texto: &str, x: f64, y: f64, tam: f32, color: ColorRgba) -> (f32, f32) {
+    pub fn ecuacion(
+        &mut self,
+        texto: &str,
+        x: f64,
+        y: f64,
+        tam: f32,
+        color: ColorRgba,
+    ) -> (f32, f32) {
         let (els, medida) = caja_de_ecuacion(texto, x, y, tam, color);
         self.el.extend(els);
         medida
@@ -393,7 +491,15 @@ impl Pizarra {
 
     /// Un arco de circunferencia (el de un angulo), con los grados como en
     /// clase: desde el eje x, en sentido antihorario.
-    pub fn arco(&mut self, (cx, cy): (f64, f64), radio: f64, desde: f64, hasta: f64, color: ColorRgba, grosor: f32) {
+    pub fn arco(
+        &mut self,
+        (cx, cy): (f64, f64),
+        radio: f64,
+        desde: f64,
+        hasta: f64,
+        color: ColorRgba,
+        grosor: f32,
+    ) {
         let n = 24;
         let pts: Vec<(f64, f64)> = (0..=n)
             .map(|k| (desde + (hasta - desde) * k as f64 / n as f64).to_radians())
@@ -434,9 +540,31 @@ impl Pizarra {
         let tam = 15.0;
         let (w, h) = medir(rotulo, tam);
         let (dx, dy) = (a.cos(), -a.sin());
-        let x = punta.0 + dx * 10.0 + if dx < -0.3 { -(w as f64) } else if dx > 0.3 { 0.0 } else { -(w as f64) / 2.0 };
-        let y = punta.1 + dy * 10.0 + if dy < -0.3 { -(h as f64) } else if dy > 0.3 { 0.0 } else { -(h as f64) / 2.0 };
-        self.pendientes.push(Pendiente { ancla: punta, preferida: (x, y), texto: rotulo.to_string(), tam, color });
+        let x = punta.0
+            + dx * 10.0
+            + if dx < -0.3 {
+                -(w as f64)
+            } else if dx > 0.3 {
+                0.0
+            } else {
+                -(w as f64) / 2.0
+            };
+        let y = punta.1
+            + dy * 10.0
+            + if dy < -0.3 {
+                -(h as f64)
+            } else if dy > 0.3 {
+                0.0
+            } else {
+                -(h as f64) / 2.0
+            };
+        self.pendientes.push(Pendiente {
+            ancla: punta,
+            preferida: (x, y),
+            texto: rotulo.to_string(),
+            tam,
+            color,
+        });
     }
 
     /// **Pone los rotulos pendientes sin que se pisen** (`rotulos::colocar`)
@@ -450,7 +578,8 @@ impl Pizarra {
         for e in &self.el {
             match &e.figura {
                 Figura::Linea { puntos } | Figura::Flecha { puntos, .. } => {
-                    let v: Vec<(f64, f64)> = puntos.iter().map(|q| (q.x as f64, q.y as f64)).collect();
+                    let v: Vec<(f64, f64)> =
+                        puntos.iter().map(|q| (q.x as f64, q.y as f64)).collect();
                     ocupado.extend(crate::rotulos::cajas_de_linea(&v, 6.0));
                 }
                 _ => {
@@ -466,10 +595,18 @@ impl Pizarra {
             .iter()
             .map(|p| {
                 let (w, h) = medir(&p.texto, p.tam);
-                crate::rotulos::Rotulo { ancla: p.ancla, ancho: w as f64, alto: h as f64, preferida: Some(p.preferida) }
+                crate::rotulos::Rotulo {
+                    ancla: p.ancla,
+                    ancho: w as f64,
+                    alto: h as f64,
+                    preferida: Some(p.preferida),
+                }
             })
             .collect();
-        for (p, (x, y)) in pendientes.iter().zip(crate::rotulos::colocar(&pedidos, &ocupado, None)) {
+        for (p, (x, y)) in pendientes
+            .iter()
+            .zip(crate::rotulos::colocar(&pedidos, &ocupado, None))
+        {
             self.texto(&p.texto, x, y, p.tam, p.color, Alinear::Izquierda);
         }
     }
@@ -483,16 +620,30 @@ impl Pizarra {
 }
 
 /// Las piezas de una ecuacion en `(x, y)` y lo que mide.
-pub fn caja_de_ecuacion(texto: &str, x: f64, y: f64, tam: f32, color: ColorRgba) -> (Vec<Elemento>, (f32, f32)) {
+pub fn caja_de_ecuacion(
+    texto: &str,
+    x: f64,
+    y: f64,
+    tam: f32,
+    color: ColorRgba,
+) -> (Vec<Elemento>, (f32, f32)) {
     let medir_ec = |t: &str, tam: f32| crate::lienzo::medir_con(t, tam, crate::ecuacion::FAMILIA);
-    let estilo = Estilo { color, tam, opacidad: 1.0, familia: crate::ecuacion::FAMILIA.into() };
+    let estilo = Estilo {
+        color,
+        tam,
+        opacidad: 1.0,
+        familia: crate::ecuacion::FAMILIA.into(),
+    };
     let lineas: Vec<String> = crate::ecuacion::partir_lineas(texto);
     let cajas: Vec<ecuacion::Caja> = lineas
         .iter()
         .map(|l| crate::ecuacion::componer(&pixpin_notas::formulas::leer(l), tam, &medir_ec))
         .collect();
     let col = ecuacion::columna(cajas, tam * 0.5);
-    (col.elementos(x as f32, y as f32, &estilo), (col.ancho, col.alto))
+    (
+        col.elementos(x as f32, y as f32, &estilo),
+        (col.ancho, col.alto),
+    )
 }
 
 /// Un texto partido en renglones que caben en `ancho` (por palabras; los
@@ -502,7 +653,11 @@ pub fn renglones(t: &str, ancho: f64, tam: f32) -> Vec<String> {
     for parrafo in t.split('\n') {
         let mut actual = String::new();
         for palabra in parrafo.split_whitespace() {
-            let prueba = if actual.is_empty() { palabra.to_string() } else { format!("{actual} {palabra}") };
+            let prueba = if actual.is_empty() {
+                palabra.to_string()
+            } else {
+                format!("{actual} {palabra}")
+            };
             if !actual.is_empty() && medir(&prueba, tam).0 as f64 > ancho {
                 v.push(std::mem::take(&mut actual));
                 actual = palabra.to_string();
@@ -545,12 +700,21 @@ impl Ejes {
             y0 -= m;
         }
         y1 += m;
-        Ejes { caja, x0, x1: if x1 > x0 { x1 } else { x0 + 1.0 }, y0, y1 }
+        Ejes {
+            caja,
+            x0,
+            x1: if x1 > x0 { x1 } else { x0 + 1.0 },
+            y0,
+            y1,
+        }
     }
 
     pub fn a_lienzo(&self, x: f64, y: f64) -> (f64, f64) {
         let [cx, cy, w, h] = self.caja;
-        (cx + (x - self.x0) / (self.x1 - self.x0) * w, cy + h - (y - self.y0) / (self.y1 - self.y0) * h)
+        (
+            cx + (x - self.x0) / (self.x1 - self.x0) * w,
+            cy + h - (y - self.y0) / (self.y1 - self.y0) * h,
+        )
     }
 
     /// Los ejes con flechas, marcas, numeros y el nombre de cada uno.
@@ -585,12 +749,35 @@ impl Ejes {
             if y.abs() > 1e-9 {
                 let (_, py) = self.a_lienzo(0.0, y);
                 pz.linea(&[(x_cero - 4.0, py), (x_cero + 4.0, py)], TINTA, 1.0);
-                pz.texto(&numero(y), x_cero - 6.0, py - tam as f64 * 0.65, tam, GRIS, Alinear::Derecha);
+                pz.texto(
+                    &numero(y),
+                    x_cero - 6.0,
+                    py - tam as f64 * 0.65,
+                    tam,
+                    GRIS,
+                    Alinear::Derecha,
+                );
             }
             y += paso_y;
         }
-        pz.texto_con(nombre_x, cx + w + 14.0, y_cero - 9.0, 15.0, TINTA, Alinear::Izquierda, true);
-        pz.texto_con(nombre_y, x_cero + 6.0, cy - 24.0, 15.0, TINTA, Alinear::Izquierda, true);
+        pz.texto_con(
+            nombre_x,
+            cx + w + 14.0,
+            y_cero - 9.0,
+            15.0,
+            TINTA,
+            Alinear::Izquierda,
+            true,
+        );
+        pz.texto_con(
+            nombre_y,
+            x_cero + 6.0,
+            cy - 24.0,
+            15.0,
+            TINTA,
+            Alinear::Izquierda,
+            true,
+        );
     }
 
     /// Una curva `y(x)` muestreada, cortada donde se sale de la ventana.
@@ -615,6 +802,7 @@ mod pruebas {
     use super::*;
 
     #[test]
+    #[allow(clippy::approx_constant)] // 1.41421 es un numero cualquiera con decimales
     fn los_numeros_se_escriben_para_personas() {
         assert_eq!(numero(2.0), "2");
         assert_eq!(numero(-0.0001), "0");
@@ -625,8 +813,14 @@ mod pruebas {
 
     #[test]
     fn los_titulos_salen_como_en_la_pizarra() {
-        assert_eq!(a_pizarra("f(x) = x^3 - 3x con tangente en x = 2", false), "f(x) = x³ - 3x con tangente en x = 2");
-        assert_eq!(a_pizarra("y = sin x en [0, pi]", false), "y = sin x en [0, π]");
+        assert_eq!(
+            a_pizarra("f(x) = x^3 - 3x con tangente en x = 2", false),
+            "f(x) = x³ - 3x con tangente en x = 2"
+        );
+        assert_eq!(
+            a_pizarra("y = sin x en [0, pi]", false),
+            "y = sin x en [0, π]"
+        );
         assert_eq!(a_pizarra("r = 2 sin(3t)", true), "r = 2 sin(3θ)");
         assert_eq!(a_pizarra("x^{-1} y x^n, 2*x", false), "x⁻¹ y xⁿ, 2·x");
         // La t de una palabra no se toca, ni sin polar.
@@ -634,15 +828,26 @@ mod pruebas {
         assert_eq!(a_pizarra("tiempo t", false), "tiempo t");
         assert_eq!(a_pizarra("spin", false), "spin");
         assert_eq!(para_ver("r = 2*sin(3*t)", true), "r = 2sin(3θ)");
-        assert_eq!(para_ver("x = cos(3*t), y = a*b", false), "x = cos(3t), y = a*b");
+        assert_eq!(
+            para_ver("x = cos(3*t), y = a*b", false),
+            "x = cos(3t), y = a*b"
+        );
     }
 
     #[test]
     fn los_renglones_caben_y_respetan_los_saltos() {
-        let r = renglones("uno dos tres cuatro cinco seis siete ocho nueve diez\notra", 120.0, 16.0);
+        let r = renglones(
+            "uno dos tres cuatro cinco seis siete ocho nueve diez\notra",
+            120.0,
+            16.0,
+        );
         assert!(r.len() >= 3, "{r:?}");
         assert_eq!(r.last().unwrap(), "otra");
-        assert!(r.iter().all(|l| medir(l, 16.0).0 <= 130.0 || !l.contains(' ')), "{r:?}");
+        assert!(
+            r.iter()
+                .all(|l| medir(l, 16.0).0 <= 130.0 || !l.contains(' ')),
+            "{r:?}"
+        );
     }
 
     #[test]
@@ -655,6 +860,10 @@ mod pruebas {
         let mut pz = Pizarra::nueva();
         e.dibujar(&mut pz, "t (s)", "x (m)");
         e.curva(&mut pz, &|t| 5.0 * t, ROJO, 2.0);
-        assert!(pz.el.iter().any(|e| matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > 100)));
+        assert!(
+            pz.el
+                .iter()
+                .any(|e| matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > 100))
+        );
     }
 }

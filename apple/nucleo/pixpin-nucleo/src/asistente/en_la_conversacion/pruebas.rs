@@ -77,17 +77,18 @@ fn entorno(pensar: bool) -> Entorno {
         pensar,
         ventana: 8192,
         cada: Duration::ZERO,
+        guardar_con: None,
     }
 }
 
 /// Escribe `texto` en el chat y, si es para el asistente, contesta con
 /// `motor`. Devuelve como acabo (o `None` si no era para el).
-fn preguntar(n: &Arc<Nucleo>, chat: &str, texto: &str, motor: &MotorGuionado, manos: Arc<Manos>, ve: Arc<Ve>, corte: &CorteIa) -> Option<FinChatIa> {
+fn preguntar(n: &Arc<Nucleo>, chat: &str, texto: &str, motor: &MotorGuionado, manos: Arc<Manos>, ve: Arc<Ve>, corte: &Arc<CorteIa>) -> Option<FinChatIa> {
     let m = n.escribir_nota(chat.into(), texto.into(), None).unwrap();
     contestar(n, chat, &m.id, motor, manos, ve, corte)
 }
 
-fn contestar(n: &Arc<Nucleo>, chat: &str, id: &str, motor: &MotorGuionado, manos: Arc<Manos>, ve: Arc<Ve>, corte: &CorteIa) -> Option<FinChatIa> {
+fn contestar(n: &Arc<Nucleo>, chat: &str, id: &str, motor: &MotorGuionado, manos: Arc<Manos>, ve: Arc<Ve>, corte: &Arc<CorteIa>) -> Option<FinChatIa> {
     let inicio = n.ia_al_enviar(chat.into(), id.into()).unwrap()?;
     assert_eq!(inicio.respuesta.texto, ia_chat::ESTADO_INICIAL, "nace pensando");
     Some(
@@ -121,6 +122,32 @@ fn el_chat_asistente_existe_una_vez_y_va_detras_de_guardados() {
     n.crear_chat("nuevo".into()).unwrap();
     let orden: Vec<String> = n.chats().unwrap().into_iter().map(|f| f.nombre).collect();
     assert_eq!(orden, vec!["Mensajes guardados", "Asistente", "nuevo"]);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// 22-oct-2026 (Windows `7c91631`): el chat «Asistente» que llega de otro
+/// aparato (un chat normal que se llama asi) no hace un segundo asistente:
+/// al pedirlo se juntan en el mas antiguo, con los mensajes de los dos, y
+/// el que queda lleva la marca que viaja en `proyecto.json`.
+#[test]
+fn el_asistente_de_otro_aparato_se_junta_con_el_de_aqui_en_uno() {
+    let (n, d) = nucleo("unico");
+    // El de otro aparato, mas antiguo, con un mensaje dentro.
+    let otro = n.crear_chat("Asistente".into()).unwrap();
+    n.escribir_nota(otro.id.clone(), "lo del otro aparato".into(), None).unwrap();
+    std::thread::sleep(Duration::from_millis(5));
+    let a = n.chat_asistente().unwrap();
+    assert_eq!(a.id, otro.id, "queda el mas antiguo");
+    assert!(a.es_asistente, "con la marca");
+    let asistentes: Vec<_> = n.chats().unwrap().into_iter().filter(|f| f.nombre == "Asistente").collect();
+    assert_eq!(asistentes.len(), 1, "uno solo");
+    assert!(n.notas_de(&a.id).iter().any(|m| m.texto == "lo del otro aparato"));
+    let proyecto = almacen::carpeta(n.ruta(), &a.id).join("proyecto.json");
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(proyecto).unwrap_or_else(|_| "{}".into())).unwrap();
+    assert!(v.get("asistente").is_none_or(|m| m == true), "la marca, si ya se escribio, dice que es el");
+    // Caso negativo: con uno solo, pedirlo otra vez no junta ni cambia nada.
+    assert_eq!(n.unificar_asistentes(), 0);
+    assert_eq!(n.chat_asistente().unwrap().id, a.id);
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -563,4 +590,197 @@ fn una_conversacion_nueva_corta_lo_que_se_le_manda_al_modelo_pero_no_lo_borra() 
     // Caso negativo: sin corte va todo.
     assert_eq!(ia_chat::conversacion(&notas[..1]).len(), 1);
     let _ = std::fs::remove_dir_all(&d);
+}
+
+/// El turno con la nube (el catalogo entero y lo que solo tiene ella).
+fn entorno_nube() -> Entorno {
+    // Con su ventana: en la de 8192 el catalogo entero ya se reinicia.
+    Entorno {
+        nube: true,
+        ventana: VENTANA_NUBE,
+        ..entorno(false)
+    }
+}
+
+/// Lo que el turno le fue mandando al modelo (con los resultados de sus
+/// herramientas).
+fn resultados(motor: &MotorGuionado) -> String {
+    motor
+        .recibido
+        .lock()
+        .unwrap()
+        .iter()
+        .flat_map(|p| p.mensajes.iter().map(|m| m.texto_entero()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Windows 22–25-oct: «dámelo del 1 al 30» pone la plantilla de serie en el
+/// lienzo del chat, y «ahora hasta 40» la rehace en su sitio (no otra al
+/// lado). Antes el Mac contestaba «aun no lo hace el Mac».
+#[test]
+fn una_plantilla_se_pone_y_se_rehace_en_su_sitio_desde_el_chat() {
+    let (n, d) = nucleo("plantilla");
+    let chat = n.chat_asistente().unwrap().id;
+    let motor = MotorGuionado::nuevo(vec![
+        Respuesta::de_llamada("figuras_guardadas", r#"{"accion":"alargar","nombre":"cronograma","desde":1,"hasta":30}"#),
+        Respuesta::de_llamada("figuras_guardadas", r#"{"accion":"alargar","hasta":40}"#),
+        Respuesta::de_texto("Listo: el cronograma con 40 actividades."),
+        Respuesta::de_texto("Listo."),
+        Respuesta::de_texto("Listo."),
+    ])
+    .como_nube();
+    let m = n.escribir_nota(chat.clone(), "ponme el cronograma del 1 al 30 y luego hasta 40".into(), None).unwrap();
+    let inicio = n.ia_al_enviar(chat.clone(), m.id).unwrap().unwrap();
+    turno_en_chat_con(&motor, &entorno_nube(), n.clone(), chat.clone(), inicio, 0, Arc::<Manos>::default(), Arc::<Ve>::default(), &CorteIa::nuevo(), Duration::ZERO).unwrap();
+    let r = resultados(&motor);
+    assert!(!r.contains("aun no lo hace el Mac"), "{r}");
+    assert!(r.contains("listo: «Cronograma» rehecha en una hoja"), "{r}");
+    assert!(r.contains("en el sitio de la que estaba elegida"), "la segunda la rehace en su sitio: {r}");
+    // Un solo cronograma, en el lienzo propio del asistente (el primero se
+    // borro al rehacerlo).
+    let l = lienzos(&n, &chat);
+    assert_eq!(l.len(), 1);
+    let ruta = almacen::lienzo(n.ruta(), &chat, l[0].referencia.as_deref().unwrap());
+    let leido = pixpin_motor2d::excalidraw::leer(&std::fs::read_to_string(ruta).unwrap()).unwrap();
+    let escena = pixpin_motor2d::excalidraw::a_escena(&leido);
+    let vivos: Vec<_> = escena.visibles().cloned().collect();
+    assert_eq!(pixpin_motor2d::figuras_de_serie::cual_es(&vivos).as_deref(), Some("cronograma"));
+    let textos: Vec<String> = vivos
+        .iter()
+        .filter_map(|e| match &e.figura {
+            pixpin_motor2d::Figura::Texto { texto, .. } => Some(texto.trim().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(textos.iter().any(|t| t == "40") && !textos.iter().any(|t| t == "41"), "{textos:?}");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// **La duda con opciones** (`preguntar_usuario`, Windows 22-oct): la
+/// tarjeta sale en la burbuja con sus opciones, el boton contesta, lo
+/// escrito mientras trabaja llega al turno y la linea queda en el historial.
+#[test]
+fn la_duda_con_opciones_se_contesta_en_la_tarjeta_y_lo_escrito_llega_al_turno() {
+    let (n, d) = nucleo("elegir");
+    let chat = n.chat_asistente().unwrap().id;
+    let motor = MotorGuionado::nuevo(vec![
+        Respuesta::de_llamada(
+            "preguntar_usuario",
+            r#"{"pregunta":"¿Traduzco todo o solo la figura?","opciones":[{"etiqueta":"Todo"},{"etiqueta":"Solo la figura","descripcion":"lo demas se queda"}]}"#,
+        ),
+        Respuesta::de_texto("Traducida solo la figura."),
+        Respuesta::de_texto("Hecho."),
+        Respuesta::de_texto("Hecho."),
+    ])
+    .como_nube();
+    let m = n.escribir_nota(chat.clone(), "traduce esto al ingles".into(), None).unwrap();
+    let inicio = n.ia_al_enviar(chat.clone(), m.id.clone()).unwrap().unwrap();
+    let nota = inicio.respuesta.id.clone();
+    // Sin turno en marcha, lo escrito no tiene adonde ir (Swift dice que
+    // esta ocupado o lanza uno nuevo).
+    assert!(!n.ia_escribir_mientras_trabaja(chat.clone(), m.id));
+    let ve = Arc::new(Ve::default());
+    let fin = std::thread::scope(|s| {
+        let h = s.spawn(|| {
+            turno_en_chat_con(&motor, &entorno_nube(), n.clone(), chat.clone(), inicio, 0, Arc::<Manos>::default(), ve.clone(), &CorteIa::nuevo(), Duration::ZERO).unwrap()
+        });
+        // Espera a que la tarjeta este en la burbuja.
+        let mut vista = None;
+        for _ in 0..500 {
+            vista = ve.vistos.lock().unwrap().iter().rev().find_map(|v| v.eleccion.clone());
+            if vista.is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let e = vista.expect("la tarjeta de opciones en la burbuja");
+        assert_eq!(e.pregunta, "¿Traduzco todo o solo la figura?");
+        assert_eq!(e.opciones.len(), 2);
+        assert_eq!(e.opciones[1].descripcion, "lo demas se queda");
+        // Algo escrito a media tarea, para el turno.
+        burbuja_de(&chat).unwrap().entrantes.lock().unwrap().push("y que quede en mayusculas".into());
+        // Otra nota no es la de la tarjeta (caso negativo).
+        assert!(!n.ia_elegir(chat.clone(), "otra-nota".into(), Some(1)));
+        assert!(n.ia_elegir(chat.clone(), nota.clone(), Some(1)));
+        h.join().unwrap()
+    });
+    let t = &fin.respuesta.texto;
+    assert!(t.contains("❓ ¿Traduzco todo o solo la figura? → ✅ Solo la figura"), "{t}");
+    let r = resultados(&motor);
+    assert!(r.contains("eligió «Solo la figura»"), "{r}");
+    assert!(r.contains("[Mensaje nuevo del usuario mientras trabajabas]\ny que quede en mayusculas"), "{r}");
+    // Acabado, ya no hay turno en marcha ni tarjeta.
+    assert!(!n.ia_elegir(chat.clone(), nota, Some(0)));
+    assert!(ve.vistos.lock().unwrap().last().unwrap().eleccion.is_none());
+    // Y no queda apuntado como a medias.
+    assert!(!n.ruta().join(crate::asistente::de_fondo::FICHERO).exists());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// «Otro…» y lo escrito en el chat es la respuesta de la duda.
+#[test]
+fn con_otro_lo_escrito_contesta_la_duda() {
+    let (n, d) = nucleo("otro");
+    let chat = n.chat_asistente().unwrap().id;
+    let motor = MotorGuionado::nuevo(vec![
+        Respuesta::de_llamada("preguntar_usuario", r#"{"pregunta":"¿De qué color?","opciones":[{"etiqueta":"Rojo"},{"etiqueta":"Azul"}]}"#),
+        Respuesta::de_texto("Verde, entonces."),
+        Respuesta::de_texto("Hecho."),
+        Respuesta::de_texto("Hecho."),
+    ])
+    .como_nube();
+    let m = n.escribir_nota(chat.clone(), "pinta el circulo".into(), None).unwrap();
+    let inicio = n.ia_al_enviar(chat.clone(), m.id).unwrap().unwrap();
+    let nota = inicio.respuesta.id.clone();
+    let ve = Arc::new(Ve::default());
+    let fin = std::thread::scope(|s| {
+        let h = s.spawn(|| {
+            turno_en_chat_con(&motor, &entorno_nube(), n.clone(), chat.clone(), inicio, 0, Arc::<Manos>::default(), ve.clone(), &CorteIa::nuevo(), Duration::ZERO).unwrap()
+        });
+        for _ in 0..500 {
+            if ve.vistos.lock().unwrap().iter().any(|v| v.eleccion.is_some()) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(n.ia_elegir(chat.clone(), nota.clone(), None), "«Otro…»");
+        assert!(ve.vistos.lock().unwrap().last().unwrap().eleccion.as_ref().is_some_and(|e| e.otro));
+        let escrito = n.escribir_nota(chat.clone(), "verde".into(), None).unwrap();
+        assert!(n.ia_escribir_mientras_trabaja(chat.clone(), escrito.id));
+        h.join().unwrap()
+    });
+    assert!(fin.respuesta.texto.contains("❓ ¿De qué color? → ✅ verde"), "{}", fin.respuesta.texto);
+    assert!(resultados(&motor).contains("contestó con sus palabras: «verde»"));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// La memoria de largo plazo va con la nube: el modelo tiene su herramienta
+/// y lo que hay en el perfil, en el sistema; con el local, nada.
+#[test]
+fn la_memoria_de_largo_plazo_va_con_la_nube() {
+    let (n, d) = nucleo("memoria");
+    let chat = n.chat_asistente().unwrap().id;
+    let aparato = n.identidad().unwrap().yo.codigo();
+    let carpeta = almacen::carpeta(n.ruta(), &chat);
+    let m = crate::asistente::memoria::en(n.ruta(), &chat, &carpeta, &aparato, "Claude Haiku", "2026-10-25");
+    m.ejecutar(r#"{"command":"create","path":"/memoria/PERFIL.md","file_text":"Se llama Max y prefiere respuestas cortas."}"#);
+    encender_memoria(true);
+    let motor = MotorGuionado::nuevo(vec![Respuesta::de_texto("Hola, Max."), Respuesta::de_texto("Hola.")]).como_nube();
+    let p = n.escribir_nota(chat.clone(), "hola".into(), None).unwrap();
+    let inicio = n.ia_al_enviar(chat.clone(), p.id).unwrap().unwrap();
+    turno_en_chat_con(&motor, &entorno_nube(), n.clone(), chat.clone(), inicio, 0, Arc::<Manos>::default(), Arc::<Ve>::default(), &CorteIa::nuevo(), Duration::ZERO).unwrap();
+    let local = MotorGuionado::nuevo(vec![Respuesta::de_texto("Hola."), Respuesta::de_texto("Hola.")]);
+    let p = n.escribir_nota(chat.clone(), "otra vez".into(), None).unwrap();
+    let inicio = n.ia_al_enviar(chat.clone(), p.id).unwrap().unwrap();
+    turno_en_chat_con(&local, &entorno(false), n.clone(), chat.clone(), inicio, 0, Arc::<Manos>::default(), Arc::<Ve>::default(), &CorteIa::nuevo(), Duration::ZERO).unwrap();
+    encender_memoria(false);
+    let pedida = motor.recibido.lock().unwrap()[0].clone();
+    assert!(pedida.mensajes[0].texto_entero().contains("prefiere respuestas cortas"));
+    assert!(pedida.herramientas.iter().any(|h| h.nombre == pixpin_ia::memoria::NOMBRE));
+    // Caso negativo: el local no la ve.
+    let pedida = local.recibido.lock().unwrap()[0].clone();
+    assert!(!pedida.mensajes[0].texto_entero().contains("prefiere respuestas cortas"));
+    assert!(!pedida.herramientas.iter().any(|h| h.nombre == pixpin_ia::memoria::NOMBRE));
+    let _ = std::fs::remove_dir_all(d);
 }

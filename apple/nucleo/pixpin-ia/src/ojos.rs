@@ -18,10 +18,12 @@
 //!   herramientas ([`mensaje_de_vista`]): es lo unico que admiten igual
 //!   Claude, DeepSeek y llama.cpp (DeepSeek no acepta imagenes en un
 //!   resultado de herramienta).
-//! - **La revision** ([`crate::agente::Opciones::revisar`]): tras un turno
-//!   que dibujo o anoto, el agente le ensena al modelo el resultado una vez
-//!   ([`pedido_de_revision`]) y le deja corregir; si contesta [`TODO_BIEN`],
-//!   no se dice nada mas.
+//! - **La revision** ([`crate::agente::Opciones::revisar`], 22-oct): tras un
+//!   turno que dibujo o anoto, un critico aparte puntua la captura con una
+//!   rubrica de 5 ejes ([`rubrica`]); el modelo corrige solo los problemas
+//!   que nombra (con sus `#id`), y si una correccion lo deja peor se vuelve a
+//!   la mejor version. Si todo llega a 8 a la primera, no se dice nada mas.
+//!   Las imagenes de las vistas viejas salen del historial ([`podar_vistas`]).
 //! - **Mirar al empezar** ([`pide_mirar`]): «corrige», «mejora», «¿que
 //!   falta?», «alinea»… dependen de lo que se ve, asi que la app pega la
 //!   vista al pedido ademas del resumen en texto.
@@ -48,6 +50,13 @@ pub const MARCA: &str = "[Vista del lienzo]";
 /// El lado mayor de la imagen como mucho. ~1000 tokens de vision en Claude
 /// (lado×lado/750) y una lectura de pocos segundos en el local.
 pub const LADO_MAXIMO: u32 = 1024;
+
+/// El lado mayor de la captura que se puntua en la revision (22-oct). Claude
+/// no reduce hasta 1568 px de lado largo (sus docs de vision) y una de
+/// 1280x720 son ~1230 tokens: entre el ~1000 que basta para ver el orden y el
+/// tope que no se reescala, con la letra pequena aun legible para juzgar la
+/// ortografia (la lista de elementos lleva ademas los textos tal cual).
+pub const LADO_REVISION: u32 = 1280;
 
 /// Lo que mas se amplia una zona pequena (una etiqueta sola): mas, y la
 /// rejilla miente sobre el tamano real.
@@ -90,17 +99,33 @@ pub struct Mirada {
     pub zona: Zona,
     /// Rejilla numerada y etiquetas `#id` (por omision, si).
     pub marcas: bool,
+    /// El lado mayor de la imagen como mucho, en px ([`LADO_MAXIMO`] o, en
+    /// la revision, [`LADO_REVISION`]).
+    pub lado: u32,
 }
 
 impl Default for Mirada {
     fn default() -> Self {
-        Mirada { zona: Zona::Todo, marcas: true }
+        Mirada::de(Zona::Todo)
     }
 }
 
 impl Mirada {
     pub fn de(zona: Zona) -> Mirada {
-        Mirada { zona, marcas: true }
+        Mirada {
+            zona,
+            marcas: true,
+            lado: LADO_MAXIMO,
+        }
+    }
+
+    /// La de la revision con rubrica: algo mas grande, para que el critico
+    /// lea las tildes de los textos pequenos.
+    pub fn para_revisar(zona: Zona) -> Mirada {
+        Mirada {
+            lado: LADO_REVISION,
+            ..Mirada::de(zona)
+        }
     }
 }
 
@@ -145,10 +170,21 @@ pub fn leer(argumentos: &str) -> Result<Mirada, String> {
     let v = if argumentos.trim().is_empty() {
         json!({})
     } else {
-        crate::herramientas::reparar_json(argumentos).ok_or("los argumentos de ver_lienzo no son JSON")?
+        crate::herramientas::reparar_json(argumentos)
+            .ok_or("los argumentos de ver_lienzo no son JSON")?
     };
-    let texto = |k: &str| v.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
-    let caja = v.get("caja").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).map(|n| n as f32).collect::<Vec<_>>());
+    let texto = |k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    };
+    let caja = v.get("caja").and_then(Value::as_array).map(|a| {
+        a.iter()
+            .filter_map(Value::as_f64)
+            .map(|n| n as f32)
+            .collect::<Vec<_>>()
+    });
     let zona = match texto("zona").map(crate::acciones::normalizar).as_deref() {
         None | Some("todo") | Some("todo el lienzo") => match (&caja, texto("que")) {
             (Some(c), _) if c.len() == 4 => Zona::Caja([c[0], c[1], c[2], c[3]]),
@@ -156,14 +192,27 @@ pub fn leer(argumentos: &str) -> Result<Mirada, String> {
             _ => Zona::Todo,
         },
         Some("caja") => match caja {
-            Some(c) if c.len() == 4 && c[2] > 0.0 && c[3] > 0.0 => Zona::Caja([c[0], c[1], c[2], c[3]]),
-            _ => return Err("con zona=caja hace falta «caja»: [x, y, ancho, alto] con ancho y alto positivos".into()),
+            Some(c) if c.len() == 4 && c[2] > 0.0 && c[3] > 0.0 => {
+                Zona::Caja([c[0], c[1], c[2], c[3]])
+            }
+            _ => return Err(
+                "con zona=caja hace falta «caja»: [x, y, ancho, alto] con ancho y alto positivos"
+                    .into(),
+            ),
         },
         Some("elegido") | Some("seleccion") => Zona::Elegido,
         Some("ultimo") | Some("lo ultimo") => Zona::Ultimo,
-        Some("elementos") | Some("elemento") => Zona::Elementos(texto("que").ok_or("con zona=elementos hace falta «que» (#id o descripcion)")?.to_string()),
+        Some("elementos") | Some("elemento") => Zona::Elementos(
+            texto("que")
+                .ok_or("con zona=elementos hace falta «que» (#id o descripcion)")?
+                .to_string(),
+        ),
         Some("documento") | Some("pagina") | Some("foto") | Some("plano") => Zona::Documento,
-        Some(otra) => return Err(format!("zona «{otra}» no existe: usa todo, caja, elegido, ultimo, elementos o documento")),
+        Some(otra) => {
+            return Err(format!(
+                "zona «{otra}» no existe: usa todo, caja, elegido, ultimo, elementos o documento"
+            ));
+        }
     };
     Ok(Mirada::de(zona))
 }
@@ -179,24 +228,37 @@ fn unir(cajas: impl Iterator<Item = (f32, f32, f32, f32)>) -> Option<(f32, f32, 
 /// [`MARGEN`]. `Err` con el motivo para el modelo (lienzo vacio, nada
 /// elegido, referencia que no encaja). [`Zona::Documento`] no es de la
 /// escena: la resuelve la app.
-pub fn caja_de(escena: &Escena, m: &Mirada, ctx: &Contexto) -> Result<(f32, f32, f32, f32), String> {
+pub fn caja_de(
+    escena: &Escena,
+    m: &Mirada,
+    ctx: &Contexto,
+) -> Result<(f32, f32, f32, f32), String> {
     let vivos = || escena.a_la_vista();
     let de_ids = |ids: &[u64]| unir(vivos().filter(|e| ids.contains(&e.id)).map(Elemento::caja));
     let caja = match &m.zona {
-        Zona::Todo | Zona::Documento => unir(vivos().map(Elemento::caja)).ok_or("el lienzo esta vacio: no hay nada que ver")?,
+        Zona::Todo | Zona::Documento => {
+            unir(vivos().map(Elemento::caja)).ok_or("el lienzo esta vacio: no hay nada que ver")?
+        }
         Zona::Caja([x, y, w, h]) => {
             let (x0, y0) = (x + ctx.marco.0, y + ctx.marco.1);
             return Ok((x0, y0, x0 + w.abs().max(1.0), y0 + h.abs().max(1.0)));
         }
-        Zona::Elegido => de_ids(&ctx.elegidos).ok_or("el usuario no tiene nada elegido en el lienzo")?,
-        Zona::Ultimo => de_ids(&ctx.ultimos).ok_or("aun no has dibujado ni tocado nada en este turno")?,
+        Zona::Elegido => {
+            de_ids(&ctx.elegidos).ok_or("el usuario no tiene nada elegido en el lienzo")?
+        }
+        Zona::Ultimo => {
+            de_ids(&ctx.ultimos).ok_or("aun no has dibujado ni tocado nada en este turno")?
+        }
         Zona::Turno => {
-            let c = de_ids(&ctx.ultimos).ok_or("aun no has dibujado ni tocado nada en este turno")?;
+            let c =
+                de_ids(&ctx.ultimos).ok_or("aun no has dibujado ni tocado nada en este turno")?;
             // Si todo el lienzo no es mucho mayor, todo: lo nuevo suele ir
             // con lo que ya habia (etiquetas de figuras, flechas a ellas).
             let todo = unir(vivos().map(Elemento::caja)).unwrap_or(c);
             let (tw, th) = (todo.2 - todo.0, todo.3 - todo.1);
-            if tw.max(th) <= 1600.0 || (tw <= 3.0 * (c.2 - c.0).max(200.0) && th <= 3.0 * (c.3 - c.1).max(200.0)) {
+            if tw.max(th) <= 1600.0
+                || (tw <= 3.0 * (c.2 - c.0).max(200.0) && th <= 3.0 * (c.3 - c.1).max(200.0))
+            {
                 todo
             } else {
                 let aire = 0.25 * (c.2 - c.0).max(c.3 - c.1).max(80.0);
@@ -211,7 +273,12 @@ pub fn caja_de(escena: &Escena, m: &Mirada, ctx: &Contexto) -> Result<(f32, f32,
             (c.0 - aire, c.1 - aire, c.2 + aire, c.3 + aire)
         }
     };
-    Ok((caja.0 - MARGEN, caja.1 - MARGEN, caja.2 + MARGEN, caja.3 + MARGEN))
+    Ok((
+        caja.0 - MARGEN,
+        caja.1 - MARGEN,
+        caja.2 + MARGEN,
+        caja.3 + MARGEN,
+    ))
 }
 
 /// **El tamano de la imagen y su escala** para una caja: el lado mayor a
@@ -219,7 +286,11 @@ pub fn caja_de(escena: &Escena, m: &Mirada, ctx: &Contexto) -> Result<(f32, f32,
 pub fn tamano(caja: (f32, f32, f32, f32), lado: u32) -> (u32, u32, f32) {
     let (w, h) = ((caja.2 - caja.0).max(1.0), (caja.3 - caja.1).max(1.0));
     let escala = (lado as f32 / w.max(h)).min(AUMENTO_MAXIMO);
-    (((w * escala).round() as u32).max(16), ((h * escala).round() as u32).max(16), escala)
+    (
+        ((w * escala).round() as u32).max(16),
+        ((h * escala).round() as u32).max(16),
+        escala,
+    )
 }
 
 /// **El paso de la rejilla** en unidades del lienzo: un numero redondo que
@@ -260,7 +331,14 @@ pub fn etiquetas(escena: &Escena, caja: (f32, f32, f32, f32)) -> Vec<(u64, (f32,
 
 /// **La leyenda de la imagen**: que zona es (en las coordenadas del modelo),
 /// la escala y como leer la rejilla.
-pub fn leyenda(caja: (f32, f32, f32, f32), marco: (f32, f32), ancho: u32, alto: u32, escala: f32, marcas: bool) -> String {
+pub fn leyenda(
+    caja: (f32, f32, f32, f32),
+    marco: (f32, f32),
+    ancho: u32,
+    alto: u32,
+    escala: f32,
+    marcas: bool,
+) -> String {
     let r = |v: f32| v.round() as i64;
     let mut s = format!(
         "{MARCA} Zona [{}, {}, {}, {}] en tus coordenadas, imagen de {ancho}x{alto} px (1 unidad = {:.2} px).",
@@ -279,9 +357,47 @@ pub fn leyenda(caja: (f32, f32, f32, f32), marco: (f32, f32), ancho: u32, alto: 
     s
 }
 
+/// **La lista de lo etiquetado** (Set-of-Mark en texto): los mismos ids que
+/// [`etiquetas`], con su tipo, color, caja en las coordenadas del modelo y su
+/// texto entero. Va en la leyenda: el modelo cruza lo que ve con numeros
+/// exactos (la localizacion de la vision es aproximada, dicen los docs de
+/// Claude) y lee las tildes del texto aunque en la imagen salga pequeno.
+pub fn lista(escena: &Escena, caja: (f32, f32, f32, f32), marco: (f32, f32)) -> String {
+    let lineas: Vec<String> = etiquetas(escena, caja)
+        .iter()
+        .filter_map(|(id, _)| escena.buscar(*id))
+        .map(|e| {
+            let mut s = crate::edicion::describir(e, marco);
+            // `describir` corta el texto a 40 letras: aqui va entero (hasta
+            // 300), que es lo que se revisa.
+            if let pixpin_motor2d::elemento::Figura::Texto { texto, .. } = &e.figura
+                && texto.chars().count() > 40
+            {
+                let entero: String = texto.chars().take(300).collect();
+                s.push_str(&format!(
+                    " texto entero: \"{}\"",
+                    entero.replace('\n', " / ")
+                ));
+            }
+            s
+        })
+        .collect();
+    if lineas.is_empty() {
+        return String::new();
+    }
+    format!(
+        "Elementos de la imagen (#id tipo color [x, y, ancho, alto]):\n{}",
+        lineas.join("\n")
+    )
+}
+
 /// **El mensaje que lleva la vista** al modelo.
 pub fn mensaje_de_vista(v: &Vista, extra: &str) -> Mensaje {
-    let texto = if extra.is_empty() { v.texto.clone() } else { format!("{}\n{extra}", v.texto) };
+    let texto = if extra.is_empty() {
+        v.texto.clone()
+    } else {
+        format!("{}\n{extra}", v.texto)
+    };
     Mensaje::usuario_con_imagen(texto, v.png.clone(), "image/png")
 }
 
@@ -290,23 +406,43 @@ pub fn es_vista(m: &Mensaje) -> bool {
     m.texto_entero().trim_start().starts_with(MARCA)
 }
 
-/// **Lo que se le pide en la revision**, con el pedido original.
-pub fn pedido_de_revision(pedido: &str, ronda: usize) -> String {
-    let pedido: String = pedido.chars().take(600).collect();
-    format!(
-        "Revision {ronda}: esta es la imagen de como quedo el lienzo tras tus cambios. Comparala con lo que pidio el usuario: «{}». \
-         Busca solo fallos que se vean: texto cortado, encima de otra cosa o fuera de su figura; flechas o lineas que no llegan a lo que senalan; \
-         cosas solapadas, fuera de sitio o desalineadas; una anotacion que no cae sobre lo senalado; algo pedido que falta. \
-         Si esta bien, contesta solo {TODO_BIEN}. Si no, corrigelo ya con las herramientas de editar (usa los #id de las etiquetas y las \
-         coordenadas de la rejilla; mueve o cambia, no lo vuelvas a dibujar entero) y luego di en una frase corta que corregiste.",
-        pedido.trim()
-    )
+/// Si un mensaje es de los ojos (una vista o el pedido de corregir lo que
+/// vio el critico), no el pedido del usuario.
+pub fn es_de_los_ojos(m: &Mensaje) -> bool {
+    es_vista(m)
+        || m.texto_entero()
+            .trim_start()
+            .starts_with(rubrica::MARCA_CORRECCION)
+}
+
+/// **Quita las imagenes de las vistas viejas** del historial y deja su
+/// texto (la leyenda y la lista de elementos). Una imagen en base64 se
+/// reenvia en cada vuelta (~1000-1500 tokens cada vez, docs de vision de
+/// Claude): tras cada ronda de revision lo que sirve de ella ya esta dicho.
+/// Devuelve cuantas quito.
+pub fn podar_vistas(historial: &mut [Mensaje]) -> usize {
+    let mut n = 0;
+    for m in historial
+        .iter_mut()
+        .filter(|m| es_vista(m) && m.tiene_imagen())
+    {
+        m.partes
+            .retain(|p| !matches!(p, crate::motor::Parte::Imagen { .. }));
+        m.partes.push(crate::motor::Parte::Texto(
+            " (La imagen ya se quito para ahorrar; si hace falta, vuelve a mirar.)".into(),
+        ));
+        n += 1;
+    }
+    n
 }
 
 /// Si la respuesta de la revision dice que no hay nada que corregir.
 pub fn es_todo_bien(texto: &str) -> bool {
     let t = crate::acciones::normalizar(texto.trim());
-    t.is_empty() || t.contains(&TODO_BIEN.to_lowercase()) || t.contains("todo_bien") || t.trim_matches(|c: char| !c.is_alphanumeric()) == "ok"
+    t.is_empty()
+        || t.contains(&TODO_BIEN.to_lowercase())
+        || t.contains("todo_bien")
+        || t.trim_matches(|c: char| !c.is_alphanumeric()) == "ok"
 }
 
 /// **Si el pedido depende de lo que se ve** del lienzo: entonces conviene
@@ -314,10 +450,39 @@ pub fn es_todo_bien(texto: &str) -> bool {
 pub fn pide_mirar(pedido: &str) -> bool {
     let q = crate::acciones::normalizar(pedido);
     const CLAVES: &[&str] = &[
-        "corrige", "corregir", "arregla", "mejora", "mejorar", "que falta", "falta algo", "alinea", "alinear", "ordena",
-        "solap", "se tapa", "encima de", "revisa", "mira el lienzo", "mira lo", "como quedo", "que hay en el lienzo",
-        "que ves", "acomoda", "reorganiza", "centra", "etiqueta a cada", "etiquetas a", "rotula", "ponle nombre",
-        "nombra cada", "a cada figura", "a cada uno", "cada elemento", "distribuye", "espacia", "endereza",
+        "corrige",
+        "corregir",
+        "arregla",
+        "mejora",
+        "mejorar",
+        "que falta",
+        "falta algo",
+        "alinea",
+        "alinear",
+        "ordena",
+        "solap",
+        "se tapa",
+        "encima de",
+        "revisa",
+        "mira el lienzo",
+        "mira lo",
+        "como quedo",
+        "que hay en el lienzo",
+        "que ves",
+        "acomoda",
+        "reorganiza",
+        "centra",
+        "etiqueta a cada",
+        "etiquetas a",
+        "rotula",
+        "ponle nombre",
+        "nombra cada",
+        "a cada figura",
+        "a cada uno",
+        "cada elemento",
+        "distribuye",
+        "espacia",
+        "endereza",
     ];
     CLAVES.iter().any(|c| q.contains(c))
 }
@@ -341,7 +506,13 @@ mod pruebas {
     fn escena_con(cajas: &[(f32, f32, f32, f32)]) -> Escena {
         let mut e = Escena::nueva();
         for &(x, y, w, h) in cajas {
-            e.anadir(Elemento { x, y, ancho: w, alto: h, ..Default::default() });
+            e.anadir(Elemento {
+                x,
+                y,
+                ancho: w,
+                alto: h,
+                ..Default::default()
+            });
         }
         e
     }
@@ -350,10 +521,22 @@ mod pruebas {
     fn lee_las_zonas_y_lo_que_falta_es_todo() {
         assert_eq!(leer("").unwrap().zona, Zona::Todo);
         assert_eq!(leer("{}").unwrap().zona, Zona::Todo);
-        assert_eq!(leer(r#"{"zona":"caja","caja":[1,2,3,4]}"#).unwrap().zona, Zona::Caja([1.0, 2.0, 3.0, 4.0]));
-        assert_eq!(leer(r#"{"caja":[1,2,3,4]}"#).unwrap().zona, Zona::Caja([1.0, 2.0, 3.0, 4.0]));
-        assert_eq!(leer(r##"{"zona":"elementos","que":"#3"}"##).unwrap().zona, Zona::Elementos("#3".into()));
-        assert_eq!(leer(r#"{"zona":"documento"}"#).unwrap().zona, Zona::Documento);
+        assert_eq!(
+            leer(r#"{"zona":"caja","caja":[1,2,3,4]}"#).unwrap().zona,
+            Zona::Caja([1.0, 2.0, 3.0, 4.0])
+        );
+        assert_eq!(
+            leer(r#"{"caja":[1,2,3,4]}"#).unwrap().zona,
+            Zona::Caja([1.0, 2.0, 3.0, 4.0])
+        );
+        assert_eq!(
+            leer(r##"{"zona":"elementos","que":"#3"}"##).unwrap().zona,
+            Zona::Elementos("#3".into())
+        );
+        assert_eq!(
+            leer(r#"{"zona":"documento"}"#).unwrap().zona,
+            Zona::Documento
+        );
         assert_eq!(leer(r#"{"zona":"último"}"#).unwrap().zona, Zona::Ultimo);
         // Casos negativos: lo que no se entiende se dice.
         assert!(leer(r#"{"zona":"caja"}"#).unwrap_err().contains("caja"));
@@ -364,9 +547,21 @@ mod pruebas {
     #[test]
     fn la_caja_de_cada_zona_en_la_escena() {
         let e = escena_con(&[(100.0, 100.0, 50.0, 50.0), (400.0, 300.0, 100.0, 20.0)]);
-        let ctx = Contexto { marco: (60.0, 60.0), elegidos: vec![2], ultimos: vec![1] };
+        let ctx = Contexto {
+            marco: (60.0, 60.0),
+            elegidos: vec![2],
+            ultimos: vec![1],
+        };
         let todo = caja_de(&e, &Mirada::default(), &ctx).unwrap();
-        assert_eq!(todo, (100.0 - MARGEN, 100.0 - MARGEN, 500.0 + MARGEN, 320.0 + MARGEN));
+        assert_eq!(
+            todo,
+            (
+                100.0 - MARGEN,
+                100.0 - MARGEN,
+                500.0 + MARGEN,
+                320.0 + MARGEN
+            )
+        );
         let c = caja_de(&e, &Mirada::de(Zona::Caja([0.0, 0.0, 10.0, 20.0])), &ctx).unwrap();
         assert_eq!(c, (60.0, 60.0, 70.0, 80.0));
         let el = caja_de(&e, &Mirada::de(Zona::Elegido), &ctx).unwrap();
@@ -377,7 +572,11 @@ mod pruebas {
         assert!(un.0 < 100.0 - MARGEN && un.2 > 150.0 + MARGEN);
         // Casos negativos.
         let vacia = Escena::nueva();
-        assert!(caja_de(&vacia, &Mirada::default(), &ctx).unwrap_err().contains("vacio"));
+        assert!(
+            caja_de(&vacia, &Mirada::default(), &ctx)
+                .unwrap_err()
+                .contains("vacio")
+        );
         let sin = Contexto::default();
         assert!(caja_de(&e, &Mirada::de(Zona::Elegido), &sin).is_err());
         assert!(caja_de(&e, &Mirada::de(Zona::Ultimo), &sin).is_err());
@@ -412,8 +611,64 @@ mod pruebas {
         assert!(es_todo_bien("TODO_BIEN"));
         assert!(es_todo_bien("todo_bien."));
         assert!(es_todo_bien("OK"));
-        assert!(!es_todo_bien("Movi la etiqueta #4 para que no tape el circulo."));
-        assert!(pedido_de_revision("dibuja una casa", 1).contains("dibuja una casa"));
+        assert!(!es_todo_bien(
+            "Movi la etiqueta #4 para que no tape el circulo."
+        ));
+    }
+
+    #[test]
+    fn la_lista_lleva_los_mismos_ids_que_las_etiquetas_y_el_texto_entero() {
+        let mut e = escena_con(&[(100.0, 100.0, 50.0, 50.0), (900.0, 900.0, 10.0, 10.0)]);
+        let largo = "Función de transferencia del sistema realimentado, con su ganancia";
+        e.anadir(Elemento {
+            x: 120.0,
+            y: 300.0,
+            ancho: 200.0,
+            alto: 20.0,
+            figura: pixpin_motor2d::elemento::Figura::Texto {
+                texto: largo.into(),
+                tam: 16.0,
+                familia: "Segoe UI".into(),
+            },
+            ..Default::default()
+        });
+        let l = lista(&e, (0.0, 0.0, 500.0, 500.0), (100.0, 100.0));
+        assert!(l.contains("#1 ") && l.contains("[0,0,50,50]"), "{l}");
+        assert!(l.contains("#3 ") && l.contains(largo), "{l}");
+        assert!(!l.contains("#2 "), "lo de fuera no sale: {l}");
+        // Caso negativo: nada en la caja, nada que decir.
+        assert!(lista(&e, (2000.0, 2000.0, 2100.0, 2100.0), (0.0, 0.0)).is_empty());
+    }
+
+    #[test]
+    fn podar_quita_las_imagenes_de_las_vistas_y_deja_su_texto() {
+        let v = Vista {
+            png: vec![1, 2],
+            ancho: 2,
+            alto: 1,
+            texto: format!("{MARCA} Zona [0, 0, 10, 10]"),
+            ms: 1,
+        };
+        let foto = Mensaje::usuario_con_imagen("mira mi foto", vec![9], "image/png");
+        let mut h = vec![
+            Mensaje::usuario("dibuja"),
+            mensaje_de_vista(&v, ""),
+            foto.clone(),
+            mensaje_de_vista(&v, ""),
+        ];
+        assert_eq!(podar_vistas(&mut h), 2);
+        assert!(!h[1].tiene_imagen() && !h[3].tiene_imagen());
+        assert!(es_vista(&h[1]) && h[1].texto_entero().contains("Zona [0, 0, 10, 10]"));
+        assert!(
+            h[2].tiene_imagen(),
+            "la foto del usuario no es una vista: se queda"
+        );
+        assert_eq!(podar_vistas(&mut h), 0, "dos veces no quita nada");
+        assert!(es_de_los_ojos(&Mensaje::usuario(format!(
+            "{} Ronda 1.",
+            rubrica::MARCA_CORRECCION
+        ))));
+        assert!(!es_de_los_ojos(&Mensaje::usuario("dibuja")));
     }
 
     #[test]
@@ -428,7 +683,13 @@ mod pruebas {
 
     #[test]
     fn la_vista_va_en_un_mensaje_marcado_con_su_imagen() {
-        let v = Vista { png: vec![1, 2], ancho: 2, alto: 1, texto: leyenda((0.0, 0.0, 100.0, 50.0), (0.0, 0.0), 2, 1, 0.02, true), ms: 1 };
+        let v = Vista {
+            png: vec![1, 2],
+            ancho: 2,
+            alto: 1,
+            texto: leyenda((0.0, 0.0, 100.0, 50.0), (0.0, 0.0), 2, 1, 0.02, true),
+            ms: 1,
+        };
         let m = mensaje_de_vista(&v, "");
         assert!(m.tiene_imagen());
         assert!(es_vista(&m));
@@ -436,6 +697,8 @@ mod pruebas {
         assert!(m.texto_entero().contains("#id"));
     }
 }
+
+pub mod rubrica;
 
 #[cfg(test)]
 mod pruebas_revision;

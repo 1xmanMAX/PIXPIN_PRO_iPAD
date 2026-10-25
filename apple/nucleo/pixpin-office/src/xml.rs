@@ -35,8 +35,14 @@ impl std::fmt::Display for ErrorXml {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorXml::Vacio => write!(f, "no hay ningun elemento XML"),
-            ErrorXml::DemasiadaProfundidad => write!(f, "el XML se anida demasiado (mas de {MAX_PROFUNDIDAD} niveles): archivo danado o malicioso"),
-            ErrorXml::DemasiadosElementos => write!(f, "el XML tiene demasiados elementos (mas de {MAX_ELEMENTOS}): archivo danado o malicioso"),
+            ErrorXml::DemasiadaProfundidad => write!(
+                f,
+                "el XML se anida demasiado (mas de {MAX_PROFUNDIDAD} niveles): archivo danado o malicioso"
+            ),
+            ErrorXml::DemasiadosElementos => write!(
+                f,
+                "el XML tiene demasiados elementos (mas de {MAX_ELEMENTOS}): archivo danado o malicioso"
+            ),
         }
     }
 }
@@ -155,7 +161,12 @@ fn apertura(texto: &str, i: usize) -> Option<(Nodo, bool, usize)> {
         return None;
     }
     let (nombre, prefijo) = partir_nombre(texto.get(inicio..j)?);
-    let mut nodo = Nodo { nombre, prefijo, atributos: Vec::new(), hijos: Vec::new() };
+    let mut nodo = Nodo {
+        nombre,
+        prefijo,
+        atributos: Vec::new(),
+        hijos: Vec::new(),
+    };
     let mut suelta = false;
     loop {
         while j < b.len() && es_espacio(b[j]) {
@@ -215,7 +226,11 @@ fn apertura(texto: &str, i: usize) -> Option<(Nodo, bool, usize)> {
 }
 
 fn texto_de(s: &str) -> String {
-    if s.contains('&') { descodificar(s) } else { s.to_string() }
+    if s.contains('&') {
+        descodificar(s)
+    } else {
+        s.to_string()
+    }
 }
 
 /// Lee el elemento completo que empieza en `i` (un `<` de apertura) y
@@ -228,11 +243,21 @@ pub fn elemento_en(texto: &str, i: usize) -> Option<(Nodo, usize)> {
 
 /// Como [`elemento_en`], pero si se pasa de los limites (profundidad o
 /// numero de elementos) deja el motivo en `fallo` y devuelve `None`.
-pub fn elemento_en_lim(texto: &str, i: usize, fallo: &mut Option<ErrorXml>) -> Option<(Nodo, usize)> {
+pub fn elemento_en_lim(
+    texto: &str,
+    i: usize,
+    fallo: &mut Option<ErrorXml>,
+) -> Option<(Nodo, usize)> {
     elemento_en_max(texto, i, fallo, MAX_PROFUNDIDAD, MAX_ELEMENTOS)
 }
 
-fn elemento_en_max(texto: &str, i: usize, fallo: &mut Option<ErrorXml>, max_prof: usize, max_elem: usize) -> Option<(Nodo, usize)> {
+fn elemento_en_max(
+    texto: &str,
+    i: usize,
+    fallo: &mut Option<ErrorXml>,
+    max_prof: usize,
+    max_elem: usize,
+) -> Option<(Nodo, usize)> {
     let b = texto.as_bytes();
     let (raiz, suelta, mut j) = apertura(texto, i)?;
     if suelta {
@@ -243,7 +268,9 @@ fn elemento_en_max(texto: &str, i: usize, fallo: &mut Option<ErrorXml>, max_prof
     while j < b.len() {
         if b[j] != b'<' {
             let ini = j;
-            j = memchr::memchr(b'<', &b[j..]).map(|k| k + j).unwrap_or(b.len());
+            j = memchr::memchr(b'<', &b[j..])
+                .map(|k| k + j)
+                .unwrap_or(b.len());
             let crudo = texto.get(ini..j).unwrap_or("");
             if let Some(padre) = pila.last_mut()
                 && (guarda_espacios(&padre.nombre) || !crudo.bytes().all(es_espacio))
@@ -259,7 +286,9 @@ fn elemento_en_max(texto: &str, i: usize, fallo: &mut Option<ErrorXml>, max_prof
                 } else if b[j..].starts_with(b"<![CDATA[") {
                     let fin = buscar(b, j + 9, b"]]>").unwrap_or(b.len());
                     if let Some(padre) = pila.last_mut() {
-                        padre.hijos.push(Hijo::Texto(texto.get(j + 9..fin).unwrap_or("").to_string()));
+                        padre
+                            .hijos
+                            .push(Hijo::Texto(texto.get(j + 9..fin).unwrap_or("").to_string()));
                     }
                     j = (fin + 3).min(b.len());
                 } else {
@@ -268,13 +297,18 @@ fn elemento_en_max(texto: &str, i: usize, fallo: &mut Option<ErrorXml>, max_prof
             }
             Some(b'?') => j = buscar(b, j + 2, b"?>").map(|k| k + 2).unwrap_or(b.len()),
             Some(b'/') => {
-                let fin = memchr::memchr(b'>', b.get(j + 2..).unwrap_or(&[])).map(|k| k + j + 2).unwrap_or(b.len());
+                let fin = memchr::memchr(b'>', b.get(j + 2..).unwrap_or(&[]))
+                    .map(|k| k + j + 2)
+                    .unwrap_or(b.len());
                 let nombre = local(texto.get(j + 2..fin).unwrap_or("").trim());
                 j = (fin + 1).min(b.len());
                 if let Some(pos) = pila.iter().rposition(|n| n.nombre == nombre) {
                     while pila.len() > pos + 1 {
                         let n = pila.pop().expect("hay mas de pos");
-                        pila.last_mut().expect("queda el padre").hijos.push(Hijo::Elemento(n));
+                        pila.last_mut()
+                            .expect("queda el padre")
+                            .hijos
+                            .push(Hijo::Elemento(n));
                     }
                     let n = pila.pop().expect("el que se cierra");
                     match pila.last_mut() {
@@ -315,7 +349,10 @@ fn elemento_en_max(texto: &str, i: usize, fallo: &mut Option<ErrorXml>, max_prof
     // Lo que quedo abierto se cierra solo.
     while pila.len() > 1 {
         let n = pila.pop().expect("hay mas de uno");
-        pila.last_mut().expect("queda el padre").hijos.push(Hijo::Elemento(n));
+        pila.last_mut()
+            .expect("queda el padre")
+            .hijos
+            .push(Hijo::Elemento(n));
     }
     pila.pop().map(|n| (n, b.len()))
 }
@@ -332,7 +369,12 @@ pub struct Hijos<'a> {
 
 impl<'a> Hijos<'a> {
     pub fn nuevo(texto: &'a str, pos: usize) -> Hijos<'a> {
-        Hijos { texto, pos, acabado: false, fallo: None }
+        Hijos {
+            texto,
+            pos,
+            acabado: false,
+            fallo: None,
+        }
     }
 
     /// El siguiente hijo elemento y su posicion de inicio, o `None` al
@@ -404,12 +446,20 @@ pub fn aperturas(texto: &str, nombre: &str) -> Vec<usize> {
     for k in memchr::memmem::find_iter(b, nombre.as_bytes()) {
         let antes = if k > 0 { b[k - 1] } else { 0 };
         let despues = b.get(k + nombre.len()).copied().unwrap_or(0);
-        if !(antes == b'<' || antes == b':') || !(es_espacio(despues) || despues == b'>' || despues == b'/') {
+        if !(antes == b'<' || antes == b':')
+            || !(es_espacio(despues) || despues == b'>' || despues == b'/')
+        {
             continue;
         }
-        let Some(ini) = texto[..k].rfind('<') else { continue };
+        let Some(ini) = texto[..k].rfind('<') else {
+            continue;
+        };
         // Entre el `<` y el nombre solo puede haber un prefijo.
-        if texto[ini + 1..k].bytes().all(|c| c.is_ascii_alphanumeric() || c == b':' || c == b'_' || c == b'-') && b.get(ini + 1) != Some(&b'/') {
+        if texto[ini + 1..k]
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b':' || c == b'_' || c == b'-')
+            && b.get(ini + 1) != Some(&b'/')
+        {
             v.push(ini);
         }
     }
@@ -427,13 +477,18 @@ mod pruebas {
         let a = leer(x).unwrap();
         assert_eq!(a.nombre, "document");
         let body = a.hijo("body").unwrap();
-        assert_eq!(body.elementos().count(), 2, "los espacios sueltos no son hijos");
+        assert_eq!(
+            body.elementos().count(),
+            2,
+            "los espacios sueltos no son hijos"
+        );
         assert_eq!(body.hijo("p").unwrap().texto(), " hola & adios ");
     }
 
     #[test]
     fn el_doctype_y_sus_entidades_se_saltan() {
-        let n = leer(r#"<!DOCTYPE a [<!ENTITY x SYSTEM "file:///c:/secreto">]><a>&x;</a>"#).unwrap();
+        let n =
+            leer(r#"<!DOCTYPE a [<!ENTITY x SYSTEM "file:///c:/secreto">]><a>&x;</a>"#).unwrap();
         assert_eq!(n.texto(), "&x;");
     }
 
@@ -442,7 +497,8 @@ mod pruebas {
         let x = r#"<d><body> <p>1</p><tbl><tr/></tbl> <sectPr/></body></d>"#;
         let ini = dentro_de(x, "body", 0).unwrap();
         let mut h = Hijos::nuevo(x, ini);
-        let nombres: Vec<String> = std::iter::from_fn(|| h.siguiente().map(|(n, _)| n.nombre)).collect();
+        let nombres: Vec<String> =
+            std::iter::from_fn(|| h.siguiente().map(|(n, _)| n.nombre)).collect();
         assert_eq!(nombres, vec!["p", "tbl", "sectPr"]);
         assert_eq!(aperturas(x, "sectPr").len(), 1);
         assert!(aperturas("<a><sectPrChange/></a>", "sectPr").is_empty());
@@ -466,9 +522,17 @@ mod pruebas_limites {
     #[test]
     fn cien_mil_niveles_de_anidamiento_se_rechazan_sin_panico() {
         let x = "<a>".repeat(100_000);
-        assert_eq!(leer_con_limites(&x).unwrap_err(), ErrorXml::DemasiadaProfundidad);
+        assert_eq!(
+            leer_con_limites(&x).unwrap_err(),
+            ErrorXml::DemasiadaProfundidad
+        );
         assert!(leer(&x).is_none());
-        assert!(leer_con_limites(&x).unwrap_err().to_string().contains("se anida demasiado"));
+        assert!(
+            leer_con_limites(&x)
+                .unwrap_err()
+                .to_string()
+                .contains("se anida demasiado")
+        );
         // Leyendo hijo a hijo, se detiene y dice por que.
         let dentro = format!("<d>{x}</d>");
         let mut h = Hijos::nuevo(&dentro, 3);

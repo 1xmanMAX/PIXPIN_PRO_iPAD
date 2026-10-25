@@ -101,14 +101,22 @@ pub fn para_la_nube(lista: &mut [Herramienta]) {
         crate::acciones::para_la_nube(h);
         let extra = match h.nombre.as_str() {
             DIBUJAR => {
-                if let Some(t) = h.parametros.pointer_mut("/properties/elementos/items/properties/tipo/enum").and_then(Value::as_array_mut) {
+                if let Some(t) = h
+                    .parametros
+                    .pointer_mut("/properties/elementos/items/properties/tipo/enum")
+                    .and_then(Value::as_array_mut)
+                {
                     for nuevo in ["paralelogramo", "tabla"] {
                         if !t.iter().any(|v| v == nuevo) {
                             t.push(json!(nuevo));
                         }
                     }
                 }
-                if let Some(p) = h.parametros.pointer_mut("/properties/elementos/items/properties").and_then(Value::as_object_mut) {
+                if let Some(p) = h
+                    .parametros
+                    .pointer_mut("/properties/elementos/items/properties")
+                    .and_then(Value::as_object_mut)
+                {
                     p.insert(
                         "filas".into(),
                         json!({"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "tabla: filas de celdas, la primera es la cabecera"}),
@@ -120,7 +128,7 @@ pub fn para_la_nube(lista: &mut [Herramienta]) {
                         json!({"type": "string", "description": "texto rico: formulas en linea entre $...$ (LaTeX), \\color{rojo}{X}, **negrita**, *cursiva*, <u>sub</u>, renglones con \\n, \\centro al inicio de un renglon"}),
                     );
                 }
-                "Tambien: tabla (con «x», «y» y «filas»:[[\"Planeta\",\"UA\"],[\"Mercurio\",\"0.39\"]], la primera fila es la cabecera; es LA forma de hacer una tabla en el lienzo, no una nota) \
+                "Tambien: tabla (con «x», «y» y «filas»:[[\"Planeta\",\"UA\"],[\"Mercurio\",\"0.39\"]], la primera fila es la cabecera; es LA forma de hacer una tabla en el lienzo, no una nota ni un Excel) \
                  y paralelogramo (con «caja»). En un diagrama de flujo: inicio/fin elipse, proceso rectangulo, decision rombo, leer/escribir paralelogramo. \
                  En geometria, fisica o planos pon «rugosidad»:0 en cada figura (la circunferencia exacta, no a mano), calcula las coordenadas de verdad \
                  (centro y radio de una inscrita), y cada punto lleva su letra UNA vez: los textos de al lado no la repiten («incentro», no «I incentro»). \
@@ -132,27 +140,80 @@ pub fn para_la_nube(lista: &mut [Herramienta]) {
             PROBLEMA => {
                 "Es LA herramienta para «pasa en limpio el problema/ejercicio» (no hoja_a_lienzo). El enunciado SIN las formulas; cada formula entera una sola vez en «ecuaciones» \
                  (LaTeX: \\frac, \\int_a^b, \\sqrt, matrices con \\begin{bmatrix}, sistemas con \\begin{cases}); incognitas en LaTeX; «figura» SOLO si la foto trae un dibujo \
-                 necesario (triangulo, circuito, plano inclinado), nunca para integrales, matrices o ecuaciones."
+                 necesario (triangulo, circuito, plano inclinado), nunca para integrales, matrices o ecuaciones. \
+                 Si la foto no tiene un problema legible, dilo y no lo inventes. Solo si piden resolverlo pon los pasos, con cada cuenta en calculo."
             }
-            "nota_nueva" => "Solo si piden una nota o un apunte: una tabla, un diagrama o una grafica van al lienzo.",
-            crate::hoja::NOMBRE => "Tambien es la de «calca/pasa esta pagina al lienzo» con un PDF adjunto (calcar_imagen solo calca fotos). \
-                                    NO para pasar en limpio o resolver un problema o ejercicio: eso es problema_en_limpio.",
+            // 22-oct: lo que decian las instrucciones («si pide X usa Y»)
+            // vive ahora en su herramienta (`agente::instrucciones`).
+            CALCAR => {
+                "Tambien la imagen pegada en el lienzo, que llega como «imagen del lienzo». Una lamina con texto y figuras geometricas la pasa con rectas, \
+                       circunferencias, arcos, puntos y texto exactos. No la uses si piden dibujarla con figuras, a lapiz o con grafito (eso es interpretarla con \
+                       dibujar_en_lienzo o dibujar_svg), ni para una hoja con texto (hoja_a_lienzo) ni para una tabla (tabla_de_imagen). Ejemplo: {\"detalle\":\"medio\"}."
+            }
+            SVG => {
+                "Usala para ilustraciones con curvas o detalle (personas, animales, arboles, isometricos): formas cerradas con fill, pocas y bien puestas, viewBox ajustado; \
+                    varias vistas o posiciones, un solo SVG con grupos separados. No para diagramas, tablas ni geometria exacta: eso es dibujar_en_lienzo o geometria_precisa."
+            }
+            FUNCION => {
+                "Nunca calcules tu los puntos: polares, parametricas, raices, extremos, tangentes, areas y asintotas tambien van con ella, y la app te devuelve los valores. \
+                        Para datos sueltos (ventas por mes) es grafica."
+            }
+            FISICA => {
+                "Usala para un diagrama de fisica (fuerzas, plano inclinado, tiro, circuito, MRU) con el tipo y los datos del enunciado; si falta un dato, pon un valor tipico y dilo. \
+                       Los resultados (alcance, aceleracion, corriente) los calcula la app: repitelos tal cual, no los calcules tu."
+            }
+            GRAFICA => {
+                "Usala cuando den datos con sus etiquetas (ventas por mes, una encuesta); para una formula es graficar_funcion. \
+                        Ejemplo: {\"tipo\":\"barras\",\"titulo\":\"Ventas\",\"etiquetas\":[\"Ene\",\"Feb\"],\"valores\":[120,95]}."
+            }
+            AYUDA => {
+                "Contesta con lo que diga, sin inventar menus ni atajos. No la uses para hacer algo en la app: para eso esta su herramienta."
+            }
+            OCR => {
+                "Despues el texto es tuyo: resumelo, traducelo o pasalo a donde pidan con su herramienta."
+            }
+            crate::acciones_documentos::ABRIR => {
+                "Nombra el archivo con las palabras del usuario; nunca le pidas rutas ni codigos. Si te dice que hay varios, pregunta cual con esa lista corta."
+            }
+            "nota_nueva" => {
+                "Solo si piden una nota o un apunte: una tabla, un diagrama o una grafica van al lienzo."
+            }
+            crate::hoja::NOMBRE => {
+                "Tambien es la de «calca/pasa esta pagina al lienzo» con un PDF adjunto (calcar_imagen solo calca fotos). \
+                                    Usala si la foto o el PDF es una hoja con texto (apuntes, un articulo, un escaneo) que piden pasar, poner o digitalizar en el lienzo: la interpreta entera (texto, tablas, formulas, fotos). \
+                                    NO para pasar en limpio o resolver un problema o ejercicio: eso es problema_en_limpio."
+            }
             // Banco de documentos (15-oct): «convierte estas formulas a LaTeX»
             // acababa dibujado en el lienzo sin una linea de LaTeX en la respuesta.
-            ECUACION => "Solo si piden las formulas EN EL LIENZO. Si piden el LaTeX («pasame en LaTeX», «convierte a LaTeX»), \
-                         contesta el codigo en el texto, una formula por renglon entre $$...$$, sin herramienta.",
+            ECUACION => {
+                "Solo si piden las formulas EN EL LIENZO. Si piden el LaTeX («pasame en LaTeX», «convierte a LaTeX»), \
+                         contesta el codigo en el texto, una formula por renglon entre $$...$$, sin herramienta."
+            }
             // «Anota en la imagen los pasos» acababa en una tarea pendiente.
-            "anadir_tarea" => "NO para «anota/marca/señala en el documento, la foto o el PDF»: eso es anotar_inteligente o anotar_documento.",
-            crate::edicion::ESTILO => "Con «tam_letra» cambia el tamano de la letra de los textos (y los de una tabla).",
-            crate::acciones_documentos::ANOTAR => "Solo PDF, Word, PowerPoint o plano, y para un texto concreto que dice el usuario. \
-                                                   NUNCA para «lo importante», resumir o explicar al margen, ni varias notas a mano: eso es anotar_inteligente, en UNA llamada.",
-            crate::anotacion::NOMBRE => "Es LA herramienta para «señala/marca lo importante», «resume cada seccion al margen», «explica paso a paso» o «marca los errores» \
-                                         en un documento, foto o Excel del chat: lee y coloca ella sola, en una llamada (no escribas tu las notas con anotar_documento).",
+            "anadir_tarea" => {
+                "NO para «anota/marca/señala en el documento, la foto o el PDF»: eso es anotar_inteligente o anotar_documento."
+            }
+            crate::edicion::ESTILO => {
+                "Con «tam_letra» cambia el tamano de la letra de los textos (y los de una tabla)."
+            }
+            crate::acciones_documentos::ANOTAR => {
+                "Solo PDF, Word, PowerPoint o plano, y para un texto concreto que dice el usuario. \
+                                                   NUNCA para «lo importante», resumir o explicar al margen, ni varias notas a mano: eso es anotar_inteligente, en UNA llamada."
+            }
+            crate::anotacion::NOMBRE => {
+                "Es LA herramienta para «señala/marca lo importante», «resume cada seccion al margen», «explica paso a paso» o «marca los errores» \
+                                         en un documento, foto o Excel del chat: lee y coloca ella sola, en una llamada (no escribas tu las notas con anotar_documento). \
+                                         Tambien numerar pasos, resumir paginas o secciones, un glosario o preguntas de repaso; pasale el pedido del usuario."
+            }
             // «Haz esta tabla en el lienzo» acababa como tabla del chat.
-            crate::acciones_documentos::TABLA => "Con «destino»:«lienzo» la dibuja en el lienzo IGUAL que en la foto (letra, anchos, colores de fondo y borde medidos): \
-                                                  es LA forma de «haz/pasa/copia esta tabla en el lienzo», no la dibujes tu.",
+            crate::acciones_documentos::TABLA => {
+                "Con «destino»:«lienzo» la dibuja en el lienzo IGUAL que en la foto (letra, anchos, colores de fondo y borde medidos): \
+                                                  es LA forma de «haz/pasa/copia esta tabla en el lienzo», no la dibujes tu."
+            }
             // «Marca los errores del Excel» acababa contestado en el chat.
-            "leer_excel" => "Para MARCAR o explicar algo EN el Excel (errores, lo importante), anotar_inteligente: lee las celdas por su cuenta.",
+            "leer_excel" => {
+                "Para MARCAR o explicar algo EN el Excel (errores, lo importante), anotar_inteligente: lee las celdas por su cuenta."
+            }
             _ => continue,
         };
         if !h.descripcion.ends_with(extra) {
@@ -170,9 +231,9 @@ pub fn catalogo_base() -> Vec<Herramienta> {
         Herramienta {
             nombre: DIBUJAR.into(),
             descripcion: concat!(
-                "Dibuja figuras en el lienzo de PixPin (800x600, origen arriba a la izquierda). ",
+                "Dibuja figuras en el lienzo de PixPin (800x600 si esta vacio, origen arriba a la izquierda; si ya hay cosas, usa las MISMAS coordenadas que trae el «Lienzo destino», que pueden pasar de 800x600). ",
                 "Cada elemento lleva su «color» (el que pidio el usuario) y, si va lleno, su «relleno». ",
-                "Tipos: rectangulo, elipse, rombo, triangulo, estrella y onda (con «caja»:[x,y,ancho,alto]; un circulo tambien con «centro»:[x,y] y «radio»); ",
+                "Tipos: rectangulo, elipse, rombo, triangulo, estrella, onda y nube (de revision, para rodear lo que cambio) (con «caja»:[x,y,ancho,alto]; un circulo tambien con «centro»:[x,y] y «radio»); ",
                 "linea, flecha, curva (suave), poligono y lapiz (a mano alzada) (con «puntos»:[x1,y1,x2,y2,...]); texto (con «x», «y» y «texto»); ",
                 "punto (con «x», «y» y su letra en «texto»); instrumento (plano cartesiano con «ejes»:2, recta con 1, espacio con 3; «caja», «unidad» en px y «tabla»:[[x,y],...] de coordenadas). ",
                 "Opcionales: «grosor», «trazo» (solido, discontinuo, punteado), «opacidad» (0-100), «relleno_estilo» (solido, rayado, cruzado), ",
@@ -196,7 +257,7 @@ pub fn catalogo_base() -> Vec<Herramienta> {
                         "type": "object",
                         "required": ["tipo"],
                         "properties": {
-                            "tipo": {"type": "string", "enum": ["rectangulo", "elipse", "rombo", "triangulo", "estrella", "onda", "linea", "flecha", "curva", "poligono", "lapiz", "texto", "punto", "instrumento"]},
+                            "tipo": {"type": "string", "enum": ["rectangulo", "elipse", "rombo", "triangulo", "estrella", "onda", "nube", "linea", "flecha", "curva", "poligono", "lapiz", "texto", "punto", "instrumento"]},
                             "caja": {"type": "array", "items": {"type": "number"}, "description": "[x, y, ancho, alto]"},
                             "puntos": {"type": "array", "items": {"type": "number"}, "description": "[x1, y1, x2, y2, ...] de linea, flecha, curva o poligono"},
                             "centro": {"type": "array", "items": {"type": "number"}, "description": "[x, y] de un circulo"},
@@ -390,6 +451,10 @@ pub enum TipoFigura {
     /// El instrumento de graficar (`pixpin-axes` y hermanos), con sus puntos
     /// de la tabla de coordenadas.
     Instrumento,
+    /// **La nube de revision** (`pixpin_motor2d::nube_revision`): la caja con
+    /// el borde en festones, la de marcar lo que cambio en un plano. Sale
+    /// dinamica: estirada en el lienzo, caben mas festones del mismo tamano.
+    Nube,
     /// **Una tabla en el lienzo** (`tabla_dibujada`, la misma de la hoja al
     /// lienzo): sus celdas van en `texto`, con tabulador entre celdas y salto
     /// entre filas. Antes no habia y «haz una tabla» acababa en una nota.
@@ -404,27 +469,52 @@ fn filas_de_tabla(o: &Map<String, Value>) -> Option<String> {
         Value::Null => String::new(),
         otro => otro.to_string(),
     };
-    let filas: Vec<Vec<String>> = match o.get("filas").or(o.get("celdas")).or(o.get("datos")).or(o.get("texto")) {
+    let filas: Vec<Vec<String>> = match o
+        .get("filas")
+        .or(o.get("celdas"))
+        .or(o.get("datos"))
+        .or(o.get("texto"))
+    {
         Some(Value::Array(l)) => l
             .iter()
             .filter_map(|f| match f {
                 Value::Array(c) => Some(c.iter().map(celda).collect()),
-                Value::String(s) => Some(s.split(['|', '\t']).map(|c| c.trim().to_string()).collect()),
+                Value::String(s) => {
+                    Some(s.split(['|', '\t']).map(|c| c.trim().to_string()).collect())
+                }
                 _ => None,
             })
             .collect(),
         Some(Value::String(s)) => s
             .lines()
-            .map(|l| l.trim().trim_matches('|').split(['|', '\t']).map(|c| c.trim().to_string()).collect::<Vec<_>>())
-            .filter(|f: &Vec<String>| !f.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch == ' ')))
+            .map(|l| {
+                l.trim()
+                    .trim_matches('|')
+                    .split(['|', '\t'])
+                    .map(|c| c.trim().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|f: &Vec<String>| {
+                !f.iter()
+                    .all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch == ' '))
+            })
             .collect(),
         _ => return None,
     };
-    let filas: Vec<Vec<String>> = filas.into_iter().filter(|f| f.iter().any(|c| !c.is_empty())).collect();
+    let filas: Vec<Vec<String>> = filas
+        .into_iter()
+        .filter(|f| f.iter().any(|c| !c.is_empty()))
+        .collect();
     if filas.is_empty() {
         return None;
     }
-    Some(filas.iter().map(|f| f.join("\t")).collect::<Vec<_>>().join("\n"))
+    Some(
+        filas
+            .iter()
+            .map(|f| f.join("\t"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 /// Como se pinta una figura, mas alla de sus colores. `None`: lo de
@@ -605,7 +695,10 @@ pub fn reparar_json(texto: &str) -> Option<Value> {
 }
 
 /// **Valida una llamada del modelo** contra las herramientas conocidas.
-pub fn validar(cruda: &LlamadaCruda, conocidas: &[Herramienta]) -> Result<Validada, ErrorHerramienta> {
+pub fn validar(
+    cruda: &LlamadaCruda,
+    conocidas: &[Herramienta],
+) -> Result<Validada, ErrorHerramienta> {
     let nombre = cruda.nombre.trim();
     if !conocidas.iter().any(|h| h.nombre == nombre) {
         return Err(ErrorHerramienta::Desconocida(nombre.to_string()));
@@ -636,13 +729,16 @@ pub fn validar(cruda: &LlamadaCruda, conocidas: &[Herramienta]) -> Result<Valida
                 .or_else(|| args.values().find_map(|v| v.as_str().map(str::to_string)))
                 .ok_or_else(|| mal("falta «pregunta»"))?,
         ),
-        crate::documentos::BUSCAR => Llamada::Buscar(crate::documentos::herramienta::validar(&args)?),
-        otro if crate::edicion::fila(otro).is_some() => {
-            Llamada::Editar(crate::edicion::validar(crate::edicion::fila(otro).unwrap(), &args)?)
+        crate::documentos::BUSCAR => {
+            Llamada::Buscar(crate::documentos::herramienta::validar(&args)?)
         }
-        otro if crate::acciones::por_nombre(otro).is_some() => {
-            Llamada::App(crate::acciones::validar(crate::acciones::por_nombre(otro).unwrap(), &args)?)
-        }
+        otro if crate::edicion::fila(otro).is_some() => Llamada::Editar(crate::edicion::validar(
+            crate::edicion::fila(otro).unwrap(),
+            &args,
+        )?),
+        otro if crate::acciones::por_nombre(otro).is_some() => Llamada::App(
+            crate::acciones::validar(crate::acciones::por_nombre(otro).unwrap(), &args)?,
+        ),
         // Una herramienta del catalogo que este crate no sabe validar (la
         // anadio el chat): no se ejecuta a ciegas.
         otro => return Err(ErrorHerramienta::Desconocida(otro.to_string())),
@@ -666,7 +762,9 @@ fn numero_en(
     donde: &str,
     rango: (f64, f64),
 ) -> Result<Option<f64>, ErrorHerramienta> {
-    let Some(v) = o.get(campo) else { return Ok(None) };
+    let Some(v) = o.get(campo) else {
+        return Ok(None);
+    };
     if v.is_null() {
         return Ok(None);
     }
@@ -691,7 +789,10 @@ fn texto_en(o: &Map<String, Value>, campo: &str) -> Option<String> {
 const COORD: (f64, f64) = (COORDENADA_MINIMA, COORDENADA_MAXIMA);
 const MEDIDA: (f64, f64) = (1.0, COORDENADA_MAXIMA);
 
-pub(crate) fn validar_dibujo(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Vec<Figura>, ErrorHerramienta> {
+pub(crate) fn validar_dibujo(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Vec<Figura>, ErrorHerramienta> {
     let lista = match args.get("elementos") {
         Some(Value::Array(l)) => l,
         // Un solo elemento suelto, sin la lista: se acepta.
@@ -754,9 +855,16 @@ fn validar_figura(
     // Formas que se generan de su caja (al modelo le cuesta poner sus puntos).
     let mut forma: Option<&str> = None;
     let tipo = match tipo_txt.to_lowercase().as_str() {
-        "rectangulo" | "rectángulo" | "rect" | "rectangle" | "cuadrado" | "square" => TipoFigura::Rectangulo,
-        "elipse" | "ellipse" | "circulo" | "círculo" | "circle" | "ovalo" | "óvalo" => TipoFigura::Elipse,
+        "rectangulo" | "rectángulo" | "rect" | "rectangle" | "cuadrado" | "square" => {
+            TipoFigura::Rectangulo
+        }
+        "elipse" | "ellipse" | "circulo" | "círculo" | "circle" | "ovalo" | "óvalo" => {
+            TipoFigura::Elipse
+        }
         "rombo" | "diamond" => TipoFigura::Rombo,
+        "nube" | "nube_de_revision" | "nube_revision" | "cloud" | "revision_cloud" => {
+            TipoFigura::Nube
+        }
         "linea" | "línea" | "line" => TipoFigura::Linea,
         "flecha" | "arrow" => TipoFigura::Flecha,
         "texto" | "text" => TipoFigura::Texto,
@@ -766,12 +874,12 @@ fn validar_figura(
             TipoFigura::Curva
         }
         "poligono" | "polígono" | "polygon" => TipoFigura::Poligono,
-        "lapiz" | "lápiz" | "pencil" | "freedraw" | "mano_alzada" | "trazo" | "grafito" | "boceto" => TipoFigura::Lapiz,
+        "lapiz" | "lápiz" | "pencil" | "freedraw" | "mano_alzada" | "trazo" | "grafito"
+        | "boceto" => TipoFigura::Lapiz,
         "punto" | "point" => TipoFigura::Punto,
         "tabla" | "table" | "cuadro" => TipoFigura::Tabla,
-        "instrumento" | "plano" | "plano_cartesiano" | "ejes" | "axes" | "recta" | "recta_numerica" | "espacio" => {
-            TipoFigura::Instrumento
-        }
+        "instrumento" | "plano" | "plano_cartesiano" | "ejes" | "axes" | "recta"
+        | "recta_numerica" | "espacio" => TipoFigura::Instrumento,
         "triangulo" | "triángulo" | "triangle" => {
             forma = Some("triangulo");
             TipoFigura::Poligono
@@ -786,7 +894,7 @@ fn validar_figura(
         }
         otro => {
             return Err(mal(format!(
-                "{donde}: «tipo» = «{otro}» no existe; usa rectangulo, elipse, rombo, triangulo, estrella, linea, flecha, curva, poligono, lapiz, texto, punto o instrumento"
+                "{donde}: «tipo» = «{otro}» no existe; usa rectangulo, elipse, rombo, triangulo, estrella, nube, linea, flecha, curva, poligono, lapiz, texto, punto o instrumento"
             )));
         }
     };
@@ -794,7 +902,11 @@ fn validar_figura(
     let caja: Option<[f64; 4]> = match o.get("caja").filter(|v| !v.is_null()) {
         Some(v) => match numeros(v).as_deref() {
             Some([x, y, w, h]) => Some([*x, *y, *w, *h]),
-            _ => return Err(mal(format!("{donde}: «caja» tiene que ser [x, y, ancho, alto]"))),
+            _ => {
+                return Err(mal(format!(
+                    "{donde}: «caja» tiene que ser [x, y, ancho, alto]"
+                )));
+            }
         },
         None => match o.get("centro").filter(|v| !v.is_null()) {
             Some(v) => match numeros(v).as_deref() {
@@ -808,7 +920,12 @@ fn validar_figura(
         },
     };
     if let Some([x, y, w, h]) = caja {
-        for (n, campo, rango) in [(x, "x", COORD), (y, "y", COORD), (w, "ancho", MEDIDA), (h, "alto", MEDIDA)] {
+        for (n, campo, rango) in [
+            (x, "x", COORD),
+            (y, "y", COORD),
+            (w, "ancho", MEDIDA),
+            (h, "alto", MEDIDA),
+        ] {
             if !(rango.0..=rango.1).contains(&n) {
                 return Err(mal(format!(
                     "{donde}: «caja» con {campo} = {n} fuera de rango ({} a {})",
@@ -820,14 +937,21 @@ fn validar_figura(
     // Los puntos de lineas, curvas y poligonos.
     let mut puntos: Vec<(f64, f64)> = match o.get("puntos").filter(|v| !v.is_null()) {
         Some(v) => {
-            let n = numeros(v).ok_or_else(|| mal(format!("{donde}: «puntos» tiene que ser una lista de numeros")))?;
+            let n = numeros(v).ok_or_else(|| {
+                mal(format!(
+                    "{donde}: «puntos» tiene que ser una lista de numeros"
+                ))
+            })?;
             if n.len() % 2 != 0 {
                 return Err(mal(format!(
                     "{donde}: «puntos» tiene un numero impar de valores (van de dos en dos: x, y)"
                 )));
             }
             if n.len() > MAX_NUMEROS_PUNTOS {
-                return Err(mal(format!("{donde}: demasiados puntos (maximo {})", MAX_NUMEROS_PUNTOS / 2)));
+                return Err(mal(format!(
+                    "{donde}: demasiados puntos (maximo {})",
+                    MAX_NUMEROS_PUNTOS / 2
+                )));
             }
             if let Some(m) = n.iter().find(|m| !(COORD.0..=COORD.1).contains(*m)) {
                 return Err(mal(format!("{donde}: un punto ({m}) esta fuera de rango")));
@@ -838,10 +962,18 @@ fn validar_figura(
     };
     let es_trazo = matches!(
         tipo,
-        TipoFigura::Linea | TipoFigura::Flecha | TipoFigura::Curva | TipoFigura::Poligono | TipoFigura::Lapiz
+        TipoFigura::Linea
+            | TipoFigura::Flecha
+            | TipoFigura::Curva
+            | TipoFigura::Poligono
+            | TipoFigura::Lapiz
     );
     // En una linea el ancho/alto son el desplazamiento y pueden ser negativos.
-    let rango_medida = if es_trazo { (-COORDENADA_MAXIMA, COORDENADA_MAXIMA) } else { MEDIDA };
+    let rango_medida = if es_trazo {
+        (-COORDENADA_MAXIMA, COORDENADA_MAXIMA)
+    } else {
+        MEDIDA
+    };
     let x_ = numero_en(o, "x", &donde, COORD)?;
     let y_ = numero_en(o, "y", &donde, COORD)?;
     let ancho_ = numero_en(o, "ancho", &donde, rango_medida)?;
@@ -852,19 +984,40 @@ fn validar_figura(
     // El texto tambien con otro nombre («text», «etiqueta», «contenido»...).
     let texto = if tipo == TipoFigura::Tabla {
         // La tabla viaja en el texto: celdas con tabulador, filas con salto.
-        filas_de_tabla(o).ok_or_else(|| mal(format!("{donde}: la tabla necesita «filas»: [[\"Nombre\",\"UA\"],[\"Mercurio\",\"0.39\"]]")))?
+        filas_de_tabla(o).ok_or_else(|| {
+            mal(format!(
+                "{donde}: la tabla necesita «filas»: [[\"Nombre\",\"UA\"],[\"Mercurio\",\"0.39\"]]"
+            ))
+        })?
     } else {
-        ["texto", "text", "etiqueta", "rotulo", "contenido", "label", "titulo", "valor"]
-            .iter()
-            .find_map(|c| texto_en(o, c))
-            .unwrap_or_default()
+        [
+            "texto",
+            "text",
+            "etiqueta",
+            "rotulo",
+            "contenido",
+            "label",
+            "titulo",
+            "valor",
+        ]
+        .iter()
+        .find_map(|c| texto_en(o, c))
+        .unwrap_or_default()
     };
     // Un texto sin texto se acepta aqui: `colores_del_pedido` lo saca de lo
     // que el usuario puso entre comillas («Plan 2026»), que es lo que el 2B
     // olvida (medido 13-oct: tres reintentos seguidos sin el campo). Si no
     // hay de donde sacarlo, el lienzo lo descarta.
-    if texto.chars().count() > if tipo == TipoFigura::Tabla { MAX_TEXTO * 8 } else { MAX_TEXTO } {
-        return Err(mal(format!("{donde}: el texto pasa de {MAX_TEXTO} caracteres")));
+    if texto.chars().count()
+        > if tipo == TipoFigura::Tabla {
+            MAX_TEXTO * 8
+        } else {
+            MAX_TEXTO
+        }
+    {
+        return Err(mal(format!(
+            "{donde}: el texto pasa de {MAX_TEXTO} caracteres"
+        )));
     }
     // Una forma con «puntos» de menos (el 2B pone [x, y] sueltos): se ignoran
     // y vale la caja. En una linea, el (x, y) es su primer punto.
@@ -884,9 +1037,13 @@ fn validar_figura(
     let sin_sitio = caja.is_none() && x_.is_none() && y_.is_none() && puntos.is_empty();
     let caja = match (caja, forma) {
         (None, Some("onda")) if sin_sitio => Some([100.0, 220.0, 600.0, 160.0]),
-        (None, _) if sin_sitio && tipo == TipoFigura::Instrumento => Some([240.0, 140.0, 320.0, 320.0]),
+        (None, _) if sin_sitio && tipo == TipoFigura::Instrumento => {
+            Some([240.0, 140.0, 320.0, 320.0])
+        }
         (None, _) if sin_sitio && tipo == TipoFigura::Punto => Some([400.0, 300.0, 1.0, 1.0]),
-        (None, _) if sin_sitio && !matches!(tipo, TipoFigura::Texto | TipoFigura::Tabla) => Some([250.0, 150.0, 300.0, 300.0]),
+        (None, _) if sin_sitio && !matches!(tipo, TipoFigura::Texto | TipoFigura::Tabla) => {
+            Some([250.0, 150.0, 300.0, 300.0])
+        }
         (c, _) => c,
     };
     if es_trazo && puntos.is_empty() {
@@ -901,14 +1058,18 @@ fn validar_figura(
             if let Some([x, y, w, h]) = caja.filter(|_| x_.is_none()) {
                 puntos = vec![(x, y + h / 2.0), (x + w, y + h / 2.0)];
             } else {
-                let x = x_.ok_or_else(|| mal(format!("{donde}: falta «puntos» (o «x», «y», «x2», «y2»)")))?;
+                let x = x_.ok_or_else(|| {
+                    mal(format!("{donde}: falta «puntos» (o «x», «y», «x2», «y2»)"))
+                })?;
                 let y = y_.ok_or_else(|| mal(format!("{donde}: falta «y»")))?;
                 let x2 = x2_.or(ancho_.map(|a| x + a)).unwrap_or(x + 100.0);
                 let y2 = y2_.or(alto_.map(|a| y + a)).unwrap_or(y);
                 puntos = vec![(x, y), (x2, y2)];
             }
         } else {
-            return Err(mal(format!("{donde}: falta «puntos»: [x1, y1, x2, y2, ...]")));
+            return Err(mal(format!(
+                "{donde}: falta «puntos»: [x1, y1, x2, y2, ...]"
+            )));
         }
     }
     let minimo = match tipo {
@@ -917,10 +1078,14 @@ fn validar_figura(
         _ => 0,
     };
     if puntos.len() < minimo {
-        return Err(mal(format!("{donde}: hacen falta al menos {minimo} puntos")));
+        return Err(mal(format!(
+            "{donde}: hacen falta al menos {minimo} puntos"
+        )));
     }
     if es_trazo && puntos.windows(2).all(|p| p[0] == p[1]) {
-        return Err(mal(format!("{donde}: la linea empieza y acaba en el mismo punto")));
+        return Err(mal(format!(
+            "{donde}: la linea empieza y acaba en el mismo punto"
+        )));
     }
     for p in &mut puntos {
         p.0 += ox;
@@ -961,8 +1126,12 @@ fn validar_figura(
     };
     // Los modelos pequenos a veces escriben el color con otro nombre
     // («fill», «stroke», «fondo»): se aceptan los sinonimos.
-    let color_txt = ["color", "colour", "stroke", "trazo"].iter().find_map(|c| texto_en(o, c));
-    let relleno_txt = ["relleno", "fill", "fondo", "background"].iter().find_map(|c| texto_en(o, c));
+    let color_txt = ["color", "colour", "stroke", "trazo"]
+        .iter()
+        .find_map(|c| texto_en(o, c));
+    let relleno_txt = ["relleno", "fill", "fondo", "background"]
+        .iter()
+        .find_map(|c| texto_en(o, c));
     let con_color = color_txt.is_some() || relleno_txt.is_some();
     let trazo = match color_txt {
         // Sin color pero con relleno: el borde del mismo color (un «circulo
@@ -979,11 +1148,20 @@ fn validar_figura(
     };
     let relleno = match relleno_txt {
         None => None,
-        Some(c) if matches!(c.to_lowercase().as_str(), "ninguno" | "none" | "transparent" | "transparente") => None,
+        Some(c)
+            if matches!(
+                c.to_lowercase().as_str(),
+                "ninguno" | "none" | "transparent" | "transparente"
+            ) =>
+        {
+            None
+        }
         Some(c) => match color(&c) {
             Some(col) => Some(col),
             None => {
-                avisos.push(format!("{donde}: relleno «{c}» desconocido, se deja sin relleno"));
+                avisos.push(format!(
+                    "{donde}: relleno «{c}» desconocido, se deja sin relleno"
+                ));
                 None
             }
         },
@@ -1031,7 +1209,9 @@ fn validar_estilo(
         "discontinuo" | "dashed" | "rayas" | "guiones" => Some("dashed"),
         "punteado" | "dotted" | "puntos" => Some("dotted"),
         otro => {
-            avisos.push(format!("{donde}: trazo «{otro}» desconocido, se usa solido"));
+            avisos.push(format!(
+                "{donde}: trazo «{otro}» desconocido, se usa solido"
+            ));
             None
         }
     });
@@ -1040,7 +1220,9 @@ fn validar_estilo(
         "rayado" | "hachure" | "rayas" | "achurado" => Some("hachure"),
         "cruzado" | "cross-hatch" | "cuadriculado" => Some("cross-hatch"),
         otro => {
-            avisos.push(format!("{donde}: relleno_estilo «{otro}» desconocido, se usa solido"));
+            avisos.push(format!(
+                "{donde}: relleno_estilo «{otro}» desconocido, se usa solido"
+            ));
             None
         }
     });
@@ -1051,7 +1233,9 @@ fn validar_estilo(
         "lapiz2b" | "2b" | "carboncillo" => Some("lapiz2b"),
         "seco" | "rotulador" | "marcador" => Some("seco"),
         otro => {
-            avisos.push(format!("{donde}: material «{otro}» desconocido, se usa liso"));
+            avisos.push(format!(
+                "{donde}: material «{otro}» desconocido, se usa liso"
+            ));
             None
         }
     });
@@ -1106,7 +1290,11 @@ pub fn dureza(texto: &str) -> Option<&'static str> {
 }
 
 /// Los ejes, la unidad y la tabla de un instrumento.
-fn validar_instrumento(o: &Map<String, Value>, donde: &str, tipo_txt: &str) -> Result<PedidoInstrumento, ErrorHerramienta> {
+fn validar_instrumento(
+    o: &Map<String, Value>,
+    donde: &str,
+    tipo_txt: &str,
+) -> Result<PedidoInstrumento, ErrorHerramienta> {
     let por_nombre = match crate::acciones::normalizar(tipo_txt).as_str() {
         "recta" | "recta_numerica" => Some(1.0),
         "espacio" => Some(3.0),
@@ -1120,9 +1308,12 @@ fn validar_instrumento(o: &Map<String, Value>, donde: &str, tipo_txt: &str) -> R
     let tabla = match o.get("tabla").filter(|v| !v.is_null()) {
         None => Vec::new(),
         Some(v) => {
-            let n = numeros(v).ok_or_else(|| mal(format!("{donde}: «tabla» tiene que ser [[x, y], ...]")))?;
+            let n = numeros(v)
+                .ok_or_else(|| mal(format!("{donde}: «tabla» tiene que ser [[x, y], ...]")))?;
             if n.len() % 2 != 0 {
-                return Err(mal(format!("{donde}: «tabla» tiene un numero impar de valores (van de dos en dos: x, y)")));
+                return Err(mal(format!(
+                    "{donde}: «tabla» tiene un numero impar de valores (van de dos en dos: x, y)"
+                )));
             }
             if n.len() / 2 > MAX_TABLA {
                 return Err(mal(format!("{donde}: la tabla pasa de {MAX_TABLA} puntos")));
@@ -1133,7 +1324,11 @@ fn validar_instrumento(o: &Map<String, Value>, donde: &str, tipo_txt: &str) -> R
             n.chunks(2).map(|c| (c[0], c[1])).collect()
         }
     };
-    Ok(PedidoInstrumento { ejes, unidad, tabla })
+    Ok(PedidoInstrumento {
+        ejes,
+        unidad,
+        tabla,
+    })
 }
 
 /// Los vertices de una forma dentro de su caja.
@@ -1153,7 +1348,10 @@ fn forma_de_caja(forma: &str, [x, y, w, h]: [f64; 4]) -> Vec<(f64, f64)> {
         "onda" => (0..=16)
             .map(|k| {
                 let t = k as f64 / 16.0;
-                (x + t * w, y + h / 2.0 - h / 2.0 * (t * 4.0 * std::f64::consts::PI).sin())
+                (
+                    x + t * w,
+                    y + h / 2.0 - h / 2.0 * (t * 4.0 * std::f64::consts::PI).sin(),
+                )
             })
             .collect(),
         // Paralelogramo (entrada/salida de un diagrama de flujo: «Leer N»).
@@ -1166,13 +1364,22 @@ fn forma_de_caja(forma: &str, [x, y, w, h]: [f64; 4]) -> Vec<(f64, f64)> {
     }
 }
 
-fn validar_calcar(args: &Map<String, Value>) -> Result<crate::calcar::Parametros, ErrorHerramienta> {
+fn validar_calcar(
+    args: &Map<String, Value>,
+) -> Result<crate::calcar::Parametros, ErrorHerramienta> {
     use crate::calcar::{Detalle, Parametros};
-    let detalle = match texto_en(args, "detalle").map(|t| crate::acciones::normalizar(&t)).as_deref() {
+    let detalle = match texto_en(args, "detalle")
+        .map(|t| crate::acciones::normalizar(&t))
+        .as_deref()
+    {
         None | Some("medio" | "normal" | "medium") => Detalle::Medio,
         Some("bajo" | "poco" | "low" | "simple") => Detalle::Bajo,
         Some("alto" | "mucho" | "high" | "maximo") => Detalle::Alto,
-        Some(otro) => return Err(mal(format!("«detalle» = «{otro}» no existe; usa bajo, medio o alto"))),
+        Some(otro) => {
+            return Err(mal(format!(
+                "«detalle» = «{otro}» no existe; usa bajo, medio o alto"
+            )));
+        }
     };
     let si_no = |campo: &str, defecto: bool| -> Result<bool, ErrorHerramienta> {
         match args.get(campo) {
@@ -1190,11 +1397,17 @@ fn validar_calcar(args: &Map<String, Value>) -> Result<crate::calcar::Parametros
         None => None,
         Some(v) => match numeros(v).as_deref() {
             Some([x, y, w, h])
-                if [*x, *y, *w, *h].iter().all(|n| (0.0..=1.0).contains(n)) && *w > 0.0 && *h > 0.0 =>
+                if [*x, *y, *w, *h].iter().all(|n| (0.0..=1.0).contains(n))
+                    && *w > 0.0
+                    && *h > 0.0 =>
             {
                 Some([*x, *y, *w, *h])
             }
-            _ => return Err(mal("«zona» tiene que ser [x, y, ancho, alto] con fracciones de 0 a 1")),
+            _ => {
+                return Err(mal(
+                    "«zona» tiene que ser [x, y, ancho, alto] con fracciones de 0 a 1",
+                ));
+            }
         },
     };
     Ok(Parametros {
@@ -1223,15 +1436,15 @@ pub fn colores_del_pedido(figuras: &mut [Figura], pedido: &str) {
         .collect();
     let tipo_de = |p: &str| -> Option<TipoFigura> {
         Some(match p {
-            "circulo" | "círculo" | "circulos" | "círculos" | "elipse" | "ovalo" | "óvalo" | "sol" | "pelota" | "bola"
-            | "circle" | "ellipse" => TipoFigura::Elipse,
-            "cuadrado" | "cuadrados" | "rectangulo" | "rectángulo" | "caja" | "square" | "rectangle" => {
-                TipoFigura::Rectangulo
-            }
+            "circulo" | "círculo" | "circulos" | "círculos" | "elipse" | "ovalo" | "óvalo"
+            | "sol" | "pelota" | "bola" | "circle" | "ellipse" => TipoFigura::Elipse,
+            "cuadrado" | "cuadrados" | "rectangulo" | "rectángulo" | "caja" | "square"
+            | "rectangle" => TipoFigura::Rectangulo,
             "rombo" | "diamante" | "diamond" => TipoFigura::Rombo,
-            "triangulo" | "triángulo" | "estrella" | "poligono" | "polígono" | "techo" | "tejado" | "triangle" | "star" => {
-                TipoFigura::Poligono
-            }
+            // Una «nube roja» de revision es su raya roja, sin relleno.
+            "nube" | "cloud" => TipoFigura::Nube,
+            "triangulo" | "triángulo" | "estrella" | "poligono" | "polígono" | "techo"
+            | "tejado" | "triangle" | "star" => TipoFigura::Poligono,
             "curva" | "onda" | "curve" | "wave" => TipoFigura::Curva,
             "linea" | "línea" | "raya" | "line" => TipoFigura::Linea,
             "flecha" | "arrow" => TipoFigura::Flecha,
@@ -1254,9 +1467,14 @@ pub fn colores_del_pedido(figuras: &mut [Figura], pedido: &str) {
         }
     }
     for f in figuras.iter_mut().filter(|f| !f.con_color) {
-        let Some(i) = pares.iter().position(|(t, _)| *t == f.tipo) else { continue };
+        let Some(i) = pares.iter().position(|(t, _)| *t == f.tipo) else {
+            continue;
+        };
         let (_, c) = pares.remove(i);
-        if matches!(f.tipo, TipoFigura::Rectangulo | TipoFigura::Elipse | TipoFigura::Rombo | TipoFigura::Poligono) {
+        if matches!(
+            f.tipo,
+            TipoFigura::Rectangulo | TipoFigura::Elipse | TipoFigura::Rombo | TipoFigura::Poligono
+        ) {
             f.relleno = Some(c.clone());
         }
         f.color = c;
@@ -1265,7 +1483,10 @@ pub fn colores_del_pedido(figuras: &mut [Figura], pedido: &str) {
     // Los textos que el modelo dejo vacios, con lo que el usuario puso entre
     // comillas, en orden.
     let mut citas = citas_del_pedido(pedido).into_iter();
-    for f in figuras.iter_mut().filter(|f| f.tipo == TipoFigura::Texto && f.texto.is_empty()) {
+    for f in figuras
+        .iter_mut()
+        .filter(|f| f.tipo == TipoFigura::Texto && f.texto.is_empty())
+    {
         match citas.next() {
             Some(c) => f.texto = c,
             None => break,
@@ -1335,7 +1556,10 @@ pub fn color(texto: &str) -> Option<Color> {
             candidatos.push(format!("{r}o"));
         }
     }
-    candidatos.into_iter().find_map(|c| color_por_nombre(&c)).map(|h| Color(h.into()))
+    candidatos
+        .into_iter()
+        .find_map(|c| color_por_nombre(&c))
+        .map(|h| Color(h.into()))
 }
 
 fn color_por_nombre(t: &str) -> Option<&'static str> {
@@ -1357,12 +1581,19 @@ fn color_por_nombre(t: &str) -> Option<&'static str> {
     Some(hex)
 }
 
-fn validar_grafica(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Grafica, ErrorHerramienta> {
+fn validar_grafica(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Grafica, ErrorHerramienta> {
     let tipo = match texto_en(args, "tipo").map(|t| t.to_lowercase()).as_deref() {
         Some("barras" | "barra" | "bar" | "columnas") => TipoGrafica::Barras,
         Some("lineas" | "líneas" | "linea" | "línea" | "line") => TipoGrafica::Lineas,
         Some("pastel" | "torta" | "pie" | "circular") => TipoGrafica::Pastel,
-        Some(otro) => return Err(mal(format!("«tipo» = «{otro}» no existe; usa barras, lineas o pastel"))),
+        Some(otro) => {
+            return Err(mal(format!(
+                "«tipo» = «{otro}» no existe; usa barras, lineas o pastel"
+            )));
+        }
         None => return Err(mal("falta «tipo» (barras, lineas o pastel)")),
     };
     let valores: Vec<f64> = match args.get("valores") {
@@ -1412,7 +1643,11 @@ fn validar_grafica(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Resul
             return Err(mal("un pastel necesita algun valor mayor que cero"));
         }
     }
-    let titulo = texto_en(args, "titulo").unwrap_or_default().chars().take(120).collect();
+    let titulo = texto_en(args, "titulo")
+        .unwrap_or_default()
+        .chars()
+        .take(120)
+        .collect();
     Ok(Grafica {
         tipo,
         titulo,
@@ -1427,12 +1662,19 @@ fn validar_ocr(args: &Map<String, Value>) -> Result<PeticionOcr, ErrorHerramient
         None => Vec::new(),
         Some(p) => leer_paginas(&p)?,
     };
-    let idioma = match texto_en(args, "idioma").map(|i| i.to_lowercase()).as_deref() {
+    let idioma = match texto_en(args, "idioma")
+        .map(|i| i.to_lowercase())
+        .as_deref()
+    {
         None | Some("auto") => None,
         Some(i @ ("es" | "en")) => Some(i.to_string()),
         Some("espanol" | "español" | "spanish") => Some("es".into()),
         Some("ingles" | "inglés" | "english") => Some("en".into()),
-        Some(otro) => return Err(mal(format!("«idioma» = «{otro}» no existe; usa es, en o auto"))),
+        Some(otro) => {
+            return Err(mal(format!(
+                "«idioma» = «{otro}» no existe; usa es, en o auto"
+            )));
+        }
     };
     Ok(PeticionOcr {
         archivo,
@@ -1453,8 +1695,12 @@ pub fn leer_paginas(texto: &str) -> Result<Vec<(u32, u32)>, ErrorHerramienta> {
             Some((a, b)) => (a.trim(), b.trim()),
             None => (trozo, trozo),
         };
-        let a: u32 = a.parse().map_err(|_| mal(format!("«paginas»: «{trozo}» no se entiende")))?;
-        let b: u32 = b.parse().map_err(|_| mal(format!("«paginas»: «{trozo}» no se entiende")))?;
+        let a: u32 = a
+            .parse()
+            .map_err(|_| mal(format!("«paginas»: «{trozo}» no se entiende")))?;
+        let b: u32 = b
+            .parse()
+            .map_err(|_| mal(format!("«paginas»: «{trozo}» no se entiende")))?;
         if a == 0 || b < a || b > 10_000 {
             return Err(mal(format!("«paginas»: «{trozo}» esta fuera de rango")));
         }
@@ -1487,7 +1733,9 @@ mod pruebas {
             r#"{"elementos":[{"y": 200, "x": 100, "tipo": "elipse", "alto": 150, "ancho": 150}, {"y": 250, "x": 600, "tipo": "rectangulo", "alto": 100, "ancho": 150}]}"#,
         )
         .unwrap();
-        let Llamada::Dibujar(f) = v.llamada else { panic!() };
+        let Llamada::Dibujar(f) = v.llamada else {
+            panic!()
+        };
         assert_eq!(f.len(), 2);
         assert_eq!(f[0].tipo, TipoFigura::Elipse);
         assert_eq!(f[1].x2, 750.0);
@@ -1504,7 +1752,9 @@ mod pruebas {
                 {"tipo":"rombo","x":1,"y":1,"relleno":"blanco"}]}"#,
         )
         .unwrap();
-        let Llamada::Dibujar(f) = v.llamada else { panic!() };
+        let Llamada::Dibujar(f) = v.llamada else {
+            panic!()
+        };
         // Lleno de rojo y sin «color»: el borde, rojo tambien.
         assert_eq!(f[0].color.0, "#e03131");
         assert_eq!(f[0].relleno.as_ref().unwrap().0, "#e03131");
@@ -1525,7 +1775,9 @@ mod pruebas {
                              {"tipo":"rectangulo","x":1,"y":1,"color":"verde"}]}"#,
         )
         .unwrap();
-        let Llamada::Dibujar(mut f) = v.llamada else { panic!() };
+        let Llamada::Dibujar(mut f) = v.llamada else {
+            panic!()
+        };
         colores_del_pedido(
             &mut f,
             "Dibuja un circulo rojo a la izquierda y un cuadrado azul a la derecha, con el titulo CASA arriba.",
@@ -1553,8 +1805,13 @@ mod pruebas {
     #[test]
     fn un_texto_sin_texto_lo_toma_de_las_comillas_del_pedido() {
         // Lo que hizo el 0.8B en la medida, y el 2B con «Plan 2026» (13-oct).
-        let mut f = figuras(r##"{"elementos":[{"y":150,"x":300,"tipo":"texto","color":"#ffffff"},{"tipo":"texto"}]}"##);
-        colores_del_pedido(&mut f, "Escribe el titulo «Plan 2026» y debajo \"version 2\"");
+        let mut f = figuras(
+            r##"{"elementos":[{"y":150,"x":300,"tipo":"texto","color":"#ffffff"},{"tipo":"texto"}]}"##,
+        );
+        colores_del_pedido(
+            &mut f,
+            "Escribe el titulo «Plan 2026» y debajo \"version 2\"",
+        );
         assert_eq!(f[0].texto, "Plan 2026");
         assert_eq!(f[1].texto, "version 2");
         assert_eq!((f[1].x, f[1].y), (60.0, 40.0));
@@ -1569,13 +1826,24 @@ mod pruebas {
 
     #[test]
     fn una_forma_sin_sitio_va_al_centro_y_los_puntos_de_menos_se_arreglan() {
-        let f = figuras(r#"{"elementos":[{"tipo":"triangulo","color":"verde"},{"tipo":"estrella","puntos":[100,50],"x":200,"y":300},{"tipo":"curva","puntos":[0,50],"x":160,"y":300},{"tipo":"onda"}]}"#);
-        assert_eq!(f[0].puntos, vec![(250.0, 450.0), (400.0, 150.0), (550.0, 450.0)]);
+        let f = figuras(
+            r#"{"elementos":[{"tipo":"triangulo","color":"verde"},{"tipo":"estrella","puntos":[100,50],"x":200,"y":300},{"tipo":"curva","puntos":[0,50],"x":160,"y":300},{"tipo":"onda"}]}"#,
+        );
+        assert_eq!(
+            f[0].puntos,
+            vec![(250.0, 450.0), (400.0, 150.0), (550.0, 450.0)]
+        );
         assert_eq!(f[1].puntos.len(), 10);
         assert_eq!(f[2].puntos, vec![(160.0, 300.0), (0.0, 50.0)]);
         assert_eq!(f[3].puntos.len(), 17);
         // Un poligono sin nada sigue siendo un error (no hay forma que inventar).
-        assert!(validar_(DIBUJAR, r#"{"elementos":[{"tipo":"poligono","puntos":[1,2]}]}"#).is_err());
+        assert!(
+            validar_(
+                DIBUJAR,
+                r#"{"elementos":[{"tipo":"poligono","puntos":[1,2]}]}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1588,8 +1856,14 @@ mod pruebas {
 
     #[test]
     fn json_roto_sin_arreglo_se_rechaza() {
-        assert_eq!(validar_(GRAFICA, r#"{"tipo": "barras", "valores": [1, 2"#).unwrap_err(), ErrorHerramienta::JsonRoto);
-        assert_eq!(validar_(GRAFICA, "no es json").unwrap_err(), ErrorHerramienta::JsonRoto);
+        assert_eq!(
+            validar_(GRAFICA, r#"{"tipo": "barras", "valores": [1, 2"#).unwrap_err(),
+            ErrorHerramienta::JsonRoto
+        );
+        assert_eq!(
+            validar_(GRAFICA, "no es json").unwrap_err(),
+            ErrorHerramienta::JsonRoto
+        );
     }
 
     #[test]
@@ -1599,7 +1873,9 @@ mod pruebas {
             "```json\n{\"tipo\": \"barras\", \"etiquetas\": [\"a\", \"b\",], \"valores\": [1, 2,],}\n```",
         )
         .unwrap();
-        let Llamada::Grafica(g) = v.llamada else { panic!() };
+        let Llamada::Grafica(g) = v.llamada else {
+            panic!()
+        };
         assert_eq!(g.valores, vec![1.0, 2.0]);
         // Una coma dentro de una cadena no se toca.
         let v = reparar_json(r#"{"t": "a, }", }"#).unwrap();
@@ -1608,11 +1884,23 @@ mod pruebas {
 
     #[test]
     fn coordenadas_fuera_de_rango_se_rechazan() {
-        let e = validar_(DIBUJAR, r#"{"elementos":[{"tipo":"rectangulo","x":90000,"y":10}]}"#).unwrap_err();
+        let e = validar_(
+            DIBUJAR,
+            r#"{"elementos":[{"tipo":"rectangulo","x":90000,"y":10}]}"#,
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("fuera de rango"), "{e}");
-        let e = validar_(DIBUJAR, r#"{"elementos":[{"tipo":"rectangulo","x":1,"y":1,"ancho":-5}]}"#).unwrap_err();
+        let e = validar_(
+            DIBUJAR,
+            r#"{"elementos":[{"tipo":"rectangulo","x":1,"y":1,"ancho":-5}]}"#,
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("«ancho»"), "{e}");
-        let e = validar_(DIBUJAR, r#"{"elementos":[{"tipo":"texto","x":1,"y":1,"texto":"a","tam_letra":900}]}"#).unwrap_err();
+        let e = validar_(
+            DIBUJAR,
+            r#"{"elementos":[{"tipo":"texto","x":1,"y":1,"texto":"a","tam_letra":900}]}"#,
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("tam_letra"), "{e}");
     }
 
@@ -1638,7 +1926,9 @@ mod pruebas {
             r##"{"elementos":[{"tipo":"rectangulo","x":"10","y":"20px","color":"azul","relleno":"#F00"},{"tipo":"elipse","x":1,"y":1,"color":"color-de-ilusion"}]}"##,
         )
         .unwrap();
-        let Llamada::Dibujar(f) = v.llamada else { panic!() };
+        let Llamada::Dibujar(f) = v.llamada else {
+            panic!()
+        };
         assert_eq!(f[0].x, 10.0);
         assert_eq!(f[0].y, 20.0);
         assert_eq!(f[0].color, Color("#1971c2".into()));
@@ -1650,27 +1940,63 @@ mod pruebas {
     #[test]
     fn una_linea_acepta_x2_y2_o_ancho_alto() {
         let v = validar_(DIBUJAR, r#"{"elementos":[{"tipo":"linea","x":10,"y":10,"x2":110,"y2":60},{"tipo":"flecha","x":0,"y":100,"ancho":-50,"alto":0}]}"#).unwrap();
-        let Llamada::Dibujar(f) = v.llamada else { panic!() };
+        let Llamada::Dibujar(f) = v.llamada else {
+            panic!()
+        };
         assert_eq!((f[0].ancho, f[0].alto), (100.0, 50.0));
         assert_eq!((f[1].x2, f[1].y2), (-50.0, 100.0));
-        assert!(validar_(DIBUJAR, r#"{"elementos":[{"tipo":"linea","x":5,"y":5,"x2":5,"y2":5}]}"#).is_err());
+        assert!(
+            validar_(
+                DIBUJAR,
+                r#"{"elementos":[{"tipo":"linea","x":5,"y":5,"x2":5,"y2":5}]}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn la_grafica_medida_pasa_y_la_descuadrada_no() {
         let v = validar_(GRAFICA, r#"{"tipo":"barras","etiquetas":["Enero", "Febrero", "Marzo"],"valores":[120, 95, 140]}"#).unwrap();
-        let Llamada::Grafica(g) = v.llamada else { panic!() };
+        let Llamada::Grafica(g) = v.llamada else {
+            panic!()
+        };
         assert_eq!(g.tipo, TipoGrafica::Barras);
-        let e = validar_(GRAFICA, r#"{"tipo":"barras","etiquetas":["a"],"valores":[1,2]}"#).unwrap_err();
+        let e = validar_(
+            GRAFICA,
+            r#"{"tipo":"barras","etiquetas":["a"],"valores":[1,2]}"#,
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("mismo numero"));
-        assert!(validar_(GRAFICA, r#"{"tipo":"pastel","etiquetas":["a","b"],"valores":[-1,2]}"#).is_err());
-        assert!(validar_(GRAFICA, r#"{"tipo":"radar","etiquetas":["a"],"valores":[1]}"#).is_err());
-        assert!(validar_(GRAFICA, r#"{"tipo":"barras","etiquetas":["a"],"valores":["mucho"]}"#).is_err());
+        assert!(
+            validar_(
+                GRAFICA,
+                r#"{"tipo":"pastel","etiquetas":["a","b"],"valores":[-1,2]}"#
+            )
+            .is_err()
+        );
+        assert!(
+            validar_(
+                GRAFICA,
+                r#"{"tipo":"radar","etiquetas":["a"],"valores":[1]}"#
+            )
+            .is_err()
+        );
+        assert!(
+            validar_(
+                GRAFICA,
+                r#"{"tipo":"barras","etiquetas":["a"],"valores":["mucho"]}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn ocr_lee_paginas_e_idioma() {
-        let v = validar_(OCR, r#"{"archivo":"tesis.pdf","paginas":"1-3, 5","idioma":"español"}"#).unwrap();
+        let v = validar_(
+            OCR,
+            r#"{"archivo":"tesis.pdf","paginas":"1-3, 5","idioma":"español"}"#,
+        )
+        .unwrap();
         assert_eq!(
             v.llamada,
             Llamada::Ocr(PeticionOcr {
@@ -1689,14 +2015,20 @@ mod pruebas {
 
     #[test]
     fn los_argumentos_que_no_son_objeto_se_rechazan() {
-        assert!(matches!(validar_(GRAFICA, "[1,2,3]"), Err(ErrorHerramienta::Parametro(_)) | Err(ErrorHerramienta::JsonRoto)));
+        assert!(matches!(
+            validar_(GRAFICA, "[1,2,3]"),
+            Err(ErrorHerramienta::Parametro(_)) | Err(ErrorHerramienta::JsonRoto)
+        ));
     }
 
     #[test]
     fn el_catalogo_es_json_de_herramientas_valido() {
         let v: Value = serde_json::from_str(&catalogo_json()).unwrap();
         let lista = v.as_array().unwrap();
-        assert_eq!(lista.len(), 13 + crate::edicion::FILAS.len() + crate::acciones::todas().count());
+        assert_eq!(
+            lista.len(),
+            13 + crate::edicion::FILAS.len() + crate::acciones::todas().count()
+        );
         for h in lista {
             assert_eq!(h["type"], "function");
             assert_eq!(h["function"]["parameters"]["type"], "object");
@@ -1722,15 +2054,24 @@ mod pruebas {
                 {"tipo":"elipse","centro":[50,50],"radio":20},
                 {"tipo":"flecha","puntos":[0,0,100,0],"texto":"si"}]}"#,
         );
-        assert_eq!((f[0].x, f[0].y, f[0].ancho, f[0].alto), (100.0, 50.0, 200.0, 100.0));
+        assert_eq!(
+            (f[0].x, f[0].y, f[0].ancho, f[0].alto),
+            (100.0, 50.0, 200.0, 100.0)
+        );
         assert_eq!(f[0].texto, "Inicio");
         assert_eq!(f[0].grupo.as_deref(), Some("a"));
         assert_eq!(f[1].tipo, TipoFigura::Poligono);
-        assert_eq!(f[1].puntos, vec![(100.0, 50.0), (150.0, 50.0), (125.0, 90.0)]);
+        assert_eq!(
+            f[1].puntos,
+            vec![(100.0, 50.0), (150.0, 50.0), (125.0, 90.0)]
+        );
         assert_eq!(f[1].color.0, "#e03131");
         assert_eq!(f[2].tipo, TipoFigura::Curva);
         assert_eq!(f[2].puntos.len(), 4);
-        assert_eq!(f[3].puntos, vec![(100.0, 130.0), (150.0, 50.0), (200.0, 130.0)]);
+        assert_eq!(
+            f[3].puntos,
+            vec![(100.0, 130.0), (150.0, 50.0), (200.0, 130.0)]
+        );
         assert_eq!(f[4].puntos.len(), 10);
         assert_eq!((f[5].x, f[5].ancho), (130.0, 40.0));
         assert_eq!(f[6].tipo, TipoFigura::Flecha);
@@ -1740,20 +2081,46 @@ mod pruebas {
     #[test]
     fn puntos_mal_puestos_se_rechazan() {
         for (args, motivo) in [
-            (r#"{"elementos":[{"tipo":"poligono","puntos":[1,2,3]}]}"#, "impar"),
-            (r#"{"elementos":[{"tipo":"poligono","puntos":[1,2,3,4]}]}"#, "al menos 3"),
+            (
+                r#"{"elementos":[{"tipo":"poligono","puntos":[1,2,3]}]}"#,
+                "impar",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"poligono","puntos":[1,2,3,4]}]}"#,
+                "al menos 3",
+            ),
             (r#"{"elementos":[{"tipo":"poligono"}]}"#, "falta «puntos»"),
-            (r#"{"elementos":[{"tipo":"poligono","puntos":[1,2,3,4,99999,1]}]}"#, "fuera de rango"),
-            (r#"{"elementos":[{"tipo":"rectangulo","caja":[1,2,3]}]}"#, "«caja»"),
-            (r#"{"elementos":[{"tipo":"rectangulo","caja":[1,2,-3,4]}]}"#, "fuera de rango"),
-            (r#"{"origen":"aqui","elementos":[{"tipo":"rectangulo","caja":[1,2,3,4]}]}"#, "«origen»"),
+            (
+                r#"{"elementos":[{"tipo":"poligono","puntos":[1,2,3,4,99999,1]}]}"#,
+                "fuera de rango",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"rectangulo","caja":[1,2,3]}]}"#,
+                "«caja»",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"rectangulo","caja":[1,2,-3,4]}]}"#,
+                "fuera de rango",
+            ),
+            (
+                r#"{"origen":"aqui","elementos":[{"tipo":"rectangulo","caja":[1,2,3,4]}]}"#,
+                "«origen»",
+            ),
         ] {
             let e = validar_(DIBUJAR, args).unwrap_err().to_string();
             assert!(e.contains(motivo), "{args}: {e}");
         }
-        let muchos: Vec<String> = (0..MAX_NUMEROS_PUNTOS + 2).map(|i| (i % 500).to_string()).collect();
-        let e = validar_(DIBUJAR, &format!(r#"{{"elementos":[{{"tipo":"curva","puntos":[{}]}}]}}"#, muchos.join(",")))
-            .unwrap_err();
+        let muchos: Vec<String> = (0..MAX_NUMEROS_PUNTOS + 2)
+            .map(|i| (i % 500).to_string())
+            .collect();
+        let e = validar_(
+            DIBUJAR,
+            &format!(
+                r#"{{"elementos":[{{"tipo":"curva","puntos":[{}]}}]}}"#,
+                muchos.join(",")
+            ),
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("demasiados"));
     }
 
@@ -1782,10 +2149,16 @@ mod pruebas {
         );
         assert_eq!(f[0].tipo, TipoFigura::Lapiz);
         assert_eq!(f[0].puntos.len(), 3);
-        assert_eq!((f[0].estilo.material, f[0].estilo.dureza), (Some("cuadritos"), Some("6B")));
+        assert_eq!(
+            (f[0].estilo.material, f[0].estilo.dureza),
+            (Some("cuadritos"), Some("6B"))
+        );
         assert_eq!(f[0].estilo.grosor, Some(3.0));
         // Una dureza sin material es grafito; 3H se lleva a la mas cercana.
-        assert_eq!((f[1].estilo.material, f[1].estilo.dureza), (Some("cuadritos"), Some("4H")));
+        assert_eq!(
+            (f[1].estilo.material, f[1].estilo.dureza),
+            (Some("cuadritos"), Some("4H"))
+        );
         let i = f[2].instrumento.as_ref().unwrap();
         assert_eq!((i.ejes, i.unidad, i.tabla.len()), (2, 40.0, 2));
         assert_eq!(f[3].instrumento.as_ref().unwrap().ejes, 1);
@@ -1799,26 +2172,60 @@ mod pruebas {
         assert_eq!(dureza("12Z"), None);
         // Casos negativos: tabla impar, enorme o con demasiados puntos.
         for (args, motivo) in [
-            (r#"{"elementos":[{"tipo":"instrumento","tabla":[1,2,3]}]}"#, "impar"),
-            (r#"{"elementos":[{"tipo":"instrumento","tabla":[[1,1e9]]}]}"#, "enorme"),
-            (r#"{"elementos":[{"tipo":"instrumento","ejes":7}]}"#, "«ejes»"),
-            (r#"{"elementos":[{"tipo":"lapiz","puntos":[1,1]}]}"#, "al menos 2"),
-            (r#"{"elementos":[{"tipo":"rectangulo","caja":[0,0,9,9],"grosor":500}]}"#, "«grosor»"),
+            (
+                r#"{"elementos":[{"tipo":"instrumento","tabla":[1,2,3]}]}"#,
+                "impar",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"instrumento","tabla":[[1,1e9]]}]}"#,
+                "enorme",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"instrumento","ejes":7}]}"#,
+                "«ejes»",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"lapiz","puntos":[1,1]}]}"#,
+                "al menos 2",
+            ),
+            (
+                r#"{"elementos":[{"tipo":"rectangulo","caja":[0,0,9,9],"grosor":500}]}"#,
+                "«grosor»",
+            ),
         ] {
             let e = validar_(DIBUJAR, args).unwrap_err().to_string();
             assert!(e.contains(motivo), "{args}: {e}");
         }
         let muchos: Vec<String> = (0..=MAX_TABLA).map(|i| format!("[{i},1]")).collect();
-        assert!(validar_(DIBUJAR, &format!(r#"{{"elementos":[{{"tipo":"instrumento","tabla":[{}]}}]}}"#, muchos.join(","))).is_err());
+        assert!(
+            validar_(
+                DIBUJAR,
+                &format!(
+                    r#"{{"elementos":[{{"tipo":"instrumento","tabla":[{}]}}]}}"#,
+                    muchos.join(",")
+                )
+            )
+            .is_err()
+        );
         // Lo cosmetico raro no rompe: aviso y lo de siempre.
-        let v = validar_(DIBUJAR, r#"{"elementos":[{"tipo":"lapiz","puntos":[0,0,9,9],"material":"oro","dureza":"ZZ"}]}"#).unwrap();
+        let v = validar_(
+            DIBUJAR,
+            r#"{"elementos":[{"tipo":"lapiz","puntos":[0,0,9,9],"material":"oro","dureza":"ZZ"}]}"#,
+        )
+        .unwrap();
         assert_eq!(v.avisos.len(), 2);
     }
 
     #[test]
     fn calcar_y_ayuda_y_acciones_se_validan() {
-        let v = validar_(CALCAR, r#"{"detalle":"alto","solo_contornos":true,"zona":[0,0,0.5,0.5]}"#).unwrap();
-        let Llamada::Calcar(p) = v.llamada else { panic!() };
+        let v = validar_(
+            CALCAR,
+            r#"{"detalle":"alto","solo_contornos":true,"zona":[0,0,0.5,0.5]}"#,
+        )
+        .unwrap();
+        let Llamada::Calcar(p) = v.llamada else {
+            panic!()
+        };
         assert_eq!(p.detalle, crate::calcar::Detalle::Alto);
         assert!(p.solo_contornos && p.colores);
         assert_eq!(p.zona, Some([0.0, 0.0, 0.5, 0.5]));
@@ -1834,7 +2241,11 @@ mod pruebas {
         assert_eq!(a.pedido["accion"], "anadir_tarea");
         // Una de la app que no se enseno en este turno: no existe para el modelo.
         let e = validar(
-            &crate::motor::LlamadaCruda { id: "1".into(), nombre: "anadir_tarea".into(), argumentos: "{}".into() },
+            &crate::motor::LlamadaCruda {
+                id: "1".into(),
+                nombre: "anadir_tarea".into(),
+                argumentos: "{}".into(),
+            },
             &catalogo_base(),
         )
         .unwrap_err();
@@ -1849,20 +2260,45 @@ mod pruebas {
         para_la_nube(&mut nube);
         let de = |l: &[Herramienta], n: &str| l.iter().find(|h| h.nombre == n).unwrap().clone();
         let (dl, dn) = (de(&local, DIBUJAR), de(&nube, DIBUJAR));
-        assert!(!dl.descripcion.contains("tabla (con") && !dl.parametros.to_string().contains("\"filas\""));
-        assert!(dn.descripcion.contains("tabla (con") && dn.parametros.to_string().contains("\"filas\""));
+        assert!(
+            !dl.descripcion.contains("tabla (con")
+                && !dl.parametros.to_string().contains("\"filas\"")
+        );
+        assert!(
+            dn.descripcion.contains("tabla (con")
+                && dn.parametros.to_string().contains("\"filas\"")
+        );
         assert!(dn.parametros.to_string().contains("\"paralelogramo\""));
         assert!(de(&nube, PROBLEMA).descripcion.contains("no hoja_a_lienzo"));
-        assert!(!de(&local, PROBLEMA).descripcion.contains("no hoja_a_lienzo"));
+        assert!(
+            !de(&local, PROBLEMA)
+                .descripcion
+                .contains("no hoja_a_lienzo")
+        );
         // Banco de documentos (15-oct): el LaTeX en el texto, la tabla al
         // lienzo y el tamano de letra; el local, igual que antes.
         assert!(de(&nube, ECUACION).descripcion.contains("LaTeX"));
         assert!(!de(&local, ECUACION).descripcion.contains("sin herramienta"));
-        assert!(de(&nube, crate::edicion::ESTILO).parametros["properties"].get("tam_letra").is_some());
-        assert!(de(&local, crate::edicion::ESTILO).parametros["properties"].get("tam_letra").is_none());
+        assert!(
+            de(&nube, crate::edicion::ESTILO).parametros["properties"]
+                .get("tam_letra")
+                .is_some()
+        );
+        assert!(
+            de(&local, crate::edicion::ESTILO).parametros["properties"]
+                .get("tam_letra")
+                .is_none()
+        );
         // Dos veces da lo mismo (es prefijo de la cache).
         let mut otra = nube.clone();
         para_la_nube(&mut otra);
-        assert_eq!(otra.iter().map(|h| h.descripcion.clone()).collect::<Vec<_>>(), nube.iter().map(|h| h.descripcion.clone()).collect::<Vec<_>>());
+        assert_eq!(
+            otra.iter()
+                .map(|h| h.descripcion.clone())
+                .collect::<Vec<_>>(),
+            nube.iter()
+                .map(|h| h.descripcion.clone())
+                .collect::<Vec<_>>()
+        );
     }
 }

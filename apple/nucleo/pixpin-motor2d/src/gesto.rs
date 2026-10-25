@@ -836,7 +836,12 @@ impl Gesto {
         crate::impacto::con_mundo(mundo, || self.evento_en_su_mundo(ev, escena, escala))
     }
 
-    fn evento_en_su_mundo(&mut self, ev: EventoGesto, escena: &mut Escena, escala: f32) -> Respuesta {
+    fn evento_en_su_mundo(
+        &mut self,
+        ev: EventoGesto,
+        escena: &mut Escena,
+        escala: f32,
+    ) -> Respuesta {
         match ev {
             // Aqui el punto va CRUDO, a proposito: `pulsar` criba con el
             // punto de verdad y solo engancha una vez decidido que la rama
@@ -1028,12 +1033,14 @@ impl Gesto {
         let excluye = |id: u64| dibujando == Some(id) || (moviendo && seleccion.contiene(id));
         // La raya que se esta trazando sale de su primer punto: desde ahi se
         // buscan las tangentes.
-        let desde = dibujando.and_then(|id| escena.buscar(id)).and_then(|e| match &e.figura {
-            Figura::Linea { puntos } | Figura::Flecha { puntos, .. } | Figura::Cota { puntos } => {
-                puntos.first().copied()
-            }
-            _ => None,
-        });
+        let desde = dibujando
+            .and_then(|id| escena.buscar(id))
+            .and_then(|e| match &e.figura {
+                Figura::Linea { puntos }
+                | Figura::Flecha { puntos, .. }
+                | Figura::Cota { puntos } => puntos.first().copied(),
+                _ => None,
+            });
         let finos = crate::enganche::AjustesFinos {
             desde,
             ..self.finos
@@ -1579,7 +1586,9 @@ impl Gesto {
                     _ => None,
                 })
             });
-            self.antes_de_escribir = debajo.as_ref().and_then(|(id, _)| escena.buscar(*id).cloned());
+            self.antes_de_escribir = debajo
+                .as_ref()
+                .and_then(|(id, _)| escena.buscar(*id).cloned());
             let (id, contenido) = match debajo {
                 Some(par) => par,
                 None => {
@@ -2420,7 +2429,9 @@ impl Gesto {
         Self::componer_texto(escena, id, edicion.texto());
         // UN paso de deshacer con todo lo escrito en un texto que ya existia.
         if let Some(a) = antes
-            && escena.buscar(id).is_some_and(|e| e.figura != a.figura || e.extras.rico != a.extras.rico)
+            && escena
+                .buscar(id)
+                .is_some_and(|e| e.figura != a.figura || e.extras.rico != a.extras.rico)
         {
             let ahora = escena.buscar(id).cloned();
             if let (Some(ahora), Some(e)) = (ahora, escena.buscar_mut(id)) {
@@ -2461,7 +2472,12 @@ impl Gesto {
             cursiva: e.extras.cursiva,
             tachado: e.extras.tachado,
         };
-        let Figura::Texto { texto, tam, familia } = &mut e.figura else {
+        let Figura::Texto {
+            texto,
+            tam,
+            familia,
+        } = &mut e.figura
+        else {
             return;
         };
         *texto = crate::texto_rico::plano(fuente);
@@ -2509,13 +2525,23 @@ impl Gesto {
             cursiva: e.extras.cursiva,
             tachado: false,
         };
-        let paso = tam * crate::texto::interlineado_de(familia).unwrap_or(crate::texto::INTERLINEADO);
+        let paso =
+            tam * crate::texto::interlineado_de(familia).unwrap_or(crate::texto::INTERLINEADO);
         let renglones: Vec<&str> = edicion.texto().split('\n').collect();
         let apartados = e
             .extras
             .alineacion
             .filter(|a| *a != crate::texto::AlineacionTexto::Izquierda)
-            .map(|al| crate::texto::apartados_de_renglones(edicion.texto(), *tam, familia, estilo, e.ancho, al))
+            .map(|al| {
+                crate::texto::apartados_de_renglones(
+                    edicion.texto(),
+                    *tam,
+                    familia,
+                    estilo,
+                    e.ancho,
+                    al,
+                )
+            })
             .unwrap_or_default();
         let (fa, fb) = (edicion.fila_de(a), edicion.fila_de(b));
         let mut v = Vec::new();
@@ -2530,7 +2556,10 @@ impl Gesto {
                     crate::texto::ancho_real(&s, *tam, familia, estilo)
                 };
                 let dx = e.x + apartados.get(fila).copied().unwrap_or(0.0);
-                let (x0, x1) = (dx + medir(desde), dx + medir(hasta).max(medir(desde) + tam * 0.25));
+                let (x0, x1) = (
+                    dx + medir(desde),
+                    dx + medir(hasta).max(medir(desde) + tam * 0.25),
+                );
                 let y0 = e.y + fila as f32 * paso;
                 v.push(crate::pintado::Orden::Relleno {
                     puntos: vec![
@@ -2539,7 +2568,12 @@ impl Gesto {
                         crate::vector::Punto2::nuevo(x1, y0 + paso),
                         crate::vector::Punto2::nuevo(x0, y0 + paso),
                     ],
-                    color: crate::ColorRgba { r: 0.26, g: 0.52, b: 0.96, a: 0.3 },
+                    color: crate::ColorRgba {
+                        r: 0.26,
+                        g: 0.52,
+                        b: 0.96,
+                        a: 0.3,
+                    },
                 });
             }
             inicio += largo + 1;

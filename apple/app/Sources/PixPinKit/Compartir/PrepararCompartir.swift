@@ -237,6 +237,13 @@ enum PrepararCompartir {
             anadirTexto(p, clave: clave, nombre: nombre, detalle: "Nota de voz", titulo: nil, texto: texto, solo: solo)
         case "PROYECTO":
             return
+        case "MINIAPP" where CarpetasDelChat.esCarpeta(m):
+            // Una carpeta de paginas: sus paginas, en orden, con la regla
+            // del cuaderno (`Compartir/PdfDeCarpeta.swift`).
+            guard let almacen, let carpeta = await CarpetasDelChat.leer(m.id, chat: chat, almacen: almacen) else { return }
+            for pagina in carpeta.paginas {
+                await PdfDeCarpeta.anadirPagina(p, pagina, chat: chat, almacen: almacen)
+            }
         default:
             // Una mini-app guarda su documento en el texto: se lee su resumen.
             let texto = m.clase == "MINIAPP" ? m.resumen : (m.texto.isEmpty ? m.resumen : m.texto)

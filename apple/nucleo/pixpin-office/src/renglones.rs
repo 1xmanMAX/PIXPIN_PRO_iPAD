@@ -214,43 +214,92 @@ fn corte_tras(u: &[Unidad], i: usize) -> bool {
     let sig = u.get(i + 1).map(|x| x.tipo);
     match u[i].tipo {
         Tipo::Letra(c) if es_espacio(c) => !matches!(sig, Some(Tipo::Letra(s)) if es_espacio(s)),
-        Tipo::Letra('-') | Tipo::Letra('\u{2010}') | Tipo::Letra('\u{2013}') | Tipo::Letra('\u{2014}') => {
+        Tipo::Letra('-')
+        | Tipo::Letra('\u{2010}')
+        | Tipo::Letra('\u{2013}')
+        | Tipo::Letra('\u{2014}') => {
             matches!(sig, Some(Tipo::Letra(s)) if s.is_alphanumeric())
         }
         Tipo::Letra('\u{200B}') | Tipo::Letra('\u{00AD}') | Tipo::Letra('/') => true,
         Tipo::Letra(c) if es_cjk(c) => true,
         Tipo::Tab | Tipo::Objeto { .. } => true,
-        _ => matches!(sig, Some(Tipo::Letra(s)) if es_cjk(s)) || matches!(sig, Some(Tipo::Objeto { .. })),
+        _ => {
+            matches!(sig, Some(Tipo::Letra(s)) if es_cjk(s))
+                || matches!(sig, Some(Tipo::Objeto { .. }))
+        }
     }
 }
 
 /// Parte las piezas en renglones.
-pub fn partir(piezas: &[Pieza], estilos: &[Estilo], marca: u32, cfg: &Config, medidor: &dyn Medidor) -> Vec<Renglon> {
+pub fn partir(
+    piezas: &[Pieza],
+    estilos: &[Estilo],
+    marca: u32,
+    cfg: &Config,
+    medidor: &dyn Medidor,
+) -> Vec<Renglon> {
     let mut u = medir(piezas, estilos, marca, medidor);
-    partir_unidades(&mut u, 0, true, estilos, marca, cfg, medidor).into_iter().map(|(r, _)| r).collect()
+    partir_unidades(&mut u, 0, true, estilos, marca, cfg, medidor)
+        .into_iter()
+        .map(|(r, _)| r)
+        .collect()
 }
 
 /// Las piezas medidas, listas para partir.
-pub fn medir(piezas: &[Pieza], estilos: &[Estilo], marca: u32, medidor: &dyn Medidor) -> Vec<Unidad> {
+pub fn medir(
+    piezas: &[Pieza],
+    estilos: &[Estilo],
+    marca: u32,
+    medidor: &dyn Medidor,
+) -> Vec<Unidad> {
     let mut u: Vec<Unidad> = Vec::new();
     let mut avances = Vec::new();
     for p in piezas {
         match p {
             Pieza::Texto { texto, estilo } => {
-                let Some(e) = estilos.get(*estilo as usize) else { continue };
+                let Some(e) = estilos.get(*estilo as usize) else {
+                    continue;
+                };
                 avances.clear();
                 medidor.avances(texto, &e.letra, &mut avances);
                 for (k, c) in texto.chars().enumerate() {
                     let a = avances.get(k).copied().unwrap_or(0.0);
-                    let a = if c == '\u{00AD}' || c == '\u{200B}' { 0.0 } else { a + e.espaciado };
-                    u.push(Unidad { tipo: Tipo::Letra(c), avance: a, estilo: *estilo });
+                    let a = if c == '\u{00AD}' || c == '\u{200B}' {
+                        0.0
+                    } else {
+                        a + e.espaciado
+                    };
+                    u.push(Unidad {
+                        tipo: Tipo::Letra(c),
+                        avance: a,
+                        estilo: *estilo,
+                    });
                 }
             }
-            Pieza::Tab { estilo } => u.push(Unidad { tipo: Tipo::Tab, avance: 0.0, estilo: *estilo }),
-            Pieza::Salto => u.push(Unidad { tipo: Tipo::Salto, avance: 0.0, estilo: marca }),
-            Pieza::Objeto { ancho, alto, bajo, id } => {
-                u.push(Unidad { tipo: Tipo::Objeto { id: *id, alto: *alto, bajo: *bajo }, avance: *ancho, estilo: marca })
-            }
+            Pieza::Tab { estilo } => u.push(Unidad {
+                tipo: Tipo::Tab,
+                avance: 0.0,
+                estilo: *estilo,
+            }),
+            Pieza::Salto => u.push(Unidad {
+                tipo: Tipo::Salto,
+                avance: 0.0,
+                estilo: marca,
+            }),
+            Pieza::Objeto {
+                ancho,
+                alto,
+                bajo,
+                id,
+            } => u.push(Unidad {
+                tipo: Tipo::Objeto {
+                    id: *id,
+                    alto: *alto,
+                    bajo: *bajo,
+                },
+                avance: *ancho,
+                estilo: marca,
+            }),
         }
     }
     u
@@ -277,7 +326,19 @@ pub fn partir_unidades(
     loop {
         let inicio_x = cfg.sangria_izq + if primero { cfg.primera } else { 0.0 };
         primero = false;
-        let (renglon, fin_j, forzado) = un_renglon(u, i, inicio_x, derecha, true, &mut xs, &mut rellenos, estilos, marca, cfg, medidor);
+        let (renglon, fin_j, forzado) = un_renglon(
+            u,
+            i,
+            inicio_x,
+            derecha,
+            true,
+            &mut xs,
+            &mut rellenos,
+            estilos,
+            marca,
+            cfg,
+            medidor,
+        );
         renglones.push((renglon, i));
         i = fin_j;
         if i >= u.len() {
@@ -314,7 +375,19 @@ pub fn renglon_en_tramos(
         // El ultimo tramo tiene que llevarse algo si ninguno se llevo nada
         // (si no, el parrafo no avanzaria).
         let forzar = k + 1 == tramos.len() && pos == i;
-        let (r, fin, fz) = un_renglon(u, pos, a, b, forzar, &mut xs, &mut rellenos, estilos, marca, cfg, medidor);
+        let (r, fin, fz) = un_renglon(
+            u,
+            pos,
+            a,
+            b,
+            forzar,
+            &mut xs,
+            &mut rellenos,
+            estilos,
+            marca,
+            cfg,
+            medidor,
+        );
         if fin > pos || fz || total.is_none() && forzar {
             total = Some(match total {
                 None => r,
@@ -383,7 +456,11 @@ fn un_renglon(
             }
             Tipo::Tab => {
                 let (nx, tope) = tabulador(u, j, x, cfg);
-                if cfg.partir && nx > derecha + 0.01 && (j > i || !forzar) && !matches!(tope.map(|t| t.tipo), Some(TipoTope::Derecha)) {
+                if cfg.partir
+                    && nx > derecha + 0.01
+                    && (j > i || !forzar)
+                    && !matches!(tope.map(|t| t.tipo), Some(TipoTope::Derecha))
+                {
                     // El tabulador no cabe: pasa con lo que le sigue al
                     // renglon siguiente.
                     fin_j = j;
@@ -405,7 +482,10 @@ fn un_renglon(
                 }
             }
             _ => {
-                if cfg.partir && x + u[j].avance - cfg.encoger * espacios > derecha + 0.01 && (j > i || !forzar) {
+                if cfg.partir
+                    && x + u[j].avance - cfg.encoger * espacios > derecha + 0.01
+                    && (j > i || !forzar)
+                {
                     fin_j = match ultimo_corte {
                         Some(c) if c > i => c,
                         _ if forzar => j,
@@ -423,14 +503,34 @@ fn un_renglon(
         j += 1;
     }
     let ultimo = fin_j >= u.len();
-    let renglon = montar(&u[i..fin_j], &xs[i..fin_j], &rellenos[i..fin_j], estilos, marca, ultimo, medidor);
-    let renglon = alinear(renglon, &u[i..fin_j], &xs[i..fin_j], cfg, derecha, ultimo || forzado);
+    let renglon = montar(
+        &u[i..fin_j],
+        &xs[i..fin_j],
+        &rellenos[i..fin_j],
+        estilos,
+        marca,
+        ultimo,
+        medidor,
+    );
+    let renglon = alinear(
+        renglon,
+        &u[i..fin_j],
+        &xs[i..fin_j],
+        cfg,
+        derecha,
+        ultimo || forzado,
+    );
     (renglon, fin_j, forzado)
 }
 
 /// Donde acaba un tabulador que empieza en `x`, y de que tipo es su tope.
 fn tabulador(u: &[Unidad], j: usize, x: f32, cfg: &Config) -> (f32, Option<Tope>) {
-    let tope = cfg.topes.iter().filter(|t| t.pos > x + 0.01).min_by(|a, b| a.pos.total_cmp(&b.pos)).copied();
+    let tope = cfg
+        .topes
+        .iter()
+        .filter(|t| t.pos > x + 0.01)
+        .min_by(|a, b| a.pos.total_cmp(&b.pos))
+        .copied();
     let Some(t) = tope else {
         let d = cfg.tope_defecto.max(1.0);
         // El siguiente multiplo del tope por defecto (contados desde el
@@ -463,7 +563,15 @@ fn tabulador(u: &[Unidad], j: usize, x: f32, cfg: &Config) -> (f32, Option<Tope>
 
 /// Junta las unidades de un renglon en trozos.
 #[allow(clippy::needless_range_loop)] // `u` y `xs` van a la par
-fn montar(u: &[Unidad], xs: &[f32], rellenos: &[Option<char>], estilos: &[Estilo], marca: u32, _ultimo: bool, medidor: &dyn Medidor) -> Renglon {
+fn montar(
+    u: &[Unidad],
+    xs: &[f32],
+    rellenos: &[Option<char>],
+    estilos: &[Estilo],
+    marca: u32,
+    _ultimo: bool,
+    medidor: &dyn Medidor,
+) -> Renglon {
     let mut r = Renglon::default();
     let mut usados: Vec<u32> = Vec::new();
     let mut k = 0;
@@ -488,20 +596,39 @@ fn montar(u: &[Unidad], xs: &[f32], rellenos: &[Option<char>], estilos: &[Estilo
                 if !usados.contains(&estilo) {
                     usados.push(estilo);
                 }
-                r.trozos.push(Trozo { x: x0, ancho, contenido: Contenido::Texto { texto, estilo, extra_espacio: 0.0 } });
+                r.trozos.push(Trozo {
+                    x: x0,
+                    ancho,
+                    contenido: Contenido::Texto {
+                        texto,
+                        estilo,
+                        extra_espacio: 0.0,
+                    },
+                });
             }
             Tipo::Tab => {
                 let e = u[k].estilo;
                 if let Some(rel) = rellenos[k]
                     && u[k].avance > 0.0
                 {
-                    r.trozos.push(Trozo { x: xs[k], ancho: u[k].avance, contenido: Contenido::Relleno { caracter: rel, estilo: e } });
+                    r.trozos.push(Trozo {
+                        x: xs[k],
+                        ancho: u[k].avance,
+                        contenido: Contenido::Relleno {
+                            caracter: rel,
+                            estilo: e,
+                        },
+                    });
                 }
                 k += 1;
             }
             Tipo::Salto => k += 1,
             Tipo::Objeto { id, alto, bajo } => {
-                r.trozos.push(Trozo { x: xs[k], ancho: u[k].avance, contenido: Contenido::Objeto { id, alto } });
+                r.trozos.push(Trozo {
+                    x: xs[k],
+                    ancho: u[k].avance,
+                    contenido: Contenido::Objeto { id, alto },
+                });
                 r.ascenso = r.ascenso.max(alto);
                 r.descenso = r.descenso.max(bajo);
                 k += 1;
@@ -516,11 +643,18 @@ fn montar(u: &[Unidad], xs: &[f32], rellenos: &[Option<char>], estilos: &[Estilo
     // El interlineado multiple de Word no multiplica lo que suben las
     // letras de simbolos (las vinetas en Symbol o Wingdings).
     let es_simbolo = |e: &u32| {
-        estilos.get(*e as usize).is_some_and(|s| matches!(&*s.letra.familia, "Symbol" | "Wingdings" | "Wingdings 2" | "Wingdings 3" | "Webdings"))
+        estilos.get(*e as usize).is_some_and(|s| {
+            matches!(
+                &*s.letra.familia,
+                "Symbol" | "Wingdings" | "Wingdings 2" | "Wingdings 3" | "Webdings"
+            )
+        })
     };
     let solo_simbolos = !usados.iter().any(|e| !es_simbolo(e));
     for e in usados {
-        let Some(est) = estilos.get(e as usize) else { continue };
+        let Some(est) = estilos.get(e as usize) else {
+            continue;
+        };
         let m = medidor.metricas(&est.letra);
         r.ascenso = r.ascenso.max(m.ascenso + est.subida.max(0.0));
         if solo_simbolos || !es_simbolo(&e) {
@@ -550,7 +684,14 @@ fn montar(u: &[Unidad], xs: &[f32], rellenos: &[Option<char>], estilos: &[Estilo
     r
 }
 
-fn alinear(mut r: Renglon, u: &[Unidad], xs: &[f32], cfg: &Config, derecha: f32, ultimo: bool) -> Renglon {
+fn alinear(
+    mut r: Renglon,
+    u: &[Unidad],
+    xs: &[f32],
+    cfg: &Config,
+    derecha: f32,
+    ultimo: bool,
+) -> Renglon {
     // Negativo si el renglon solo cabe encogiendo los espacios.
     let libre = derecha - r.fin;
     let desplazar = match cfg.alineacion {
@@ -567,21 +708,42 @@ fn alinear(mut r: Renglon, u: &[Unidad], xs: &[f32], cfg: &Config, derecha: f32,
     if justificar && libre.abs() > 0.001 {
         // Los espacios que se estiran: los de despues del ultimo tabulador y
         // antes del final escrito.
-        let desde = u.iter().rposition(|x| x.tipo == Tipo::Tab).map(|p| p + 1).unwrap_or(0);
+        let desde = u
+            .iter()
+            .rposition(|x| x.tipo == Tipo::Tab)
+            .map(|p| p + 1)
+            .unwrap_or(0);
         let fin = r.fin;
-        let cuantos = (desde..u.len()).filter(|&k| matches!(u[k].tipo, Tipo::Letra(c) if es_espacio(c)) && xs[k] + 0.001 < fin).count();
+        let cuantos = (desde..u.len())
+            .filter(|&k| {
+                matches!(u[k].tipo, Tipo::Letra(c) if es_espacio(c)) && xs[k] + 0.001 < fin
+            })
+            .count();
         if cuantos > 0 {
             let extra = libre / cuantos as f32;
             // Rehacer las x de los trozos: cada trozo se desplaza lo que
             // sumen los espacios estirados que tenga delante.
-            let x_corte = if desde > 0 { xs[desde - 1] } else { f32::NEG_INFINITY };
+            let x_corte = if desde > 0 {
+                xs[desde - 1]
+            } else {
+                f32::NEG_INFINITY
+            };
             for t in &mut r.trozos {
                 if t.x <= x_corte {
                     continue;
                 }
-                let antes = (desde..u.len()).filter(|&k| matches!(u[k].tipo, Tipo::Letra(c) if es_espacio(c)) && xs[k] + 0.001 < t.x).count();
+                let antes = (desde..u.len())
+                    .filter(|&k| {
+                        matches!(u[k].tipo, Tipo::Letra(c) if es_espacio(c)) && xs[k] + 0.001 < t.x
+                    })
+                    .count();
                 t.x += extra * antes as f32;
-                if let Contenido::Texto { texto, extra_espacio, .. } = &mut t.contenido {
+                if let Contenido::Texto {
+                    texto,
+                    extra_espacio,
+                    ..
+                } = &mut t.contenido
+                {
                     // Los espacios de dentro del trozo, sin los colgados.
                     let dentro = texto.trim_end().chars().filter(|c| es_espacio(*c)).count();
                     *extra_espacio = extra;
@@ -622,8 +784,14 @@ mod pruebas {
     #[test]
     fn las_palabras_se_reparten_y_los_espacios_cuelgan() {
         // Cada letra mide 5: «uno dos tres» en 40 puntos (8 letras).
-        let p = vec![Pieza::Texto { texto: "uno dos tres".into(), estilo: 0 }];
-        let cfg = Config { ancho: 40.0, ..Default::default() };
+        let p = vec![Pieza::Texto {
+            texto: "uno dos tres".into(),
+            estilo: 0,
+        }];
+        let cfg = Config {
+            ancho: 40.0,
+            ..Default::default()
+        };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
         assert_eq!(r.len(), 2);
         assert_eq!(texto(&r[0]), "uno dos ");
@@ -634,16 +802,32 @@ mod pruebas {
 
     #[test]
     fn una_palabra_mas_larga_que_el_renglon_se_parte_por_letras() {
-        let p = vec![Pieza::Texto { texto: "abcdefghij".into(), estilo: 0 }];
-        let cfg = Config { ancho: 20.0, ..Default::default() };
+        let p = vec![Pieza::Texto {
+            texto: "abcdefghij".into(),
+            estilo: 0,
+        }];
+        let cfg = Config {
+            ancho: 20.0,
+            ..Default::default()
+        };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
-        assert_eq!(r.iter().map(texto).collect::<Vec<_>>(), vec!["abcd", "efgh", "ij"]);
+        assert_eq!(
+            r.iter().map(texto).collect::<Vec<_>>(),
+            vec!["abcd", "efgh", "ij"]
+        );
     }
 
     #[test]
     fn el_centrado_y_la_derecha_desplazan() {
-        let p = vec![Pieza::Texto { texto: "ab".into(), estilo: 0 }];
-        let mut cfg = Config { ancho: 100.0, alineacion: Alineacion::Centro, ..Default::default() };
+        let p = vec![Pieza::Texto {
+            texto: "ab".into(),
+            estilo: 0,
+        }];
+        let mut cfg = Config {
+            ancho: 100.0,
+            alineacion: Alineacion::Centro,
+            ..Default::default()
+        };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
         assert_eq!(r[0].trozos[0].x, 45.0);
         cfg.alineacion = Alineacion::Derecha;
@@ -653,8 +837,15 @@ mod pruebas {
 
     #[test]
     fn el_justificado_llena_todos_menos_el_ultimo() {
-        let p = vec![Pieza::Texto { texto: "aa bb cc dd".into(), estilo: 0 }];
-        let cfg = Config { ancho: 50.0, alineacion: Alineacion::Justificada, ..Default::default() };
+        let p = vec![Pieza::Texto {
+            texto: "aa bb cc dd".into(),
+            estilo: 0,
+        }];
+        let cfg = Config {
+            ancho: 50.0,
+            alineacion: Alineacion::Justificada,
+            ..Default::default()
+        };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
         assert_eq!(r.len(), 2);
         assert_eq!(r[0].fin, 50.0);
@@ -668,30 +859,65 @@ mod pruebas {
     #[test]
     fn el_tabulador_salta_al_tope() {
         let p = vec![
-            Pieza::Texto { texto: "a".into(), estilo: 0 },
+            Pieza::Texto {
+                texto: "a".into(),
+                estilo: 0,
+            },
             Pieza::Tab { estilo: 0 },
-            Pieza::Texto { texto: "b".into(), estilo: 0 },
+            Pieza::Texto {
+                texto: "b".into(),
+                estilo: 0,
+            },
             Pieza::Tab { estilo: 0 },
-            Pieza::Texto { texto: "9".into(), estilo: 0 },
+            Pieza::Texto {
+                texto: "9".into(),
+                estilo: 0,
+            },
         ];
         let cfg = Config {
             ancho: 200.0,
-            topes: vec![Tope { pos: 100.0, tipo: TipoTope::Derecha, relleno: Some('.') }],
+            topes: vec![Tope {
+                pos: 100.0,
+                tipo: TipoTope::Derecha,
+                relleno: Some('.'),
+            }],
             tope_defecto: 36.0,
             ..Default::default()
         };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
-        let xs: Vec<f32> = r[0].trozos.iter().filter(|t| matches!(t.contenido, Contenido::Texto { .. })).map(|t| t.x).collect();
+        let xs: Vec<f32> = r[0]
+            .trozos
+            .iter()
+            .filter(|t| matches!(t.contenido, Contenido::Texto { .. }))
+            .map(|t| t.x)
+            .collect();
         // Un tope propio anula los de por defecto de su izquierda: «b» acaba en
         // 100 y «9» va al siguiente tope por defecto (108).
         assert_eq!(xs, vec![0.0, 95.0, 108.0]);
-        assert!(r[0].trozos.iter().any(|t| matches!(t.contenido, Contenido::Relleno { caracter: '.', .. })));
+        assert!(
+            r[0].trozos
+                .iter()
+                .any(|t| matches!(t.contenido, Contenido::Relleno { caracter: '.', .. }))
+        );
     }
 
     #[test]
     fn el_salto_parte_y_un_parrafo_vacio_tiene_alto() {
-        let p = vec![Pieza::Texto { texto: "a".into(), estilo: 0 }, Pieza::Salto, Pieza::Texto { texto: "b".into(), estilo: 0 }];
-        let cfg = Config { ancho: 200.0, ..Default::default() };
+        let p = vec![
+            Pieza::Texto {
+                texto: "a".into(),
+                estilo: 0,
+            },
+            Pieza::Salto,
+            Pieza::Texto {
+                texto: "b".into(),
+                estilo: 0,
+            },
+        ];
+        let cfg = Config {
+            ancho: 200.0,
+            ..Default::default()
+        };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
         assert_eq!(r.len(), 2);
         let r = partir(&[], &estilos(), 0, &cfg, &MedidorFijo::default());
@@ -701,8 +927,16 @@ mod pruebas {
 
     #[test]
     fn la_sangria_francesa_mueve_el_primer_renglon() {
-        let p = vec![Pieza::Texto { texto: "aaaa bbbb".into(), estilo: 0 }];
-        let cfg = Config { ancho: 40.0, sangria_izq: 10.0, primera: -10.0, ..Default::default() };
+        let p = vec![Pieza::Texto {
+            texto: "aaaa bbbb".into(),
+            estilo: 0,
+        }];
+        let cfg = Config {
+            ancho: 40.0,
+            sangria_izq: 10.0,
+            primera: -10.0,
+            ..Default::default()
+        };
         let r = partir(&p, &estilos(), 0, &cfg, &MedidorFijo::default());
         assert_eq!(r[0].trozos[0].x, 0.0);
         assert_eq!(r[1].trozos[0].x, 10.0);

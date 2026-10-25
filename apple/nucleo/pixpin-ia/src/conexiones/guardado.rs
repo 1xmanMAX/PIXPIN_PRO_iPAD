@@ -33,7 +33,14 @@ impl std::fmt::Debug for Cliente {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Cliente")
             .field("id", &self.id)
-            .field("secreto", &if self.secreto.is_empty() { "" } else { "•••" })
+            .field(
+                "secreto",
+                &if self.secreto.is_empty() {
+                    ""
+                } else {
+                    "•••"
+                },
+            )
             .finish()
     }
 }
@@ -53,7 +60,14 @@ impl std::fmt::Debug for Tokens {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Tokens")
             .field("acceso", &"•••")
-            .field("refresco", &if self.refresco.is_empty() { "" } else { "•••" })
+            .field(
+                "refresco",
+                &if self.refresco.is_empty() {
+                    ""
+                } else {
+                    "•••"
+                },
+            )
             .field("caduca_ms", &self.caduca_ms)
             .finish()
     }
@@ -70,7 +84,9 @@ pub struct Guardado {
 
 impl Guardado {
     pub fn conectado(&self) -> bool {
-        self.tokens.as_ref().is_some_and(|t| !t.acceso.is_empty() || !t.refresco.is_empty())
+        self.tokens
+            .as_ref()
+            .is_some_and(|t| !t.acceso.is_empty() || !t.refresco.is_empty())
     }
 }
 
@@ -98,9 +114,20 @@ fn a_json(g: &Guardado) -> Value {
 }
 
 fn de_json(v: &Value) -> Guardado {
-    let s = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let s = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     Guardado {
-        cliente: v.get("cliente").map(|c| Cliente { id: s(c, "id"), secreto: s(c, "secreto") }).filter(|c| !c.id.is_empty()),
+        cliente: v
+            .get("cliente")
+            .map(|c| Cliente {
+                id: s(c, "id"),
+                secreto: s(c, "secreto"),
+            })
+            .filter(|c| !c.id.is_empty()),
         tokens: v.get("tokens").map(|t| Tokens {
             acceso: s(t, "acceso"),
             refresco: s(t, "refresco"),
@@ -138,9 +165,15 @@ fn nombre_secreto(s: &Servicio) -> String {
 /// cuenta de Windows, fichero danado): vacio, y se pide otra vez.
 #[cfg(any(windows, test))]
 pub fn leer_de(carpeta: &Path, s: &Servicio) -> Guardado {
-    let Ok(cifrado) = std::fs::read(fichero(carpeta, s)) else { return Guardado::default() };
-    let Ok(claro) = claves::descifrar(&cifrado) else { return Guardado::default() };
-    serde_json::from_slice::<Value>(&claro).map(|v| de_json(&v)).unwrap_or_default()
+    let Ok(cifrado) = std::fs::read(fichero(carpeta, s)) else {
+        return Guardado::default();
+    };
+    let Ok(claro) = claves::descifrar(&cifrado) else {
+        return Guardado::default();
+    };
+    serde_json::from_slice::<Value>(&claro)
+        .map(|v| de_json(&v))
+        .unwrap_or_default()
 }
 
 /// **Guarda** (cifrado). Si no queda nada, borra el fichero.
@@ -149,12 +182,15 @@ pub fn guardar_en(carpeta: &Path, s: &Servicio, g: &Guardado) -> Result<(), Stri
     let ruta = fichero(carpeta, s);
     if g.cliente.is_none() && g.tokens.is_none() {
         return match std::fs::remove_file(&ruta) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("no se pudo borrar la conexion: {e}")),
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                Err(format!("no se pudo borrar la conexion: {e}"))
+            }
             _ => Ok(()),
         };
     }
     let cifrado = claves::cifrar(a_json(g).to_string().as_bytes())?;
-    std::fs::create_dir_all(carpeta).map_err(|e| format!("no se pudo crear la carpeta de claves: {e}"))?;
+    std::fs::create_dir_all(carpeta)
+        .map_err(|e| format!("no se pudo crear la carpeta de claves: {e}"))?;
     // Primero aparte y luego se cambia de nombre: un corte a medias no deja
     // los tokens buenos rotos.
     let tmp = ruta.with_extension("cifrado.parte");
@@ -179,7 +215,12 @@ pub fn leer_cliente(texto: &str) -> Option<Cliente> {
         let v: Value = serde_json::from_str(t).ok()?;
         let dentro = v.get("installed").or_else(|| v.get("web")).unwrap_or(&v);
         let id = dentro.get("client_id")?.as_str()?.trim().to_string();
-        let secreto = dentro.get("client_secret").and_then(Value::as_str).unwrap_or_default().trim().to_string();
+        let secreto = dentro
+            .get("client_secret")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         return valido(&id).then_some(Cliente { id, secreto });
     }
     let mut partes = t.split_whitespace();
@@ -192,7 +233,10 @@ pub fn leer_cliente(texto: &str) -> Option<Cliente> {
 }
 
 fn valido(id: &str) -> bool {
-    (8..=300).contains(&id.len()) && id.chars().all(|c| c.is_ascii_alphanumeric() || "-._".contains(c))
+    (8..=300).contains(&id.len())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-._".contains(c))
 }
 
 #[cfg(test)]
@@ -201,7 +245,8 @@ mod pruebas {
     use crate::conexiones::drive::GOOGLE_DRIVE;
 
     fn carpeta_de_prueba(nombre: &str) -> PathBuf {
-        let c = std::env::temp_dir().join(format!("pixpin-conexiones-{nombre}-{}", std::process::id()));
+        let c =
+            std::env::temp_dir().join(format!("pixpin-conexiones-{nombre}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&c);
         c
     }
@@ -210,8 +255,15 @@ mod pruebas {
     fn se_guarda_cifrado_y_nada_va_en_claro() {
         let c = carpeta_de_prueba("guardado");
         let g = Guardado {
-            cliente: Some(Cliente { id: "1234-abcd.apps.googleusercontent.com".into(), secreto: "GOCSPX-secretoXYZ".into() }),
-            tokens: Some(Tokens { acceso: "ya29.ACCESOprueba".into(), refresco: "1//REFRESCOprueba".into(), caduca_ms: 42 }),
+            cliente: Some(Cliente {
+                id: "1234-abcd.apps.googleusercontent.com".into(),
+                secreto: "GOCSPX-secretoXYZ".into(),
+            }),
+            tokens: Some(Tokens {
+                acceso: "ya29.ACCESOprueba".into(),
+                refresco: "1//REFRESCOprueba".into(),
+                caduca_ms: 42,
+            }),
             cuenta: Some("ana@example.com".into()),
         };
         guardar_en(&c, &GOOGLE_DRIVE, &g).unwrap();
@@ -220,14 +272,25 @@ mod pruebas {
         for e in std::fs::read_dir(&c).unwrap() {
             n += 1;
             let bytes = std::fs::read(e.unwrap().path()).unwrap();
-            for buscado in [&b"ACCESOprueba"[..], b"REFRESCOprueba", b"secretoXYZ", b"ana@example"] {
-                assert!(!bytes.windows(buscado.len()).any(|w| w == buscado), "en claro en el disco");
+            for buscado in [
+                &b"ACCESOprueba"[..],
+                b"REFRESCOprueba",
+                b"secretoXYZ",
+                b"ana@example",
+            ] {
+                assert!(
+                    !bytes.windows(buscado.len()).any(|w| w == buscado),
+                    "en claro en el disco"
+                );
             }
         }
         assert_eq!(n, 1, "sin temporales olvidados");
         // El Debug no ensena los secretos (por si alguien lo manda a tracing).
         let d = format!("{g:?}");
-        assert!(!d.contains("ACCESO") && !d.contains("REFRESCO") && !d.contains("secretoXYZ"), "{d}");
+        assert!(
+            !d.contains("ACCESO") && !d.contains("REFRESCO") && !d.contains("secretoXYZ"),
+            "{d}"
+        );
         // Sin nada que guardar, se borra.
         guardar_en(&c, &GOOGLE_DRIVE, &Guardado::default()).unwrap();
         assert!(!fichero(&c, &GOOGLE_DRIVE).exists());
@@ -247,10 +310,30 @@ mod pruebas {
     #[test]
     fn el_cliente_se_entiende_pegado_de_tres_maneras() {
         let id = "123456789-abcdef.apps.googleusercontent.com";
-        assert_eq!(leer_cliente(id), Some(Cliente { id: id.into(), secreto: String::new() }));
-        assert_eq!(leer_cliente(&format!("  {id}   GOCSPX-abc ")), Some(Cliente { id: id.into(), secreto: "GOCSPX-abc".into() }));
-        let json = format!(r#"{{"installed":{{"client_id":"{id}","project_id":"p","client_secret":"GOCSPX-x","redirect_uris":["http://localhost"]}}}}"#);
-        assert_eq!(leer_cliente(&json), Some(Cliente { id: id.into(), secreto: "GOCSPX-x".into() }));
+        assert_eq!(
+            leer_cliente(id),
+            Some(Cliente {
+                id: id.into(),
+                secreto: String::new()
+            })
+        );
+        assert_eq!(
+            leer_cliente(&format!("  {id}   GOCSPX-abc ")),
+            Some(Cliente {
+                id: id.into(),
+                secreto: "GOCSPX-abc".into()
+            })
+        );
+        let json = format!(
+            r#"{{"installed":{{"client_id":"{id}","project_id":"p","client_secret":"GOCSPX-x","redirect_uris":["http://localhost"]}}}}"#
+        );
+        assert_eq!(
+            leer_cliente(&json),
+            Some(Cliente {
+                id: id.into(),
+                secreto: "GOCSPX-x".into()
+            })
+        );
         // Casos negativos.
         assert_eq!(leer_cliente(""), None);
         assert_eq!(leer_cliente("hola que tal amigo"), None);

@@ -61,7 +61,9 @@ struct Herencia<'a> {
 
 impl Presentacion {
     pub fn de_paquete(mut paquete: Paquete) -> Result<Presentacion, ErrorOffice> {
-        let principal = paquete.principal().unwrap_or_else(|| "ppt/presentation.xml".into());
+        let principal = paquete
+            .principal()
+            .unwrap_or_else(|| "ppt/presentation.xml".into());
         let Some(raiz) = paquete.xml(&principal) else {
             return Err(match paquete.ultimo_limite {
                 Some(e) => ErrorOffice::Limite(e.to_string()),
@@ -78,12 +80,20 @@ impl Presentacion {
             .hijo("sldIdLst")
             .map(|l| {
                 l.elementos()
-                    .filter_map(|s| rels.get(s.atributo_con_prefijo("r", "id")).filter(|r| !r.externa).map(|r| r.destino.clone()))
+                    .filter_map(|s| {
+                        rels.get(s.atributo_con_prefijo("r", "id"))
+                            .filter(|r| !r.externa)
+                            .map(|r| r.destino.clone())
+                    })
                     .filter(|r| paquete.existe(r))
                     .collect()
             })
             .unwrap_or_default();
-        let estilos_tabla = rels.values().find(|r| r.tipo == "tableStyles").map(|r| r.destino.clone()).and_then(|r| paquete.xml(&r));
+        let estilos_tabla = rels
+            .values()
+            .find(|r| r.tipo == "tableStyles")
+            .map(|r| r.destino.clone())
+            .and_then(|r| paquete.xml(&r));
         let n = diapositivas.len();
         Ok(Presentacion {
             paquete,
@@ -111,7 +121,12 @@ impl Presentacion {
         if let Some(t) = self.temas.get(ruta) {
             return t.clone();
         }
-        let t = Arc::new(self.paquete.xml(ruta).map(|n| Tema::leer(&n)).unwrap_or_else(|| Tema::leer(&Nodo::default())));
+        let t = Arc::new(
+            self.paquete
+                .xml(ruta)
+                .map(|n| Tema::leer(&n))
+                .unwrap_or_else(|| Tema::leer(&Nodo::default())),
+        );
         self.temas.insert(ruta.to_string(), t.clone());
         t
     }
@@ -122,10 +137,25 @@ impl Presentacion {
         }
         let raiz = self.paquete.xml(ruta)?;
         let rels = self.paquete.relaciones(ruta);
-        let padre = rels.values().find(|r| r.tipo == "slideMaster").map(|r| r.destino.clone());
+        let padre = rels
+            .values()
+            .find(|r| r.tipo == "slideMaster")
+            .map(|r| r.destino.clone());
         let (mapa, tema) = if raiz.nombre == "sldMaster" {
-            let mapa = raiz.hijo("clrMap").map(|m| m.atributos.iter().map(|(k, v)| (local(k), v.clone())).collect()).unwrap_or_default();
-            let tema = match rels.values().find(|r| r.tipo == "theme").map(|r| r.destino.clone()) {
+            let mapa = raiz
+                .hijo("clrMap")
+                .map(|m| {
+                    m.atributos
+                        .iter()
+                        .map(|(k, v)| (local(k), v.clone()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let tema = match rels
+                .values()
+                .find(|r| r.tipo == "theme")
+                .map(|r| r.destino.clone())
+            {
                 Some(t) => self.tema(&t),
                 None => Arc::new(Tema::leer(&Nodo::default())),
             };
@@ -133,12 +163,30 @@ impl Presentacion {
         } else {
             let patron = padre.as_deref().and_then(|p| self.plantilla(p));
             let mut mapa = patron.as_ref().map(|p| p.mapa.clone()).unwrap_or_default();
-            if let Some(o) = raiz.hijo("clrMapOvr").and_then(|o| o.hijo("overrideClrMapping")) {
-                mapa = o.atributos.iter().map(|(k, v)| (local(k), v.clone())).collect();
+            if let Some(o) = raiz
+                .hijo("clrMapOvr")
+                .and_then(|o| o.hijo("overrideClrMapping"))
+            {
+                mapa = o
+                    .atributos
+                    .iter()
+                    .map(|(k, v)| (local(k), v.clone()))
+                    .collect();
             }
-            (mapa, patron.map(|p| p.tema.clone()).unwrap_or_else(|| Arc::new(Tema::leer(&Nodo::default()))))
+            (
+                mapa,
+                patron
+                    .map(|p| p.tema.clone())
+                    .unwrap_or_else(|| Arc::new(Tema::leer(&Nodo::default()))),
+            )
         };
-        let p = Arc::new(Plantilla { raiz, rels, padre, mapa, tema });
+        let p = Arc::new(Plantilla {
+            raiz,
+            rels,
+            padre,
+            mapa,
+            tema,
+        });
         self.plantillas.insert(ruta.to_string(), p.clone());
         Some(p)
     }
@@ -155,32 +203,78 @@ impl Presentacion {
     }
 
     fn armar(&mut self, ruta: &str, numero: u32, medidor: &dyn Medidor) -> Pagina {
-        let mut pagina = Pagina { ancho: self.ancho, alto: self.alto, numero, ..Default::default() };
+        let mut pagina = Pagina {
+            ancho: self.ancho,
+            alto: self.alto,
+            numero,
+            ..Default::default()
+        };
         let Some(raiz) = self.paquete.xml(ruta) else {
             pagina.fondo = Some(Relleno::Solido(Color::BLANCO));
             return pagina;
         };
         let rels = self.paquete.relaciones(ruta);
-        let diseno = rels.values().find(|r| r.tipo == "slideLayout").map(|r| r.destino.clone()).and_then(|r| self.plantilla(&r));
-        let patron = diseno.as_ref().and_then(|d| d.padre.clone()).and_then(|r| self.plantilla(&r));
-        let tema = patron.as_ref().map(|p| p.tema.clone()).unwrap_or_else(|| Arc::new(Tema::leer(&Nodo::default())));
+        let diseno = rels
+            .values()
+            .find(|r| r.tipo == "slideLayout")
+            .map(|r| r.destino.clone())
+            .and_then(|r| self.plantilla(&r));
+        let patron = diseno
+            .as_ref()
+            .and_then(|d| d.padre.clone())
+            .and_then(|r| self.plantilla(&r));
+        let tema = patron
+            .as_ref()
+            .map(|p| p.tema.clone())
+            .unwrap_or_else(|| Arc::new(Tema::leer(&Nodo::default())));
         let mut mapa = diseno.as_ref().map(|d| d.mapa.clone()).unwrap_or_default();
-        if let Some(o) = raiz.hijo("clrMapOvr").and_then(|o| o.hijo("overrideClrMapping")) {
-            mapa = o.atributos.iter().map(|(k, v)| (local(k), v.clone())).collect();
+        if let Some(o) = raiz
+            .hijo("clrMapOvr")
+            .and_then(|o| o.hijo("overrideClrMapping"))
+        {
+            mapa = o
+                .atributos
+                .iter()
+                .map(|(k, v)| (local(k), v.clone()))
+                .collect();
         }
-        let ctx = Contexto { tema: &tema, mapa: &mapa };
+        let ctx = Contexto {
+            tema: &tema,
+            mapa: &mapa,
+        };
 
         // El fondo: el de la diapositiva, el del diseno o el del patron.
-        let fondos = [Some(&raiz), diseno.as_ref().map(|d| &d.raiz), patron.as_ref().map(|p| &p.raiz)];
+        let fondos = [
+            Some(&raiz),
+            diseno.as_ref().map(|d| &d.raiz),
+            patron.as_ref().map(|p| &p.raiz),
+        ];
         pagina.fondo = fondos
             .iter()
             .flatten()
-            .find_map(|r| r.hijo("cSld").and_then(|c| c.hijo("bg")).and_then(|bg| fondo(bg, ctx)))
+            .find_map(|r| {
+                r.hijo("cSld")
+                    .and_then(|c| c.hijo("bg"))
+                    .and_then(|bg| fondo(bg, ctx))
+            })
             .or(Some(Relleno::Solido(Color::BLANCO)));
         // Una imagen de fondo.
-        for (r, rel) in [(Some(&raiz), Some(&rels)), (diseno.as_ref().map(|d| &d.raiz), diseno.as_ref().map(|d| &d.rels))] {
-            let (Some(r), Some(rel)) = (r, rel) else { continue };
-            if let Some(bf) = r.hijo("cSld").and_then(|c| c.hijo("bg")).and_then(|b| b.hijo("bgPr")).and_then(|b| b.hijo("blipFill")) {
+        for (r, rel) in [
+            (Some(&raiz), Some(&rels)),
+            (
+                diseno.as_ref().map(|d| &d.raiz),
+                diseno.as_ref().map(|d| &d.rels),
+            ),
+        ] {
+            let (Some(r), Some(rel)) = (r, rel) else {
+                continue;
+            };
+            if let Some(bf) = r
+                .hijo("cSld")
+                .and_then(|c| c.hijo("bg"))
+                .and_then(|b| b.hijo("bgPr"))
+                .and_then(|b| b.hijo("blipFill"))
+            {
                 if let Some(id) = self.imagen(rel, bf) {
                     pagina.elementos.push(Elemento::Imagen {
                         id,
@@ -198,11 +292,18 @@ impl Presentacion {
         if let Some(d) = &defecto {
             texto::mezclar_lista(&mut base_niveles, d, ctx);
         }
-        let estilos_patron = patron.as_ref().and_then(|p| p.raiz.hijo("txStyles")).cloned();
+        let estilos_patron = patron
+            .as_ref()
+            .and_then(|p| p.raiz.hijo("txStyles"))
+            .cloned();
         let niveles_de = |tipo: &str| -> Niveles {
             // El estilo de texto de la presentacion solo vale para lo que no
             // es marcador (los marcadores parten de los estilos del patron).
-            let mut n = if tipo.is_empty() { base_niveles.clone() } else { texto::niveles_vacios() };
+            let mut n = if tipo.is_empty() {
+                base_niveles.clone()
+            } else {
+                texto::niveles_vacios()
+            };
             if let Some(tx) = &estilos_patron {
                 let cual = match tipo {
                     "title" | "ctrTitle" => "titleStyle",
@@ -217,8 +318,13 @@ impl Presentacion {
             n
         };
 
-        let mostrar = diseno.as_ref().is_none_or(|d| d.mostrar_patron()) && !matches!(raiz.atributo("showMasterSp"), "0" | "false");
-        let mut lienzo = Lienzo { numero, medidor, elementos: Vec::new() };
+        let mostrar = diseno.as_ref().is_none_or(|d| d.mostrar_patron())
+            && !matches!(raiz.atributo("showMasterSp"), "0" | "false");
+        let mut lienzo = Lienzo {
+            numero,
+            medidor,
+            elementos: Vec::new(),
+        };
         if mostrar && let Some(p) = &patron {
             let p = p.clone();
             if let Some(arbol) = p.arbol() {
@@ -229,7 +335,15 @@ impl Presentacion {
             let d = d.clone();
             if let Some(arbol) = d.arbol() {
                 let previos: Vec<&Plantilla> = patron.iter().map(|p| p.as_ref()).collect();
-                self.arbol(&mut lienzo, arbol, &d.rels, ctx, &previos, &niveles_de, false);
+                self.arbol(
+                    &mut lienzo,
+                    arbol,
+                    &d.rels,
+                    ctx,
+                    &previos,
+                    &niveles_de,
+                    false,
+                );
             }
         }
         if let Some(arbol) = raiz.hijo("cSld").and_then(|c| c.hijo("spTree")) {
@@ -276,7 +390,17 @@ impl Presentacion {
     ) {
         for n in arbol.elementos() {
             let mut el = Vec::new();
-            self.forma(&mut el, l, n, rels, ctx, previos, niveles_de, es_diapositiva, None);
+            self.forma(
+                &mut el,
+                l,
+                n,
+                rels,
+                ctx,
+                previos,
+                niveles_de,
+                es_diapositiva,
+                None,
+            );
             l.elementos.append(&mut el);
         }
     }
@@ -295,7 +419,10 @@ impl Presentacion {
         caja_grupo: Option<Rect>,
     ) {
         let nv = n.elementos().find(|e| e.nombre.starts_with("nv"));
-        if nv.and_then(|v| v.hijo("cNvPr")).is_some_and(|c| matches!(c.atributo("hidden"), "1" | "true")) {
+        if nv
+            .and_then(|v| v.hijo("cNvPr"))
+            .is_some_and(|c| matches!(c.atributo("hidden"), "1" | "true"))
+        {
             return;
         }
         let ph = nv.and_then(|v| v.hijo("nvPr")).and_then(|p| p.hijo("ph"));
@@ -313,58 +440,154 @@ impl Presentacion {
                 let x = xfrm_heredado(sppr, &herencia, caja_grupo);
                 let Some(x) = x else { return };
                 let Some(bf) = n.hijo("blipFill") else { return };
-                let Some(id) = self.imagen(rels, bf) else { return };
+                let Some(id) = self.imagen(rels, bf) else {
+                    return;
+                };
                 let caja = Rect::nuevo(x.x, x.y, x.ancho, x.alto);
-                let mut els = vec![Elemento::Imagen { id, rect: Rect::nuevo(0.0, 0.0, x.ancho, x.alto), recorte: dml::recorte(bf), opacidad: 1.0 }];
+                let mut els = vec![Elemento::Imagen {
+                    id,
+                    rect: Rect::nuevo(0.0, 0.0, x.ancho, x.alto),
+                    recorte: dml::recorte(bf),
+                    opacidad: 1.0,
+                }];
                 if pase::medio_de(n).is_some() {
                     // Un video o un audio: su poster con el boton de reproducir.
                     els.extend(pase::icono_reproducir(x.ancho, x.alto));
                 }
-                if let Some(t) = sppr.and_then(|s| s.hijo("ln")).and_then(|ln| dml::linea(ln, ctx, None)).flatten() {
-                    els.push(Elemento::Rect { rect: Rect::nuevo(0.0, 0.0, x.ancho, x.alto), relleno: None, borde: Some(t) });
+                if let Some(t) = sppr
+                    .and_then(|s| s.hijo("ln"))
+                    .and_then(|ln| dml::linea(ln, ctx, None))
+                    .flatten()
+                {
+                    els.push(Elemento::Rect {
+                        rect: Rect::nuevo(0.0, 0.0, x.ancho, x.alto),
+                        relleno: None,
+                        borde: Some(t),
+                    });
                 }
                 let efectos = dml::efectos_forma(sppr, n.hijo("style"), &[], ctx, x.giro);
-                salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos));
+                salida.push(
+                    dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos),
+                );
             }
             "grpSp" => {
-                let gx = n.hijo("grpSpPr").and_then(|g| g.hijo("xfrm")).map(dml::xfrm).unwrap_or_default();
+                let gx = n
+                    .hijo("grpSpPr")
+                    .and_then(|g| g.hijo("xfrm"))
+                    .map(dml::xfrm)
+                    .unwrap_or_default();
                 let gx = ajustar_a_grupo(gx, caja_grupo);
-                let sx = if gx.hijo_ancho > 0.0 { gx.ancho / gx.hijo_ancho } else { 1.0 };
-                let sy = if gx.hijo_alto > 0.0 { gx.alto / gx.hijo_alto } else { 1.0 };
+                let sx = if gx.hijo_ancho > 0.0 {
+                    gx.ancho / gx.hijo_ancho
+                } else {
+                    1.0
+                };
+                let sy = if gx.hijo_alto > 0.0 {
+                    gx.alto / gx.hijo_alto
+                } else {
+                    1.0
+                };
                 // Los hijos se pintan en coordenadas del grupo ya
                 // escaladas, con origen en la esquina del grupo.
                 let mut hijos = Vec::new();
                 for h in n.elementos() {
-                    let marco = Rect { x: gx.hijo_x, y: gx.hijo_y, ancho: sx, alto: sy };
-                    self.forma(&mut hijos, l, h, rels, ctx, &[], niveles_de, es_diapositiva, Some(marco));
+                    let marco = Rect {
+                        x: gx.hijo_x,
+                        y: gx.hijo_y,
+                        ancho: sx,
+                        alto: sy,
+                    };
+                    self.forma(
+                        &mut hijos,
+                        l,
+                        h,
+                        rels,
+                        ctx,
+                        &[],
+                        niveles_de,
+                        es_diapositiva,
+                        Some(marco),
+                    );
                 }
                 let efectos = dml::efectos_forma(n.hijo("grpSpPr"), None, &[], ctx, gx.giro);
-                let grupo = dml::colocar(hijos, Rect::nuevo(gx.x, gx.y, gx.ancho, gx.alto), gx.giro, gx.voltear_h, gx.voltear_v);
+                let grupo = dml::colocar(
+                    hijos,
+                    Rect::nuevo(gx.x, gx.y, gx.ancho, gx.alto),
+                    gx.giro,
+                    gx.voltear_h,
+                    gx.voltear_v,
+                );
                 salida.push(grupo.con_efectos(efectos));
             }
             "graphicFrame" => {
-                let x = n.hijo("xfrm").map(dml::xfrm).or_else(|| herencia_xfrm(&herencia));
-                let Some(x) = x.map(|x| ajustar_a_grupo(x, caja_grupo)) else { return };
-                let Some(datos) = n.hijo("graphic").and_then(|g| g.hijo("graphicData")) else { return };
+                let x = n
+                    .hijo("xfrm")
+                    .map(dml::xfrm)
+                    .or_else(|| herencia_xfrm(&herencia));
+                let Some(x) = x.map(|x| ajustar_a_grupo(x, caja_grupo)) else {
+                    return;
+                };
+                let Some(datos) = n.hijo("graphic").and_then(|g| g.hijo("graphicData")) else {
+                    return;
+                };
                 if let Some(t) = datos.hijo("tbl") {
                     let els = self.tabla(t, x.ancho, ctx, l);
                     let efectos = dml::efectos_forma(t.hijo("tblPr"), None, &[], ctx, 0.0);
-                    salida.push(dml::colocar(els, Rect::nuevo(x.x, x.y, x.ancho, x.alto), 0.0, false, false).con_efectos(efectos));
-                } else if let Some(els) =
-                    crate::grafico::de_datos(&mut self.paquete, rels, datos, ctx, l.medidor, x.ancho, x.alto)
-                {
+                    salida.push(
+                        dml::colocar(
+                            els,
+                            Rect::nuevo(x.x, x.y, x.ancho, x.alto),
+                            0.0,
+                            false,
+                            false,
+                        )
+                        .con_efectos(efectos),
+                    );
+                } else if let Some(els) = crate::grafico::de_datos(
+                    &mut self.paquete,
+                    rels,
+                    datos,
+                    ctx,
+                    l.medidor,
+                    x.ancho,
+                    x.alto,
+                ) {
                     // Un grafico: dibujado con los datos de su cache.
-                    salida.push(dml::colocar(els, Rect::nuevo(x.x, x.y, x.ancho, x.alto), 0.0, false, false));
+                    salida.push(dml::colocar(
+                        els,
+                        Rect::nuevo(x.x, x.y, x.ancho, x.alto),
+                        0.0,
+                        false,
+                        false,
+                    ));
                 } else if datos.atributo("uri").ends_with("/diagram") {
                     // SmartArt: el dibujo que PowerPoint guarda ya hecho.
-                    let dm = datos.hijo("relIds").map(|r| r.atributo_con_prefijo("r", "dm").to_string()).unwrap_or_default();
+                    let dm = datos
+                        .hijo("relIds")
+                        .map(|r| r.atributo_con_prefijo("r", "dm").to_string())
+                        .unwrap_or_default();
                     if let Some(els) = self.smartart(rels, &dm, ctx, l, niveles_de) {
-                        salida.push(dml::colocar(els, Rect::nuevo(x.x, x.y, x.ancho, x.alto), 0.0, false, false));
+                        salida.push(dml::colocar(
+                            els,
+                            Rect::nuevo(x.x, x.y, x.ancho, x.alto),
+                            0.0,
+                            false,
+                            false,
+                        ));
                     }
-                } else if let Some(bf) = datos.descendientes("pic").into_iter().find_map(|p| p.hijo("blipFill")) {
+                } else if let Some(bf) = datos
+                    .descendientes("pic")
+                    .into_iter()
+                    .find_map(|p| p.hijo("blipFill"))
+                {
                     // Un objeto incrustado (OLE): su imagen de muestra.
                     if let Some(id) = self.imagen(rels, bf) {
-                        salida.push(Elemento::Imagen { id, rect: Rect::nuevo(x.x, x.y, x.ancho, x.alto), recorte: dml::recorte(bf), opacidad: 1.0 });
+                        salida.push(Elemento::Imagen {
+                            id,
+                            rect: Rect::nuevo(x.x, x.y, x.ancho, x.alto),
+                            recorte: dml::recorte(bf),
+                            opacidad: 1.0,
+                        });
                     }
                 }
             }
@@ -372,7 +595,17 @@ impl Presentacion {
                 let rama = n.hijo("Fallback").or_else(|| n.hijo("Choice"));
                 if let Some(r) = rama {
                     for h in r.elementos() {
-                        self.forma(salida, l, h, rels, ctx, previos, niveles_de, es_diapositiva, caja_grupo);
+                        self.forma(
+                            salida,
+                            l,
+                            h,
+                            rels,
+                            ctx,
+                            previos,
+                            niveles_de,
+                            es_diapositiva,
+                            caja_grupo,
+                        );
                     }
                 }
             }
@@ -392,22 +625,39 @@ impl Presentacion {
         caja_grupo: Option<Rect>,
     ) {
         let sppr = n.hijo("spPr");
-        let Some(x) = xfrm_heredado(sppr, herencia, caja_grupo) else { return };
-        let estilo = n.hijo("style").map(|s| dml::estilo_forma(s, ctx)).unwrap_or_default();
+        let Some(x) = xfrm_heredado(sppr, herencia, caja_grupo) else {
+            return;
+        };
+        let estilo = n
+            .hijo("style")
+            .map(|s| dml::estilo_forma(s, ctx))
+            .unwrap_or_default();
         // Relleno y linea: los de la forma, los heredados del marcador, o
         // los del estilo.
-        let mut sppr_cadena: Vec<&Nodo> = herencia.cadena.iter().filter_map(|h| h.hijo("spPr")).collect();
+        let mut sppr_cadena: Vec<&Nodo> = herencia
+            .cadena
+            .iter()
+            .filter_map(|h| h.hijo("spPr"))
+            .collect();
         if let Some(s) = sppr {
             sppr_cadena.push(s);
         }
         // Primero lo de la propia forma (su `spPr` y despues su estilo), y
         // solo si no dice nada, lo heredado del marcador.
         let tiene_estilo = n.hijo("style").is_some();
-        let heredados: Vec<&Nodo> = herencia.cadena.iter().filter_map(|h| h.hijo("spPr")).collect();
+        let heredados: Vec<&Nodo> = herencia
+            .cadena
+            .iter()
+            .filter_map(|h| h.hijo("spPr"))
+            .collect();
         let relleno = match sppr.and_then(|s| dml::relleno(s, ctx, None)) {
             Some(r) => r,
             None if tiene_estilo => estilo.relleno.clone(),
-            None => heredados.iter().rev().find_map(|s| dml::relleno(s, ctx, None)).flatten(),
+            None => heredados
+                .iter()
+                .rev()
+                .find_map(|s| dml::relleno(s, ctx, None))
+                .flatten(),
         };
         let ln_color = estilo.linea.map(|t| t.color);
         let ln_propia = sppr.and_then(|s| s.hijo("ln"));
@@ -415,18 +665,34 @@ impl Presentacion {
             Some(t) => t,
             None if tiene_estilo => {
                 let g = ln_propia.and_then(|ln| attr_num(ln, "w", 1.0)).map(emu);
-                estilo.linea.map(|t| Trazo { grosor: g.unwrap_or(t.grosor), ..t })
+                estilo.linea.map(|t| Trazo {
+                    grosor: g.unwrap_or(t.grosor),
+                    ..t
+                })
             }
-            None => heredados.iter().rev().filter_map(|s| s.hijo("ln")).find_map(|ln| dml::linea(ln, ctx, None)).flatten(),
+            None => heredados
+                .iter()
+                .rev()
+                .filter_map(|s| s.hijo("ln"))
+                .find_map(|ln| dml::linea(ln, ctx, None))
+                .flatten(),
         };
-        let geom = sppr_cadena.iter().rev().find(|s| s.hijo("prstGeom").is_some() || s.hijo("custGeom").is_some()).copied();
+        let geom = sppr_cadena
+            .iter()
+            .rev()
+            .find(|s| s.hijo("prstGeom").is_some() || s.hijo("custGeom").is_some())
+            .copied();
         let (figuras, es_linea) = match geom {
             Some(g) => dml::figuras(g, x.ancho, x.alto),
             None => dml::figuras(&Nodo::default(), x.ancho, x.alto),
         };
         let mut els = Vec::new();
         if !figuras.is_empty() && (relleno.is_some() || borde.is_some()) {
-            els.push(Elemento::Trayecto { figuras, relleno: if es_linea { None } else { relleno }, borde });
+            els.push(Elemento::Trayecto {
+                figuras,
+                relleno: if es_linea { None } else { relleno },
+                borde,
+            });
         }
         if let Some(tx) = n.hijo("txBody") {
             let mut niveles = niveles_de(&herencia.tipo);
@@ -448,8 +714,16 @@ impl Presentacion {
                     nv.def.color = Some(c);
                 }
             }
-            let color = estilo.color_letra.or_else(|| ctx.tema.esquema("tx1", ctx.mapa)).unwrap_or(Color::NEGRO);
-            let e = Entorno { ctx, medidor: l.medidor, color, numero: l.numero };
+            let color = estilo
+                .color_letra
+                .or_else(|| ctx.tema.esquema("tx1", ctx.mapa))
+                .unwrap_or(Color::NEGRO);
+            let e = Entorno {
+                ctx,
+                medidor: l.medidor,
+                color,
+                numero: l.numero,
+            };
             // El texto vertical (`vert`): se maqueta en la caja girada.
             let vertical = tx.hijo("bodyPr").map(|b| b.atributo("vert")).unwrap_or("");
             if matches!(vertical, "vert" | "vert270" | "eaVert") {
@@ -466,10 +740,26 @@ impl Presentacion {
             return;
         }
         let efectos = dml::efectos_forma(sppr, n.hijo("style"), &heredados, ctx, x.giro);
-        salida.push(dml::colocar(els, Rect::nuevo(x.x, x.y, x.ancho, x.alto), x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos));
+        salida.push(
+            dml::colocar(
+                els,
+                Rect::nuevo(x.x, x.y, x.ancho, x.alto),
+                x.giro,
+                x.voltear_h,
+                x.voltear_v,
+            )
+            .con_efectos(efectos),
+        );
     }
 
-    fn smartart(&mut self, rels: &Relaciones, dm: &str, ctx: Contexto, l: &Lienzo, niveles_de: &dyn Fn(&str) -> Niveles) -> Option<Vec<Elemento>> {
+    fn smartart(
+        &mut self,
+        rels: &Relaciones,
+        dm: &str,
+        ctx: Contexto,
+        l: &Lienzo,
+        niveles_de: &dyn Fn(&str) -> Niveles,
+    ) -> Option<Vec<Elemento>> {
         // El dibujo se encuentra por el `dataModelExt` de los datos, o el
         // primero que haya.
         let datos = rels.get(dm).map(|r| r.destino.clone());
@@ -477,10 +767,18 @@ impl Presentacion {
         if let Some(d) = datos
             && let Some(x) = self.paquete.xml(&d)
         {
-            let rid = x.descendientes("dataModelExt").first().map(|e| e.atributo("relId").to_string()).unwrap_or_default();
+            let rid = x
+                .descendientes("dataModelExt")
+                .first()
+                .map(|e| e.atributo("relId").to_string())
+                .unwrap_or_default();
             ruta = rels.get(&rid).map(|r| r.destino.clone());
         }
-        let ruta = ruta.or_else(|| rels.values().find(|r| r.tipo == "diagramDrawing").map(|r| r.destino.clone()))?;
+        let ruta = ruta.or_else(|| {
+            rels.values()
+                .find(|r| r.tipo == "diagramDrawing")
+                .map(|r| r.destino.clone())
+        })?;
         let raiz = self.paquete.xml(&ruta)?;
         let rels_d = self.paquete.relaciones(&ruta);
         let arbol = raiz.hijo("spTree")?;
@@ -495,7 +793,12 @@ impl Presentacion {
     fn tabla(&mut self, t: &Nodo, ancho_marco: f32, ctx: Contexto, l: &Lienzo) -> Vec<Elemento> {
         let rejilla: Vec<f32> = t
             .hijo("tblGrid")
-            .map(|g| g.elementos().filter(|c| c.nombre == "gridCol").map(|c| emu(attr_num(c, "w", 1.0).unwrap_or(0.0))).collect())
+            .map(|g| {
+                g.elementos()
+                    .filter(|c| c.nombre == "gridCol")
+                    .map(|c| emu(attr_num(c, "w", 1.0).unwrap_or(0.0)))
+                    .collect()
+            })
             .unwrap_or_default();
         let _ = ancho_marco;
         let mut xs = vec![0.0f32];
@@ -504,9 +807,18 @@ impl Presentacion {
         }
         let tblpr = t.hijo("tblPr");
         let marca = |k: &str| tblpr.is_some_and(|p| matches!(p.atributo(k), "1" | "true"));
-        let (primera_fila, ultima_fila, primera_col, ultima_col, bandas_f, bandas_c) =
-            (marca("firstRow"), marca("lastRow"), marca("firstCol"), marca("lastCol"), marca("bandRow"), marca("bandCol"));
-        let id_estilo = tblpr.and_then(|p| p.hijo("tableStyleId")).map(|s| s.texto().trim().to_string()).unwrap_or_default();
+        let (primera_fila, ultima_fila, primera_col, ultima_col, bandas_f, bandas_c) = (
+            marca("firstRow"),
+            marca("lastRow"),
+            marca("firstCol"),
+            marca("lastCol"),
+            marca("bandRow"),
+            marca("bandCol"),
+        );
+        let id_estilo = tblpr
+            .and_then(|p| p.hijo("tableStyleId"))
+            .map(|s| s.texto().trim().to_string())
+            .unwrap_or_default();
         let estilo = self.estilo_tabla(&id_estilo, ctx);
         let filas: Vec<&Nodo> = t.elementos().filter(|e| e.nombre == "tr").collect();
         let n_filas = filas.len();
@@ -525,7 +837,9 @@ impl Presentacion {
         for (fi, f) in filas.iter().enumerate() {
             altos.push(emu(attr_num(f, "h", 1.0).unwrap_or(0.0)));
             for (ci, c) in f.elementos().filter(|e| e.nombre == "tc").enumerate() {
-                if matches!(c.atributo("hMerge"), "1" | "true") || matches!(c.atributo("vMerge"), "1" | "true") {
+                if matches!(c.atributo("hMerge"), "1" | "true")
+                    || matches!(c.atributo("vMerge"), "1" | "true")
+                {
                     continue;
                 }
                 let mut partes: Vec<&'static str> = vec!["wholeTbl"];
@@ -567,7 +881,12 @@ impl Presentacion {
             let ancho = (xs[fin] - xs[col]).max(1.0);
             let tcpr = c.nodo.hijo("tcPr");
             let m = |k: &str, d: f32| tcpr.and_then(|p| attr_num(p, k, 1.0)).map(emu).unwrap_or(d);
-            let (mi, md, ma, mb) = (m("marL", 7.2), m("marR", 7.2), m("marT", 3.6), m("marB", 3.6));
+            let (mi, md, ma, mb) = (
+                m("marL", 7.2),
+                m("marR", 7.2),
+                m("marT", 3.6),
+                m("marB", 3.6),
+            );
             let mut negrita = None;
             let mut color_texto = None;
             for p in &c.partes {
@@ -593,9 +912,22 @@ impl Presentacion {
                     nv.def.color = color_texto;
                 }
             }
-            let cuerpo = Cuerpo { izq: Some(mi), der: Some(md), arriba: Some(ma), abajo: Some(mb), ..Default::default() };
-            let color = color_texto.or_else(|| ctx.tema.esquema("tx1", ctx.mapa)).unwrap_or(Color::NEGRO);
-            let e = Entorno { ctx, medidor: l.medidor, color, numero: l.numero };
+            let cuerpo = Cuerpo {
+                izq: Some(mi),
+                der: Some(md),
+                arriba: Some(ma),
+                abajo: Some(mb),
+                ..Default::default()
+            };
+            let color = color_texto
+                .or_else(|| ctx.tema.esquema("tx1", ctx.mapa))
+                .unwrap_or(Color::NEGRO);
+            let e = Entorno {
+                ctx,
+                medidor: l.medidor,
+                color,
+                numero: l.numero,
+            };
             let (els, alto) = match c.nodo.hijo("txBody") {
                 Some(tx) => {
                     let els = texto::maquetar(tx, ancho, 0.0, &niveles, &cuerpo, &e);
@@ -628,10 +960,18 @@ impl Presentacion {
             let propio = tcpr.and_then(|p| dml::relleno(p, ctx, None));
             let relleno = match propio {
                 Some(r) => r,
-                None => c.partes.iter().rev().find_map(|p| estilo.get(*p).and_then(|e| e.relleno.clone())),
+                None => c
+                    .partes
+                    .iter()
+                    .rev()
+                    .find_map(|p| estilo.get(*p).and_then(|e| e.relleno.clone())),
             };
             if let Some(r) = relleno {
-                fondos.push(Elemento::Rect { rect: caja, relleno: Some(r), borde: None });
+                fondos.push(Elemento::Rect {
+                    rect: caja,
+                    relleno: Some(r),
+                    borde: None,
+                });
             }
             // Anclaje vertical.
             let libre = (caja.alto - alto_texto).max(0.0);
@@ -652,7 +992,9 @@ impl Presentacion {
                 ("lnR", "right", (x0 + ancho, y0), (x0 + ancho, y1)),
             ];
             for (k, lado, a, b) in lados {
-                let propio = tcpr.and_then(|p| p.hijo(k)).and_then(|ln| dml::linea(ln, ctx, None));
+                let propio = tcpr
+                    .and_then(|p| p.hijo(k))
+                    .and_then(|ln| dml::linea(ln, ctx, None));
                 let trazo = match propio {
                     Some(t) => t,
                     None => {
@@ -671,14 +1013,22 @@ impl Presentacion {
                         } else {
                             "insideV"
                         };
-                        c.partes
-                            .iter()
-                            .rev()
-                            .find_map(|p| estilo.get(*p).and_then(|e| e.bordes.get(clave).copied().or_else(|| e.bordes.get(lado).copied())))
+                        c.partes.iter().rev().find_map(|p| {
+                            estilo.get(*p).and_then(|e| {
+                                e.bordes
+                                    .get(clave)
+                                    .copied()
+                                    .or_else(|| e.bordes.get(lado).copied())
+                            })
+                        })
                     }
                 };
                 if let Some(t) = trazo {
-                    lineas.push(Elemento::Linea { desde: a, hasta: b, trazo: t });
+                    lineas.push(Elemento::Linea {
+                        desde: a,
+                        hasta: b,
+                        trazo: t,
+                    });
                 }
             }
         }
@@ -691,33 +1041,61 @@ impl Presentacion {
     /// por defecto de PowerPoint si no esta escrito.
     fn estilo_tabla(&self, id: &str, ctx: Contexto) -> HashMap<&'static str, ParteTabla> {
         let mut m = HashMap::new();
-        let nodo = self.estilos_tabla.as_ref().and_then(|e| e.elementos().find(|s| s.atributo("styleId") == id));
-        let partes = ["wholeTbl", "band1H", "band2H", "band1V", "band2V", "firstRow", "lastRow", "firstCol", "lastCol"];
+        let nodo = self
+            .estilos_tabla
+            .as_ref()
+            .and_then(|e| e.elementos().find(|s| s.atributo("styleId") == id));
+        let partes = [
+            "wholeTbl", "band1H", "band2H", "band1V", "band2V", "firstRow", "lastRow", "firstCol",
+            "lastCol",
+        ];
         let Some(nodo) = nodo else {
             // Los estilos de PowerPoint que no van escritos en el fichero: los
             // mas comunes, aproximados con los colores del tema.
             let blanco = Color::BLANCO;
-            let a1 = ctx.tema.esquema("accent1", ctx.mapa).unwrap_or(Color::rgb(0x44, 0x72, 0xC4));
+            let a1 = ctx
+                .tema
+                .esquema("accent1", ctx.mapa)
+                .unwrap_or(Color::rgb(0x44, 0x72, 0xC4));
             let dk1 = ctx.tema.esquema("tx1", ctx.mapa).unwrap_or(Color::NEGRO);
             let tinte = |c: Color, t: f32| {
                 let m = |x: u8| (x as f32 * t + 255.0 * (1.0 - t)).round() as u8;
                 Color::rgb(m(c.r), m(c.g), m(c.b))
             };
             let todos = |t: Trazo| -> HashMap<&'static str, Trazo> {
-                ["left", "right", "top", "bottom", "insideH", "insideV"].into_iter().map(|k| (k, t)).collect()
+                ["left", "right", "top", "bottom", "insideH", "insideV"]
+                    .into_iter()
+                    .map(|k| (k, t))
+                    .collect()
             };
-            let resaltada =
-                |c: Color| ParteTabla { relleno: Some(Relleno::Solido(c)), negrita: Some(true), color_texto: Some(blanco), ..Default::default() };
+            let resaltada = |c: Color| ParteTabla {
+                relleno: Some(Relleno::Solido(c)),
+                negrita: Some(true),
+                color_texto: Some(blanco),
+                ..Default::default()
+            };
             match id {
                 // Sin estilo, sin cuadricula.
                 "{2D5ABB26-0587-4C30-8999-92F81FD0307C}" => {}
                 // Sin estilo, cuadricula de tabla.
                 "{5940675A-B579-460E-94D1-54222C63F5DA}" => {
-                    m.insert("wholeTbl", ParteTabla { bordes: todos(Trazo::solido(dk1, 1.0)), ..Default::default() });
+                    m.insert(
+                        "wholeTbl",
+                        ParteTabla {
+                            bordes: todos(Trazo::solido(dk1, 1.0)),
+                            ..Default::default()
+                        },
+                    );
                 }
                 // Estilo medio 2 (con el enfasis 1 o con el texto).
-                "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}" | "" | "{073A0DAA-6AF3-43AB-8588-CEC1D06C72B9}" => {
-                    let c = if id == "{073A0DAA-6AF3-43AB-8588-CEC1D06C72B9}" { dk1 } else { a1 };
+                "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"
+                | ""
+                | "{073A0DAA-6AF3-43AB-8588-CEC1D06C72B9}" => {
+                    let c = if id == "{073A0DAA-6AF3-43AB-8588-CEC1D06C72B9}" {
+                        dk1
+                    } else {
+                        a1
+                    };
                     // El texto del cuerpo en `dk1` del tema (sin pasar por el mapa:
                     // en un tema oscuro `tx1` seria blanco).
                     let oscuro = ctx.tema.colores.get("dk1").copied().unwrap_or(Color::NEGRO);
@@ -730,8 +1108,20 @@ impl Presentacion {
                             ..Default::default()
                         },
                     );
-                    m.insert("band1H", ParteTabla { relleno: Some(Relleno::Solido(tinte(c, 0.4))), ..Default::default() });
-                    m.insert("band1V", ParteTabla { relleno: Some(Relleno::Solido(tinte(c, 0.4))), ..Default::default() });
+                    m.insert(
+                        "band1H",
+                        ParteTabla {
+                            relleno: Some(Relleno::Solido(tinte(c, 0.4))),
+                            ..Default::default()
+                        },
+                    );
+                    m.insert(
+                        "band1V",
+                        ParteTabla {
+                            relleno: Some(Relleno::Solido(tinte(c, 0.4))),
+                            ..Default::default()
+                        },
+                    );
                     for k in ["firstRow", "lastRow", "firstCol", "lastCol"] {
                         m.insert(k, resaltada(c));
                     }
@@ -743,7 +1133,13 @@ impl Presentacion {
                     for k in ["left", "right", "top", "bottom"] {
                         b.insert(k, Trazo::solido(a1, 1.0));
                     }
-                    m.insert("wholeTbl", ParteTabla { bordes: b, ..Default::default() });
+                    m.insert(
+                        "wholeTbl",
+                        ParteTabla {
+                            bordes: b,
+                            ..Default::default()
+                        },
+                    );
                     m.insert("firstRow", resaltada(a1));
                 }
             }
@@ -758,8 +1154,10 @@ impl Presentacion {
                     "off" => Some(false),
                     _ => None,
                 };
-                pt.color_texto = tema::color_hijo(tx, ctx.tema, ctx.mapa, None)
-                    .or_else(|| tx.hijo("fontRef").and_then(|f| tema::color_hijo(f, ctx.tema, ctx.mapa, None)));
+                pt.color_texto = tema::color_hijo(tx, ctx.tema, ctx.mapa, None).or_else(|| {
+                    tx.hijo("fontRef")
+                        .and_then(|f| tema::color_hijo(f, ctx.tema, ctx.mapa, None))
+                });
             }
             if let Some(tc) = x.hijo("tcStyle") {
                 if let Some(f) = tc.hijo("fill") {
@@ -768,13 +1166,21 @@ impl Presentacion {
                     pt.relleno = tema::color_hijo(f, ctx.tema, ctx.mapa, None).map(Relleno::Solido);
                 }
                 if let Some(b) = tc.hijo("tcBdr") {
-                    for (k, lado) in
-                        [("left", "left"), ("right", "right"), ("top", "top"), ("bottom", "bottom"), ("insideH", "insideH"), ("insideV", "insideV")]
-                    {
+                    for (k, lado) in [
+                        ("left", "left"),
+                        ("right", "right"),
+                        ("top", "top"),
+                        ("bottom", "bottom"),
+                        ("insideH", "insideH"),
+                        ("insideV", "insideV"),
+                    ] {
                         let Some(l) = b.hijo(k) else { continue };
                         let trazo = match l.hijo("ln") {
                             Some(ln) => dml::linea(ln, ctx, None).flatten(),
-                            None => l.hijo("lnRef").and_then(|r| tema::color_hijo(r, ctx.tema, ctx.mapa, None)).map(|c| Trazo::solido(c, 1.0)),
+                            None => l
+                                .hijo("lnRef")
+                                .and_then(|r| tema::color_hijo(r, ctx.tema, ctx.mapa, None))
+                                .map(|c| Trazo::solido(c, 1.0)),
                         };
                         if let Some(t) = trazo {
                             pt.bordes.insert(lado, t);
@@ -872,7 +1278,10 @@ fn buscar_herencia<'a>(ph: &Nodo, previos: &[&'a Plantilla]) -> Herencia<'a> {
             norm(t) == norm(&tipo_buscado)
         };
         let encontrado = if !es_patron && !idx_buscado.is_empty() {
-            candidatos.iter().find(|(_, _, i)| *i == idx_buscado).or_else(|| candidatos.iter().find(|(_, t, _)| mismo_tipo(t)))
+            candidatos
+                .iter()
+                .find(|(_, _, i)| *i == idx_buscado)
+                .or_else(|| candidatos.iter().find(|(_, t, _)| mismo_tipo(t)))
         } else {
             candidatos.iter().find(|(_, t, _)| mismo_tipo(t))
         };
@@ -888,7 +1297,10 @@ fn buscar_herencia<'a>(ph: &Nodo, previos: &[&'a Plantilla]) -> Herencia<'a> {
         }
     }
     cadena.reverse();
-    Herencia { cadena, tipo: tipo_final }
+    Herencia {
+        cadena,
+        tipo: tipo_final,
+    }
 }
 
 /// Los marcadores de un arbol: (forma, tipo, idx).
@@ -898,19 +1310,33 @@ fn marcadores(arbol: &Nodo) -> Vec<(&Nodo, String, String)> {
         let nv = n.elementos().find(|e| e.nombre.starts_with("nv"));
         if let Some(ph) = nv.and_then(|v| v.hijo("nvPr")).and_then(|p| p.hijo("ph")) {
             let t = ph.atributo("type");
-            v.push((n, if t.is_empty() { "body".to_string() } else { t.to_string() }, ph.atributo("idx").to_string()));
+            v.push((
+                n,
+                if t.is_empty() {
+                    "body".to_string()
+                } else {
+                    t.to_string()
+                },
+                ph.atributo("idx").to_string(),
+            ));
         }
     }
     v
 }
 
 fn herencia_xfrm(h: &Herencia) -> Option<Xfrm> {
-    h.cadena.iter().rev().find_map(|n| n.hijo("spPr").and_then(|s| s.hijo("xfrm")).map(dml::xfrm))
+    h.cadena
+        .iter()
+        .rev()
+        .find_map(|n| n.hijo("spPr").and_then(|s| s.hijo("xfrm")).map(dml::xfrm))
 }
 
 /// La posicion de una forma: la suya o la de su marcador.
 fn xfrm_heredado(sppr: Option<&Nodo>, h: &Herencia, grupo: Option<Rect>) -> Option<Xfrm> {
-    let x = sppr.and_then(|s| s.hijo("xfrm")).map(dml::xfrm).or_else(|| herencia_xfrm(h))?;
+    let x = sppr
+        .and_then(|s| s.hijo("xfrm"))
+        .map(dml::xfrm)
+        .or_else(|| herencia_xfrm(h))?;
     Some(ajustar_a_grupo(x, grupo))
 }
 

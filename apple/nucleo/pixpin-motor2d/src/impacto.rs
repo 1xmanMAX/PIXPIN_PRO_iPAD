@@ -135,6 +135,14 @@ pub fn toca(e: &Elemento, p: Punto2) -> bool {
         | Figura::Flecha { puntos, .. }
         | Figura::Cota { puntos } => cerca_de_la_polilinea(puntos, p, margen),
 
+        // La nube se toca por sus festones, y por dentro si va rellena: entre
+        // los picos y la caja no hay nada que agarrar.
+        Figura::Rectangulo | Figura::Elipse if crate::nube_revision::base_de(e).is_some() => {
+            let borde = crate::nube_revision::contorno_de(e).unwrap_or_default();
+            (e.tiene_relleno() && crate::lazo::dentro_del_poligono(&borde, p))
+                || cerca_de_la_polilinea(&borde, p, margen)
+        }
+
         // La barra va con las de caja, como el rectangulo (D37): nunca
         // lleva relleno, asi que se toca por su borde.
         Figura::Rectangulo | Figura::Rombo | Figura::Mosaico { .. } | Figura::EscalaGrafica => {

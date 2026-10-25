@@ -47,17 +47,28 @@ pub fn a_xlsx(hojas: &[HojaParaVer], activa: usize) -> std::io::Result<Vec<u8>> 
 
 /// Lo mismo, con `moneda` como el simbolo del formato de moneda (el del
 /// equipo: `S/` en el Peru).
-pub fn a_xlsx_con_moneda(hojas: &[HojaParaVer], activa: usize, moneda: &str) -> std::io::Result<Vec<u8>> {
+pub fn a_xlsx_con_moneda(
+    hojas: &[HojaParaVer],
+    activa: usize,
+    moneda: &str,
+) -> std::io::Result<Vec<u8>> {
     let vacia = Tabla::default();
-    let sola = [HojaParaVer { nombre: "Hoja1", tabla: &vacia, valores: None }];
+    let sola = [HojaParaVer {
+        nombre: "Hoja1",
+        tabla: &vacia,
+        valores: None,
+    }];
     let hojas = if hojas.is_empty() { &sola[..] } else { hojas };
     let activa = activa.min(hojas.len() - 1);
     let mut estilos = Estilos::nuevos(moneda);
-    let partes: Vec<String> = hojas.iter().map(|h| hoja_xml(h.tabla, h.valores, &mut estilos)).collect();
+    let partes: Vec<String> = hojas
+        .iter()
+        .map(|h| hoja_xml(h.tabla, h.valores, &mut estilos))
+        .collect();
 
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    let op = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
+    let op =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     let mut parte = |nombre: &str, datos: &[u8]| -> std::io::Result<()> {
         zip.start_file(nombre, op).map_err(std::io::Error::other)?;
         zip.write_all(datos)
@@ -84,8 +95,15 @@ pub fn a_xlsx_con_moneda(hojas: &[HojaParaVer], activa: usize, moneda: &str) -> 
     );
     for (i, h) in hojas.iter().enumerate() {
         let n = i + 1;
-        let nombre = if h.nombre.trim().is_empty() { format!("Hoja{n}") } else { h.nombre.to_string() };
-        libro.push_str(&format!(r#"<sheet name="{}" sheetId="{n}" r:id="rId{n}"/>"#, escapar(&nombre)));
+        let nombre = if h.nombre.trim().is_empty() {
+            format!("Hoja{n}")
+        } else {
+            h.nombre.to_string()
+        };
+        libro.push_str(&format!(
+            r#"<sheet name="{}" sheetId="{n}" r:id="rId{n}"/>"#,
+            escapar(&nombre)
+        ));
         rels.push_str(&format!(
             r#"<Relationship Id="rId{n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{n}.xml"/>"#
         ));
@@ -138,16 +156,29 @@ const ID_MONEDA: u32 = 164;
 
 impl Estilos {
     fn nuevos(moneda: &str) -> Estilos {
-        Estilos { xfs: Vec::new(), moneda: moneda.to_string() }
+        Estilos {
+            xfs: Vec::new(),
+            moneda: moneda.to_string(),
+        }
     }
 
     /// El `s` de una celda con este estilo (0, el de siempre, si no tiene).
     fn de(&mut self, e: Option<&EstiloDeCelda>) -> usize {
         let Some(e) = e else { return 0 };
         let clave = ClaveXf {
-            letra: ClaveLetra { negrita: e.n, cursiva: e.k, subrayado: e.s, tachado: e.t, color: e.c.as_deref().and_then(color_rgb) },
+            letra: ClaveLetra {
+                negrita: e.n,
+                cursiva: e.k,
+                subrayado: e.s,
+                tachado: e.t,
+                color: e.c.as_deref().and_then(color_rgb),
+            },
             fondo: e.f.as_deref().and_then(color_rgb),
-            alinea: e.a.as_deref().and_then(|a| a.chars().next()).filter(|c| matches!(c, 'i' | 'c' | 'd')),
+            alinea: e
+                .a
+                .as_deref()
+                .and_then(|a| a.chars().next())
+                .filter(|c| matches!(c, 'i' | 'c' | 'd')),
             ajustar: e.w,
             numero: e.formato_numero(),
         };
@@ -176,8 +207,14 @@ impl Estilos {
         let mut fondos: Vec<&String> = self.xfs.iter().filter_map(|x| x.fondo.as_ref()).collect();
         fondos.sort();
         fondos.dedup();
-        let mut s = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#);
-        if self.xfs.iter().any(|x| x.numero == Some(FormatoNumero::Moneda)) {
+        let mut s = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
+        );
+        if self
+            .xfs
+            .iter()
+            .any(|x| x.numero == Some(FormatoNumero::Moneda))
+        {
             // `"S/" #,##0.00`: el simbolo entre comillas (las suyas, quitadas)
             // y el numero con miles y dos decimales.
             let simbolo = self.moneda.replace('"', "");
@@ -214,9 +251,16 @@ impl Estilos {
             s.push_str(&format!(r#"<fill><patternFill patternType="solid"><fgColor rgb="FF{f}"/></patternFill></fill>"#));
         }
         s.push_str(r#"</fills><borders count="1"><border/></borders>"#);
-        s.push_str(&format!(r#"<cellXfs count="{}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>"#, self.xfs.len() + 1));
+        s.push_str(&format!(
+            r#"<cellXfs count="{}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>"#,
+            self.xfs.len() + 1
+        ));
         for x in &self.xfs {
-            let fill = x.fondo.as_ref().and_then(|f| fondos.iter().position(|y| *y == f)).map_or(0, |i| i + 2);
+            let fill = x
+                .fondo
+                .as_ref()
+                .and_then(|f| fondos.iter().position(|y| *y == f))
+                .map_or(0, |i| i + 2);
             let font = letras.iter().position(|l| **l == x.letra).unwrap_or(0);
             let num = match x.numero {
                 None => 0,
@@ -225,7 +269,9 @@ impl Estilos {
                 Some(FormatoNumero::Porcentaje) => 10,
                 Some(FormatoNumero::Fecha) => 14,
             };
-            s.push_str(&format!(r#"<xf numFmtId="{num}" fontId="{font}" fillId="{fill}" borderId="0""#));
+            s.push_str(&format!(
+                r#"<xf numFmtId="{num}" fontId="{font}" fillId="{fill}" borderId="0""#
+            ));
             if num != 0 {
                 s.push_str(r#" applyNumberFormat="1""#);
             }
@@ -280,7 +326,11 @@ fn escapar(s: &str) -> String {
 /// Un numero como lo guarda Excel: el mas corto que vuelve al mismo valor,
 /// sin notacion cientifica.
 fn numero(n: f64) -> String {
-    if n.is_finite() { format!("{n}") } else { "0".into() }
+    if n.is_finite() {
+        format!("{n}")
+    } else {
+        "0".into()
+    }
 }
 
 /// La hoja de una tabla: sus anchos y sus celdas, fila a fila.
@@ -294,13 +344,23 @@ fn hoja_xml(t: &Tabla, hechos: Option<&BTreeMap<String, Valor>>, estilos: &mut E
         }
     };
     // Por filas y, dentro, por columnas: es el orden que pide SpreadsheetML.
-    let mut celdas: Vec<(Ref, &String)> = t.celdas.keys().filter_map(|k| Some((ref_de(k)?, k))).collect();
+    let mut celdas: Vec<(Ref, &String)> = t
+        .celdas
+        .keys()
+        .filter_map(|k| Some((ref_de(k)?, k)))
+        .collect();
     celdas.sort_by_key(|(r, _)| (r.fila, r.columna));
     let (columnas, filas) = t.tamano();
     let mut s = String::with_capacity(64 * celdas.len() + 512);
     s.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#);
     if columnas > 0 && filas > 0 {
-        s.push_str(&format!(r#"<dimension ref="A1:{}"/>"#, ref_a(Ref { columna: columnas - 1, fila: filas - 1 })));
+        s.push_str(&format!(
+            r#"<dimension ref="A1:{}"/>"#,
+            ref_a(Ref {
+                columna: columnas - 1,
+                fila: filas - 1
+            })
+        ));
     }
     s.push_str(&format!(
         r#"<sheetFormatPr defaultColWidth="{}" defaultRowHeight="{}" customHeight="1"/>"#,
@@ -318,7 +378,10 @@ fn hoja_xml(t: &Tabla, hechos: Option<&BTreeMap<String, Valor>>, estilos: &mut E
         s.push_str("<cols>");
         for (c, px) in &anchos {
             let n = c + 1;
-            s.push_str(&format!(r#"<col min="{n}" max="{n}" width="{}" customWidth="1"/>"#, *px as f64 / DIGITO));
+            s.push_str(&format!(
+                r#"<col min="{n}" max="{n}" width="{}" customWidth="1"/>"#,
+                *px as f64 / DIGITO
+            ));
         }
         s.push_str("</cols>");
     }
@@ -333,13 +396,23 @@ fn hoja_xml(t: &Tabla, hechos: Option<&BTreeMap<String, Valor>>, estilos: &mut E
             fila_abierta = Some(r.fila);
         }
         let estilo = estilos.de(t.estilos.get(clave));
-        let st = if estilo > 0 { format!(r#" s="{estilo}""#) } else { String::new() };
+        let st = if estilo > 0 {
+            format!(r#" s="{estilo}""#)
+        } else {
+            String::new()
+        };
         match valores.get(clave) {
-            Some(Valor::Numero(n)) => s.push_str(&format!(r#"<c r="{clave}"{st}><v>{}</v></c>"#, numero(*n))),
-            Some(Valor::Error(e)) => s.push_str(&format!(r#"<c r="{clave}"{st} t="e"><v>{}</v></c>"#, escapar(&e.to_string()))),
-            Some(Valor::Texto(texto)) if !texto.is_empty() => {
-                s.push_str(&format!(r#"<c r="{clave}"{st} t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#, escapar(texto)))
+            Some(Valor::Numero(n)) => {
+                s.push_str(&format!(r#"<c r="{clave}"{st}><v>{}</v></c>"#, numero(*n)))
             }
+            Some(Valor::Error(e)) => s.push_str(&format!(
+                r#"<c r="{clave}"{st} t="e"><v>{}</v></c>"#,
+                escapar(&e.to_string())
+            )),
+            Some(Valor::Texto(texto)) if !texto.is_empty() => s.push_str(&format!(
+                r#"<c r="{clave}"{st} t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
+                escapar(texto)
+            )),
             // Vacia pero con estilo: el fondo se ve igual.
             _ if estilo > 0 => s.push_str(&format!(r#"<c r="{clave}"{st}/>"#)),
             _ => {}
@@ -366,11 +439,32 @@ mod pruebas {
 
     fn tabla() -> Tabla {
         let mut t = Tabla::default();
-        for (k, v) in [("A1", "Concepto"), ("B1", "Importe"), ("A2", "Pan & <vino>"), ("B2", "12,5"), ("B3", "7"), ("B4", "=SUMA(B2:B3)"), ("C1", "=1/0")] {
+        for (k, v) in [
+            ("A1", "Concepto"),
+            ("B1", "Importe"),
+            ("A2", "Pan & <vino>"),
+            ("B2", "12,5"),
+            ("B3", "7"),
+            ("B4", "=SUMA(B2:B3)"),
+            ("C1", "=1/0"),
+        ] {
             t.poner(ref_de(k).unwrap(), v);
         }
-        t.estilos.insert("A1".into(), EstiloDeCelda { n: true, f: Some("#fff2cc".into()), ..Default::default() });
-        t.estilos.insert("B1".into(), EstiloDeCelda { a: Some("d".into()), ..Default::default() });
+        t.estilos.insert(
+            "A1".into(),
+            EstiloDeCelda {
+                n: true,
+                f: Some("#fff2cc".into()),
+                ..Default::default()
+            },
+        );
+        t.estilos.insert(
+            "B1".into(),
+            EstiloDeCelda {
+                a: Some("d".into()),
+                ..Default::default()
+            },
+        );
         t.anchos.insert("A".into(), 180);
         t
     }
@@ -378,20 +472,49 @@ mod pruebas {
     #[test]
     fn la_tabla_sale_con_sus_valores_calculados_y_su_formato() {
         let t = tabla();
-        let x = a_xlsx(&[HojaParaVer { nombre: "Gastos", tabla: &t, valores: None }], 0).unwrap();
+        let x = a_xlsx(
+            &[HojaParaVer {
+                nombre: "Gastos",
+                tabla: &t,
+                valores: None,
+            }],
+            0,
+        )
+        .unwrap();
         let hoja = parte(&x, "xl/worksheets/sheet1.xml");
         // La formula va con su RESULTADO: el visor no calcula.
         let total = formula::evaluar(&t, ref_de("B4").unwrap());
         assert!(matches!(total, Valor::Numero(_)), "{total:?}");
-        assert!(hoja.contains(&format!(r#"<c r="B4"><v>{}</v></c>"#, numero(match total { Valor::Numero(n) => n, _ => 0.0 }))), "{hoja}");
-        assert!(hoja.contains("Pan &amp; &lt;vino&gt;"), "el texto se escapa");
-        assert!(hoja.contains(r#"<c r="C1" t="e">"#), "un error es un error, no un texto");
-        assert!(hoja.contains(r#"<col min="1" max="1" width=""#), "el ancho de la A");
+        assert!(
+            hoja.contains(&format!(
+                r#"<c r="B4"><v>{}</v></c>"#,
+                numero(match total {
+                    Valor::Numero(n) => n,
+                    _ => 0.0,
+                })
+            )),
+            "{hoja}"
+        );
+        assert!(
+            hoja.contains("Pan &amp; &lt;vino&gt;"),
+            "el texto se escapa"
+        );
+        assert!(
+            hoja.contains(r#"<c r="C1" t="e">"#),
+            "un error es un error, no un texto"
+        );
+        assert!(
+            hoja.contains(r#"<col min="1" max="1" width=""#),
+            "el ancho de la A"
+        );
         // Las filas en orden y cada una una vez.
         assert!(hoja.find(r#"<row r="1">"#).unwrap() < hoja.find(r#"<row r="2">"#).unwrap());
         assert_eq!(hoja.matches(r#"<row r="1">"#).count(), 1);
         let estilos = parte(&x, "xl/styles.xml");
-        assert!(estilos.contains(r#"<fgColor rgb="FFFFF2CC"/>"#), "{estilos}");
+        assert!(
+            estilos.contains(r#"<fgColor rgb="FFFFF2CC"/>"#),
+            "{estilos}"
+        );
         assert!(estilos.contains(r#"horizontal="right""#));
         let libro = parte(&x, "xl/workbook.xml");
         assert!(libro.contains(r#"name="Gastos""#));
@@ -401,10 +524,31 @@ mod pruebas {
     fn varias_hojas_con_la_activa_y_sin_hojas_una_vacia() {
         let t = tabla();
         let otra = Tabla::default();
-        let x = a_xlsx(&[HojaParaVer { nombre: "A", tabla: &t, valores: None }, HojaParaVer { nombre: "", tabla: &otra, valores: None }], 7).unwrap();
+        let x = a_xlsx(
+            &[
+                HojaParaVer {
+                    nombre: "A",
+                    tabla: &t,
+                    valores: None,
+                },
+                HojaParaVer {
+                    nombre: "",
+                    tabla: &otra,
+                    valores: None,
+                },
+            ],
+            7,
+        )
+        .unwrap();
         let libro = parte(&x, "xl/workbook.xml");
-        assert!(libro.contains(r#"activeTab="1""#), "la activa se acota a las que hay");
-        assert!(libro.contains(r#"name="Hoja2""#), "una hoja sin nombre se llama como en Excel");
+        assert!(
+            libro.contains(r#"activeTab="1""#),
+            "la activa se acota a las que hay"
+        );
+        assert!(
+            libro.contains(r#"name="Hoja2""#),
+            "una hoja sin nombre se llama como en Excel"
+        );
         parte(&x, "xl/worksheets/sheet2.xml");
         // Caso negativo: sin hojas no sale un libro roto, sale una vacia.
         let x = a_xlsx(&[], 0).unwrap();
@@ -420,9 +564,18 @@ mod pruebas {
         assert_eq!(escapar("a\u{1}b\tc\"d"), "ab\tc&quot;d");
         let mut e = Estilos::nuevos("$");
         // Un estilo que no cambia nada que se vea no gasta un formato.
-        assert_eq!(e.de(Some(&EstiloDeCelda { e: true, ..Default::default() })), 0);
+        assert_eq!(
+            e.de(Some(&EstiloDeCelda {
+                e: true,
+                ..Default::default()
+            })),
+            0
+        );
         assert_eq!(e.de(None), 0);
-        let b = EstiloDeCelda { n: true, ..Default::default() };
+        let b = EstiloDeCelda {
+            n: true,
+            ..Default::default()
+        };
         assert_eq!(e.de(Some(&b)), 1);
         assert_eq!(e.de(Some(&b)), 1, "el mismo formato se reutiliza");
     }
@@ -451,26 +604,52 @@ mod pruebas_formato {
             f(&mut e);
             e
         };
-        t.estilos.insert("A1".into(), est(|e| {
-            e.k = true;
-            e.s = true;
-            e.t = true;
-            e.c = Some("#c00000".into());
-        }));
-        t.estilos.insert("B1".into(), est(|e| e.nf = Some("moneda".into())));
-        t.estilos.insert("C1".into(), est(|e| {
-            e.nf = Some("porcentaje".into());
-            e.w = true;
-        }));
+        t.estilos.insert(
+            "A1".into(),
+            est(|e| {
+                e.k = true;
+                e.s = true;
+                e.t = true;
+                e.c = Some("#c00000".into());
+            }),
+        );
+        t.estilos
+            .insert("B1".into(), est(|e| e.nf = Some("moneda".into())));
+        t.estilos.insert(
+            "C1".into(),
+            est(|e| {
+                e.nf = Some("porcentaje".into());
+                e.w = true;
+            }),
+        );
         // Caso negativo: un formato de numero que no se conoce se ve General.
-        t.estilos.insert("D1".into(), est(|e| e.nf = Some("rarisimo".into())));
-        let x = a_xlsx_con_moneda(&[HojaParaVer { nombre: "H", tabla: &t, valores: None }], 0, "S/").unwrap();
+        t.estilos
+            .insert("D1".into(), est(|e| e.nf = Some("rarisimo".into())));
+        let x = a_xlsx_con_moneda(
+            &[HojaParaVer {
+                nombre: "H",
+                tabla: &t,
+                valores: None,
+            }],
+            0,
+            "S/",
+        )
+        .unwrap();
         let estilos = parte(&x, "xl/styles.xml");
-        assert!(estilos.contains("<font><i/><strike/><u/><sz val=\"11\"/><color rgb=\"FFC00000\"/>"), "{estilos}");
-        assert!(estilos.contains(r#"formatCode="&quot;S/&quot; #,##0.00"#), "{estilos}");
+        assert!(
+            estilos.contains("<font><i/><strike/><u/><sz val=\"11\"/><color rgb=\"FFC00000\"/>"),
+            "{estilos}"
+        );
+        assert!(
+            estilos.contains(r#"formatCode="&quot;S/&quot; #,##0.00"#),
+            "{estilos}"
+        );
         assert!(estilos.contains(r#"numFmtId="164""#));
         assert!(estilos.contains(r#"numFmtId="10""#) && estilos.contains(r#"wrapText="1""#));
         let hoja = parte(&x, "xl/worksheets/sheet1.xml");
-        assert!(hoja.contains(r#"<c r="D1"><v>"#), "sin formato que se vea, sin estilo: {hoja}");
+        assert!(
+            hoja.contains(r#"<c r="D1"><v>"#),
+            "sin formato que se vea, sin estilo: {hoja}"
+        );
     }
 }

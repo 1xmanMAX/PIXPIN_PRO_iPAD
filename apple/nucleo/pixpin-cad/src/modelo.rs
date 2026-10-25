@@ -185,8 +185,13 @@ impl Modelo {
         let paso = (n / 40_000).max(1);
         let mut out = self.caja;
         for k in 0..2 {
-            let mut v: Vec<f32> =
-                self.vertices.iter().step_by(paso).map(|p| if k == 0 { p.x } else { p.y }).filter(|x| x.is_finite()).collect();
+            let mut v: Vec<f32> = self
+                .vertices
+                .iter()
+                .step_by(paso)
+                .map(|p| if k == 0 { p.x } else { p.y })
+                .filter(|x| x.is_finite())
+                .collect();
             if v.len() < 100 {
                 continue;
             }
@@ -200,7 +205,11 @@ impl Modelo {
     }
 
     pub fn vacio(&self) -> bool {
-        self.lineas.is_empty() && self.triangulos.is_empty() && self.triangulos_trama.is_empty() && self.letras.is_empty() && self.arcos.is_empty()
+        self.lineas.is_empty()
+            && self.triangulos.is_empty()
+            && self.triangulos_trama.is_empty()
+            && self.letras.is_empty()
+            && self.arcos.is_empty()
     }
 
     /// Lo que ocupara en la tarjeta, en bytes (aproximado).
@@ -237,6 +246,10 @@ pub struct FamiliaPlano {
     pub trazos: Vec<f64>,
 }
 
+/// Una trama a medias: su centro (aun en f64), su caja, su angulo y sus
+/// tramos de puntos y triangulos.
+type TramaPendiente = ([f64; 2], [f64; 4], f64, u32, u32);
+
 /// Junta lo dibujado (en coordenadas del plano, `f64`) y al final lo ordena
 /// en un [`Modelo`].
 #[derive(Default)]
@@ -251,7 +264,7 @@ pub struct Constructor {
     triangulos_trama: Vec<u32>,
     piezas_tr: Vec<Pieza>,
     /// Tramas con su centro aun en f64.
-    tramas: Vec<([f64; 2], [f64; 4], f64, u32, u32)>,
+    tramas: Vec<TramaPendiente>,
     familias: Vec<Familia>,
     malla_letras: Vec<[f32; 2]>,
     glifos: Vec<[u32; 2]>,
@@ -448,8 +461,19 @@ impl Constructor {
     /// Un sombreado con patron: su contorno relleno (malla en el plano),
     /// la matriz del plano al sistema del sombreado (`al_plano`: 2x2 + punto,
     /// la que lleva del sistema del sombreado al plano) y sus familias.
-    pub fn trama(&mut self, puntos: &[[f64; 2]], indices: &[u32], color: u32, al_plano: [f64; 6], familias: &[FamiliaPlano]) {
-        if indices.len() < 3 || familias.is_empty() || self.lleno() || puntos.iter().any(|p| !valido(*p)) {
+    pub fn trama(
+        &mut self,
+        puntos: &[[f64; 2]],
+        indices: &[u32],
+        color: u32,
+        al_plano: [f64; 6],
+        familias: &[FamiliaPlano],
+    ) {
+        if indices.len() < 3
+            || familias.is_empty()
+            || self.lleno()
+            || puntos.iter().any(|p| !valido(*p))
+        {
             return;
         }
         let mut caja = None;
@@ -484,7 +508,10 @@ impl Constructor {
             // resta en la tarjeta son numeros pequenos.
             let (vx, vy) = (centro_local[0] - f.base[0], centro_local[1] - f.base[1]);
             let k = ((vx * n[0] + vy * n[1]) / paso).round();
-            let base = [f.base[0] + k * f.desplazamiento[0] - centro_local[0], f.base[1] + k * f.desplazamiento[1] - centro_local[1]];
+            let base = [
+                f.base[0] + k * f.desplazamiento[0] - centro_local[0],
+                f.base[1] + k * f.desplazamiento[1] - centro_local[1],
+            ];
             let mut trazos = [0f32; 8];
             let nt = f.trazos.len().min(8);
             for (i, t) in f.trazos.iter().take(8).enumerate() {
@@ -533,7 +560,12 @@ impl Constructor {
         if !valido(centro) || !(radio > 0.0) || !radio.is_finite() || self.lleno() {
             return;
         }
-        let caja = [centro[0] - radio, centro[1] - radio, centro[0] + radio, centro[1] + radio];
+        let caja = [
+            centro[0] - radio,
+            centro[1] - radio,
+            centro[0] + radio,
+            centro[1] + radio,
+        ];
         self.sumar_caja(caja);
         let i = self.arcos.len() as u32;
         self.arcos.push((centro, radio, inicio, barrido, color));
@@ -548,7 +580,13 @@ impl Constructor {
 
     /// El numero de una letra distinta (fuente y caracter); la rellena con
     /// `malla` la primera vez. `rayas`: la malla son pares de puntos.
-    pub fn glifo(&mut self, fuente: u32, ch: char, rayas: bool, malla: impl FnOnce() -> Vec<[f32; 2]>) -> u32 {
+    pub fn glifo(
+        &mut self,
+        fuente: u32,
+        ch: char,
+        rayas: bool,
+        malla: impl FnOnce() -> Vec<[f32; 2]>,
+    ) -> u32 {
         if let Some(g) = self.glifo_de.get(&(fuente, ch)) {
             return *g;
         }
@@ -556,7 +594,10 @@ impl Constructor {
         let desde = self.malla_letras.len() as u32;
         self.malla_letras.extend_from_slice(&m);
         let g = self.glifos.len() as u32;
-        self.glifos.push([desde, m.len() as u32 | if rayas { GLIFO_DE_RAYAS } else { 0 }]);
+        self.glifos.push([
+            desde,
+            m.len() as u32 | if rayas { GLIFO_DE_RAYAS } else { 0 },
+        ]);
         self.glifo_de.insert((fuente, ch), g);
         g
     }
@@ -564,7 +605,9 @@ impl Constructor {
     /// Una letra puesta: `pos` en el plano y `m` (2x2) de em al plano.
     /// `alto` es el del texto, para no dibujarla si de lejos no se ve.
     pub fn letra(&mut self, glifo: u32, pos: [f64; 2], m: [f64; 4], color: u32, alto: f64) {
-        let Some(&[_, n]) = self.glifos.get(glifo as usize) else { return };
+        let Some(&[_, n]) = self.glifos.get(glifo as usize) else {
+            return;
+        };
         let rayas = n & GLIFO_DE_RAYAS;
         let n = n & !GLIFO_DE_RAYAS;
         if n == 0 || !valido(pos) || self.lleno() {
@@ -573,12 +616,20 @@ impl Constructor {
         // La caja de la letra: su em cuadrado llevado al plano.
         let mut caja = None;
         for (x, y) in [(0.0, -0.25), (1.0, -0.25), (0.0, 1.0), (1.0, 1.0)] {
-            crecer(&mut caja, [pos[0] + m[0] * x + m[1] * y, pos[1] + m[2] * x + m[3] * y]);
+            crecer(
+                &mut caja,
+                [pos[0] + m[0] * x + m[1] * y, pos[1] + m[2] * x + m[3] * y],
+            );
         }
         let caja = caja.unwrap_or_default();
         self.sumar_caja(caja);
         let i = self.letras.len() as u32;
-        self.letras.push((pos, [m[0] as f32, m[1] as f32, m[2] as f32, m[3] as f32], color, glifo));
+        self.letras.push((
+            pos,
+            [m[0] as f32, m[1] as f32, m[2] as f32, m[3] as f32],
+            color,
+            glifo,
+        ));
         self.piezas_le.push(Pieza {
             desde: i,
             cuantos: 1,
@@ -620,8 +671,15 @@ impl Constructor {
         // Ordena las piezas por (nivel de mayor a menor, celda, clase) y
         // devuelve el nuevo orden de sus trozos y los tramos.
         let ordenar = |piezas: Vec<Pieza>| -> (Vec<(u32, u32)>, Vec<Tramo>) {
-            let mut piezas: Vec<(i32, u32, Pieza)> = piezas.into_iter().map(|p| (p.nivel, celda(&p.caja), p)).collect();
-            piezas.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.clase.cmp(&b.2.clase)));
+            let mut piezas: Vec<(i32, u32, Pieza)> = piezas
+                .into_iter()
+                .map(|p| (p.nivel, celda(&p.caja), p))
+                .collect();
+            piezas.sort_by(|a, b| {
+                b.0.cmp(&a.0)
+                    .then(a.1.cmp(&b.1))
+                    .then(a.2.clase.cmp(&b.2.clase))
+            });
             let mut orden = Vec::with_capacity(piezas.len());
             let mut tramos: Vec<Tramo> = Vec::new();
             let mut actual: Option<(i32, u32, Tramo)> = None;
@@ -632,7 +690,12 @@ impl Constructor {
                 match &mut actual {
                     Some((n, cc, t)) if *n == nivel && *cc == c && t.clase == p.clase => {
                         t.cuantos += p.cuantos;
-                        t.caja = [t.caja[0].min(pc[0]), t.caja[1].min(pc[1]), t.caja[2].max(pc[2]), t.caja[3].max(pc[3])];
+                        t.caja = [
+                            t.caja[0].min(pc[0]),
+                            t.caja[1].min(pc[1]),
+                            t.caja[2].max(pc[2]),
+                            t.caja[3].max(pc[3]),
+                        ];
                     }
                     _ => {
                         if let Some((_, _, t)) = actual.take() {
@@ -786,7 +849,11 @@ impl Palabras for Vertice {
         v.extend([f(self.x), f(self.y), self.color]);
     }
     fn tomar(p: &[u32]) -> Self {
-        Vertice { x: g(p[0]), y: g(p[1]), color: p[2] }
+        Vertice {
+            x: g(p[0]),
+            y: g(p[1]),
+            color: p[2],
+        }
     }
 }
 impl Palabras for VerticeTrama {
@@ -795,7 +862,12 @@ impl Palabras for VerticeTrama {
         v.extend([f(self.x), f(self.y), self.color, self.trama]);
     }
     fn tomar(p: &[u32]) -> Self {
-        VerticeTrama { x: g(p[0]), y: g(p[1]), color: p[2], trama: p[3] }
+        VerticeTrama {
+            x: g(p[0]),
+            y: g(p[1]),
+            color: p[2],
+            trama: p[3],
+        }
     }
 }
 impl Palabras for Trama {
@@ -818,7 +890,16 @@ impl Palabras for Trama {
 impl Palabras for Familia {
     const N: usize = 16;
     fn poner(&self, v: &mut Vec<u32>) {
-        v.extend([f(self.base[0]), f(self.base[1]), f(self.dir[0]), f(self.dir[1]), f(self.paso), f(self.corrimiento), f(self.largo), self.n]);
+        v.extend([
+            f(self.base[0]),
+            f(self.base[1]),
+            f(self.dir[0]),
+            f(self.dir[1]),
+            f(self.paso),
+            f(self.corrimiento),
+            f(self.largo),
+            self.n,
+        ]);
         v.extend(self.trazos.map(f));
     }
     fn tomar(p: &[u32]) -> Self {
@@ -856,7 +937,16 @@ impl Palabras for Letra {
 impl Palabras for Arco {
     const N: usize = 8;
     fn poner(&self, v: &mut Vec<u32>) {
-        v.extend([f(self.centro[0]), f(self.centro[1]), f(self.radio), f(self.inicio), f(self.barrido), self.color, 0, 0]);
+        v.extend([
+            f(self.centro[0]),
+            f(self.centro[1]),
+            f(self.radio),
+            f(self.inicio),
+            f(self.barrido),
+            self.color,
+            0,
+            0,
+        ]);
     }
     fn tomar(p: &[u32]) -> Self {
         Arco {
@@ -946,8 +1036,14 @@ impl Modelo {
     /// mismo plano es leer esto, sin volver a pasar por el DWG.
     pub fn a_bytes(&self) -> Vec<u8> {
         let mut w: Vec<u32> = Vec::with_capacity(self.bytes_gpu() / 4 + 64);
-        w.extend([self.origen[0].to_bits() as u32, (self.origen[0].to_bits() >> 32) as u32]);
-        w.extend([self.origen[1].to_bits() as u32, (self.origen[1].to_bits() >> 32) as u32]);
+        w.extend([
+            self.origen[0].to_bits() as u32,
+            (self.origen[0].to_bits() >> 32) as u32,
+        ]);
+        w.extend([
+            self.origen[1].to_bits() as u32,
+            (self.origen[1].to_bits() >> 32) as u32,
+        ]);
         w.extend(self.caja.map(f));
         poner_lista(&mut w, &self.vertices);
         poner_lista(&mut w, &self.lineas);
@@ -989,7 +1085,10 @@ impl Modelo {
         if b.len() < 8 || &b[..8] != MAGIA || (b.len() - 8) % 4 != 0 {
             return None;
         }
-        let w: Vec<u32> = b[8..].chunks_exact(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
+        let w: Vec<u32> = b[8..]
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
         let mut r = Lector { p: &w, i: 0 };
         let o0 = f64::from_bits(r.uno()? as u64 | (r.uno()? as u64) << 32);
         let o1 = f64::from_bits(r.uno()? as u64 | (r.uno()? as u64) << 32);
@@ -1036,14 +1135,28 @@ impl Modelo {
     pub fn valido(&self) -> bool {
         let nv = self.vertices.len() as u32;
         let nt = self.vertices_trama.len() as u32;
-        let ok_tramos = |t: &[Tramo], n: usize| t.iter().all(|t| (t.desde as usize + t.cuantos as usize) <= n);
+        let ok_tramos = |t: &[Tramo], n: usize| {
+            t.iter()
+                .all(|t| (t.desde as usize + t.cuantos as usize) <= n)
+        };
         self.lineas.iter().all(|&i| i == CORTE || i < nv)
             && self.triangulos.iter().all(|&i| i < nv)
             && self.triangulos_trama.iter().all(|&i| i < nt)
-            && self.vertices_trama.iter().all(|v| (v.trama as usize) < self.tramas.len())
-            && self.tramas.iter().all(|t| (t.desde as usize + t.cuantas as usize) <= self.familias.len())
-            && self.glifos.iter().all(|g| (g[0] as usize + (g[1] & !GLIFO_DE_RAYAS) as usize) <= self.malla_letras.len())
-            && self.letras.iter().all(|l| (l.glifo as usize) < self.glifos.len())
+            && self
+                .vertices_trama
+                .iter()
+                .all(|v| (v.trama as usize) < self.tramas.len())
+            && self
+                .tramas
+                .iter()
+                .all(|t| (t.desde as usize + t.cuantas as usize) <= self.familias.len())
+            && self.glifos.iter().all(|g| {
+                (g[0] as usize + (g[1] & !GLIFO_DE_RAYAS) as usize) <= self.malla_letras.len()
+            })
+            && self
+                .letras
+                .iter()
+                .all(|l| (l.glifo as usize) < self.glifos.len())
             && ok_tramos(&self.tramos_lineas, self.lineas.len())
             && ok_tramos(&self.tramos_triangulos, self.triangulos.len())
             && ok_tramos(&self.tramos_trama, self.triangulos_trama.len())
@@ -1066,10 +1179,18 @@ mod pruebas {
             let y = -35_000.0 + (i / 20) as f64 * 40.0;
             c.polilinea(&[[x, y], [x + 50.0, y + 20.0]], 0xff00_00ff, None);
         }
-        c.polilinea(&[[170_600.0, 35_000.0], [170_700.0, 35_200.0]], 0xff00_00ff, None);
+        c.polilinea(
+            &[[170_600.0, 35_000.0], [170_700.0, 35_200.0]],
+            0xff00_00ff,
+            None,
+        );
         let m = c.terminar();
         let u = m.caja_util();
-        assert!(u[2] - u[0] < 3_000.0 && u[3] - u[1] < 3_000.0, "{u:?} de {:?}", m.caja);
+        assert!(
+            u[2] - u[0] < 3_000.0 && u[3] - u[1] < 3_000.0,
+            "{u:?} de {:?}",
+            m.caja
+        );
         // Caso negativo: un plano normal (pocos puntos) se encuadra entero.
         let mut c = Constructor::nuevo();
         c.polilinea(&[[0.0, 0.0], [100.0, 50.0]], 0xff00_00ff, None);
@@ -1093,27 +1214,42 @@ mod pruebas {
         let g = c.glifo(0, 'J', false, || vec![[0.0, 0.0], [0.5, 0.7], [0.1, 0.0]]);
         let letra = [378_979.965_3, 8_285_059.720_7];
         c.letra(g, letra, [0.92, 0.016, -0.016, 0.92], 0xffff_ffff, 0.66);
-        let suelto = [[758_222.917, 16_570_059.798], [758_223.025, 16_570_059.798], [758_223.025, 16_570_059.690]];
+        let suelto = [
+            [758_222.917, 16_570_059.798],
+            [758_223.025, 16_570_059.798],
+            [758_223.025, 16_570_059.690],
+        ];
         c.polilinea(&suelto, 0xff00_00ff, None);
         let m = c.terminar();
         // La causa: con el origen en el centro de la caja, un f32 solo
         // distingue medio metro en el plano.
         let medio = [(x0 + suelto[0][0]) / 2.0, (y0 + suelto[0][1]) / 2.0];
-        let viejo = puntos.iter().map(|p| (((p[1] - medio[1]) as f32) as f64 + medio[1] - p[1]).abs()).fold(0.0, f64::max);
+        let viejo = puntos
+            .iter()
+            .map(|p| (((p[1] - medio[1]) as f32) as f64 + medio[1] - p[1]).abs())
+            .fold(0.0, f64::max);
         assert!(viejo > 0.1, "{viejo}");
         // Con el origen en lo que importa, cada vertice vuelve a su sitio.
         let mut peor = 0.0f64;
         for (v, p) in m.vertices.iter().zip(puntos.iter()) {
-            peor = peor.max((v.x as f64 + m.origen[0] - p[0]).abs()).max((v.y as f64 + m.origen[1] - p[1]).abs());
+            peor = peor
+                .max((v.x as f64 + m.origen[0] - p[0]).abs())
+                .max((v.y as f64 + m.origen[1] - p[1]).abs());
         }
         assert!(peor < 1e-3, "error de {peor} m");
         let l = m.letras[0];
-        assert!((l.pos[0] as f64 + m.origen[0] - letra[0]).abs() < 1e-3 && (l.pos[1] as f64 + m.origen[1] - letra[1]).abs() < 1e-3);
+        assert!(
+            (l.pos[0] as f64 + m.origen[0] - letra[0]).abs() < 1e-3
+                && (l.pos[1] as f64 + m.origen[1] - letra[1]).abs() < 1e-3
+        );
         // Caso negativo: lo suelto no se pierde (solo va menos fino) y la
         // caja lo sigue contando.
         assert_eq!(m.vertices.len(), puntos.len() + suelto.len());
         let s = m.vertices[puntos.len()];
-        assert!((s.x as f64 + m.origen[0] - suelto[0][0]).abs() < 1.0 && (s.y as f64 + m.origen[1] - suelto[0][1]).abs() < 1.0);
+        assert!(
+            (s.x as f64 + m.origen[0] - suelto[0][0]).abs() < 1.0
+                && (s.y as f64 + m.origen[1] - suelto[0][1]).abs() < 1.0
+        );
         assert!(m.caja[3] as f64 + m.origen[1] > 16_000_000.0);
         // Y la rejilla reparte el plano en celdas (con la caja entera, todo
         // caia en una y se dibujaba siempre entero).
@@ -1130,11 +1266,18 @@ mod pruebas {
             &[0, 1, 2],
             0xff00ffff,
             [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            &[FamiliaPlano { angulo: 0.0, base: [0.0, 0.0], desplazamiento: [0.0, 1.0], trazos: vec![] }],
+            &[FamiliaPlano {
+                angulo: 0.0,
+                base: [0.0, 0.0],
+                desplazamiento: [0.0, 1.0],
+                trazos: vec![],
+            }],
         );
         let g = c.glifo(0, 'A', false, || vec![[0.0, 0.0], [0.5, 1.0], [1.0, 0.0]]);
         assert_eq!(c.glifo(0, 'A', false, || panic!("ya estaba")), g);
-        let r = c.glifo(1, 'L', true, || vec![[0.0, 1.0], [0.0, 0.0], [0.0, 0.0], [0.5, 0.0]]);
+        let r = c.glifo(1, 'L', true, || {
+            vec![[0.0, 1.0], [0.0, 0.0], [0.0, 0.0], [0.5, 0.0]]
+        });
         c.letra(r, [6.0, 5.0], [2.0, 0.0, 0.0, 2.0], 0xffffffff, 2.0);
         c.arco([3.0, 3.0], 2.0, 0.0, std::f64::consts::TAU, 0xff0000ff);
         c.unidades = 6;
@@ -1152,10 +1295,21 @@ mod pruebas {
         assert_eq!(m.tramos_lineas[0].caja, [-500.0, -5.0, 500.0, -5.0]);
         assert_eq!(m.lineas.iter().filter(|i| **i == CORTE).count(), 2);
         assert_eq!(m.triangulos.len(), 3);
-        assert_eq!((m.tramas.len(), m.familias.len(), m.triangulos_trama.len()), (1, 1, 3));
+        assert_eq!(
+            (m.tramas.len(), m.familias.len(), m.triangulos_trama.len()),
+            (1, 1, 3)
+        );
         assert_eq!((m.glifos.len(), m.letras.len()), (2, 2));
-        assert!(m.tramos_letras.iter().any(|t| t.clase & GLIFO_DE_RAYAS != 0));
-        assert!(m.tramos_letras.iter().any(|t| t.clase & GLIFO_DE_RAYAS == 0));
+        assert!(
+            m.tramos_letras
+                .iter()
+                .any(|t| t.clase & GLIFO_DE_RAYAS != 0)
+        );
+        assert!(
+            m.tramos_letras
+                .iter()
+                .any(|t| t.clase & GLIFO_DE_RAYAS == 0)
+        );
         assert_eq!((m.arcos.len(), m.unidades), (1, 6));
         assert!(m.valido());
         // Casos negativos: lo que no es un numero no entra, y una linea de
@@ -1174,10 +1328,19 @@ mod pruebas {
             &[0, 1, 2],
             0,
             [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            &[FamiliaPlano { angulo: 0.0, base: [0.0, 0.3], desplazamiento: [0.0, 1.0], trazos: vec![1.0, -1.0] }],
+            &[FamiliaPlano {
+                angulo: 0.0,
+                base: [0.0, 0.3],
+                desplazamiento: [0.0, 1.0],
+                trazos: vec![1.0, -1.0],
+            }],
         );
         let m = c.terminar();
-        assert!(m.familias[0].base[1].abs() <= 0.5 + 1e-6, "{:?}", m.familias[0]);
+        assert!(
+            m.familias[0].base[1].abs() <= 0.5 + 1e-6,
+            "{:?}",
+            m.familias[0]
+        );
         assert_eq!(m.familias[0].largo, 2.0);
     }
 

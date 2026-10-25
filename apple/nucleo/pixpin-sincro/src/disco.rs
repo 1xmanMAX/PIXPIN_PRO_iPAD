@@ -1320,9 +1320,11 @@ pub fn alcance_de<D: Disco + ?Sized>(d: &D, chat: &str) -> io::Result<Vec<(Strin
     let mut salida: Vec<(String, String)> = Vec::new();
     let poner = |rel: Option<String>, etiqueta: &str, salida: &mut Vec<(String, String)>| {
         let Some(rel) = rel else { return };
-        // Los marcadores de un lienzo, con el (`marcasJuntoA`, v0.96).
+        // Los marcadores de un lienzo, con el (`marcasJuntoA`, v0.96), y la
+        // vista de cada uno (25-oct-2026).
         let marcas = crate::anotado::marcas_junto_a(&rel);
-        for r in std::iter::once(rel).chain(marcas) {
+        let vistas = crate::anotado::vistas_junto_a(&rel);
+        for r in std::iter::once(rel).chain(marcas).chain(vistas) {
             if salida.iter().any(|(x, _)| *x == r) || !permitida(&r) {
                 continue;
             }

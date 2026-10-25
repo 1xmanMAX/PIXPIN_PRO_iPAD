@@ -46,21 +46,56 @@ struct Maquina<'a> {
 
 /// Maqueta un `m:oMath` a `tam` puntos.
 pub fn formula(n: &Nodo, tam: f32, color: Color, en_linea: bool, medidor: &dyn Medidor) -> Objeto {
-    let m = Maquina { medidor, color, en_linea };
+    let m = Maquina {
+        medidor,
+        color,
+        en_linea,
+    };
     let c = m.fila(n, tam);
     let alto = c.asc.max(tam * 0.7);
     let bajo = c.desc.max(tam * 0.2);
     let ancho = c.ancho;
-    Objeto { ancho, alto, bajo, elementos: c.mover(0.0, alto) }
+    Objeto {
+        ancho,
+        alto,
+        bajo,
+        elementos: c.mover(0.0, alto),
+    }
 }
 
 fn es_operador(c: char) -> bool {
-    matches!(c, '=' | '<' | '>' | '≤' | '≥' | '≈' | '≠' | '+' | '−' | '±' | '×' | '·' | '÷' | '→' | '⇒' | '∈' | '≡' | '∼' | '≅' | '∝')
+    matches!(
+        c,
+        '=' | '<'
+            | '>'
+            | '≤'
+            | '≥'
+            | '≈'
+            | '≠'
+            | '+'
+            | '−'
+            | '±'
+            | '×'
+            | '·'
+            | '÷'
+            | '→'
+            | '⇒'
+            | '∈'
+            | '≡'
+            | '∼'
+            | '≅'
+            | '∝'
+    )
 }
 
 impl Maquina<'_> {
     fn letra(&self, tam: f32, cursiva: bool, negrita: bool) -> Letra {
-        Letra { familia: Arc::from(LETRA), tam, negrita, cursiva }
+        Letra {
+            familia: Arc::from(LETRA),
+            tam,
+            negrita,
+            cursiva,
+        }
     }
 
     /// Un texto suelto.
@@ -93,11 +128,40 @@ impl Maquina<'_> {
         let con_rabo = s.chars().any(|c| {
             matches!(
                 c,
-                'g' | 'j' | 'p' | 'q' | 'y' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | ',' | ';' | 'β' | 'γ' | 'μ' | 'ρ' | 'φ' | 'ψ' | '∫' | '∑'
+                'g' | 'j'
+                    | 'p'
+                    | 'q'
+                    | 'y'
+                    | '('
+                    | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '|'
+                    | ','
+                    | ';'
+                    | 'β'
+                    | 'γ'
+                    | 'μ'
+                    | 'ρ'
+                    | 'φ'
+                    | 'ψ'
+                    | '∫'
+                    | '∑'
             )
         });
-        let desc = if con_rabo { m.descenso.min(tam * 0.22) } else { tam * 0.05 };
-        Caja { ancho, asc: m.ascenso.min(tam * 0.75), desc, els: vec![Elemento::Texto(t)] }
+        let desc = if con_rabo {
+            m.descenso.min(tam * 0.22)
+        } else {
+            tam * 0.05
+        };
+        Caja {
+            ancho,
+            asc: m.ascenso.min(tam * 0.75),
+            desc,
+            els: vec![Elemento::Texto(t)],
+        }
     }
 
     /// Pone cajas una detras de otra.
@@ -115,12 +179,18 @@ impl Maquina<'_> {
 
     /// Los hijos de un nodo, en fila.
     fn fila(&self, n: &Nodo, tam: f32) -> Caja {
-        let cajas = n.elementos().filter(|e| !e.nombre.ends_with("Pr")).map(|e| self.elemento(e, tam)).collect();
+        let cajas = n
+            .elementos()
+            .filter(|e| !e.nombre.ends_with("Pr"))
+            .map(|e| self.elemento(e, tam))
+            .collect();
         self.juntar(cajas)
     }
 
     fn hijo(&self, n: &Nodo, nombre: &str, tam: f32) -> Caja {
-        n.hijo(nombre).map(|h| self.fila(h, tam)).unwrap_or_default()
+        n.hijo(nombre)
+            .map(|h| self.fila(h, tam))
+            .unwrap_or_default()
     }
 
     fn propiedad<'n>(n: &'n Nodo, pr: &str, nombre: &str) -> Option<&'n str> {
@@ -138,7 +208,10 @@ impl Maquina<'_> {
             "nary" => self.nario(n, tam),
             "func" => {
                 let nombre = self.hijo(n, "fName", tam);
-                let esp = Caja { ancho: tam * 0.17, ..Default::default() };
+                let esp = Caja {
+                    ancho: tam * 0.17,
+                    ..Default::default()
+                };
                 let arg = self.hijo(n, "e", tam);
                 self.juntar(vec![nombre, esp, arg])
             }
@@ -159,7 +232,12 @@ impl Maquina<'_> {
                 // El acento (casi siempre una flecha o un gorro, que se
                 // dibujan a media altura de la letra) justo encima.
                 let asc = e.asc + tam * 0.25;
-                let mut c = Caja { ancho: e.ancho, asc, desc: e.desc, els: Vec::new() };
+                let mut c = Caja {
+                    ancho: e.ancho,
+                    asc,
+                    desc: e.desc,
+                    els: Vec::new(),
+                };
                 c.els.extend(a.mover(x, -e.asc + tam * 0.1));
                 c.els.extend(e.els);
                 c
@@ -168,9 +246,17 @@ impl Maquina<'_> {
                 let e = self.hijo(n, "e", tam);
                 let abajo = Self::propiedad(n, "barPr", "pos") == Some("bot");
                 let g = tam * 0.05;
-                let y = if abajo { e.desc + g * 2.0 } else { -e.asc - g * 2.0 };
+                let y = if abajo {
+                    e.desc + g * 2.0
+                } else {
+                    -e.asc - g * 2.0
+                };
                 let mut c = e.clone();
-                c.els.push(Elemento::Linea { desde: (0.0, y), hasta: (e.ancho, y), trazo: Trazo::solido(self.color, g) });
+                c.els.push(Elemento::Linea {
+                    desde: (0.0, y),
+                    hasta: (e.ancho, y),
+                    trazo: Trazo::solido(self.color, g),
+                });
                 if abajo {
                     c.desc += g * 3.0;
                 } else {
@@ -189,25 +275,41 @@ impl Maquina<'_> {
                 self.apilar(e, lim, n.nombre == "limUpp", tam)
             }
             "eqArr" => {
-                let filas: Vec<Caja> = n.elementos().filter(|e| e.nombre == "e").map(|e| self.fila(e, tam)).collect();
+                let filas: Vec<Caja> = n
+                    .elementos()
+                    .filter(|e| e.nombre == "e")
+                    .map(|e| self.fila(e, tam))
+                    .collect();
                 self.columna(filas, tam, false)
             }
             "t" => self.texto(&n.texto(), tam, false, false),
-            "box" | "borderBox" | "phant" | "e" | "num" | "den" | "sub" | "sup" | "deg" | "fName" | "lim" | "oMath" | "oMathPara" => {
-                self.fila(n, tam)
-            }
+            "box" | "borderBox" | "phant" | "e" | "num" | "den" | "sub" | "sup" | "deg"
+            | "fName" | "lim" | "oMath" | "oMathPara" => self.fila(n, tam),
             _ => self.fila(n, tam),
         }
     }
 
     fn corrida(&self, n: &Nodo, tam: f32) -> Caja {
-        let texto: String = n.elementos().filter(|e| e.nombre == "t").map(|t| t.texto()).collect();
+        let texto: String = n
+            .elementos()
+            .filter(|e| e.nombre == "t")
+            .map(|t| t.texto())
+            .collect();
         // `m:rPr` (estilo matematico) y `w:rPr` (color, tamano) se llaman
         // igual: los separa el prefijo.
-        let mrpr = n.elementos().find(|e| e.nombre == "rPr" && e.prefijo != "w");
-        let wrpr = n.elementos().find(|e| e.nombre == "rPr" && e.prefijo == "w");
-        let color = wrpr.and_then(|r| r.hijo("color")).and_then(|c| Color::hex(c.valor())).unwrap_or(self.color);
-        let sty = mrpr.and_then(|p| p.hijo("sty")).map(|s| s.valor().to_string());
+        let mrpr = n
+            .elementos()
+            .find(|e| e.nombre == "rPr" && e.prefijo != "w");
+        let wrpr = n
+            .elementos()
+            .find(|e| e.nombre == "rPr" && e.prefijo == "w");
+        let color = wrpr
+            .and_then(|r| r.hijo("color"))
+            .and_then(|c| Color::hex(c.valor()))
+            .unwrap_or(self.color);
+        let sty = mrpr
+            .and_then(|p| p.hijo("sty"))
+            .map(|s| s.valor().to_string());
         let normal = mrpr.and_then(|p| p.hijo("nor")).is_some();
         let negrita = matches!(sty.as_deref(), Some("b") | Some("bi"));
         // Por defecto las letras van en cursiva y lo demas derecho.
@@ -233,9 +335,15 @@ impl Maquina<'_> {
                 let c = if c == '-' { '−' } else { c };
                 let unario = i == 0 && matches!(c, '−' | '+');
                 let esp = if unario { 0.0 } else { tam * 0.22 };
-                cajas.push(Caja { ancho: esp, ..Default::default() });
+                cajas.push(Caja {
+                    ancho: esp,
+                    ..Default::default()
+                });
                 cajas.push(self.texto_color(&c.to_string(), tam, false, negrita, color));
-                cajas.push(Caja { ancho: esp, ..Default::default() });
+                cajas.push(Caja {
+                    ancho: esp,
+                    ..Default::default()
+                });
                 cursiva_actual = None;
                 continue;
             }
@@ -252,7 +360,11 @@ impl Maquina<'_> {
 
     fn fraccion(&self, n: &Nodo, tam_fuera: f32) -> Caja {
         let tipo = Self::propiedad(n, "fPr", "type").unwrap_or("bar");
-        let tam = if self.en_linea { (tam_fuera * 0.75).max(6.0) } else { tam_fuera };
+        let tam = if self.en_linea {
+            (tam_fuera * 0.75).max(6.0)
+        } else {
+            tam_fuera
+        };
         let num = self.hijo(n, "num", tam);
         let den = self.hijo(n, "den", tam);
         if tipo == "lin" || tipo == "skw" {
@@ -264,12 +376,21 @@ impl Maquina<'_> {
         let ancho = num.ancho.max(den.ancho) + tam * 0.2;
         let base_num = eje - g * 2.0 - num.desc;
         let base_den = eje + g * 2.0 + den.asc;
-        let mut c = Caja { ancho, asc: -(base_num - num.asc), desc: base_den + den.desc, els: Vec::new() };
+        let mut c = Caja {
+            ancho,
+            asc: -(base_num - num.asc),
+            desc: base_den + den.desc,
+            els: Vec::new(),
+        };
         let (wn, wd) = (num.ancho, den.ancho);
         c.els.extend(num.mover((ancho - wn) / 2.0, base_num));
         c.els.extend(den.mover((ancho - wd) / 2.0, base_den));
         if tipo != "noBar" {
-            c.els.push(Elemento::Linea { desde: (tam * 0.05, eje), hasta: (ancho - tam * 0.05, eje), trazo: Trazo::solido(self.color, g) });
+            c.els.push(Elemento::Linea {
+                desde: (tam * 0.05, eje),
+                hasta: (ancho - tam * 0.05, eje),
+                trazo: Trazo::solido(self.color, g),
+            });
         }
         c
     }
@@ -279,8 +400,16 @@ impl Maquina<'_> {
         let base = self.hijo(n, "e", tam);
         let sub = n.hijo("sub").map(|s| self.fila(s, t2));
         let sup = n.hijo("sup").map(|s| self.fila(s, t2));
-        let ancho_ind = sub.as_ref().map(|s| s.ancho).unwrap_or(0.0).max(sup.as_ref().map(|s| s.ancho).unwrap_or(0.0));
-        let mut c = Caja { asc: base.asc, desc: base.desc, ..Default::default() };
+        let ancho_ind = sub
+            .as_ref()
+            .map(|s| s.ancho)
+            .unwrap_or(0.0)
+            .max(sup.as_ref().map(|s| s.ancho).unwrap_or(0.0));
+        let mut c = Caja {
+            asc: base.asc,
+            desc: base.desc,
+            ..Default::default()
+        };
         let previo = n.nombre == "sPre";
         let x_base = if previo { ancho_ind } else { 0.0 };
         let x_ind = if previo { 0.0 } else { base.ancho + tam * 0.03 };
@@ -322,7 +451,11 @@ impl Maquina<'_> {
             ancho,
             asc: asc + tam * 0.05,
             desc: desc + tam * 0.05,
-            els: vec![Elemento::Grupo { transformada: [sx, 0.0, 0.0, k, 0.0, y0], recorte: None, elementos: els }],
+            els: vec![Elemento::Grupo {
+                transformada: [sx, 0.0, 0.0, k, 0.0, y0],
+                recorte: None,
+                elementos: els,
+            }],
         }
     }
 
@@ -335,7 +468,11 @@ impl Maquina<'_> {
             }
         };
         let (beg, end, sep) = (lee("begChr", "("), lee("endChr", ")"), lee("sepChr", "|"));
-        let partes: Vec<Caja> = n.elementos().filter(|e| e.nombre == "e").map(|e| self.fila(e, tam)).collect();
+        let partes: Vec<Caja> = n
+            .elementos()
+            .filter(|e| e.nombre == "e")
+            .map(|e| self.fila(e, tam))
+            .collect();
         let asc = partes.iter().map(|p| p.asc).fold(tam * 0.7, f32::max);
         let desc = partes.iter().map(|p| p.desc).fold(tam * 0.2, f32::max);
         let mut v = vec![self.delimitador_alto(&beg, tam, asc, desc)];
@@ -355,13 +492,23 @@ impl Maquina<'_> {
     fn columna(&self, filas: Vec<Caja>, tam: f32, centrar: bool) -> Caja {
         let hueco = tam * 0.25;
         let ancho = filas.iter().map(|f| f.ancho).fold(0.0, f32::max);
-        let total: f32 = filas.iter().map(|f| f.asc + f.desc).sum::<f32>() + hueco * (filas.len().saturating_sub(1)) as f32;
+        let total: f32 = filas.iter().map(|f| f.asc + f.desc).sum::<f32>()
+            + hueco * (filas.len().saturating_sub(1)) as f32;
         let eje = -tam * 0.25;
         let mut y = eje - total / 2.0;
-        let mut c = Caja { ancho, asc: -(eje - total / 2.0), desc: eje + total / 2.0, els: Vec::new() };
+        let mut c = Caja {
+            ancho,
+            asc: -(eje - total / 2.0),
+            desc: eje + total / 2.0,
+            els: Vec::new(),
+        };
         for f in filas {
             let base = y + f.asc;
-            let x = if centrar { (ancho - f.ancho) / 2.0 } else { 0.0 };
+            let x = if centrar {
+                (ancho - f.ancho) / 2.0
+            } else {
+                0.0
+            };
             y = base + f.desc + hueco;
             c.els.extend(f.mover(x, base));
         }
@@ -372,7 +519,12 @@ impl Maquina<'_> {
         let filas: Vec<Vec<Caja>> = n
             .elementos()
             .filter(|e| e.nombre == "mr")
-            .map(|r| r.elementos().filter(|e| e.nombre == "e").map(|e| self.fila(e, tam)).collect())
+            .map(|r| {
+                r.elementos()
+                    .filter(|e| e.nombre == "e")
+                    .map(|e| self.fila(e, tam))
+                    .collect()
+            })
             .collect();
         let columnas = filas.iter().map(|f| f.len()).max().unwrap_or(0);
         let mut anchos = vec![0.0f32; columnas];
@@ -386,7 +538,11 @@ impl Maquina<'_> {
         for f in filas {
             let asc = f.iter().map(|c| c.asc).fold(tam * 0.7, f32::max);
             let desc = f.iter().map(|c| c.desc).fold(tam * 0.2, f32::max);
-            let mut r = Caja { asc, desc, ..Default::default() };
+            let mut r = Caja {
+                asc,
+                desc,
+                ..Default::default()
+            };
             let mut x = 0.0;
             for (k, c) in f.into_iter().enumerate() {
                 let w = c.ancho;
@@ -402,7 +558,12 @@ impl Maquina<'_> {
     fn apilar(&self, e: Caja, otro: Caja, arriba: bool, tam: f32) -> Caja {
         let ancho = e.ancho.max(otro.ancho);
         let g = tam * 0.1;
-        let mut c = Caja { ancho, asc: e.asc, desc: e.desc, els: Vec::new() };
+        let mut c = Caja {
+            ancho,
+            asc: e.asc,
+            desc: e.desc,
+            els: Vec::new(),
+        };
         let (we, wo) = (e.ancho, otro.ancho);
         let (e_asc, e_desc) = (e.asc, e.desc);
         c.els.extend(e.mover((ancho - we) / 2.0, 0.0));
@@ -420,14 +581,29 @@ impl Maquina<'_> {
 
     fn raiz(&self, n: &Nodo, tam: f32) -> Caja {
         let e = self.hijo(n, "e", tam);
-        let oculto = Self::propiedad(n, "radPr", "degHide").is_some_and(|v| !matches!(v, "0" | "off" | "false"));
-        let grado = if oculto { None } else { n.hijo("deg").map(|d| self.fila(d, tam * 0.6)).filter(|d| d.ancho > 0.0) };
+        let oculto = Self::propiedad(n, "radPr", "degHide")
+            .is_some_and(|v| !matches!(v, "0" | "off" | "false"));
+        let grado = if oculto {
+            None
+        } else {
+            n.hijo("deg")
+                .map(|d| self.fila(d, tam * 0.6))
+                .filter(|d| d.ancho > 0.0)
+        };
         let g = tam * 0.05;
         let arriba = -e.asc - g * 3.0;
         let abajo = e.desc;
         let w_signo = tam * 0.5;
-        let x0 = grado.as_ref().map(|d| (d.ancho - w_signo * 0.4).max(0.0)).unwrap_or(0.0);
-        let mut c = Caja { ancho: x0 + w_signo + e.ancho + g * 2.0, asc: -arriba + g, desc: abajo, els: Vec::new() };
+        let x0 = grado
+            .as_ref()
+            .map(|d| (d.ancho - w_signo * 0.4).max(0.0))
+            .unwrap_or(0.0);
+        let mut c = Caja {
+            ancho: x0 + w_signo + e.ancho + g * 2.0,
+            asc: -arriba + g,
+            desc: abajo,
+            els: Vec::new(),
+        };
         let medio = (arriba + abajo) / 2.0 + tam * 0.1;
         let figura = Figura {
             inicio: (x0, medio),
@@ -442,7 +618,11 @@ impl Maquina<'_> {
             trazar: true,
             ..Default::default()
         };
-        c.els.push(Elemento::Trayecto { figuras: vec![figura], relleno: None, borde: Some(Trazo::solido(self.color, g)) });
+        c.els.push(Elemento::Trayecto {
+            figuras: vec![figura],
+            relleno: None,
+            borde: Some(Trazo::solido(self.color, g)),
+        });
         if let Some(d) = grado {
             c.els.extend(d.mover(0.0, medio - tam * 0.1));
         }
@@ -451,16 +631,35 @@ impl Maquina<'_> {
     }
 
     fn nario(&self, n: &Nodo, tam: f32) -> Caja {
-        let chr = Self::propiedad(n, "naryPr", "chr").unwrap_or("∫").to_string();
+        let chr = Self::propiedad(n, "naryPr", "chr")
+            .unwrap_or("∫")
+            .to_string();
         let lim_loc = Self::propiedad(n, "naryPr", "limLoc").map(|s| s.to_string());
         let integral = matches!(chr.as_str(), "∫" | "∬" | "∭" | "∮");
-        let debajo = lim_loc.as_deref().map(|l| l == "undOvr").unwrap_or(!integral);
-        let ocultar_sub = Self::propiedad(n, "naryPr", "subHide").is_some_and(|v| !matches!(v, "0" | "off"));
-        let ocultar_sup = Self::propiedad(n, "naryPr", "supHide").is_some_and(|v| !matches!(v, "0" | "off"));
+        let debajo = lim_loc
+            .as_deref()
+            .map(|l| l == "undOvr")
+            .unwrap_or(!integral);
+        let ocultar_sub =
+            Self::propiedad(n, "naryPr", "subHide").is_some_and(|v| !matches!(v, "0" | "off"));
+        let ocultar_sup =
+            Self::propiedad(n, "naryPr", "supHide").is_some_and(|v| !matches!(v, "0" | "off"));
         let signo = self.texto(&chr, tam * 1.4, false, false);
         let t2 = tam * 0.7;
-        let sub = if ocultar_sub { None } else { n.hijo("sub").map(|s| self.fila(s, t2)).filter(|s| s.ancho > 0.0) };
-        let sup = if ocultar_sup { None } else { n.hijo("sup").map(|s| self.fila(s, t2)).filter(|s| s.ancho > 0.0) };
+        let sub = if ocultar_sub {
+            None
+        } else {
+            n.hijo("sub")
+                .map(|s| self.fila(s, t2))
+                .filter(|s| s.ancho > 0.0)
+        };
+        let sup = if ocultar_sup {
+            None
+        } else {
+            n.hijo("sup")
+                .map(|s| self.fila(s, t2))
+                .filter(|s| s.ancho > 0.0)
+        };
         let mut op = signo;
         if debajo {
             if let Some(s) = sub {
@@ -470,7 +669,11 @@ impl Maquina<'_> {
                 op = self.apilar(op, s, true, tam);
             }
         } else {
-            let mut c = Caja { asc: op.asc, desc: op.desc, ..Default::default() };
+            let mut c = Caja {
+                asc: op.asc,
+                desc: op.desc,
+                ..Default::default()
+            };
             let w = op.ancho;
             let (a, d) = (op.asc, op.desc);
             c.els.extend(op.mover(0.0, 0.0));
@@ -488,7 +691,10 @@ impl Maquina<'_> {
             c.ancho = w + extra + tam * 0.05;
             op = c;
         }
-        let esp = Caja { ancho: tam * 0.15, ..Default::default() };
+        let esp = Caja {
+            ancho: tam * 0.15,
+            ..Default::default()
+        };
         let e = self.hijo(n, "e", tam);
         self.juntar(vec![op, esp, e])
     }
@@ -505,10 +711,24 @@ mod pruebas {
         let n = leer(r#"<m:oMath><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num><m:den><m:r><m:t>bb</m:t></m:r></m:den></m:f></m:oMath>"#).unwrap();
         let o = formula(&n, 10.0, Color::NEGRO, false, &MedidorFijo::default());
         assert!(o.alto > 10.0 && o.bajo > 5.0, "{} {}", o.alto, o.bajo);
-        let ys: Vec<f32> = o.elementos.iter().filter_map(|e| if let Elemento::Texto(t) = e { Some(t.y) } else { None }).collect();
+        let ys: Vec<f32> = o
+            .elementos
+            .iter()
+            .filter_map(|e| {
+                if let Elemento::Texto(t) = e {
+                    Some(t.y)
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(ys.len(), 2);
         assert!(ys[0] < ys[1], "el numerador va arriba");
-        assert!(o.elementos.iter().any(|e| matches!(e, Elemento::Linea { .. })));
+        assert!(
+            o.elementos
+                .iter()
+                .any(|e| matches!(e, Elemento::Linea { .. }))
+        );
     }
 
     #[test]

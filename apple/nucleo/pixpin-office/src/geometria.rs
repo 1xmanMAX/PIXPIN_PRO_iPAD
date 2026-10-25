@@ -20,7 +20,10 @@ pub fn ajustes(prst: Option<&Nodo>) -> HashMap<String, f32> {
     };
     for gd in av.elementos().filter(|e| e.nombre == "gd") {
         let f = gd.atributo("fmla");
-        if let Some(v) = f.strip_prefix("val ").and_then(|v| v.trim().parse::<f32>().ok()) {
+        if let Some(v) = f
+            .strip_prefix("val ")
+            .and_then(|v| v.trim().parse::<f32>().ok())
+        {
             m.insert(gd.atributo("name").to_string(), v);
         }
     }
@@ -32,11 +35,22 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Figura {
 }
 
 fn poligono(p: &[(f32, f32)]) -> Figura {
-    Figura { inicio: p[0], tramos: p[1..].iter().map(|&(x, y)| Tramo::Linea(x, y)).collect(), cerrada: true, rellenar: true, trazar: true, ..Default::default() }
+    Figura {
+        inicio: p[0],
+        tramos: p[1..].iter().map(|&(x, y)| Tramo::Linea(x, y)).collect(),
+        cerrada: true,
+        rellenar: true,
+        trazar: true,
+        ..Default::default()
+    }
 }
 
 fn polilinea(p: &[(f32, f32)]) -> Figura {
-    Figura { cerrada: false, rellenar: false, ..poligono(p) }
+    Figura {
+        cerrada: false,
+        rellenar: false,
+        ..poligono(p)
+    }
 }
 
 /// Una elipse inscrita en la caja.
@@ -66,7 +80,14 @@ pub fn predefinida(nombre: &str, w: f32, h: f32, adj: &HashMap<String, f32>) -> 
     if let Some(f) = crate::formas::buscar(nombre, w, h, adj) {
         return f;
     }
-    let a = |k: &str, def: f32| adj.get(k).copied().filter(|v| v.is_finite()).unwrap_or(def).clamp(-1.0e7, 1.0e7) / 100000.0;
+    let a = |k: &str, def: f32| {
+        adj.get(k)
+            .copied()
+            .filter(|v| v.is_finite())
+            .unwrap_or(def)
+            .clamp(-1.0e7, 1.0e7)
+            / 100000.0
+    };
     match nombre {
         "line" | "straightConnector1" => vec![polilinea(&[(0.0, 0.0), (w, h)])],
         "bentConnector2" => vec![polilinea(&[(0.0, 0.0), (w, 0.0), (w, h)])],
@@ -102,7 +123,14 @@ pub fn predefinida(nombre: &str, w: f32, h: f32, adj: &HashMap<String, f32>) -> 
 /// rectangulo de reserva): sirve a las pruebas.
 pub fn conocidas() -> Vec<String> {
     let mut v = crate::formas::nombres();
-    for n in ["line", "straightConnector1", "bentConnector2", "bentConnector3", "bentConnector4", "curvedConnector3"] {
+    for n in [
+        "line",
+        "straightConnector1",
+        "bentConnector2",
+        "bentConnector3",
+        "bentConnector4",
+        "curvedConnector3",
+    ] {
         v.push(n.to_string());
     }
     v.sort();
@@ -139,7 +167,12 @@ pub fn guias(cust: &Nodo, w: f64, h: f64) -> HashMap<String, f64> {
 
 /// Como `guias`, pero los ajustes (`avLst`) que estan en `ajustes` mandan sobre
 /// los del archivo de la geometria (los de `a:prstGeom/a:avLst`).
-pub fn guias_con(cust: &Nodo, w: f64, h: f64, ajustes: &HashMap<String, f32>) -> HashMap<String, f64> {
+pub fn guias_con(
+    cust: &Nodo,
+    w: f64,
+    h: f64,
+    ajustes: &HashMap<String, f32>,
+) -> HashMap<String, f64> {
     let mut v = variables_base(w, h);
     for lista in ["avLst", "gdLst"] {
         if let Some(l) = cust.hijo(lista) {
@@ -195,7 +228,10 @@ pub(crate) fn evaluar(fmla: &str, v: &HashMap<String, f64>) -> f64 {
     let p: Vec<&str> = fmla.split_whitespace().collect();
     let a = |i: usize| -> f64 {
         let s = p.get(i).copied().unwrap_or("0");
-        s.parse::<f64>().ok().or_else(|| v.get(s).copied()).unwrap_or(0.0)
+        s.parse::<f64>()
+            .ok()
+            .or_else(|| v.get(s).copied())
+            .unwrap_or(0.0)
     };
     let div = |x: f64, y: f64| if y.abs() < 1e-12 { 0.0 } else { x / y };
     let ang = |x: f64| (x / 60000.0).to_radians();
@@ -239,7 +275,10 @@ pub fn propia(cust: &Nodo, w: f32, h: f32) -> Vec<Figura> {
         if s.is_empty() {
             return None;
         }
-        s.parse::<f64>().ok().or_else(|| g.get(s).copied()).map(|x| x as f32)
+        s.parse::<f64>()
+            .ok()
+            .or_else(|| g.get(s).copied())
+            .map(|x| x as f32)
     };
     for path in lista.elementos().filter(|e| e.nombre == "path") {
         let pw = crate::paquete::attr_num(path, "w", 1.0).filter(|v| *v > 0.0);
@@ -249,35 +288,69 @@ pub fn propia(cust: &Nodo, w: f32, h: f32) -> Vec<Figura> {
         let sy = ph.map(|ph| h / ph).unwrap_or(1.0 / 12700.0);
         let rellenar = path.atributo("fill") != "none";
         let trazar = path.atributo("stroke") != "0" && path.atributo("stroke") != "false";
-        let punto = |pt: &Nodo| (num(pt, "x").unwrap_or(0.0) * sx, num(pt, "y").unwrap_or(0.0) * sy);
+        let punto = |pt: &Nodo| {
+            (
+                num(pt, "x").unwrap_or(0.0) * sx,
+                num(pt, "y").unwrap_or(0.0) * sy,
+            )
+        };
         let mut actual: Option<Figura> = None;
         let mut pos = (0.0f32, 0.0f32);
         for orden in path.elementos() {
-            let pts: Vec<(f32, f32)> = orden.elementos().filter(|e| e.nombre == "pt").map(punto).collect();
+            let pts: Vec<(f32, f32)> = orden
+                .elementos()
+                .filter(|e| e.nombre == "pt")
+                .map(punto)
+                .collect();
             match orden.nombre.as_str() {
                 "moveTo" => {
                     if let Some(f) = actual.take() {
                         salida.push(f);
                     }
                     pos = pts.first().copied().unwrap_or((0.0, 0.0));
-                    actual = Some(Figura { inicio: pos, tramos: vec![], cerrada: false, rellenar, trazar, ..Default::default() });
+                    actual = Some(Figura {
+                        inicio: pos,
+                        tramos: vec![],
+                        cerrada: false,
+                        rellenar,
+                        trazar,
+                        ..Default::default()
+                    });
                 }
                 "lnTo" => {
                     if let Some(&p) = pts.first() {
-                        let f = actual.get_or_insert_with(|| Figura { inicio: pos, rellenar, trazar, ..Default::default() });
+                        let f = actual.get_or_insert_with(|| Figura {
+                            inicio: pos,
+                            rellenar,
+                            trazar,
+                            ..Default::default()
+                        });
                         f.tramos.push(Tramo::Linea(p.0, p.1));
                         pos = p;
                     }
                 }
                 "cubicBezTo" if pts.len() >= 3 => {
-                    let f = actual.get_or_insert_with(|| Figura { inicio: pos, rellenar, trazar, ..Default::default() });
+                    let f = actual.get_or_insert_with(|| Figura {
+                        inicio: pos,
+                        rellenar,
+                        trazar,
+                        ..Default::default()
+                    });
                     f.tramos.push(Tramo::Bezier(pts[0], pts[1], pts[2]));
                     pos = pts[2];
                 }
                 "quadBezTo" if pts.len() >= 2 => {
-                    let f = actual.get_or_insert_with(|| Figura { inicio: pos, rellenar, trazar, ..Default::default() });
+                    let f = actual.get_or_insert_with(|| Figura {
+                        inicio: pos,
+                        rellenar,
+                        trazar,
+                        ..Default::default()
+                    });
                     let (c, p) = (pts[0], pts[1]);
-                    let c1 = (pos.0 + 2.0 / 3.0 * (c.0 - pos.0), pos.1 + 2.0 / 3.0 * (c.1 - pos.1));
+                    let c1 = (
+                        pos.0 + 2.0 / 3.0 * (c.0 - pos.0),
+                        pos.1 + 2.0 / 3.0 * (c.1 - pos.1),
+                    );
                     let c2 = (p.0 + 2.0 / 3.0 * (c.0 - p.0), p.1 + 2.0 / 3.0 * (c.1 - p.1));
                     f.tramos.push(Tramo::Bezier(c1, c2, p));
                     pos = p;
@@ -287,7 +360,12 @@ pub fn propia(cust: &Nodo, w: f32, h: f32) -> Vec<Figura> {
                     let hr = num(orden, "hR").unwrap_or(0.0) * sy;
                     let st = num(orden, "stAng").unwrap_or(0.0) / 60000.0;
                     let sw = num(orden, "swAng").unwrap_or(0.0) / 60000.0;
-                    let f = actual.get_or_insert_with(|| Figura { inicio: pos, rellenar, trazar, ..Default::default() });
+                    let f = actual.get_or_insert_with(|| Figura {
+                        inicio: pos,
+                        rellenar,
+                        trazar,
+                        ..Default::default()
+                    });
                     pos = arco(f, pos, wr, hr, st, sw);
                 }
                 "close" => {
@@ -387,6 +465,9 @@ mod pruebas {
     fn el_arco_de_un_cuarto_llega_a_su_sitio() {
         let mut f = Figura::default();
         let fin = arco(&mut f, (10.0, 0.0), 10.0, 10.0, 0.0, 90.0);
-        assert!((fin.0 - 0.0).abs() < 1e-3 && (fin.1 - 10.0).abs() < 1e-3, "{fin:?}");
+        assert!(
+            (fin.0 - 0.0).abs() < 1e-3 && (fin.1 - 10.0).abs() < 1e-3,
+            "{fin:?}"
+        );
     }
 }

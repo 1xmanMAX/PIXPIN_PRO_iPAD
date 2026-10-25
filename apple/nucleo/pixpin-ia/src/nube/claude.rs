@@ -44,6 +44,10 @@ use super::{Proveedor, instrucciones};
 
 pub const URL: &str = "https://api.anthropic.com/v1/messages";
 pub const MODELO: &str = "claude-haiku-5-5";
+/// **El critico de respaldo** de la revision con rubrica (23-oct): mas
+/// fuerte que el del turno, solo para puntuar cuando Haiku no da una nota
+/// que se lea o ya suspendio dos veces (`agente::Opciones::critico`).
+pub const MODELO_CRITICO: &str = "claude-sonnet-5-5";
 pub const VERSION_API: &str = "2023-06-01";
 pub const ESFUERZO: &str = "medium";
 /// Tope de salida de cada vuelta. El pensamiento cuenta dentro: con 2048
@@ -94,21 +98,29 @@ pub fn mensajes(lista: &[Mensaje], memoria: &HashMap<String, Value>) -> Vec<Valu
             Rol::Sistema if i == 0 => {}
             Rol::Sistema => poner(
                 "user",
-                vec![json!({"type": "text", "text": format!("<aviso_de_la_app>{}</aviso_de_la_app>", m.texto_entero())})],
+                vec![
+                    json!({"type": "text", "text": format!("<aviso_de_la_app>{}</aviso_de_la_app>", m.texto_entero())}),
+                ],
             ),
             Rol::Usuario => {
                 let mut b = Vec::new();
                 for p in &m.partes {
                     match p {
                         Parte::Imagen { bytes, mime } => b.push(imagen(bytes, mime)),
-                        Parte::Texto(t) if !t.trim().is_empty() => b.push(json!({"type": "text", "text": t})),
+                        Parte::Texto(t) if !t.trim().is_empty() => {
+                            b.push(json!({"type": "text", "text": t}))
+                        }
                         Parte::Texto(_) => {}
                     }
                 }
                 poner("user", b);
             }
             Rol::Asistente => {
-                let guardado = m.llamadas.first().and_then(|l| memoria.get(&l.id)).and_then(Value::as_array);
+                let guardado = m
+                    .llamadas
+                    .first()
+                    .and_then(|l| memoria.get(&l.id))
+                    .and_then(Value::as_array);
                 let bloques = match guardado {
                     Some(b) => b.clone(),
                     None => {
@@ -141,10 +153,19 @@ pub fn mensajes(lista: &[Mensaje], memoria: &HashMap<String, Value>) -> Vec<Valu
     }
     // Empieza y acaba con el usuario (sin prefill: Haiku 5.5 da 400).
     if salida.first().is_some_and(|(r, _)| r == "assistant") {
-        salida.insert(0, ("user".into(), vec![json!({"type": "text", "text": "(sigue la conversacion de antes)"})]));
+        salida.insert(
+            0,
+            (
+                "user".into(),
+                vec![json!({"type": "text", "text": "(sigue la conversacion de antes)"})],
+            ),
+        );
     }
     if salida.last().is_some_and(|(r, _)| r == "assistant") {
-        salida.push(("user".into(), vec![json!({"type": "text", "text": "Sigue."})]));
+        salida.push((
+            "user".into(),
+            vec![json!({"type": "text", "text": "Sigue."})],
+        ));
     }
     salida
         .into_iter()
@@ -181,7 +202,8 @@ pub fn cuerpo(p: &Peticion, memoria: &HashMap<String, Value>, max_tokens: u32) -
     // de trabajo, la peticion mejorada) detras, sin punto: si fuera dentro
     // del mismo bloque, cada pregunta nueva volveria a escribir la cache.
     let (fijo, variable) = instrucciones::en_dos(Proveedor::Claude, &base, &p.herramientas);
-    let mut sistema = vec![json!({"type": "text", "text": fijo, "cache_control": {"type": "ephemeral"}})];
+    let mut sistema =
+        vec![json!({"type": "text", "text": fijo, "cache_control": {"type": "ephemeral"}})];
     if !variable.is_empty() {
         sistema.push(json!({"type": "text", "text": variable}));
     }
@@ -213,7 +235,10 @@ pub fn cuerpo(p: &Peticion, memoria: &HashMap<String, Value>, max_tokens: u32) -
 
 /// Las cabeceras (la clave va aqui y en ningun otro sitio).
 pub fn cabeceras(clave: &str) -> Vec<(&'static str, String)> {
-    vec![("x-api-key", clave.to_string()), ("anthropic-version", VERSION_API.to_string())]
+    vec![
+        ("x-api-key", clave.to_string()),
+        ("anthropic-version", VERSION_API.to_string()),
+    ]
 }
 
 /// La peticion minima de «Probar»: sin streaming, sin pensar, 16 tokens.
@@ -232,13 +257,23 @@ pub fn cuerpo_de_prueba() -> Value {
 #[derive(Debug, Clone)]
 enum Bloque {
     Texto(String),
-    Pensando { texto: String, firma: String },
+    Pensando {
+        texto: String,
+        firma: String,
+    },
     /// `redacted_thinking` y lo que no se conozca: se devuelve tal cual.
     Tal(Value),
-    Herramienta { id: String, nombre: String, json: String },
+    Herramienta {
+        id: String,
+        nombre: String,
+        json: String,
+    },
     /// `server_tool_use` (la web): lo ejecuta la API; solo se guarda para
     /// devolverlo intacto, con su entrada juntada de los trozos.
-    Servidor { bloque: Value, json: String },
+    Servidor {
+        bloque: Value,
+        json: String,
+    },
 }
 
 /// Lo que dejo una respuesta entera.
@@ -309,30 +344,65 @@ impl Lector {
             "content_block_start" => {
                 let b = v.get("content_block").cloned().unwrap_or(Value::Null);
                 let bloque = match b.get("type").and_then(Value::as_str) {
-                    Some("text") => Bloque::Texto(b.get("text").and_then(Value::as_str).unwrap_or("").to_string()),
+                    Some("text") => Bloque::Texto(
+                        b.get("text")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string(),
+                    ),
                     Some("thinking") => Bloque::Pensando {
-                        texto: b.get("thinking").and_then(Value::as_str).unwrap_or("").to_string(),
-                        firma: b.get("signature").and_then(Value::as_str).unwrap_or("").to_string(),
+                        texto: b
+                            .get("thinking")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string(),
+                        firma: b
+                            .get("signature")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string(),
                     },
                     Some("tool_use") => {
-                        let nombre = b.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-                        trozos.push(Trozo::Llamando { nombre: nombre.clone() });
+                        let nombre = b
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        trozos.push(Trozo::Llamando {
+                            nombre: nombre.clone(),
+                        });
                         Bloque::Herramienta {
-                            id: b.get("id").and_then(Value::as_str).unwrap_or("").to_string(),
+                            id: b
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
                             nombre,
                             json: String::new(),
                         }
                     }
                     Some("server_tool_use") => {
-                        let nombre = b.get("name").and_then(Value::as_str).unwrap_or("").to_string();
+                        let nombre = b
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
                         trozos.push(Trozo::Llamando { nombre });
-                        Bloque::Servidor { bloque: b, json: String::new() }
+                        Bloque::Servidor {
+                            bloque: b,
+                            json: String::new(),
+                        }
                     }
                     _ => Bloque::Tal(b),
                 };
-                let i = v.get("index").and_then(Value::as_u64).map_or(self.bloques.len(), |i| i as usize);
+                let i = v
+                    .get("index")
+                    .and_then(Value::as_u64)
+                    .map_or(self.bloques.len(), |i| i as usize);
                 if i > 256 {
-                    return Err(ErrorIa::Protocolo("demasiados bloques en la respuesta".into()));
+                    return Err(ErrorIa::Protocolo(
+                        "demasiados bloques en la respuesta".into(),
+                    ));
                 }
                 while self.bloques.len() < i {
                     self.bloques.push(Bloque::Tal(Value::Null));
@@ -347,7 +417,9 @@ impl Lector {
                 let i = v.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
                 let d = v.get("delta").cloned().unwrap_or(Value::Null);
                 let Some(b) = self.bloques.get_mut(i) else {
-                    return Err(ErrorIa::Protocolo("trozo de un bloque que no empezo".into()));
+                    return Err(ErrorIa::Protocolo(
+                        "trozo de un bloque que no empezo".into(),
+                    ));
                 };
                 let s = |k: &str| d.get(k).and_then(Value::as_str).unwrap_or("").to_string();
                 match (d.get("type").and_then(Value::as_str), b) {
@@ -365,10 +437,13 @@ impl Lector {
                             trozos.push(Trozo::Pensando(x));
                         }
                     }
-                    (Some("signature_delta"), Bloque::Pensando { firma, .. }) => firma.push_str(&s("signature")),
-                    (Some("input_json_delta"), Bloque::Herramienta { json, .. } | Bloque::Servidor { json, .. }) => {
-                        json.push_str(&s("partial_json"))
+                    (Some("signature_delta"), Bloque::Pensando { firma, .. }) => {
+                        firma.push_str(&s("signature"))
                     }
+                    (
+                        Some("input_json_delta"),
+                        Bloque::Herramienta { json, .. } | Bloque::Servidor { json, .. },
+                    ) => json.push_str(&s("partial_json")),
                     // Citas y lo que venga nuevo: no se usa.
                     _ => {}
                 }
@@ -377,7 +452,10 @@ impl Lector {
                 if let Some(m) = v.pointer("/delta/stop_reason").and_then(Value::as_str) {
                     self.motivo = Some(m.to_string());
                 }
-                if let Some(c) = v.pointer("/delta/stop_details/category").and_then(Value::as_str) {
+                if let Some(c) = v
+                    .pointer("/delta/stop_details/category")
+                    .and_then(Value::as_str)
+                {
                     self.categoria = Some(c.to_string());
                 }
                 if let Some(u) = v.get("usage") {
@@ -386,8 +464,16 @@ impl Lector {
             }
             "message_stop" => self.acabado = true,
             "error" => {
-                let tipo = v.pointer("/error/type").and_then(Value::as_str).unwrap_or("error").to_string();
-                let mensaje = v.pointer("/error/message").and_then(Value::as_str).unwrap_or("").to_string();
+                let tipo = v
+                    .pointer("/error/type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("error")
+                    .to_string();
+                let mensaje = v
+                    .pointer("/error/message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
                 self.error = Some(ErrorDelFlujo { tipo, mensaje });
                 self.acabado = true;
             }
@@ -399,7 +485,8 @@ impl Lector {
 
     fn uso(&mut self, u: &Value) {
         let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0) as u32;
-        let entrada = n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens");
+        let entrada =
+            n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens");
         if entrada > 0 {
             self.medidas.tokens_entrada = entrada;
         }
@@ -443,9 +530,17 @@ impl Lector {
                     bloques.push(bloque);
                 }
                 Bloque::Herramienta { id, nombre, json } => {
-                    let argumentos = if json.trim().is_empty() { "{}".to_string() } else { json };
+                    let argumentos = if json.trim().is_empty() {
+                        "{}".to_string()
+                    } else {
+                        json
+                    };
                     bloques.push(json!({"type": "tool_use", "id": id, "name": nombre, "input": como_objeto(&argumentos)}));
-                    llamadas.push(LlamadaCruda { id, nombre, argumentos });
+                    llamadas.push(LlamadaCruda {
+                        id,
+                        nombre,
+                        argumentos,
+                    });
                 }
             }
         }
@@ -498,7 +593,11 @@ mod pruebas {
         sse.lines()
             .filter_map(|l| l.strip_prefix("data: "))
             .filter_map(|d| serde_json::from_str::<Value>(d.trim()).ok())
-            .filter_map(|v| v.pointer("/delta/partial_json").and_then(Value::as_str).map(str::to_string))
+            .filter_map(|v| {
+                v.pointer("/delta/partial_json")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
             .collect()
     }
 
@@ -517,7 +616,10 @@ mod pruebas {
         // Grabadas con la API real (13-oct, `PIXPIN_IA_GRABAR`): la misma
         // casa pedida con y sin `strict`. Lo que se junta es exactamente lo
         // que mando el modelo: la deformacion no era nuestra.
-        for sse in [include_str!("grabaciones/casa-sin-strict.sse"), include_str!("grabaciones/casa-con-strict.sse")] {
+        for sse in [
+            include_str!("grabaciones/casa-sin-strict.sse"),
+            include_str!("grabaciones/casa-con-strict.sse"),
+        ] {
             let s = leer_grabada(sse);
             assert_eq!(s.respuesta.llamadas.len(), 1);
             assert_eq!(s.respuesta.llamadas[0].argumentos, juntar_a_mano(sse));
@@ -532,10 +634,19 @@ mod pruebas {
             crate::herramientas::validar(&s.respuesta.llamadas[0], &catalogo())
         };
         let buena = validar(include_str!("grabaciones/casa-sin-strict.sse")).unwrap();
-        let crate::herramientas::Llamada::Dibujar(figuras) = &buena.llamada else { panic!() };
+        let crate::herramientas::Llamada::Dibujar(figuras) = &buena.llamada else {
+            panic!()
+        };
         assert_eq!(figuras.len(), 3);
         assert!(figuras.iter().all(|f| f.con_color), "{figuras:?}");
-        assert!(figuras.iter().filter(|f| f.ancho > 0.0 && f.alto > 0.0).count() >= 2, "{figuras:?}");
+        assert!(
+            figuras
+                .iter()
+                .filter(|f| f.ancho > 0.0 && f.alto > 0.0)
+                .count()
+                >= 2,
+            "{figuras:?}"
+        );
         // Caso negativo: lo que salia con `strict` (`{"tipo":"rectangulo",
         // "x":0}`, sin tamano, color ni «y») no pasa la validacion.
         assert!(validar(include_str!("grabaciones/casa-con-strict.sse")).is_err());
@@ -543,18 +654,35 @@ mod pruebas {
 
     #[test]
     fn el_cuerpo_sigue_las_reglas_de_haiku_5_5() {
-        let mut p = Peticion::nueva(vec![Mensaje::sistema("Eres el asistente."), Mensaje::usuario("hola")]);
+        let mut p = Peticion::nueva(vec![
+            Mensaje::sistema("Eres el asistente."),
+            Mensaje::usuario("hola"),
+        ]);
         p.herramientas = catalogo();
         let c = cuerpo(&p, &HashMap::new(), MAX_TOKENS);
         assert_eq!(c["model"], "claude-haiku-5-5");
-        assert_eq!(c["thinking"], json!({"type": "adaptive", "display": "summarized"}));
+        assert_eq!(
+            c["thinking"],
+            json!({"type": "adaptive", "display": "summarized"})
+        );
         assert_eq!(c["output_config"]["effort"], "medium");
         assert_eq!(c["tool_choice"], json!({"type": "auto"}));
-        for prohibido in ["temperature", "top_p", "top_k", "chat_template_kwargs", "presence_penalty"] {
+        for prohibido in [
+            "temperature",
+            "top_p",
+            "top_k",
+            "chat_template_kwargs",
+            "presence_penalty",
+        ] {
             assert!(c.get(prohibido).is_none(), "{prohibido}");
         }
         assert_eq!(c["system"][0]["cache_control"]["type"], "ephemeral");
-        assert!(c["system"][0]["text"].as_str().unwrap().contains("Eres el asistente."));
+        assert!(
+            c["system"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Eres el asistente.")
+        );
         let m = c["messages"].as_array().unwrap();
         assert_eq!(m.len(), 1, "el sistema no va en messages");
         assert_eq!(m[0]["content"][0]["cache_control"]["type"], "ephemeral");
@@ -564,8 +692,16 @@ mod pruebas {
     fn los_resultados_van_juntos_y_el_pensamiento_vuelve_intacto() {
         let mut asis = Mensaje::texto(Rol::Asistente, "voy");
         asis.llamadas = vec![
-            LlamadaCruda { id: "toolu_1".into(), nombre: "ocr".into(), argumentos: "{}".into() },
-            LlamadaCruda { id: "toolu_2".into(), nombre: "grafica".into(), argumentos: "{roto".into() },
+            LlamadaCruda {
+                id: "toolu_1".into(),
+                nombre: "ocr".into(),
+                argumentos: "{}".into(),
+            },
+            LlamadaCruda {
+                id: "toolu_2".into(),
+                nombre: "grafica".into(),
+                argumentos: "{roto".into(),
+            },
         ];
         let lista = vec![
             Mensaje::sistema("s"),
@@ -604,8 +740,18 @@ mod pruebas {
 
     #[test]
     fn la_imagen_va_en_base64_antes_del_texto() {
-        let m = mensajes(&[Mensaje::usuario_con_imagen("dibujala", vec![1, 2, 3], "image/png")], &HashMap::new());
-        assert_eq!(m[0]["content"][0]["source"], json!({"type": "base64", "media_type": "image/png", "data": "AQID"}));
+        let m = mensajes(
+            &[Mensaje::usuario_con_imagen(
+                "dibujala",
+                vec![1, 2, 3],
+                "image/png",
+            )],
+            &HashMap::new(),
+        );
+        assert_eq!(
+            m[0]["content"][0]["source"],
+            json!({"type": "base64", "media_type": "image/png", "data": "AQID"})
+        );
         assert_eq!(m[0]["content"][1]["text"], "dibujala");
     }
 
@@ -618,9 +764,21 @@ mod pruebas {
 
     #[test]
     fn la_web_va_siempre_y_la_busqueda_se_devuelve_intacta() {
-        let c = cuerpo(&Peticion::nueva(vec![Mensaje::usuario("hola")]), &HashMap::new(), 100);
-        let tipos: Vec<&str> = c["tools"].as_array().unwrap().iter().filter_map(|t| t["type"].as_str()).collect();
-        assert!(tipos.contains(&"web_search_20250305") && tipos.contains(&"web_fetch_20250910"), "{tipos:?}");
+        let c = cuerpo(
+            &Peticion::nueva(vec![Mensaje::usuario("hola")]),
+            &HashMap::new(),
+            100,
+        );
+        let tipos: Vec<&str> = c["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["type"].as_str())
+            .collect();
+        assert!(
+            tipos.contains(&"web_search_20250305") && tipos.contains(&"web_fetch_20250910"),
+            "{tipos:?}"
+        );
         let sse = [
             r#"data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}"#,
             r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"query\": \"pixpin\"}"}}"#,
@@ -634,10 +792,17 @@ mod pruebas {
             + "\n";
         let mut l = Lector::nuevo();
         let trozos = l.meter(sse.as_bytes()).unwrap();
-        assert!(trozos.iter().any(|t| matches!(t, Trozo::Llamando { nombre } if nombre == BUSCAR_EN_LA_WEB)));
+        assert!(
+            trozos
+                .iter()
+                .any(|t| matches!(t, Trozo::Llamando { nombre } if nombre == BUSCAR_EN_LA_WEB))
+        );
         let s = l.acabar(false);
         assert_eq!(s.respuesta.texto, "Hallado.");
-        assert!(s.respuesta.llamadas.is_empty(), "la web no es una llamada de la app");
+        assert!(
+            s.respuesta.llamadas.is_empty(),
+            "la web no es una llamada de la app"
+        );
         assert_eq!(s.respuesta.fin, Fin::Natural);
         assert_eq!(s.bloques[0]["input"], json!({"query": "pixpin"}));
         assert_eq!(s.bloques[1]["type"], "web_search_tool_result");

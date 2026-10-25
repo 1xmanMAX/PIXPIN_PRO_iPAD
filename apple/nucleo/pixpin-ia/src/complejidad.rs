@@ -73,7 +73,10 @@ pub fn clasificar(pedido: &str) -> Option<Motivo> {
     }
 
     // 2. Problemas.
-    let cifras = palabras.iter().filter(|p| p.chars().next().is_some_and(|c| c.is_ascii_digit())).count();
+    let cifras = palabras
+        .iter()
+        .filter(|p| p.chars().next().is_some_and(|c| c.is_ascii_digit()))
+        .count();
     let cuentas = q.contains('=') || q.chars().any(|c| matches!(c, '^' | '√' | '∫' | '²' | '³'));
     let de_ciencias = tiene(CIENCIAS);
     if empieza_por(&palabras, RESOLVER) {
@@ -82,7 +85,9 @@ pub fn clasificar(pedido: &str) -> Option<Motivo> {
     if empieza_por(&palabras, CALCULAR) && (de_ciencias || cuentas || palabras.len() > 14) {
         return Some(Motivo::Problema);
     }
-    let pregunta = es(&["cuanto", "cuanta", "cuantos", "cuantas", "cuando", "cual", "cuales", "donde"]) || q.contains('?');
+    let pregunta = es(&[
+        "cuanto", "cuanta", "cuantos", "cuantas", "cuando", "cual", "cuales", "donde",
+    ]) || q.contains('?');
     if cifras >= 2 && pregunta && palabras.len() >= 12 && (de_ciencias || tiene(UNIDADES)) {
         return Some(Motivo::Problema);
     }
@@ -104,7 +109,10 @@ pub fn clasificar(pedido: &str) -> Option<Motivo> {
         .lines()
         .filter(|l| {
             let l = l.trim_start();
-            l.chars().next().is_some_and(|c| c.is_ascii_digit()) && l.chars().nth(1).is_some_and(|c| matches!(c, '.' | ')' | '-'))
+            l.chars().next().is_some_and(|c| c.is_ascii_digit())
+                && l.chars()
+                    .nth(1)
+                    .is_some_and(|c| matches!(c, '.' | ')' | '-'))
         })
         .count();
     if ordenes >= 3 || (ordenes >= 2 && encadena && palabras.len() >= 20) || numerada >= 3 {
@@ -121,73 +129,233 @@ pub fn clasificar(pedido: &str) -> Option<Motivo> {
 /// Si alguna palabra empieza por una de `raices` (con lo que se le pegue:
 /// «resuelvelo», «demuestrame»).
 fn empieza_por(palabras: &[&str], raices: &[&str]) -> bool {
-    palabras.iter().any(|p| raices.iter().any(|r| p.starts_with(r)))
+    palabras
+        .iter()
+        .any(|p| raices.iter().any(|r| p.starts_with(r)))
 }
 
 /// Una orden: el verbo tal cual o con un pronombre pegado («ponle»,
 /// «dibujalo»). Por igualdad y no por raiz: «crea» no es «creativo».
 fn es_orden(p: &str) -> bool {
     const PEGADOS: [&str; 10] = ["", "lo", "la", "los", "las", "le", "les", "me", "nos", "te"];
-    ORDENES.iter().any(|v| p.strip_prefix(v).is_some_and(|resto| PEGADOS.contains(&resto)))
+    ORDENES.iter().any(|v| {
+        p.strip_prefix(v)
+            .is_some_and(|resto| PEGADOS.contains(&resto))
+    })
 }
 
-const NO_PENSAR: &[&str] = &["sin pensar", "no pienses", "no lo pienses", "no razones", "contesta rapido", "responde rapido", "rapidito"];
+const NO_PENSAR: &[&str] = &[
+    "sin pensar",
+    "no pienses",
+    "no lo pienses",
+    "no razones",
+    "contesta rapido",
+    "responde rapido",
+    "rapidito",
+];
 
 const PENSAR: &[&str] = &[
-    "piensa", "piensalo", "pensalo", "piensatelo", "razona", "razonalo", "razonando", "reflexiona", "think",
+    "piensa",
+    "piensalo",
+    "pensalo",
+    "piensatelo",
+    "razona",
+    "razonalo",
+    "razonando",
+    "reflexiona",
+    "think",
 ];
 
 const PENSAR_FRASES: &[&str] = &[
-    "paso a paso", "pasito a pasito", "en profundidad", "detenidamente", "con calma",
-    "step by step", "think hard", "piensa bien",
+    "paso a paso",
+    "pasito a pasito",
+    "en profundidad",
+    "detenidamente",
+    "con calma",
+    "step by step",
+    "think hard",
+    "piensa bien",
 ];
 
 /// Verbos de resolver: con ellos ya es un problema.
-const RESOLVER: &[&str] = &["resuelv", "resolver", "demuestr", "demostrar", "despej", "halla", "deduc", "determina"];
+const RESOLVER: &[&str] = &[
+    "resuelv",
+    "resolver",
+    "demuestr",
+    "demostrar",
+    "despej",
+    "halla",
+    "deduc",
+    "determina",
+];
 
 /// Verbos de calcular: un problema solo con algo de ciencias, cuentas o
 /// un pedido que no es corto («calcula el 15 % de 80» no piensa).
-const CALCULAR: &[&str] = &["calcul", "encuentra", "obten", "simplific", "factoriz", "deriva", "integra"];
+const CALCULAR: &[&str] = &[
+    "calcul",
+    "encuentra",
+    "obten",
+    "simplific",
+    "factoriz",
+    "deriva",
+    "integra",
+];
 
 const CIENCIAS: &[&str] = &[
-    "fuerza", "aceleracion", "velocidad", "masa", "energia", "potencia", "friccion", "rozamiento", "inclinado",
-    "proyectil", "pendulo", "polea", "circuito", "resistencia", "voltaje", "corriente", "presion", "caudal",
-    "momento", "torque", "integral", "derivada", "limite", "ecuacion", "sistema de", "matriz", "vector",
-    "probabilidad", "logaritmo", "volumen", "perimetro", " area ", "hipotenusa", "angulo", "trigonometr",
-    "interes compuesto", "estadistic", "promedio", "varianza", "viga", "esfuerzo", "deflexion",
+    "fuerza",
+    "aceleracion",
+    "velocidad",
+    "masa",
+    "energia",
+    "potencia",
+    "friccion",
+    "rozamiento",
+    "inclinado",
+    "proyectil",
+    "pendulo",
+    "polea",
+    "circuito",
+    "resistencia",
+    "voltaje",
+    "corriente",
+    "presion",
+    "caudal",
+    "momento",
+    "torque",
+    "integral",
+    "derivada",
+    "limite",
+    "ecuacion",
+    "sistema de",
+    "matriz",
+    "vector",
+    "probabilidad",
+    "logaritmo",
+    "volumen",
+    "perimetro",
+    " area ",
+    "hipotenusa",
+    "angulo",
+    "trigonometr",
+    "interes compuesto",
+    "estadistic",
+    "promedio",
+    "varianza",
+    "viga",
+    "esfuerzo",
+    "deflexion",
 ];
 
 const UNIDADES: &[&str] = &[
-    "km/h", "m/s", " km", " kg", " cm", " mm", " m ", " m.", " m,", " s ", "segundo", "minuto", " hora", "metro",
-    "kilo", "litro", "newton", "julio", "watt", "voltio", "ohm", "grados", "°", "%", "soles", "euros", "dolares",
+    "km/h", "m/s", " km", " kg", " cm", " mm", " m ", " m.", " m,", " s ", "segundo", "minuto",
+    " hora", "metro", "kilo", "litro", "newton", "julio", "watt", "voltio", "ohm", "grados", "°",
+    "%", "soles", "euros", "dolares",
 ];
 
 const PLANIFICAR: &[&str] = &[
-    "planific", "planea", "analiz", "compara", "disena", "optimiz", "evalua", "justifica",
+    "planific",
+    "planea",
+    "analiz",
+    "compara",
+    "disena",
+    "optimiz",
+    "evalua",
+    "justifica",
 ];
 
 const PLANIFICAR_FRASES: &[&str] = &[
-    "haz un plan", "hazme un plan", "un plan de", "plan para", "estrategia", "organiza mi", "organizame", "pros y contras",
+    "haz un plan",
+    "hazme un plan",
+    "un plan de",
+    "plan para",
+    "estrategia",
+    "organiza mi",
+    "organizame",
+    "pros y contras",
     "ventajas y desventajas",
 ];
 
 const ENTEROS: &[&str] = &[
-    "toda la hoja", "hoja entera", "hoja completa", "todas las hojas", "todo el plano", "plano entero",
-    "plano completo", "todo el lienzo", "lienzo entero", "todo el documento", "documento entero",
-    "documento completo", "todas las paginas", "toda la pagina", "pagina entera", "todo el pdf", "pdf entero",
-    "todo el libro", "libro entero", "todo el excel", "toda la tabla", "tabla entera",
+    "toda la hoja",
+    "hoja entera",
+    "hoja completa",
+    "todas las hojas",
+    "todo el plano",
+    "plano entero",
+    "plano completo",
+    "todo el lienzo",
+    "lienzo entero",
+    "todo el documento",
+    "documento entero",
+    "documento completo",
+    "todas las paginas",
+    "toda la pagina",
+    "pagina entera",
+    "todo el pdf",
+    "pdf entero",
+    "todo el libro",
+    "libro entero",
+    "todo el excel",
+    "toda la tabla",
+    "tabla entera",
 ];
 
 const CONECTORES: &[&str] = &[
-    " luego ", " despues ", "a continuacion", "por ultimo", "finalmente", "primero ", "y entonces", "al final",
+    " luego ",
+    " despues ",
+    "a continuacion",
+    "por ultimo",
+    "finalmente",
+    "primero ",
+    "y entonces",
+    "al final",
 ];
 
 /// Verbos de orden (en imperativo, sin tildes).
 const ORDENES: &[&str] = &[
-    "dibuja", "pinta", "pon", "anade", "agrega", "escribe", "calcula", "haz", "crea", "abre", "busca", "cambia",
-    "mueve", "borra", "quita", "colorea", "traza", "marca", "resume", "traduce", "convierte", "guarda", "envia",
-    "manda", "copia", "ordena", "genera", "rellena", "grafica", "exporta", "inserta", "dime", "explica", "lee",
-    "rota", "gira", "agranda", "achica", "alinea", "une", "separa", "duplica", "renombra",
+    "dibuja",
+    "pinta",
+    "pon",
+    "anade",
+    "agrega",
+    "escribe",
+    "calcula",
+    "haz",
+    "crea",
+    "abre",
+    "busca",
+    "cambia",
+    "mueve",
+    "borra",
+    "quita",
+    "colorea",
+    "traza",
+    "marca",
+    "resume",
+    "traduce",
+    "convierte",
+    "guarda",
+    "envia",
+    "manda",
+    "copia",
+    "ordena",
+    "genera",
+    "rellena",
+    "grafica",
+    "exporta",
+    "inserta",
+    "dime",
+    "explica",
+    "lee",
+    "rota",
+    "gira",
+    "agranda",
+    "achica",
+    "alinea",
+    "une",
+    "separa",
+    "duplica",
+    "renombra",
 ];
 
 #[cfg(test)]
@@ -221,28 +389,46 @@ mod pruebas {
     /// Lo complejo: piensa, y por que.
     const COMPLEJOS: &[(&str, Motivo)] = &[
         ("piensa bien cómo distribuir los muebles", Motivo::Pedido),
-        ("explícame paso a paso la regla de la cadena", Motivo::Pedido),
+        (
+            "explícame paso a paso la regla de la cadena",
+            Motivo::Pedido,
+        ),
         ("razona la respuesta", Motivo::Pedido),
         ("resuelve x^2 - 5x + 6 = 0", Motivo::Problema),
         ("resuélvelo", Motivo::Problema),
         ("Demuestra que la raíz de 2 es irracional", Motivo::Problema),
-        ("calcula la aceleración de un bloque de 5 kg en un plano inclinado de 30°", Motivo::Problema),
+        (
+            "calcula la aceleración de un bloque de 5 kg en un plano inclinado de 30°",
+            Motivo::Problema,
+        ),
         (
             "Un tren sale a las 8 a 80 km/h y otro a las 9 a 100 km/h por la misma vía, ¿cuándo lo alcanza?",
             Motivo::Problema,
         ),
         ("halla la derivada de sin(x)·x²", Motivo::Problema),
-        ("planifica la obra de la casa en 12 semanas", Motivo::Planificar),
+        (
+            "planifica la obra de la casa en 12 semanas",
+            Motivo::Planificar,
+        ),
         ("compara estas dos vigas", Motivo::Planificar),
-        ("hazme un plan de estudio para el examen", Motivo::Planificar),
+        (
+            "hazme un plan de estudio para el examen",
+            Motivo::Planificar,
+        ),
         ("pasa toda la hoja al lienzo", Motivo::Entero),
         ("revisa el plano entero y marca los errores", Motivo::Entero),
-        ("dibuja un rectángulo, ponle un título y colorea el fondo de azul", Motivo::Pasos),
+        (
+            "dibuja un rectángulo, ponle un título y colorea el fondo de azul",
+            Motivo::Pasos,
+        ),
         (
             "primero dibuja el plano de la planta baja con sus cuatro habitaciones y luego pon las cotas de cada pared en metros",
             Motivo::Pasos,
         ),
-        ("1. abre el plano\n2. marca las puertas\n3. exporta a PDF", Motivo::Pasos),
+        (
+            "1. abre el plano\n2. marca las puertas\n3. exporta a PDF",
+            Motivo::Pasos,
+        ),
     ];
 
     #[test]
@@ -295,7 +481,11 @@ mod pruebas {
 
     #[test]
     fn clasificar_cuesta_menos_de_un_milisegundo() {
-        let todos: Vec<&str> = SIMPLES.iter().copied().chain(COMPLEJOS.iter().map(|(s, _)| *s)).collect();
+        let todos: Vec<&str> = SIMPLES
+            .iter()
+            .copied()
+            .chain(COMPLEJOS.iter().map(|(s, _)| *s))
+            .collect();
         let vueltas = 200;
         let t = std::time::Instant::now();
         let mut n = 0;
@@ -307,6 +497,9 @@ mod pruebas {
         let por_pedido = t.elapsed() / (vueltas * todos.len()) as u32;
         assert_eq!(n, vueltas * COMPLEJOS.len());
         println!("clasificar: {por_pedido:?} por pedido (sin optimizar)");
-        assert!(por_pedido < std::time::Duration::from_millis(1), "{por_pedido:?}");
+        assert!(
+            por_pedido < std::time::Duration::from_millis(1),
+            "{por_pedido:?}"
+        );
     }
 }

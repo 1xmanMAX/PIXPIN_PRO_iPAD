@@ -57,7 +57,12 @@ pub enum Hecho {
     /// «O centro» / «de centro O».
     Centro(char),
     /// «m∢AOB = 90°»: el angulo de vertice `v`.
-    Angulo { a: char, v: char, b: char, grados: f64 },
+    Angulo {
+        a: char,
+        v: char,
+        b: char,
+        grados: f64,
+    },
     /// «θ = 90°» sin letras: hay un angulo recto marcado.
     Recto,
 }
@@ -108,7 +113,8 @@ fn letras_en(c: &[char], i: usize) -> Vec<char> {
 fn numero_en(c: &[char], i: usize) -> Option<f64> {
     let mut s = String::new();
     let mut k = i;
-    while k < c.len() && (c[k].is_ascii_digit() || ((c[k] == '.' || c[k] == ',') && !s.is_empty())) {
+    while k < c.len() && (c[k].is_ascii_digit() || ((c[k] == '.' || c[k] == ',') && !s.is_empty()))
+    {
         s.push(if c[k] == ',' { '.' } else { c[k] });
         k += 1;
     }
@@ -136,30 +142,64 @@ pub fn hechos_de_texto<S: AsRef<str>>(renglones: &[S]) -> Vec<Hecho> {
         }
         let c: Vec<char> = n.chars().collect();
         // Las palabras (con sus letras de puntos).
-        let palabras: Vec<&str> = n.split(|ch: char| ch.is_whitespace() || ch == ',' || ch == ':' || ch == ';').filter(|p| !p.is_empty()).collect();
+        let palabras: Vec<&str> = n
+            .split(|ch: char| ch.is_whitespace() || ch == ',' || ch == ':' || ch == ';')
+            .filter(|p| !p.is_empty())
+            .collect();
         let bajas: Vec<String> = palabras.iter().map(|p| p.to_lowercase()).collect();
-        let es_nombre = |p: &str| p.chars().count() >= 2 && p.chars().count() <= 3 && p.chars().all(|ch| ch.is_ascii_uppercase());
+        let es_nombre = |p: &str| {
+            p.chars().count() >= 2
+                && p.chars().count() <= 3
+                && p.chars().all(|ch| ch.is_ascii_uppercase())
+        };
         for (k, p) in palabras.iter().enumerate() {
             if !es_nombre(p) {
                 continue;
             }
             let l: Vec<char> = p.chars().collect();
-            let siguientes: Vec<&str> = bajas.iter().skip(k + 1).take(4).map(String::as_str).collect();
-            let antes: Vec<&str> = bajas.iter().take(k).rev().take(2).map(String::as_str).collect();
-            let dice = |w: &str| siguientes.iter().any(|s| s.starts_with(w)) || antes.iter().any(|s| s.starts_with(w));
+            let siguientes: Vec<&str> = bajas
+                .iter()
+                .skip(k + 1)
+                .take(4)
+                .map(String::as_str)
+                .collect();
+            let antes: Vec<&str> = bajas
+                .iter()
+                .take(k)
+                .rev()
+                .take(2)
+                .map(String::as_str)
+                .collect();
+            let dice = |w: &str| {
+                siguientes.iter().any(|s| s.starts_with(w))
+                    || antes.iter().any(|s| s.starts_with(w))
+            };
             if l.len() == 2 && dice("diametro") {
                 anadir(Hecho::Diametro(l[0], l[1]), &mut v);
             }
             if l.len() == 3 && dice("cuadrante") {
-                anadir(Hecho::CuadranteDe { o: l[1], a: l[0], b: l[2] }, &mut v);
+                anadir(
+                    Hecho::CuadranteDe {
+                        o: l[1],
+                        a: l[0],
+                        b: l[2],
+                    },
+                    &mut v,
+                );
             }
         }
         // «centro O», «O es el centro», «de centro O».
         for (k, p) in bajas.iter().enumerate() {
             if p.starts_with("centro") {
-                let vecino = palabras.get(k + 1).filter(|q| q.chars().count() == 1 && q.chars().all(|ch| ch.is_ascii_uppercase()));
+                let vecino = palabras.get(k + 1).filter(|q| {
+                    q.chars().count() == 1 && q.chars().all(|ch| ch.is_ascii_uppercase())
+                });
                 let previo = (k >= 2 && matches!(bajas[k - 1].as_str(), "el" | "es"))
-                    .then(|| palabras[..k].iter().rev().find(|q| q.chars().count() == 1 && q.chars().all(|ch| ch.is_ascii_uppercase())))
+                    .then(|| {
+                        palabras[..k].iter().rev().find(|q| {
+                            q.chars().count() == 1 && q.chars().all(|ch| ch.is_ascii_uppercase())
+                        })
+                    })
                     .flatten();
                 if let Some(o) = vecino.or(previo).and_then(|q| q.chars().next()) {
                     anadir(Hecho::Centro(o), &mut v);
@@ -191,7 +231,15 @@ pub fn hechos_de_texto<S: AsRef<str>>(renglones: &[S]) -> Vec<Hecho> {
                 k += 1;
             }
             if let Some(g) = numero_en(&c, k).filter(|g| *g > 0.0 && *g < 360.0) {
-                anadir(Hecho::Angulo { a: l[0], v: l[1], b: l[2], grados: g }, &mut v);
+                anadir(
+                    Hecho::Angulo {
+                        a: l[0],
+                        v: l[1],
+                        b: l[2],
+                        grados: g,
+                    },
+                    &mut v,
+                );
             }
         }
         // «θ = 90°», «α=90°»: un recto marcado.
@@ -210,7 +258,9 @@ pub fn hechos_de_texto<S: AsRef<str>>(renglones: &[S]) -> Vec<Hecho> {
             while k < c.len() && c[k] == ' ' {
                 k += 1;
             }
-            if numero_en(&c, k).is_some_and(|g| (g - 90.0).abs() < 1e-6) && c.get(k + 2).is_none_or(|ch| !ch.is_ascii_digit()) {
+            if numero_en(&c, k).is_some_and(|g| (g - 90.0).abs() < 1e-6)
+                && c.get(k + 2).is_none_or(|ch| !ch.is_ascii_digit())
+            {
                 anadir(Hecho::Recto, &mut v);
             }
         }
@@ -267,7 +317,13 @@ fn muestras_de(d: &Diagrama, p: Pieza) -> Vec<P> {
         Pieza::Punto(i) => v.push(d.puntos[i].c),
         Pieza::Recuadro(i) => {
             let r = &d.recuadros[i];
-            let c = [(r.x0, r.y0), (r.x1, r.y0), (r.x1, r.y1), (r.x0, r.y1), (r.x0, r.y0)];
+            let c = [
+                (r.x0, r.y0),
+                (r.x1, r.y0),
+                (r.x1, r.y1),
+                (r.x0, r.y1),
+                (r.x0, r.y0),
+            ];
             for k in 0..4 {
                 tramo(c[k], c[k + 1], &mut v);
             }
@@ -303,7 +359,8 @@ pub fn figuras(d: &Diagrama, tol: f64) -> Vec<Figura> {
     let n = piezas.len();
     let mut padre: Vec<usize> = (0..n).collect();
     let celda = tol.max(1.0);
-    let mut rejilla: std::collections::HashMap<(i64, i64), Vec<(usize, P)>> = std::collections::HashMap::new();
+    let mut rejilla: std::collections::HashMap<(i64, i64), Vec<(usize, P)>> =
+        std::collections::HashMap::new();
     let mut cajas = vec![(f64::MAX, f64::MAX, f64::MIN, f64::MIN); n];
     for (k, &p) in piezas.iter().enumerate() {
         for q in muestras_de(d, p) {
@@ -345,9 +402,17 @@ pub fn figuras(d: &Diagrama, tol: f64) -> Vec<Figura> {
             let mut caja = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
             for &k in &ks {
                 let c = cajas[k];
-                caja = (caja.0.min(c.0), caja.1.min(c.1), caja.2.max(c.2), caja.3.max(c.3));
+                caja = (
+                    caja.0.min(c.0),
+                    caja.1.min(c.1),
+                    caja.2.max(c.2),
+                    caja.3.max(c.3),
+                );
             }
-            Figura { piezas: ks.into_iter().map(|k| piezas[k]).collect(), caja }
+            Figura {
+                piezas: ks.into_iter().map(|k| piezas[k]).collect(),
+                caja,
+            }
         })
         .collect()
 }
@@ -387,10 +452,17 @@ struct Figurado {
 }
 
 fn nudo_de(nudos: &mut Vec<Nudo>, p: P, tol: f64) -> usize {
-    if let Some(k) = (0..nudos.len()).filter(|&k| dist(nudos[k].p, p) <= tol).min_by(|&a, &b| dist(nudos[a].p, p).total_cmp(&dist(nudos[b].p, p))) {
+    if let Some(k) = (0..nudos.len())
+        .filter(|&k| dist(nudos[k].p, p) <= tol)
+        .min_by(|&a, &b| dist(nudos[a].p, p).total_cmp(&dist(nudos[b].p, p)))
+    {
         return k;
     }
-    nudos.push(Nudo { p, nombre: None, fijo: false });
+    nudos.push(Nudo {
+        p,
+        nombre: None,
+        fijo: false,
+    });
     nudos.len() - 1
 }
 
@@ -446,11 +518,21 @@ pub fn aplicar(d: &mut Diagrama, hechos: &[Hecho], hm: f64) {
 fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) {
     let escala = fig.escala().max(1.0);
     let tol_nudo = 3f64.max(0.012 * escala).min(0.5 * hm.max(8.0));
-    let mut f = Figurado { nudos: Vec::new(), segs: Vec::new(), arcos: Vec::new(), circulos: Vec::new(), puntos: Vec::new() };
+    let mut f = Figurado {
+        nudos: Vec::new(),
+        segs: Vec::new(),
+        arcos: Vec::new(),
+        circulos: Vec::new(),
+        puntos: Vec::new(),
+    };
     // 1. Los nudos: los puntos primero.
     for pz in &fig.piezas {
         if let Pieza::Punto(i) = *pz {
-            f.nudos.push(Nudo { p: d.puntos[i].c, nombre: None, fijo: false });
+            f.nudos.push(Nudo {
+                p: d.puntos[i].c,
+                nombre: None,
+                fijo: false,
+            });
             f.puntos.push((i, f.nudos.len() - 1));
         }
     }
@@ -470,19 +552,30 @@ fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) 
             let a = d.arcos[i].clone();
             // A que circunferencia de la figura pertenece.
             let tol_c = 2.5f64.max(0.03 * a.r);
-            let k = match f.circulos.iter().position(|c| dist(c.c, a.c) <= tol_c && (c.r - a.r).abs() <= tol_c) {
+            let k = match f
+                .circulos
+                .iter()
+                .position(|c| dist(c.c, a.c) <= tol_c && (c.r - a.r).abs() <= tol_c)
+            {
                 Some(k) => {
                     f.circulos[k].arcos.push(i);
                     k
                 }
                 None => {
-                    f.circulos.push(Circulo { c: a.c, r: a.r, arcos: vec![i], centro: None });
+                    f.circulos.push(Circulo {
+                        c: a.c,
+                        r: a.r,
+                        arcos: vec![i],
+                        centro: None,
+                    });
                     f.circulos.len() - 1
                 }
             };
             if f.circulos[k].centro.is_none() {
                 let tol_centro = tol_nudo.max(0.04 * a.r);
-                f.circulos[k].centro = (0..f.nudos.len()).filter(|&n| dist(f.nudos[n].p, a.c) <= tol_centro).min_by(|&x, &y| dist(f.nudos[x].p, a.c).total_cmp(&dist(f.nudos[y].p, a.c)));
+                f.circulos[k].centro = (0..f.nudos.len())
+                    .filter(|&n| dist(f.nudos[n].p, a.c) <= tol_centro)
+                    .min_by(|&x, &y| dist(f.nudos[x].p, a.c).total_cmp(&dist(f.nudos[y].p, a.c)));
             }
             if a.entera() {
                 f.arcos.push((i, None, None));
@@ -490,7 +583,11 @@ fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) 
             }
             let (p, q) = a.extremos();
             let t = tol_nudo.max(a.grosor / 2.0 + 3.0);
-            let cerca = |nudos: &Vec<Nudo>, x: P| (0..nudos.len()).filter(|&n| dist(nudos[n].p, x) <= t).min_by(|&u, &v| dist(nudos[u].p, x).total_cmp(&dist(nudos[v].p, x)));
+            let cerca = |nudos: &Vec<Nudo>, x: P| {
+                (0..nudos.len())
+                    .filter(|&n| dist(nudos[n].p, x) <= t)
+                    .min_by(|&u, &v| dist(nudos[u].p, x).total_cmp(&dist(nudos[v].p, x)))
+            };
             let ni = cerca(&f.nudos, p).unwrap_or_else(|| nudo_de(&mut f.nudos, p, 0.0));
             let nf = cerca(&f.nudos, q).unwrap_or_else(|| nudo_de(&mut f.nudos, q, 0.0));
             f.arcos.push((i, Some(ni), Some(nf)));
@@ -523,7 +620,9 @@ fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) 
                     let (vx, vy) = (q.0 - pe.0, q.1 - pe.1);
                     let delante = vx * u.0 + vy * u.1;
                     let lado = (vx * -u.1 + vy * u.0).abs();
-                    delante > 0.0 && delante <= alcance.min(0.6 * l) && lado <= 3.0f64.max(0.07 * delante)
+                    delante > 0.0
+                        && delante <= alcance.min(0.6 * l)
+                        && lado <= 3.0f64.max(0.07 * delante)
                 })
                 .min_by(|&x, &y| dist(f.nudos[x].p, pe).total_cmp(&dist(f.nudos[y].p, pe)));
             if let Some(n) = mejor {
@@ -536,10 +635,17 @@ fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) 
     let mut letras: Vec<(char, P, f64)> = d
         .rotulos
         .iter()
-        .filter_map(|r| letra_de(&r.texto).map(|l| (l, (r.caja.cx(), r.caja.cy()), r.caja.h.max(r.caja.w))))
-        .filter(|(_, c, _)| c.0 >= fig.caja.0 - 3.0 * hm && c.0 <= fig.caja.2 + 3.0 * hm && c.1 >= fig.caja.1 - 3.0 * hm && c.1 <= fig.caja.3 + 3.0 * hm)
+        .filter_map(|r| {
+            letra_de(&r.texto).map(|l| (l, (r.caja.cx(), r.caja.cy()), r.caja.h.max(r.caja.w)))
+        })
+        .filter(|(_, c, _)| {
+            c.0 >= fig.caja.0 - 3.0 * hm
+                && c.0 <= fig.caja.2 + 3.0 * hm
+                && c.1 >= fig.caja.1 - 3.0 * hm
+                && c.1 <= fig.caja.3 + 3.0 * hm
+        })
         .collect();
-    letras.sort_by(|a, b| a.0.cmp(&b.0));
+    letras.sort_by_key(|a| a.0);
     let mut parejas: Vec<(f64, usize, usize)> = Vec::new();
     for (li, (_, c, tam)) in letras.iter().enumerate() {
         for (n, nudo) in f.nudos.iter().enumerate() {
@@ -568,8 +674,18 @@ fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) 
     let antes = (f.nudos.clone(), f.circulos.clone());
     let limite = (0.04 * escala).max(1.5 * hm);
     let movido = |f: &Figurado| {
-        let n = f.nudos.iter().zip(&antes.0).map(|(a, b)| dist(a.p, b.p)).fold(0.0, f64::max);
-        let c = f.circulos.iter().zip(&antes.1).map(|(a, b)| dist(a.c, b.c).max((a.r - b.r).abs())).fold(0.0, f64::max);
+        let n = f
+            .nudos
+            .iter()
+            .zip(&antes.0)
+            .map(|(a, b)| dist(a.p, b.p))
+            .fold(0.0, f64::max);
+        let c = f
+            .circulos
+            .iter()
+            .zip(&antes.1)
+            .map(|(a, b)| dist(a.c, b.c).max((a.r - b.r).abs()))
+            .fold(0.0, f64::max);
         n.max(c)
     };
     vueltas(&mut f, d, hechos, hm);
@@ -601,7 +717,9 @@ fn aplicar_en_figura(d: &mut Diagrama, fig: &Figura, hechos: &[Hecho], hm: f64) 
             if a.entera() {
                 continue;
             }
-            let Some(&(_, Some(ni), Some(nf))) = f.arcos.iter().find(|x| x.0 == ai) else { continue };
+            let Some(&(_, Some(ni), Some(nf))) = f.arcos.iter().find(|x| x.0 == ai) else {
+                continue;
+            };
             let (pi, pf) = (f.nudos[ni].p, f.nudos[nf].p);
             let ini = angulo(c.c, pi);
             let fin = angulo(c.c, pf);
@@ -628,9 +746,21 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
 
     // 3. Las vueltas de restricciones.
     let hay = |h: &Hecho| hechos.contains(h);
-    let semi_tol = if hay(&Hecho::Semicircunferencia) { 16f64 } else { 5.0 };
+    let semi_tol = if hay(&Hecho::Semicircunferencia) {
+        16f64
+    } else {
+        5.0
+    };
     let cuad_tol = if hay(&Hecho::Cuadrante) { 14f64 } else { 4.0 };
-    let recto_tol = if hay(&Hecho::Recto) || hechos.iter().any(|h| matches!(h, Hecho::Angulo { grados, .. } if (*grados - 90.0).abs() < 1e-6)) { 4.0 } else { 2.5 };
+    let recto_tol = if hay(&Hecho::Recto)
+        || hechos
+            .iter()
+            .any(|h| matches!(h, Hecho::Angulo { grados, .. } if (*grados - 90.0).abs() < 1e-6))
+    {
+        4.0
+    } else {
+        2.5
+    };
     for vuelta in 0..5 {
         // a. Horizontales y verticales.
         for &(_, a, b) in &f.segs {
@@ -680,7 +810,11 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
                 let o = f.nudos[v].p;
                 let (l1, l2) = (dist(o, f.nudos[p1].p), dist(o, f.nudos[p2].p));
                 let da = dif(angulo(o, f.nudos[p1].p), angulo(o, f.nudos[p2].p));
-                let falta = if da >= 0.0 { FRAC_PI_2 - da } else { -FRAC_PI_2 - da };
+                let falta = if da >= 0.0 {
+                    FRAC_PI_2 - da
+                } else {
+                    -FRAC_PI_2 - da
+                };
                 if falta.abs() > holgura(recto_tol, l1.min(l2)) || falta.abs() < 1e-9 {
                     continue;
                 }
@@ -692,8 +826,16 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
                 };
                 // Un extremo sobre una circunferencia manda (Tales: el recto sale
                 // solo al ponerlo en ella; girarlo la descuadraba).
-                let en_circulo = |p: P| f.circulos.iter().any(|c| (dist(p, c.c) - c.r).abs() <= 3f64.max(0.03 * c.r));
-                let manda = |n: usize| f.nudos[n].fijo || horizontal_o_vertical(f.nudos[n].p) || en_circulo(f.nudos[n].p);
+                let en_circulo = |p: P| {
+                    f.circulos
+                        .iter()
+                        .any(|c| (dist(p, c.c) - c.r).abs() <= 3f64.max(0.03 * c.r))
+                };
+                let manda = |n: usize| {
+                    f.nudos[n].fijo
+                        || horizontal_o_vertical(f.nudos[n].p)
+                        || en_circulo(f.nudos[n].p)
+                };
                 let (m1, m2) = (manda(p1), manda(p2));
                 match (m1, m2) {
                     (true, true) => {}
@@ -709,16 +851,23 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
         // c. Hechos de cuadrante con letras: O centro, OA = OB, recto.
         for h in hechos {
             if let Hecho::CuadranteDe { o, a, b } = *h
-                && let (Some(no), Some(na), Some(nb)) = (nombrado(f, o), nombrado(f, a), nombrado(f, b))
+                && let (Some(no), Some(na), Some(nb)) =
+                    (nombrado(f, o), nombrado(f, a), nombrado(f, b))
             {
                 cuadrante(f, no, na, nb);
             }
         }
         // d. Arcos: semicircunferencias y cuadrantes.
         for &(ai, ni, nf) in &f.arcos.clone() {
-            let (Some(ni), Some(nf)) = (ni, nf) else { continue };
+            let (Some(ni), Some(nf)) = (ni, nf) else {
+                continue;
+            };
             let barrido = d.arcos[ai].barrido;
-            let k = f.circulos.iter().position(|c| c.arcos.contains(&ai)).unwrap_or(0);
+            let k = f
+                .circulos
+                .iter()
+                .position(|c| c.arcos.contains(&ai))
+                .unwrap_or(0);
             if (barrido - PI).abs() <= semi_tol.to_radians() {
                 // El diametro: sus dos extremos; el centro, en medio.
                 let (pa, pb) = (f.nudos[ni].p, f.nudos[nf].p);
@@ -743,16 +892,24 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
         for h in hechos {
             match *h {
                 Hecho::Diametro(a, b) => {
-                    let (Some(na), Some(nb)) = (nombrado(f, a), nombrado(f, b)) else { continue };
+                    let (Some(na), Some(nb)) = (nombrado(f, a), nombrado(f, b)) else {
+                        continue;
+                    };
                     let (pa, pb) = (f.nudos[na].p, f.nudos[nb].p);
                     // La circunferencia que pasa (mas o menos) por los dos.
                     let k = (0..f.circulos.len())
                         .filter(|&k| {
                             let c = &f.circulos[k];
                             let tol = 0.08 * c.r + 3.0;
-                            (dist(pa, c.c) - c.r).abs() <= tol && (dist(pb, c.c) - c.r).abs() <= tol && (dist(pa, pb) - 2.0 * c.r).abs() <= 2.0 * tol
+                            (dist(pa, c.c) - c.r).abs() <= tol
+                                && (dist(pb, c.c) - c.r).abs() <= tol
+                                && (dist(pa, pb) - 2.0 * c.r).abs() <= 2.0 * tol
                         })
-                        .min_by(|&x, &y| (dist(pa, pb) - 2.0 * f.circulos[x].r).abs().total_cmp(&(dist(pa, pb) - 2.0 * f.circulos[y].r).abs()));
+                        .min_by(|&x, &y| {
+                            (dist(pa, pb) - 2.0 * f.circulos[x].r)
+                                .abs()
+                                .total_cmp(&(dist(pa, pb) - 2.0 * f.circulos[y].r).abs())
+                        });
                     if let Some(k) = k {
                         let c = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
                         f.circulos[k].c = c;
@@ -767,7 +924,12 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
                 Hecho::Centro(o) => {
                     let Some(no) = nombrado(f, o) else { continue };
                     let p = f.nudos[no].p;
-                    if let Some(k) = (0..f.circulos.len()).filter(|&k| dist(f.circulos[k].c, p) <= 0.12 * f.circulos[k].r + 3.0).min_by(|&x, &y| dist(f.circulos[x].c, p).total_cmp(&dist(f.circulos[y].c, p))) {
+                    if let Some(k) = (0..f.circulos.len())
+                        .filter(|&k| dist(f.circulos[k].c, p) <= 0.12 * f.circulos[k].r + 3.0)
+                        .min_by(|&x, &y| {
+                            dist(f.circulos[x].c, p).total_cmp(&dist(f.circulos[y].c, p))
+                        })
+                    {
                         f.circulos[k].centro = Some(no);
                         f.circulos[k].c = p;
                     }
@@ -782,7 +944,10 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
             for c in f.circulos.iter_mut() {
                 let tol = 2.5f64.max(0.02 * c.r);
                 let m = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
-                if (dist(pa, c.c) - c.r).abs() <= tol && (dist(pb, c.c) - c.r).abs() <= tol && dist(m, c.c) <= tol {
+                if (dist(pa, c.c) - c.r).abs() <= tol
+                    && (dist(pb, c.c) - c.r).abs() <= tol
+                    && dist(m, c.c) <= tol
+                {
                     c.c = m;
                     c.r = dist(pa, pb) / 2.0;
                 }
@@ -792,7 +957,11 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
         for c in f.circulos.iter_mut() {
             if let Some(nc) = c.centro {
                 let p = f.nudos[nc].p;
-                let m = if f.nudos[nc].fijo { p } else { ((p.0 + c.c.0) / 2.0, (p.1 + c.c.1) / 2.0) };
+                let m = if f.nudos[nc].fijo {
+                    p
+                } else {
+                    ((p.0 + c.c.0) / 2.0, (p.1 + c.c.1) / 2.0)
+                };
                 c.c = m;
                 f.nudos[nc].p = m;
             }
@@ -807,10 +976,17 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
                 if c.centro == Some(n) {
                     continue;
                 }
-                let base = if f.nudos[n].nombre.is_some() { 0.05 } else { 0.025 };
+                let base = if f.nudos[n].nombre.is_some() {
+                    0.05
+                } else {
+                    0.025
+                };
                 let tol = 3f64.max(base * c.r);
                 let de = dist(p, c.c);
-                if (de - c.r).abs() <= tol && de > 1e-6 && (ultima || !f.nudos[n].fijo || (de - c.r).abs() > 1e-6) {
+                if (de - c.r).abs() <= tol
+                    && de > 1e-6
+                    && (ultima || !f.nudos[n].fijo || (de - c.r).abs() > 1e-6)
+                {
                     f.nudos[n].p = en(c.c, c.r, angulo(c.c, p));
                 }
             }
@@ -827,7 +1003,8 @@ fn vueltas(f: &mut Figurado, d: &Diagrama, hechos: &[Hecho], hm: f64) {
                 let u = ((pb.0 - pa.0) / l, (pb.1 - pa.1) / l);
                 let t = (p.0 - pa.0) * u.0 + (p.1 - pa.1) * u.1;
                 let lado = (p.0 - pa.0) * -u.1 + (p.1 - pa.1) * u.0;
-                if t > 2.0 && t < l - 2.0 && lado.abs() <= 2.5f64.max(0.01 * l) && lado.abs() > 1e-9 {
+                if t > 2.0 && t < l - 2.0 && lado.abs() <= 2.5f64.max(0.01 * l) && lado.abs() > 1e-9
+                {
                     f.nudos[n].p = (pa.0 + u.0 * t, pa.1 + u.1 * t);
                 }
             }
@@ -879,7 +1056,11 @@ fn marcas_de_angulo(d: &mut Diagrama, hm: f64) {
     let mut vertices: Vec<(P, Vec<f64>)> = Vec::new();
     // Solo las rayas de verdad (largas): las rayitas de una letra o del
     // borde de la mancha no hacen vertice.
-    let largas: Vec<&super::Segmento> = d.segmentos.iter().filter(|s| s.largo() >= 0.5 * max_r).collect();
+    let largas: Vec<&super::Segmento> = d
+        .segmentos
+        .iter()
+        .filter(|s| s.largo() >= 0.5 * max_r)
+        .collect();
     for s in largas.iter().copied() {
         for (e, o) in [(s.a, s.b), (s.b, s.a)] {
             let dir = angulo(e, o);
@@ -902,7 +1083,10 @@ fn marcas_de_angulo(d: &mut Diagrama, hm: f64) {
     // Y las rayas que pasan por un vertice (una recta que sigue de largo).
     for v in vertices.iter_mut() {
         for s in largas.iter().copied() {
-            if dist(s.a, v.0) > 3.0 && dist(s.b, v.0) > 3.0 && super::ajuste::dist_a_segmento(v.0, s.a, s.b) <= 1.5 {
+            if dist(s.a, v.0) > 3.0
+                && dist(s.b, v.0) > 3.0
+                && super::ajuste::dist_a_segmento(v.0, s.a, s.b) <= 1.5
+            {
                 for dir in [angulo(v.0, s.a), angulo(v.0, s.b)] {
                     if !v.1.iter().any(|&x| dif(x, dir).abs() < 0.02) {
                         v.1.push(dir);
@@ -911,9 +1095,19 @@ fn marcas_de_angulo(d: &mut Diagrama, hm: f64) {
             }
             // O que apuntan a el sin llegar (la recta cortada por la marca).
             let l = s.largo().max(1e-9);
-            let lado = ((v.0.0 - s.a.0) * -(s.b.1 - s.a.1) / l + (v.0.1 - s.a.1) * (s.b.0 - s.a.0) / l).abs();
-            let (cerca, lejos) = if dist(s.a, v.0) < dist(s.b, v.0) { (s.a, s.b) } else { (s.b, s.a) };
-            if dist(cerca, v.0) > 3.0 && dist(cerca, v.0) <= 2.0 * max_r && lado <= 2.5 && dist(lejos, v.0) > dist(cerca, v.0) {
+            let lado = ((v.0.0 - s.a.0) * -(s.b.1 - s.a.1) / l
+                + (v.0.1 - s.a.1) * (s.b.0 - s.a.0) / l)
+                .abs();
+            let (cerca, lejos) = if dist(s.a, v.0) < dist(s.b, v.0) {
+                (s.a, s.b)
+            } else {
+                (s.b, s.a)
+            };
+            if dist(cerca, v.0) > 3.0
+                && dist(cerca, v.0) <= 2.0 * max_r
+                && lado <= 2.5
+                && dist(lejos, v.0) > dist(cerca, v.0)
+            {
                 let dir = angulo(v.0, lejos);
                 if !v.1.iter().any(|&x| dif(x, dir).abs() < 0.02) {
                     v.1.push(dir);
@@ -927,11 +1121,18 @@ fn marcas_de_angulo(d: &mut Diagrama, hm: f64) {
     let mut sectores: Vec<(P, f64)> = d.marcas.iter().map(|m| (m.v, m.r)).collect();
     let mut quedan = Vec::with_capacity(d.regiones.len());
     for reg in std::mem::take(&mut d.regiones) {
-        if reg.contorno.len() >= 3 && reg.area <= PI * max_r * max_r * 0.5
+        if reg.contorno.len() >= 3
+            && reg.area <= PI * max_r * max_r * 0.5
             && let Some((v, r, inicio, barrido)) = sector_de(&reg, &vertices, max_r)
         {
             sectores.push((v, r));
-            d.marcas.push(super::Marca { v, r, inicio, barrido, color: reg.color });
+            d.marcas.push(super::Marca {
+                v,
+                r,
+                inicio,
+                barrido,
+                color: reg.color,
+            });
             continue;
         }
         quedan.push(reg);
@@ -950,7 +1151,8 @@ fn marcas_de_angulo(d: &mut Diagrama, hm: f64) {
         }
         !(0..=8).all(|k| dentro(en(a.c, a.r, a.inicio + a.barrido * k as f64 / 8.0)))
     });
-    d.segmentos.retain(|s| !(s.largo() < 0.9 * r_max && dentro(s.a) && dentro(s.b)));
+    d.segmentos
+        .retain(|s| !(s.largo() < 0.9 * r_max && dentro(s.a) && dentro(s.b)));
 }
 
 fn sector_de(reg: &Region, vertices: &[(P, Vec<f64>)], max_r: f64) -> Option<(P, f64, f64, f64)> {
@@ -958,11 +1160,23 @@ fn sector_de(reg: &Region, vertices: &[(P, Vec<f64>)], max_r: f64) -> Option<(P,
     // mancha entera a menos de `max_r`.
     let mut mejor: Option<(usize, f64)> = None;
     for (k, v) in vertices.iter().enumerate() {
-        let lejos = reg.contorno.iter().map(|&p| dist(p, v.0)).fold(0.0, f64::max);
-        let cerca = reg.contorno.iter().map(|&p| dist(p, v.0)).fold(f64::MAX, f64::min);
+        let lejos = reg
+            .contorno
+            .iter()
+            .map(|&p| dist(p, v.0))
+            .fold(0.0, f64::max);
+        let cerca = reg
+            .contorno
+            .iter()
+            .map(|&p| dist(p, v.0))
+            .fold(f64::MAX, f64::min);
         // (Junto al vertice la mancha se pierde: alli las rayas la cortan en
         // cunas que no aguantan la erosion.)
-        if lejos <= max_r && cerca <= 0.6 * lejos + 3.0 && !v.1.is_empty() && mejor.is_none_or(|m| cerca < m.1) {
+        if lejos <= max_r
+            && cerca <= 0.6 * lejos + 3.0
+            && !v.1.is_empty()
+            && mejor.is_none_or(|m| cerca < m.1)
+        {
             mejor = Some((k, cerca));
         }
     }
@@ -976,12 +1190,19 @@ fn sector_de(reg: &Region, vertices: &[(P, Vec<f64>)], max_r: f64) -> Option<(P,
     if r < 4.0 {
         return None;
     }
-    let angs: Vec<f64> = reg.contorno.iter().filter(|&&p| dist(p, *o) >= 0.35 * r).map(|&p| angulo(*o, p)).collect();
+    let angs: Vec<f64> = reg
+        .contorno
+        .iter()
+        .filter(|&&p| dist(p, *o) >= 0.35 * r)
+        .map(|&p| angulo(*o, p))
+        .collect();
     if angs.len() < 3 {
         return None;
     }
     // El centro del abanico y lo que abarca.
-    let (sx, sy) = angs.iter().fold((0.0, 0.0), |a, &t| (a.0 + t.cos(), a.1 + t.sin()));
+    let (sx, sy) = angs
+        .iter()
+        .fold((0.0, 0.0), |a, &t| (a.0 + t.cos(), a.1 + t.sin()));
     let medio = sy.atan2(sx);
     let (mut lo, mut hi) = (0f64, 0f64);
     for &t in &angs {
@@ -990,13 +1211,32 @@ fn sector_de(reg: &Region, vertices: &[(P, Vec<f64>)], max_r: f64) -> Option<(P,
         hi = hi.max(x);
     }
     if std::env::var_os("PIXPIN_DIAGRAMA_DEPURAR").is_some() {
-        eprintln!("sector: area {:.0} vertice {:?} r {r:.1} medio {:.0} lo {:.0} hi {:.0} rayas {:?}", reg.area, o, medio.to_degrees(), lo.to_degrees(), hi.to_degrees(), dirs.iter().map(|x| x.to_degrees().round()).collect::<Vec<_>>());
+        eprintln!(
+            "sector: area {:.0} vertice {:?} r {r:.1} medio {:.0} lo {:.0} hi {:.0} rayas {:?}",
+            reg.area,
+            o,
+            medio.to_degrees(),
+            lo.to_degrees(),
+            hi.to_degrees(),
+            dirs.iter()
+                .map(|x| x.to_degrees().round())
+                .collect::<Vec<_>>()
+        );
     }
     if hi - lo > PI * 0.95 || hi - lo < 0.15 {
         return None;
     }
     // Las rayas que lo cierran: la mas cercana a cada lado (con holgura).
-    let raya = |objetivo: f64| dirs.iter().copied().filter(|&x| dif(medio + objetivo, x).abs() <= 0.35).min_by(|a, b| dif(medio + objetivo, *a).abs().total_cmp(&dif(medio + objetivo, *b).abs()));
+    let raya = |objetivo: f64| {
+        dirs.iter()
+            .copied()
+            .filter(|&x| dif(medio + objetivo, x).abs() <= 0.35)
+            .min_by(|a, b| {
+                dif(medio + objetivo, *a)
+                    .abs()
+                    .total_cmp(&dif(medio + objetivo, *b).abs())
+            })
+    };
     let (a0, a1) = (raya(lo)?, raya(hi)?);
     let barrido = dif(a0, a1);
     if barrido <= 0.05 {
@@ -1009,8 +1249,28 @@ fn sector_de(reg: &Region, vertices: &[(P, Vec<f64>)], max_r: f64) -> Option<(P,
 /// del contorno que cae junto a una raya o un arco de la figura, sobre el;
 /// lo que va por un arco, con el arco (no a trozos).
 fn bordes_de_regiones(d: &mut Diagrama, fig: &Figura) {
-    let segs: Vec<usize> = fig.piezas.iter().filter_map(|p| if let Pieza::Segmento(i) = *p { Some(i) } else { None }).collect();
-    let arcs: Vec<usize> = fig.piezas.iter().filter_map(|p| if let Pieza::Arco(i) = *p { Some(i) } else { None }).collect();
+    let segs: Vec<usize> = fig
+        .piezas
+        .iter()
+        .filter_map(|p| {
+            if let Pieza::Segmento(i) = *p {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let arcs: Vec<usize> = fig
+        .piezas
+        .iter()
+        .filter_map(|p| {
+            if let Pieza::Arco(i) = *p {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .collect();
     for pz in &fig.piezas {
         let Pieza::Region(ri) = *pz else { continue };
         // Las marcas de angulo (pequenas) ya son sectores exactos.
@@ -1099,17 +1359,54 @@ mod pruebas {
         ]);
         assert!(h.contains(&Hecho::Semicircunferencia), "{h:?}");
         assert!(h.contains(&Hecho::Diametro('A', 'B')), "{h:?}");
-        assert!(h.contains(&Hecho::Angulo { a: 'A', v: 'O', b: 'B', grados: 90.0 }), "{h:?}");
-        assert!(h.contains(&Hecho::Angulo { a: 'B', v: 'P', b: 'D', grados: 45.0 }), "{h:?}");
-        assert!(h.contains(&Hecho::CuadranteDe { o: 'O', a: 'A', b: 'B' }), "{h:?}");
+        assert!(
+            h.contains(&Hecho::Angulo {
+                a: 'A',
+                v: 'O',
+                b: 'B',
+                grados: 90.0
+            }),
+            "{h:?}"
+        );
+        assert!(
+            h.contains(&Hecho::Angulo {
+                a: 'B',
+                v: 'P',
+                b: 'D',
+                grados: 45.0
+            }),
+            "{h:?}"
+        );
+        assert!(
+            h.contains(&Hecho::CuadranteDe {
+                o: 'O',
+                a: 'A',
+                b: 'B'
+            }),
+            "{h:?}"
+        );
         assert!(h.contains(&Hecho::Cuadrante), "{h:?}");
         assert!(h.contains(&Hecho::Recto), "{h:?}");
         assert!(h.contains(&Hecho::Centro('O')), "{h:?}");
         // La pregunta no es un hecho (no tiene medida).
-        assert!(!h.iter().any(|x| matches!(x, Hecho::Angulo { a: 'C', .. })), "{h:?}");
+        assert!(
+            !h.iter().any(|x| matches!(x, Hecho::Angulo { a: 'C', .. })),
+            "{h:?}"
+        );
         // En LaTeX, como lo escribe la nube.
-        let h = hechos_de_texto(&[r"m\measuredangle AOB = 90^{\circ}", r"\overline{AB} es diametro"]);
-        assert!(h.contains(&Hecho::Angulo { a: 'A', v: 'O', b: 'B', grados: 90.0 }), "{h:?}");
+        let h = hechos_de_texto(&[
+            r"m\measuredangle AOB = 90^{\circ}",
+            r"\overline{AB} es diametro",
+        ]);
+        assert!(
+            h.contains(&Hecho::Angulo {
+                a: 'A',
+                v: 'O',
+                b: 'B',
+                grados: 90.0
+            }),
+            "{h:?}"
+        );
         assert!(h.contains(&Hecho::Diametro('A', 'B')), "{h:?}");
         // Nada que ver: nada.
         assert!(hechos_de_texto(&["Calcule el area del triangulo", "x = 45"]).is_empty());

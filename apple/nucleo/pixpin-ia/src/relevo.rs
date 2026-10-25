@@ -40,7 +40,11 @@ impl Relevo {
     /// no debe cargar nada: los motores de llama.cpp cargan en la primera
     /// peticion).
     pub fn motor(&self, id: &str, crear: impl FnOnce() -> Arc<dyn Motor>) -> Arc<dyn Motor> {
-        let mut g = self.dentro.motores.lock().unwrap_or_else(|e| e.into_inner());
+        let mut g = self
+            .dentro
+            .motores
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let motor = match g.iter().find(|(i, _)| i == id) {
             Some((_, m)) => m.clone(),
             None => {
@@ -63,7 +67,11 @@ impl Relevo {
 
     /// Suelta y olvida el motor `id` (el usuario cambio de modelo).
     pub fn quitar(&self, id: &str) {
-        let mut g = self.dentro.motores.lock().unwrap_or_else(|e| e.into_inner());
+        let mut g = self
+            .dentro
+            .motores
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(i) = g.iter().position(|(x, _)| x == id) {
             g.remove(i).1.soltar();
         }
@@ -71,7 +79,11 @@ impl Relevo {
 
     /// Suelta todos: la memoria vuelve entera.
     pub fn soltar_todo(&self) {
-        let g = self.dentro.motores.lock().unwrap_or_else(|e| e.into_inner());
+        let g = self
+            .dentro
+            .motores
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         for (_, m) in g.iter() {
             m.soltar();
         }
@@ -118,7 +130,11 @@ impl Relevado {
 }
 
 impl Motor for Relevado {
-    fn completar(&self, p: &Peticion, al_trozo: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+    fn completar(
+        &self,
+        p: &Peticion,
+        al_trozo: &mut dyn FnMut(&Trozo) -> Seguir,
+    ) -> Result<Respuesta, ErrorIa> {
         self.con_turno(|| self.motor.completar(p, al_trozo))
     }
 
@@ -139,6 +155,16 @@ impl Motor for Relevado {
     fn a_la_vez(&self) -> usize {
         self.motor.a_la_vez()
     }
+
+    // Lo que es el de dentro: sin esto, un motor que ve dejaba de ver al
+    // pasar por el relevo (y la revision se apagaba sin decirlo).
+    fn ve_imagenes(&self) -> bool {
+        self.motor.ve_imagenes()
+    }
+
+    fn es_local(&self) -> bool {
+        self.motor.es_local()
+    }
 }
 
 #[cfg(test)]
@@ -158,7 +184,11 @@ mod pruebas {
     }
 
     impl Motor for Contador {
-        fn completar(&self, _: &Peticion, _: &mut dyn FnMut(&Trozo) -> Seguir) -> Result<Respuesta, ErrorIa> {
+        fn completar(
+            &self,
+            _: &Peticion,
+            _: &mut dyn FnMut(&Trozo) -> Seguir,
+        ) -> Result<Respuesta, ErrorIa> {
             let n = self.a_la_vez.fetch_add(1, Ordering::SeqCst) + 1;
             self.maximo.fetch_max(n, Ordering::SeqCst);
             std::thread::sleep(Duration::from_millis(15));
@@ -184,8 +214,11 @@ mod pruebas {
     }
 
     fn pedir(m: &Arc<dyn Motor>) {
-        m.completar(&Peticion::nueva(vec![Mensaje::usuario("hola")]), &mut |_| Seguir::Si)
-            .unwrap();
+        m.completar(
+            &Peticion::nueva(vec![Mensaje::usuario("hola")]),
+            &mut |_| Seguir::Si,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -200,7 +233,11 @@ mod pruebas {
         assert_eq!(qwen.soltado.load(Ordering::SeqCst), 0);
         assert_eq!(r.ultimo().as_deref(), Some("qwen"));
         pedir(&mg);
-        assert_eq!(qwen.soltado.load(Ordering::SeqCst), 1, "Qwen fuera antes de cargar Gemma");
+        assert_eq!(
+            qwen.soltado.load(Ordering::SeqCst),
+            1,
+            "Qwen fuera antes de cargar Gemma"
+        );
         assert_eq!(gemma.soltado.load(Ordering::SeqCst), 0);
         pedir(&mq);
         assert_eq!(gemma.soltado.load(Ordering::SeqCst), 1);
@@ -225,7 +262,11 @@ mod pruebas {
         assert_eq!(gemma.soltado.load(Ordering::SeqCst), 1);
         assert_eq!(r.ultimo().as_deref(), Some("qwen"));
         mq.precalentar();
-        assert_eq!(qwen.soltado.load(Ordering::SeqCst), 0, "precargar el mismo no lo recarga");
+        assert_eq!(
+            qwen.soltado.load(Ordering::SeqCst),
+            0,
+            "precargar el mismo no lo recarga"
+        );
     }
 
     #[test]

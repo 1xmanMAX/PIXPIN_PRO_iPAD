@@ -1,0 +1,30 @@
+# El compresor de PDF de PixPin, en su propio ejecutable.
+#
+# Va aparte de `pixpinmax.exe` por dos cosas. Una, el tamano: pdfsqueeze y
+# sus codecs son ~1,8 MB, y el programa principal se abre en cada arranque de
+# Windows. Dos, la seguridad: el release es `panic = "abort"`, y un PDF raro
+# que haga entrar en panico a lopdf mataria el proceso donde corra; asi mata
+# este, no PixPin. `pixpinmax` lo busca junto a si mismo y, si no esta, aligera
+# con el plan B de `pixpin-pdf` (ver `apps/pixpin/src/aligerar.rs`).
+[package]
+name = "pixpin-aligerar"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "pixpin-aligerar"
+path = "src/main.rs"
+
+[dependencies]
+pdfsqueeze-core = { workspace = true }
+# Prioridad por debajo de lo normal y el pico de memoria.
+pixpin-shell = { workspace = true }
+rayon = "1"
+
+[dev-dependencies]
+lopdf = { version = "0.42", default-features = false }

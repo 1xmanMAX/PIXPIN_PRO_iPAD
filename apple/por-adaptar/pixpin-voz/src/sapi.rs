@@ -830,12 +830,25 @@ mod pruebas {
             let Some(l) = Lector::nuevo("es").or_else(|| Lector::nuevo("en")) else {
                 return;
             };
+            // La primera vez SAPI abre la salida de sonido, y en un equipo
+            // sin altavoces (la CI) eso tarda: no es lo que se mide.
             let t = std::time::Instant::now();
-            l.leer("hola");
+            l.leer(".");
             l.callar();
+            eprintln!("abrir la salida de sonido: {:?}", t.elapsed());
+            // Una frase de varios segundos: si `leer` esperase a que acabe,
+            // tardaria eso; sin esperar, vuelve enseguida.
+            let t = std::time::Instant::now();
+            l.leer(
+                "Esta frase es larga a proposito: leida entera tardaria varios \
+                 segundos, y leer tiene que volver antes de empezar a sonar.",
+            );
+            l.callar();
+            let tardo = t.elapsed();
+            eprintln!("leer y callar: {tardo:?}");
             assert!(
-                t.elapsed() < std::time::Duration::from_millis(500),
-                "leer no puede esperar a que acabe la frase"
+                tardo < std::time::Duration::from_millis(1500),
+                "leer no puede esperar a que acabe la frase ({tardo:?})"
             );
         });
         hecho.join().unwrap();

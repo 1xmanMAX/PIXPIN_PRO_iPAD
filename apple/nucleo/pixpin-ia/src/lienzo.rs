@@ -61,7 +61,13 @@ impl Fabrica {
         format!("ia-{:x}-{}", self.semilla, self.n)
     }
 
-    pub(crate) fn base(&mut self, tipo: &str, [x, y, ancho, alto]: [f64; 4], trazo: &str, relleno: Option<&str>) -> Value {
+    pub(crate) fn base(
+        &mut self,
+        tipo: &str,
+        [x, y, ancho, alto]: [f64; 4],
+        trazo: &str,
+        relleno: Option<&str>,
+    ) -> Value {
         let id = self.id();
         json!({
             "id": id,
@@ -95,7 +101,13 @@ impl Fabrica {
 
     /// Una polilinea; `puntos` en coordenadas del modelo. Excalidraw los
     /// quiere relativos al primero.
-    pub(crate) fn trazo(&mut self, tipo: &str, puntos: &[(f64, f64)], color: &str, relleno: Option<&str>) {
+    pub(crate) fn trazo(
+        &mut self,
+        tipo: &str,
+        puntos: &[(f64, f64)],
+        color: &str,
+        relleno: Option<&str>,
+    ) {
         let (x0, y0) = puntos[0];
         let (mut minx, mut miny, mut maxx, mut maxy) = (x0, y0, x0, y0);
         for &(x, y) in puntos {
@@ -105,7 +117,12 @@ impl Fabrica {
             maxy = maxy.max(y);
         }
         let mut e = self.base(tipo, [x0, y0, maxx - minx, maxy - miny], color, relleno);
-        e["points"] = Value::Array(puntos.iter().map(|&(x, y)| json!([x - x0, y - y0])).collect());
+        e["points"] = Value::Array(
+            puntos
+                .iter()
+                .map(|&(x, y)| json!([x - x0, y - y0]))
+                .collect(),
+        );
         if tipo == "arrow" {
             e["startArrowhead"] = Value::Null;
             e["endArrowhead"] = json!("arrow");
@@ -119,7 +136,13 @@ impl Fabrica {
     /// Una mancha rellena con agujeros (`pixpin-region`, la del bote de
     /// pintura): el unico poligono que el lienzo del PC y el del movil
     /// rellenan. Sus puntos y los de los agujeros, relativos al primero.
-    pub(crate) fn region(&mut self, contorno: &[(f64, f64)], huecos: &[Vec<(f64, f64)>], trazo: &str, relleno: &str) {
+    pub(crate) fn region(
+        &mut self,
+        contorno: &[(f64, f64)],
+        huecos: &[Vec<(f64, f64)>],
+        trazo: &str,
+        relleno: &str,
+    ) {
         if contorno.len() < 3 {
             return;
         }
@@ -134,13 +157,23 @@ impl Fabrica {
             e["huecos"] = Value::Array(
                 huecos
                     .iter()
-                    .map(|h| Value::Array(h.iter().map(|&(x, y)| json!([x - x0, y - y0])).collect()))
+                    .map(|h| {
+                        Value::Array(h.iter().map(|&(x, y)| json!([x - x0, y - y0])).collect())
+                    })
                     .collect(),
             );
         }
     }
 
-    pub(crate) fn texto(&mut self, x: f64, y: f64, texto: &str, tam: f64, color: &str, alinear: &str) {
+    pub(crate) fn texto(
+        &mut self,
+        x: f64,
+        y: f64,
+        texto: &str,
+        tam: f64,
+        color: &str,
+        alinear: &str,
+    ) {
         // **Texto rico** (`$...$` en linea, `\color{rojo}{X}`, `**negrita**`,
         // `\centro`): la fuente viaja en `textoRico` y `text` lleva su
         // version plana, la que lee quien no la entiende
@@ -193,7 +226,13 @@ impl Fabrica {
 
     /// **Un trazo a mano alzada** (`freedraw`), con la presion simulada como
     /// el lapiz del lienzo. Con material (grafito con su dureza, tiza...).
-    pub(crate) fn lapiz(&mut self, puntos: &[(f64, f64)], color: &str, material: Option<&str>, dureza: Option<&str>) {
+    pub(crate) fn lapiz(
+        &mut self,
+        puntos: &[(f64, f64)],
+        color: &str,
+        material: Option<&str>,
+        dureza: Option<&str>,
+    ) {
         if puntos.len() < 2 {
             return;
         }
@@ -325,7 +364,11 @@ pub fn elementos(llamada: &Llamada, origen: (f64, f64), semilla: u64) -> Vec<Val
 
 /// **Una figura de la biblioteca**, lista para el lienzo, agrupada (se
 /// guardo como una cosa y vuelve como una cosa).
-pub fn elementos_de_figura(figura: &pixpin_motor2d::biblioteca::FiguraGuardada, origen: (f64, f64), semilla: u64) -> Vec<Value> {
+pub fn elementos_de_figura(
+    figura: &pixpin_motor2d::biblioteca::FiguraGuardada,
+    origen: (f64, f64),
+    semilla: u64,
+) -> Vec<Value> {
     let mut f = Fabrica::nueva(origen, semilla);
     f.grupo = Some(f.nombre_de_grupo("figura"));
     f.de_motor(&figura.elementos);
@@ -349,7 +392,8 @@ pub fn documento(elementos: Vec<Value>) -> String {
 pub(crate) fn figura(f: &mut Fabrica, fig: &Figura) {
     let trazo = fig.color.0.as_str();
     let relleno = fig.relleno.as_ref().map(|c| c.0.as_str());
-    let con_rotulo = !matches!(fig.tipo, TipoFigura::Texto | TipoFigura::Tabla) && !fig.texto.is_empty();
+    let con_rotulo =
+        !matches!(fig.tipo, TipoFigura::Texto | TipoFigura::Tabla) && !fig.texto.is_empty();
     // El grupo que pidio el modelo; si no, una figura con su rotulo va
     // agrupada con el, para que se muevan juntos.
     f.grupo = match &fig.grupo {
@@ -383,10 +427,20 @@ pub(crate) fn figura(f: &mut Fabrica, fig: &Figura) {
         TipoFigura::Tabla => {
             // La tabla dibujada del motor (la de la hoja al lienzo), con la
             // primera fila de cabecera; las celdas vienen en el texto.
-            let filas: Vec<Vec<String>> = fig.texto.lines().map(|l| l.split('\t').map(str::to_string).collect()).collect();
-            let color = pixpin_motor2d::excalidraw::color_desde(Some(&json!(trazo))).unwrap_or(pixpin_motor2d::elemento::ColorRgba::opaco(0.12, 0.12, 0.12));
+            let filas: Vec<Vec<String>> = fig
+                .texto
+                .lines()
+                .map(|l| l.split('\t').map(str::to_string).collect())
+                .collect();
+            let color = pixpin_motor2d::excalidraw::color_desde(Some(&json!(trazo)))
+                .unwrap_or(pixpin_motor2d::elemento::ColorRgba::opaco(0.12, 0.12, 0.12));
             let tam = fig.tam_letra.clamp(10.0, 28.0).min(20.0) as f32;
-            let estilo = pixpin_motor2d::ecuacion::Estilo { color, tam, opacidad: 1.0, familia: "Segoe UI".into() };
+            let estilo = pixpin_motor2d::ecuacion::Estilo {
+                color,
+                tam,
+                opacidad: 1.0,
+                familia: "Segoe UI".into(),
+            };
             let medir_t = |s: &str, t: f32| medir_con(s, t, "Segoe UI");
             let els = pixpin_motor2d::tabla_dibujada::elementos_de_tabla(
                 &filas,
@@ -403,6 +457,24 @@ pub(crate) fn figura(f: &mut Fabrica, fig: &Figura) {
         }
         TipoFigura::Elipse => f.caja("ellipse", caja, trazo, relleno),
         TipoFigura::Rombo => f.caja("diamond", caja, trazo, relleno),
+        // La nube de revision, la dinamica del motor: sale como la escribe
+        // el lienzo (la linea de festones con su `nubeRadio`), y al leerla
+        // vuelve a ser su caja con el radio del feston.
+        TipoFigura::Nube => {
+            let color = |c: &str| pixpin_motor2d::excalidraw::color_desde(Some(&json!(c)));
+            let mut e = pixpin_motor2d::nube_revision::nube(
+                fig.x as f32,
+                fig.y as f32,
+                fig.ancho as f32,
+                fig.alto as f32,
+                pixpin_motor2d::nube_revision::RADIO_DE_FABRICA,
+                color(trazo)
+                    .unwrap_or(pixpin_motor2d::elemento::ColorRgba::opaco(0.12, 0.12, 0.12)),
+                2.0,
+            );
+            e.relleno = relleno.and_then(color);
+            f.de_motor(&[e]);
+        }
         TipoFigura::Linea => f.trazo("line", &puntos, trazo, None),
         TipoFigura::Flecha => f.trazo("arrow", &puntos, trazo, None),
         // Un texto que se quedo sin texto (ver `colores_del_pedido`) no se pinta.
@@ -436,7 +508,14 @@ pub(crate) fn figura(f: &mut Fabrica, fig: &Figura) {
             TipoFigura::Linea | TipoFigura::Flecha | TipoFigura::Curva => {
                 let (a, b) = (puntos[0], puntos[puntos.len() - 1]);
                 let tam = fig.tam_letra.min(20.0);
-                f.texto((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0 - tam * 1.25 - 4.0, &fig.texto, tam, negro, "center");
+                f.texto(
+                    (a.0 + b.0) / 2.0,
+                    (a.1 + b.1) / 2.0 - tam * 1.25 - 4.0,
+                    &fig.texto,
+                    tam,
+                    negro,
+                    "center",
+                );
             }
             // Dentro, centrado, y que quepa.
             _ => {
@@ -453,9 +532,16 @@ pub(crate) fn figura(f: &mut Fabrica, fig: &Figura) {
                     (fig.x, fig.y, fig.ancho, fig.alto)
                 };
                 let letras = fig.texto.chars().count().max(1) as f64;
-                let tam = fig.tam_letra.min(ancho.abs() * 0.75 / (0.6 * letras)).max(8.0);
+                let tam = fig
+                    .tam_letra
+                    .min(ancho.abs() * 0.75 / (0.6 * letras))
+                    .max(8.0);
                 let (cx, cy) = (x + ancho / 2.0, y + alto / 2.0);
-                let color = if relleno.is_some_and(|r| es_oscuro(r)) { "#ffffff" } else { negro };
+                let color = if relleno.is_some_and(es_oscuro) {
+                    "#ffffff"
+                } else {
+                    negro
+                };
                 f.texto(cx, cy - tam * 1.25 / 2.0, &fig.texto, tam, color, "center");
             }
         }
@@ -470,7 +556,12 @@ pub(crate) fn figura(f: &mut Fabrica, fig: &Figura) {
 /// grupo. Las tablas de la escena (`escena.tablas`) cuentan en pixeles o en
 /// la escala calibrada, no en las unidades del instrumento: por eso los
 /// puntos van como elementos que caen sobre sus rayas.
-fn instrumento(f: &mut Fabrica, [x, y, w, h]: [f64; 4], p: &crate::herramientas::PedidoInstrumento, color: &str) {
+fn instrumento(
+    f: &mut Fabrica,
+    [x, y, w, h]: [f64; 4],
+    p: &crate::herramientas::PedidoInstrumento,
+    color: &str,
+) {
     use pixpin_motor2d::instrumento as ins;
     let tinta = pixpin_motor2d::excalidraw::color_desde(Some(&json!(color)))
         .unwrap_or(pixpin_motor2d::ColorRgba::opaco(0.12, 0.12, 0.12));
@@ -484,13 +575,21 @@ fn instrumento(f: &mut Fabrica, [x, y, w, h]: [f64; 4], p: &crate::herramientas:
     e.x = x as f32;
     e.y = y as f32;
     e.ancho = w.max(40.0) as f32;
-    e.alto = if p.ejes == 1 { (h.max(ins::ALTO_DE_LA_RECTA as f64)) as f32 } else { h.max(40.0) as f32 };
+    e.alto = if p.ejes == 1 {
+        (h.max(ins::ALTO_DE_LA_RECTA as f64)) as f32
+    } else {
+        h.max(40.0) as f32
+    };
     let i = *ins::de(&e).expect("es un instrumento");
     let mut piezas = vec![e.clone()];
     let letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     for (k, &(px, py)) in p.tabla.iter().enumerate() {
         let en = ins::punto(&e, &i, px, py, 0.0);
-        let letra = letras.chars().nth(k % 26).map(String::from).unwrap_or_default();
+        let letra = letras
+            .chars()
+            .nth(k % 26)
+            .map(String::from)
+            .unwrap_or_default();
         piezas.push(pixpin_motor2d::Elemento {
             figura: pixpin_motor2d::elemento::Figura::Punto {
                 letra,
@@ -516,14 +615,20 @@ fn instrumento(f: &mut Fabrica, [x, y, w, h]: [f64; 4], p: &crate::herramientas:
         let filas: Vec<Vec<String>> = std::iter::once(vec![String::new(), "x".into(), "y".into()])
             .chain(p.tabla.iter().enumerate().map(|(k, &(px, py))| {
                 vec![
-                    letras.chars().nth(k % 26).map(String::from).unwrap_or_default(),
+                    letras
+                        .chars()
+                        .nth(k % 26)
+                        .map(String::from)
+                        .unwrap_or_default(),
                     ins::escrito(px),
                     ins::escrito(py),
                 ]
             }))
             .collect();
         let origen = pixpin_motor2d::vector::Punto2::nuevo(e.x + e.ancho + 24.0, e.y);
-        piezas.extend(pixpin_motor2d::tabla_dibujada::elementos_de_tabla(&filas, &estilo, origen, &medir, true));
+        piezas.extend(pixpin_motor2d::tabla_dibujada::elementos_de_tabla(
+            &filas, &estilo, origen, &medir, true,
+        ));
     }
     let antes = f.grupo.clone();
     if f.grupo.is_none() {
@@ -544,7 +649,12 @@ pub(crate) fn medir(texto: &str, tam: f32) -> (f32, f32) {
 /// Lo que mide un texto rico compuesto (con DirectWrite si lo hay; si no,
 /// con la estimacion del motor).
 pub(crate) fn texto_rico_medida(fuente: &str, tam: f32, familia: &str) -> (f32, f32) {
-    pixpin_motor2d::texto_rico::medida(fuente, tam, familia, pixpin_motor2d::texto::EstiloDeTexto::default())
+    pixpin_motor2d::texto_rico::medida(
+        fuente,
+        tam,
+        familia,
+        pixpin_motor2d::texto::EstiloDeTexto::default(),
+    )
 }
 
 pub(crate) fn medir_con(texto: &str, tam: f32, familia: &str) -> (f32, f32) {
@@ -566,14 +676,19 @@ pub(crate) fn medir_con(texto: &str, tam: f32, familia: &str) -> (f32, f32) {
 /// Si un `#rrggbb` es oscuro (para escribir en blanco encima).
 fn es_oscuro(hex: &str) -> bool {
     let h = hex.trim_start_matches('#');
-    let c = |i: usize| u8::from_str_radix(h.get(i..i + 2).unwrap_or("ff"), 16).unwrap_or(255) as f64;
+    let c =
+        |i: usize| u8::from_str_radix(h.get(i..i + 2).unwrap_or("ff"), 16).unwrap_or(255) as f64;
     0.299 * c(0) + 0.587 * c(2) + 0.114 * c(4) < 110.0
 }
 
 /// **Los elementos de un calcado** (`calcar::calcar`), todos en un grupo
 /// para moverlos de una vez (se desagrupa para tocar una pieza). Lisos:
 /// rugosidad 0, que un calco a mano alzada ya no se pareceria al original.
-pub fn elementos_de_calcado(c: &crate::calcar::Calcado, origen: (f64, f64), semilla: u64) -> Vec<Value> {
+pub fn elementos_de_calcado(
+    c: &crate::calcar::Calcado,
+    origen: (f64, f64),
+    semilla: u64,
+) -> Vec<Value> {
     use crate::calcar::Trazo;
     let mut f = Fabrica {
         semilla,
@@ -586,9 +701,17 @@ pub fn elementos_de_calcado(c: &crate::calcar::Calcado, origen: (f64, f64), semi
     for t in &c.trazos {
         match t {
             Trazo::Fondo { caja, color } => f.caja("rectangle", *caja, color, Some(color)),
-            Trazo::Mancha { contorno, huecos, color } => f.region(contorno, huecos, color, color),
+            Trazo::Mancha {
+                contorno,
+                huecos,
+                color,
+            } => f.region(contorno, huecos, color, color),
             Trazo::Linea { puntos, color, .. } => f.trazo("line", puntos, color, None),
-            Trazo::Raya { puntos, color, grosor } => {
+            Trazo::Raya {
+                puntos,
+                color,
+                grosor,
+            } => {
                 f.trazo("line", puntos, color, None);
                 if let Some(e) = f.salida.last_mut() {
                     e["strokeWidth"] = json!(((grosor * 2.0).round() / 2.0).max(0.5));
@@ -621,7 +744,13 @@ fn grafica(f: &mut Fabrica, g: &Grafica) {
     let (x0, x1) = (MARGEN + 20.0, ANCHO_LIENZO - MARGEN);
     let (y0, y1) = (arriba, ALTO_LIENZO - MARGEN);
     match g.tipo {
-        TipoGrafica::Pastel => pastel(f, g, (x0 + x1) / 2.0, (y0 + y1) / 2.0, ((y1 - y0) / 2.0 - 30.0).clamp(60.0, 200.0)),
+        TipoGrafica::Pastel => pastel(
+            f,
+            g,
+            (x0 + x1) / 2.0,
+            (y0 + y1) / 2.0,
+            ((y1 - y0) / 2.0 - 30.0).clamp(60.0, 200.0),
+        ),
         TipoGrafica::Barras | TipoGrafica::Lineas => {
             let min = g.valores.iter().copied().fold(0.0_f64, f64::min);
             let max = g.valores.iter().copied().fold(0.0_f64, f64::max);
@@ -642,7 +771,14 @@ fn grafica(f: &mut Fabrica, g: &Grafica) {
                 if (v).abs() > paso * 1e-6 {
                     f.trazo("line", &[(x0, y), (x1, y)], "#dee2e6", None);
                 }
-                f.texto(x0 - 8.0, y - 10.0, &bonito((v / paso).round() * paso), 16.0, negro, "right");
+                f.texto(
+                    x0 - 8.0,
+                    y - 10.0,
+                    &bonito((v / paso).round() * paso),
+                    16.0,
+                    negro,
+                    "right",
+                );
                 v += paso;
             }
             let n = g.valores.len() as f64;
@@ -654,17 +790,39 @@ fn grafica(f: &mut Fabrica, g: &Grafica) {
                 if g.tipo == TipoGrafica::Barras {
                     let ancho = paso * 0.6;
                     let color = SERIES[i % SERIES.len()];
-                    f.caja("rectangle", [centro - ancho / 2.0, y.min(cero), ancho, (cero - y).abs().max(1.0)], color, Some(color));
+                    f.caja(
+                        "rectangle",
+                        [
+                            centro - ancho / 2.0,
+                            y.min(cero),
+                            ancho,
+                            (cero - y).abs().max(1.0),
+                        ],
+                        color,
+                        Some(color),
+                    );
                 } else {
                     puntos.push((centro, y));
                 }
-                f.texto(centro, y.min(cero) - 24.0, &bonito(*v), 16.0, negro, "center");
+                f.texto(
+                    centro,
+                    y.min(cero) - 24.0,
+                    &bonito(*v),
+                    16.0,
+                    negro,
+                    "center",
+                );
                 f.texto(centro, y1 + 8.0, etiqueta, 16.0, negro, "center");
             }
             if puntos.len() >= 2 {
                 f.trazo("line", &puntos, SERIES[0], None);
             } else if let Some(&(x, y)) = puntos.first() {
-                f.caja("ellipse", [x - 5.0, y - 5.0, 10.0, 10.0], SERIES[0], Some(SERIES[0]));
+                f.caja(
+                    "ellipse",
+                    [x - 5.0, y - 5.0, 10.0, 10.0],
+                    SERIES[0],
+                    Some(SERIES[0]),
+                );
             }
         }
     }
@@ -693,12 +851,29 @@ fn pastel(f: &mut Fabrica, g: &Grafica, cx: f64, cy: f64, r: f64) {
         let porcentaje = v / total * 100.0;
         // El modelo a veces ya pone el % en la etiqueta («Otros 5%»): sin
         // repetirlo («Otros 5% (5%)»).
-        let rotulo = if etiqueta.contains('%') { etiqueta.clone() } else { format!("{etiqueta} ({porcentaje:.0}%)") };
+        let rotulo = if etiqueta.contains('%') {
+            etiqueta.clone()
+        } else {
+            format!("{etiqueta} ({porcentaje:.0}%)")
+        };
         // Pegado al borde, hacia fuera: a la derecha del pastel alineado a
         // la izquierda y al reves, que centrado se metia en las porciones.
         let (c, s) = (medio.cos(), medio.sin());
-        let lado = if c > 0.25 { "left" } else if c < -0.25 { "right" } else { "center" };
-        f.texto(cx + (r + 14.0) * c, cy + (r + 14.0) * s - 10.0 + 10.0 * s, &rotulo, 16.0, "#1e1e1e", lado);
+        let lado = if c > 0.25 {
+            "left"
+        } else if c < -0.25 {
+            "right"
+        } else {
+            "center"
+        };
+        f.texto(
+            cx + (r + 14.0) * c,
+            cy + (r + 14.0) * s - 10.0 + 10.0 * s,
+            &rotulo,
+            16.0,
+            "#1e1e1e",
+            lado,
+        );
         angulo += barrido;
     }
 }
@@ -710,7 +885,11 @@ pub(crate) fn paso_redondo(bruto: f64) -> f64 {
         return 1.0;
     }
     let p = 10f64.powf(bruto.log10().floor());
-    [1.0, 2.0, 2.5, 5.0, 10.0].into_iter().map(|k| k * p).find(|&s| s >= bruto * 0.999).unwrap_or(10.0 * p)
+    [1.0, 2.0, 2.5, 5.0, 10.0]
+        .into_iter()
+        .map(|k| k * p)
+        .find(|&s| s >= bruto * 0.999)
+        .unwrap_or(10.0 * p)
 }
 
 /// Un numero sin decimales de sobra.
@@ -718,7 +897,10 @@ fn bonito(v: f64) -> String {
     if (v - v.round()).abs() < 1e-9 {
         format!("{}", v.round() as i64)
     } else {
-        format!("{v:.2}").trim_end_matches('0').trim_end_matches('.').to_string()
+        format!("{v:.2}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
     }
 }
 
@@ -777,6 +959,40 @@ mod pruebas {
     /// El texto rico del asistente: formulas en linea y colores, con las
     /// barras de mas de los modelos, y su texto plano de reserva.
     #[test]
+    fn la_nube_del_asistente_llega_dinamica_al_lienzo() {
+        let l = llamada(
+            "dibujar_en_lienzo",
+            r##"{"elementos":[{"tipo":"nube","caja":[100,80,320,140],"color":"rojo","texto":"Cambio"},
+                {"tipo":"rectangulo","caja":[500,80,100,60]}]}"##,
+        );
+        let doc = documento(elementos(&l, (1000.0, 2000.0), 7));
+        let els = pixpin_motor2d::excalidraw::leer(&doc).unwrap().elementos();
+        let nube = &els[0];
+        assert_eq!(
+            pixpin_motor2d::nube_revision::base_de(nube),
+            Some(pixpin_motor2d::nube_revision::Base::Rectangulo)
+        );
+        assert_eq!(
+            nube.extras.nube,
+            Some(pixpin_motor2d::nube_revision::RADIO_DE_FABRICA)
+        );
+        assert_eq!(
+            (nube.x, nube.y, nube.ancho, nube.alto),
+            (1100.0, 2080.0, 320.0, 140.0)
+        );
+        assert_eq!(
+            nube.relleno, None,
+            "una nube de revision no se rellena sola"
+        );
+        // Su rotulo dentro, y el rectangulo de al lado sigue siendo uno normal.
+        assert!(els.iter().any(
+            |e| matches!(&e.figura, pixpin_motor2d::Figura::Texto { texto, .. } if texto == "Cambio")
+        ));
+        let otro = els.iter().find(|e| e.x == 1500.0).unwrap();
+        assert_eq!(otro.extras.nube, None);
+    }
+
+    #[test]
     fn el_texto_rico_del_asistente_llega_compuesto_al_lienzo() {
         let l = llamada(
             "dibujar_en_lienzo",
@@ -786,15 +1002,23 @@ mod pruebas {
         let doc = documento(elementos(&l, (0.0, 0.0), 7));
         let els = pixpin_motor2d::excalidraw::leer(&doc).unwrap().elementos();
         let rico = els[0].extras.rico.as_deref().expect("es rico");
-        assert_eq!(rico, "Nos piden $m\\sphericalangle COD = \\color{rojo}{X}$\n\\centro $\\overline{AB}$");
-        assert!(matches!(&els[0].figura, FiguraLienzo::Texto { texto, .. } if texto == "Nos piden m∢COD = X\nA̅B̅"));
+        assert_eq!(
+            rico,
+            "Nos piden $m\\sphericalangle COD = \\color{rojo}{X}$\n\\centro $\\overline{AB}$"
+        );
+        assert!(
+            matches!(&els[0].figura, FiguraLienzo::Texto { texto, .. } if texto == "Nos piden m∢COD = X\nA̅B̅")
+        );
         // Lo que no lleva marcas sigue como siempre.
         assert_eq!(els[1].extras.rico, None);
     }
 
     #[test]
     fn los_identificadores_no_se_repiten() {
-        let l = llamada("grafica", r#"{"tipo":"barras","etiquetas":["a","b","c"],"valores":[1,2,3],"titulo":"t"}"#);
+        let l = llamada(
+            "grafica",
+            r#"{"tipo":"barras","etiquetas":["a","b","c"],"valores":[1,2,3],"titulo":"t"}"#,
+        );
         let els = elementos(&l, (0.0, 0.0), 99);
         let mut ids: Vec<&str> = els.iter().map(|e| e["id"].as_str().unwrap()).collect();
         let n = ids.len();
@@ -806,9 +1030,18 @@ mod pruebas {
     #[test]
     fn las_tres_graficas_salen_y_se_leen() {
         for (args, minimo) in [
-            (r#"{"tipo":"barras","etiquetas":["Enero","Febrero","Marzo"],"valores":[120,95,140],"titulo":"Ventas"}"#, 3 + 3 * 3),
-            (r#"{"tipo":"lineas","etiquetas":["a","b","c","d"],"valores":[1,-2,3.5,0]}"#, 3 + 4 * 2 + 1),
-            (r#"{"tipo":"pastel","etiquetas":["si","no"],"valores":[3,1]}"#, 4),
+            (
+                r#"{"tipo":"barras","etiquetas":["Enero","Febrero","Marzo"],"valores":[120,95,140],"titulo":"Ventas"}"#,
+                3 + 3 * 3,
+            ),
+            (
+                r#"{"tipo":"lineas","etiquetas":["a","b","c","d"],"valores":[1,-2,3.5,0]}"#,
+                3 + 4 * 2 + 1,
+            ),
+            (
+                r#"{"tipo":"pastel","etiquetas":["si","no"],"valores":[3,1]}"#,
+                4,
+            ),
         ] {
             let els = elementos(&llamada("grafica", args), (0.0, 0.0), 1);
             assert!(els.len() >= minimo, "{args}: {}", els.len());
@@ -825,7 +1058,10 @@ mod pruebas {
         let els = elementos(&llamada("grafica", args), (0.0, 0.0), 1);
         let lienzo = pixpin_motor2d::excalidraw::leer(&documento(els)).unwrap();
         let els = lienzo.elementos();
-        let regiones = els.iter().filter(|e| matches!(e.figura, FiguraLienzo::Region { .. }) && e.relleno.is_some()).count();
+        let regiones = els
+            .iter()
+            .filter(|e| matches!(e.figura, FiguraLienzo::Region { .. }) && e.relleno.is_some())
+            .count();
         assert_eq!(regiones, 2);
         let textos: Vec<String> = els
             .iter()
@@ -863,12 +1099,23 @@ mod pruebas {
             assert!(textos.iter().any(|x| x == t), "{t}: {textos:?}");
         }
         // El rotulo del paralelogramo, dentro de su caja.
-        let leer = els.iter().find(|e| matches!(&e.figura, FiguraLienzo::Texto { texto, .. } if texto == "Leer N")).unwrap();
+        let leer = els
+            .iter()
+            .find(|e| matches!(&e.figura, FiguraLienzo::Texto { texto, .. } if texto == "Leer N"))
+            .unwrap();
         let (x0, y0, x1, y1) = leer.caja();
-        assert!(x0 >= 100.0 && x1 <= 300.0 && y0 >= 300.0 && y1 <= 360.0, "{:?}", leer.caja());
+        assert!(
+            x0 >= 100.0 && x1 <= 300.0 && y0 >= 300.0 && y1 <= 360.0,
+            "{:?}",
+            leer.caja()
+        );
         // Una tabla sin filas se rechaza con el motivo.
         let e = validar(
-            &LlamadaCruda { id: "1".into(), nombre: "dibujar_en_lienzo".into(), argumentos: r#"{"elementos":[{"tipo":"tabla","x":1,"y":1}]}"#.into() },
+            &LlamadaCruda {
+                id: "1".into(),
+                nombre: "dibujar_en_lienzo".into(),
+                argumentos: r#"{"elementos":[{"tipo":"tabla","x":1,"y":1}]}"#.into(),
+            },
             &catalogo(),
         )
         .unwrap_err();
@@ -879,7 +1126,11 @@ mod pruebas {
     fn las_barras_llevan_varias_marcas_en_el_eje() {
         let args = r#"{"tipo":"barras","etiquetas":["Ana","Luis"],"valores":[15,18]}"#;
         let els = elementos(&llamada("grafica", args), (0.0, 0.0), 1);
-        let marcas: Vec<&str> = els.iter().filter_map(|e| e["text"].as_str()).filter(|t| t.parse::<f64>().is_ok()).collect();
+        let marcas: Vec<&str> = els
+            .iter()
+            .filter_map(|e| e["text"].as_str())
+            .filter(|t| t.parse::<f64>().is_ok())
+            .collect();
         for m in ["0", "5", "10", "15", "20"] {
             assert!(marcas.contains(&m), "{marcas:?}");
         }
@@ -918,12 +1169,16 @@ mod pruebas {
         let leidos = lienzo.elementos();
         // triangulo, casa, poligono, curva, caja + rotulo, flecha + rotulo.
         assert_eq!(leidos.len(), 8);
-        assert!(matches!(&leidos[0].figura, FiguraLienzo::Region { contorno, .. } if contorno.len() == 3));
+        assert!(
+            matches!(&leidos[0].figura, FiguraLienzo::Region { contorno, .. } if contorno.len() == 3)
+        );
         assert!(leidos[0].relleno.is_some());
         assert_eq!(leidos[0].grupos, leidos[1].grupos);
         assert!(!leidos[0].grupos.is_empty());
         // Sin relleno: linea cerrada (vuelve al primer punto).
-        assert!(matches!(&leidos[2].figura, FiguraLienzo::Linea { puntos } if puntos.len() == 4 && puntos[0] == puntos[3]));
+        assert!(
+            matches!(&leidos[2].figura, FiguraLienzo::Linea { puntos } if puntos.len() == 4 && puntos[0] == puntos[3])
+        );
         // La curva: linea redondeada.
         assert!(matches!(&leidos[3].figura, FiguraLienzo::Linea { puntos } if puntos.len() == 4));
         assert!(leidos[3].redondo);
@@ -957,19 +1212,31 @@ mod pruebas {
                 }
             }
         }
-        for p in [crate::calcar::Parametros::default(), crate::calcar::Parametros { solo_contornos: true, ..Default::default() }] {
+        for p in [
+            crate::calcar::Parametros::default(),
+            crate::calcar::Parametros {
+                solo_contornos: true,
+                ..Default::default()
+            },
+        ] {
             let c = crate::calcar::calcar(&px, w, h, &p);
             let els = elementos_de_calcado(&c, (0.0, 0.0), 9);
             assert!(els.len() >= 2, "{p:?}: {}", els.len());
             let lienzo = pixpin_motor2d::excalidraw::leer(&documento(els)).unwrap();
             assert_eq!(lienzo.cuantos_ajenos(), 0);
             let leidos = lienzo.elementos();
-            assert!(leidos.iter().all(|e| e.grupos == leidos[0].grupos && !e.grupos.is_empty()));
+            assert!(
+                leidos
+                    .iter()
+                    .all(|e| e.grupos == leidos[0].grupos && !e.grupos.is_empty())
+            );
             if !p.solo_contornos {
                 let anillo = leidos
                     .iter()
                     .find_map(|e| match &e.figura {
-                        FiguraLienzo::Region { huecos, .. } if !huecos.is_empty() => Some(huecos.len()),
+                        FiguraLienzo::Region { huecos, .. } if !huecos.is_empty() => {
+                            Some(huecos.len())
+                        }
                         _ => None,
                     })
                     .expect("el anillo con su agujero");

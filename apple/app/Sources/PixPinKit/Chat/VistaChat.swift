@@ -100,10 +100,12 @@ public struct VistaChat: View {
                          escala: $escala, avisar: { menu.avisar($0) },
                          biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil,
                          informacion: { verInfo = true },
-                         nuevaCarpeta: { [almacen, chat] in
+                         nuevaCarpeta: { [almacen, chat, menu] in
+                             // Como el Mac: nace con el nombre listo para
+                             // escribirlo («Cuaderno» no dice nada).
                              _ = Task<Void, Never> { @MainActor in
                                  guard let c = await AccionesCarpeta.crear(en: chat, con: nil, almacen: almacen) else { return }
-                                 VistaCarpeta.abrir(chat: chat, carpeta: c.id, almacen: almacen)
+                                 menu.escritura = .renombrar(c)
                              }
                          },
                          figuras: { [almacen, chat] in VistaFiguras.abrir(almacen: almacen, chat: chat) })
@@ -352,6 +354,13 @@ public struct VistaChat: View {
             Button { transcribir(m) } label: {
                 Label(m.transcripcion?.isEmpty == false ? "Volver a pasar a texto" : "Pasar a texto",
                       systemImage: "captions.bubble")
+            }
+            // Una clase grabada: el texto junto a sus capturas (la
+            // pantalla de la letra de Windows).
+            if !ClaseEnElChat.capturas(m, chat: chat, nucleo: almacen.nucleo).isEmpty {
+                Button { VisorClase.abrir(m, chat: chat, almacen: almacen) } label: {
+                    Label("Ver con las capturas", systemImage: "photo.on.rectangle")
+                }
             }
         case "DIBUJO":
             Button { abrir(m) } label: { Label("Abrir en lienzo", systemImage: "pencil.and.scribble") }

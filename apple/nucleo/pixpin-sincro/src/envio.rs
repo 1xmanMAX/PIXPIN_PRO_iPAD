@@ -631,10 +631,52 @@ pub fn nombre_sano(nombre: &str) -> String {
 /// Las extensiones que se reconocen (`EXTENSIONES_CONOCIDAS` de
 /// `guardados/Mensajes.kt`). `bin` NO esta: es «no se que es».
 const EXTENSIONES_CONOCIDAS: [&str; 46] = [
-    "pdf", "jpg", "jpeg", "png", "webp", "gif", "heic", "bmp", "svg", "m4a", "mp3", "ogg", "oga",
-    "opus", "wav", "flac", "aac", "amr", "3gp", "mp4", "mkv", "mov", "webm", "txt", "md", "csv",
-    "json", "xml", "html", "htm", "zip", "doc", "docx", "xls", "xlsx", "xlsm", "tsv", "ppt",
-    "pptx", "odt", "ods", "dxf", "dwg", "pixpin", "excalidraw", "epub",
+    "pdf",
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "heic",
+    "bmp",
+    "svg",
+    "m4a",
+    "mp3",
+    "ogg",
+    "oga",
+    "opus",
+    "wav",
+    "flac",
+    "aac",
+    "amr",
+    "3gp",
+    "mp4",
+    "mkv",
+    "mov",
+    "webm",
+    "txt",
+    "md",
+    "csv",
+    "json",
+    "xml",
+    "html",
+    "htm",
+    "zip",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "xlsm",
+    "tsv",
+    "ppt",
+    "pptx",
+    "odt",
+    "ods",
+    "dxf",
+    "dwg",
+    "pixpin",
+    "excalidraw",
+    "epub",
 ];
 
 /// Si `nombre` acaba en una extension de las que se reconocen
@@ -1149,14 +1191,35 @@ mod pruebas {
     #[test]
     fn un_bin_que_es_un_pdf_o_una_imagen_se_llama_por_lo_que_es() {
         assert_eq!(extension_por_contenido(b"%PDF-1.7\n"), Some("pdf"));
-        assert_eq!(extension_por_contenido(&[0x89, b'P', b'N', b'G', 13, 10]), Some("png"));
-        assert_eq!(extension_por_contenido(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("jpg"));
+        assert_eq!(
+            extension_por_contenido(&[0x89, b'P', b'N', b'G', 13, 10]),
+            Some("png")
+        );
+        assert_eq!(
+            extension_por_contenido(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            Some("jpg")
+        );
         assert_eq!(extension_por_contenido(b"GIF89a"), Some("gif"));
-        assert_eq!(extension_por_contenido(b"RIFF\x10\0\0\0WEBPVP8 "), Some("webp"));
-        assert_eq!(nombre_por_contenido("informe.bin", b"%PDF-1.4"), "informe.pdf");
-        assert_eq!(nombre_por_contenido("informe.BIN", b"%PDF-1.4"), "informe.pdf");
-        assert_eq!(nombre_por_contenido("Plano de la nave", b"%PDF-1.4"), "Plano de la nave.pdf");
-        assert_eq!(nombre_por_contenido("Plano v1.2", &[0xFF, 0xD8, 0xFF]), "Plano v1.2.jpg");
+        assert_eq!(
+            extension_por_contenido(b"RIFF\x10\0\0\0WEBPVP8 "),
+            Some("webp")
+        );
+        assert_eq!(
+            nombre_por_contenido("informe.bin", b"%PDF-1.4"),
+            "informe.pdf"
+        );
+        assert_eq!(
+            nombre_por_contenido("informe.BIN", b"%PDF-1.4"),
+            "informe.pdf"
+        );
+        assert_eq!(
+            nombre_por_contenido("Plano de la nave", b"%PDF-1.4"),
+            "Plano de la nave.pdf"
+        );
+        assert_eq!(
+            nombre_por_contenido("Plano v1.2", &[0xFF, 0xD8, 0xFF]),
+            "Plano v1.2.jpg"
+        );
     }
 
     #[test]

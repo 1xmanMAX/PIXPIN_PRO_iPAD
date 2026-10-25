@@ -139,15 +139,6 @@ impl Lienzo {
     pub(crate) fn escena(&self) -> &Escena {
         &self.escena
     }
-
-    /// Un lienzo de una escena hecha aqui, sin fotos (una figura de la
-    /// biblioteca, `galeria_figuras.rs`).
-    pub(crate) fn de_escena(escena: Escena) -> Lienzo {
-        Lienzo {
-            escena,
-            imagenes: Vec::new(),
-        }
-    }
 }
 
 #[uniffi::export]

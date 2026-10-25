@@ -83,7 +83,11 @@ pub fn pos_byte(d: &[u8], b: u8) -> Option<usize> {
 /// La primera de tres bytes cualquiera.
 #[inline]
 fn pos_de3(d: &[u8], a: u8, b: u8, c: u8) -> Option<usize> {
-    let (pa, pb, pc) = (UNOS.wrapping_mul(a as u64), UNOS.wrapping_mul(b as u64), UNOS.wrapping_mul(c as u64));
+    let (pa, pb, pc) = (
+        UNOS.wrapping_mul(a as u64),
+        UNOS.wrapping_mul(b as u64),
+        UNOS.wrapping_mul(c as u64),
+    );
     let mut i = 0;
     while i + 8 <= d.len() {
         let v = ocho(d, i);
@@ -96,7 +100,10 @@ fn pos_de3(d: &[u8], a: u8, b: u8, c: u8) -> Option<usize> {
         }
         i += 8;
     }
-    d[i..].iter().position(|&x| x == a || x == b || x == c).map(|k| i + k)
+    d[i..]
+        .iter()
+        .position(|&x| x == a || x == b || x == c)
+        .map(|k| i + k)
 }
 
 #[inline]
@@ -212,7 +219,9 @@ pub fn siguiente<'a>(d: &'a [u8], pos: &mut usize, final_: bool) -> Paso<'a> {
                     Some(n) => {
                         let nombre = recortar(&d[p + 2..p + n]);
                         *pos = p + n + 1;
-                        Paso::Evento(Evento::Cierra { nombre: local(nombre) })
+                        Paso::Evento(Evento::Cierra {
+                            nombre: local(nombre),
+                        })
                     }
                     None => falta,
                 };
@@ -240,9 +249,16 @@ pub fn siguiente<'a>(d: &'a [u8], pos: &mut usize, final_: bool) -> Paso<'a> {
                 if vacia {
                     dentro = &dentro[..dentro.len() - 1];
                 }
-                let corte = dentro.iter().position(|b| b.is_ascii_whitespace()).unwrap_or(dentro.len());
+                let corte = dentro
+                    .iter()
+                    .position(|b| b.is_ascii_whitespace())
+                    .unwrap_or(dentro.len());
                 *pos = fin + 1;
-                return Paso::Evento(Evento::Abre { nombre: local(&dentro[..corte]), attrs: &dentro[corte..], vacia });
+                return Paso::Evento(Evento::Abre {
+                    nombre: local(&dentro[..corte]),
+                    attrs: &dentro[corte..],
+                    vacia,
+                });
             }
         }
     }
@@ -351,7 +367,11 @@ pub fn desescapar(raw: &[u8]) -> Cow<'_, str> {
             "amp" => Some('&'),
             "quot" => Some('"'),
             "apos" => Some('\''),
-            _ if ent.starts_with("#x") || ent.starts_with("#X") => u32::from_str_radix(&ent[2..], 16).ok().and_then(char::from_u32),
+            _ if ent.starts_with("#x") || ent.starts_with("#X") => {
+                u32::from_str_radix(&ent[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32)
+            }
             _ if ent.starts_with('#') => ent[1..].parse::<u32>().ok().and_then(char::from_u32),
             _ => None,
         };
@@ -381,7 +401,11 @@ pub fn sin_escapes_ooxml(s: &str) -> Cow<'_, str> {
     let mut i = 0;
     let mut desde = 0;
     while i + 7 <= b.len() {
-        if b[i] == b'_' && b[i + 1] == b'x' && b[i + 6] == b'_' && b[i + 2..i + 6].iter().all(|c| c.is_ascii_hexdigit()) {
+        if b[i] == b'_'
+            && b[i + 1] == b'x'
+            && b[i + 6] == b'_'
+            && b[i + 2..i + 6].iter().all(|c| c.is_ascii_hexdigit())
+        {
             // SAFETY de indices: los 7 bytes son ASCII, asi que i e i+7 caen
             // en limites de caracter.
             let codigo = u32::from_str_radix(&s[i + 2..i + 6], 16).unwrap_or(0xFFFD);
@@ -419,7 +443,10 @@ const NODOS_MAX: usize = 4_000_000;
 
 impl Nodo {
     pub fn attr(&self, nombre: &str) -> Option<&str> {
-        self.attrs.iter().find(|(n, _)| n == nombre).map(|(_, v)| v.as_str())
+        self.attrs
+            .iter()
+            .find(|(n, _)| n == nombre)
+            .map(|(_, v)| v.as_str())
     }
 
     pub fn hijo(&self, nombre: &str) -> Option<&Nodo> {
@@ -477,7 +504,11 @@ fn arbol_lim(d: &[u8], nodos_max: usize) -> Nodo {
     let mut pos = 0usize;
     loop {
         match siguiente(d, &mut pos, true) {
-            Paso::Evento(Evento::Abre { nombre, attrs, vacia }) => {
+            Paso::Evento(Evento::Abre {
+                nombre,
+                attrs,
+                vacia,
+            }) => {
                 if ignorar > 0 || pila.len() > PROFUNDIDAD_MAX || nodos >= nodos_max {
                     if !vacia {
                         ignorar += 1;
@@ -487,7 +518,14 @@ fn arbol_lim(d: &[u8], nodos_max: usize) -> Nodo {
                 nodos += 1;
                 let nodo = Nodo {
                     nombre: String::from_utf8_lossy(nombre).into_owned(),
-                    attrs: atributos(attrs).map(|(n, v)| (String::from_utf8_lossy(n).into_owned(), desescapar(v).into_owned())).collect(),
+                    attrs: atributos(attrs)
+                        .map(|(n, v)| {
+                            (
+                                String::from_utf8_lossy(n).into_owned(),
+                                desescapar(v).into_owned(),
+                            )
+                        })
+                        .collect(),
                     hijos: Vec::new(),
                     texto: String::new(),
                 };
@@ -546,7 +584,11 @@ mod pruebas {
         let mut v = Vec::new();
         while let Paso::Evento(e) = siguiente(d, &mut pos, true) {
             v.push(match e {
-                Evento::Abre { nombre, vacia, .. } => format!("<{}{}", String::from_utf8_lossy(nombre), if vacia { "/" } else { "" }),
+                Evento::Abre { nombre, vacia, .. } => format!(
+                    "<{}{}",
+                    String::from_utf8_lossy(nombre),
+                    if vacia { "/" } else { "" }
+                ),
                 Evento::Cierra { nombre } => format!("</{}", String::from_utf8_lossy(nombre)),
                 Evento::Texto(t) => format!("t:{}", String::from_utf8_lossy(t)),
                 Evento::Cdata(t) => format!("c:{}", String::from_utf8_lossy(t)),
@@ -565,7 +607,10 @@ mod pruebas {
     fn un_trozo_cortado_pide_mas_sin_avanzar() {
         let d = br#"<a k="1"><b"#;
         let mut pos = 0;
-        assert!(matches!(siguiente(d, &mut pos, false), Paso::Evento(Evento::Abre { .. })));
+        assert!(matches!(
+            siguiente(d, &mut pos, false),
+            Paso::Evento(Evento::Abre { .. })
+        ));
         let antes = pos;
         assert_eq!(siguiente(d, &mut pos, false), Paso::Incompleto);
         assert_eq!(pos, antes);

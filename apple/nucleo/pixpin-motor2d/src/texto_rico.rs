@@ -75,9 +75,16 @@ impl Default for EstiloTramo {
 /// Un trozo de renglon con su estilo.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tramo {
-    Texto { texto: String, estilo: EstiloTramo },
+    Texto {
+        texto: String,
+        estilo: EstiloTramo,
+    },
     /// Una formula (sin sus dolares). `alta`: entre `$$`.
-    Formula { fuente: String, estilo: EstiloTramo, alta: bool },
+    Formula {
+        fuente: String,
+        estilo: EstiloTramo,
+        alta: bool,
+    },
 }
 
 /// A que lado va un renglon. `Justificado` no existe en el fichero de
@@ -148,14 +155,26 @@ fn leer_renglon(linea: &str) -> Renglon {
     let c: Vec<char> = resto.chars().collect();
     let mut tramos = Vec::new();
     leer_tramos(&c, EstiloTramo::default(), &mut tramos);
-    Renglon { alineado, tramos: fusionar(tramos) }
+    Renglon {
+        alineado,
+        tramos: fusionar(tramos),
+    }
 }
 
 /// Junta los textos seguidos con el mismo estilo.
 fn fusionar(v: Vec<Tramo>) -> Vec<Tramo> {
     let mut out: Vec<Tramo> = Vec::with_capacity(v.len());
     for t in v {
-        if let (Some(Tramo::Texto { texto: a, estilo: ea }), Tramo::Texto { texto: b, estilo: eb }) = (out.last_mut(), &t)
+        if let (
+            Some(Tramo::Texto {
+                texto: a,
+                estilo: ea,
+            }),
+            Tramo::Texto {
+                texto: b,
+                estilo: eb,
+            },
+        ) = (out.last_mut(), &t)
             && ea == eb
         {
             a.push_str(b);
@@ -170,7 +189,10 @@ fn leer_tramos(c: &[char], est: EstiloTramo, out: &mut Vec<Tramo>) {
     let mut buf = String::new();
     let soltar = |buf: &mut String, out: &mut Vec<Tramo>| {
         if !buf.is_empty() {
-            out.push(Tramo::Texto { texto: std::mem::take(buf), estilo: est });
+            out.push(Tramo::Texto {
+                texto: std::mem::take(buf),
+                estilo: est,
+            });
         }
     };
     let mut i = 0;
@@ -201,7 +223,11 @@ fn leer_tramos(c: &[char], est: EstiloTramo, out: &mut Vec<Tramo>) {
         if ch == '$' {
             if let Some((fin, fuente, alta)) = formula(c, i) {
                 soltar(&mut buf, out);
-                out.push(Tramo::Formula { fuente, estilo: est, alta });
+                out.push(Tramo::Formula {
+                    fuente,
+                    estilo: est,
+                    alta,
+                });
                 i = fin;
                 continue;
             }
@@ -230,7 +256,11 @@ type Cambio = fn(&mut EstiloTramo);
 /// Si en `i` empieza una marca de las de Markdown que abre de verdad: su
 /// largo, lo que la cierra y lo que cambia.
 fn marca_en(c: &[char], i: usize) -> Option<(usize, &'static str, Cambio)> {
-    let empieza = |s: &str| s.chars().enumerate().all(|(k, ch)| c.get(i + k) == Some(&ch));
+    let empieza = |s: &str| {
+        s.chars()
+            .enumerate()
+            .all(|(k, ch)| c.get(i + k) == Some(&ch))
+    };
     let detras_no_blanco = |k: usize| c.get(k).is_some_and(|x| !x.is_whitespace());
     if empieza("<u>") {
         return Some((3, "</u>", |e| e.subrayado = true));
@@ -275,7 +305,9 @@ fn cierre(c: &[char], desde: usize, marca: &str) -> Option<usize> {
         if c[k..].starts_with(&m) && k > desde {
             let antes_ok = marca.starts_with('<') || !c[k - 1].is_whitespace();
             let simple = m.len() == 1;
-            let despues_ok = !simple || c.get(k + 1).is_none_or(|x| !x.is_alphanumeric() && *x != m[0]);
+            let despues_ok = !simple
+                || c.get(k + 1)
+                    .is_none_or(|x| !x.is_alphanumeric() && *x != m[0]);
             if antes_ok && despues_ok {
                 return Some(k);
             }
@@ -356,7 +388,13 @@ fn mandato(c: &[char], i: usize, est: EstiloTramo) -> Option<(usize, EstiloTramo
             }
         }
         "tam" => {
-            let f: f32 = argumento.as_deref().unwrap_or("").trim().replace(',', ".").parse().ok()?;
+            let f: f32 = argumento
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .replace(',', ".")
+                .parse()
+                .ok()?;
             sub.escala = est.escala * f.clamp(0.3, 5.0);
         }
         "textbf" | "negrita" => sub.negrita = true,
@@ -411,7 +449,10 @@ pub fn sin_barras_dobles(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
     while i < c.len() {
-        if c[i] == '\\' && c.get(i + 1) == Some(&'\\') && c.get(i + 2).is_some_and(|x| x.is_ascii_alphabetic()) {
+        if c[i] == '\\'
+            && c.get(i + 1) == Some(&'\\')
+            && c.get(i + 2).is_some_and(|x| x.is_ascii_alphabetic())
+        {
             i += 1;
             continue;
         }
@@ -431,7 +472,11 @@ pub fn plano(fuente: &str) -> String {
                 .iter()
                 .map(|t| match t {
                     Tramo::Texto { texto, .. } => texto.clone(),
-                    Tramo::Formula { fuente, .. } => crate::formulas::legible(&crate::formulas::leer(fuente)).trim().to_string(),
+                    Tramo::Formula { fuente, .. } => {
+                        crate::formulas::legible(&crate::formulas::leer(fuente))
+                            .trim()
+                            .to_string()
+                    }
                 })
                 .collect::<String>()
         })
@@ -471,7 +516,11 @@ pub fn color_de_nombre(nombre: &str) -> Option<ColorRgba> {
             6 | 8 => (v(0, 2)?, v(2, 2)?, v(4, 2)?),
             _ => return None,
         };
-        Some(ColorRgba::opaco(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0))
+        Some(ColorRgba::opaco(
+            r as f32 / 255.0,
+            g as f32 / 255.0,
+            b as f32 / 255.0,
+        ))
     };
     if let Some(h) = t.strip_prefix('#') {
         return hex(h);
@@ -552,7 +601,11 @@ struct Atomo {
 
 /// Una caja de letras de un tramo, con su raya de subrayado o tachado.
 fn caja_de_texto(s: &str, t: f32, familia: &str, e: &EstiloTramo) -> Caja {
-    let estilo = EstiloDeTexto { negrita: e.negrita, cursiva: e.cursiva, tachado: false };
+    let estilo = EstiloDeTexto {
+        negrita: e.negrita,
+        cursiva: e.cursiva,
+        tachado: false,
+    };
     let ancho = texto::ancho_real(s, t, familia, estilo);
     let alto = alto_de_renglon(t, familia);
     let mut piezas = vec![Pieza::Texto {
@@ -569,7 +622,10 @@ fn caja_de_texto(s: &str, t: f32, familia: &str, e: &EstiloTramo) -> Caja {
     // La base a un tamano de letra del borde de arriba, como el tachado de
     // siempre (`texto::raya_del_tachado`): la misma cuenta.
     let grosor = (t * texto::GROSOR_DEL_TACHADO).max(1.0);
-    for (si, y) in [(e.subrayado, t * 1.1), (e.tachado, t - t * texto::ALTURA_DEL_TACHADO)] {
+    for (si, y) in [
+        (e.subrayado, t * 1.1),
+        (e.tachado, t - t * texto::ALTURA_DEL_TACHADO),
+    ] {
         if si && ancho > 0.0 {
             piezas.push(Pieza::Raya {
                 puntos: vec![Punto2::nuevo(0.0, y), Punto2::nuevo(ancho, y)],
@@ -578,7 +634,12 @@ fn caja_de_texto(s: &str, t: f32, familia: &str, e: &EstiloTramo) -> Caja {
             });
         }
     }
-    Caja { ancho, alto, eje: alto * 0.55, piezas }
+    Caja {
+        ancho,
+        alto,
+        eje: alto * 0.55,
+        piezas,
+    }
 }
 
 fn atomos(r: &Renglon, o: &Opciones<'_>) -> Vec<Atomo> {
@@ -608,38 +669,60 @@ fn atomos(r: &Renglon, o: &Opciones<'_>) -> Vec<Atomo> {
                     // inscrito»), dibujado como en las formulas.
                     if caja::ANGULOS.contains(&ch) {
                         if !trozo.is_empty() {
-                            v.push(Atomo { caja: caja_de_texto(&trozo, t, o.familia, &e), espacio: en_blanco == Some(true) });
+                            v.push(Atomo {
+                                caja: caja_de_texto(&trozo, t, o.familia, &e),
+                                espacio: en_blanco == Some(true),
+                            });
                             trozo.clear();
                         }
                         en_blanco = None;
                         let familia = o.familia;
                         let medir = |s: &str, t: f32| {
-                            (texto::ancho_real(s, t, familia, EstiloDeTexto::default()), alto_de_renglon(t, familia))
+                            (
+                                texto::ancho_real(s, t, familia, EstiloDeTexto::default()),
+                                alto_de_renglon(t, familia),
+                            )
                         };
                         let mut c = caja::angulo(ch, t, &medir);
                         if let Some(col) = e.color {
                             c = c.tenida(col);
                         }
-                        v.push(Atomo { caja: c, espacio: false });
+                        v.push(Atomo {
+                            caja: c,
+                            espacio: false,
+                        });
                         continue;
                     }
                     let blanco = ch == ' ' || ch == '\t';
                     if en_blanco.is_some_and(|b| b != blanco) {
-                        v.push(Atomo { caja: caja_de_texto(&trozo, t, o.familia, &e), espacio: en_blanco == Some(true) });
+                        v.push(Atomo {
+                            caja: caja_de_texto(&trozo, t, o.familia, &e),
+                            espacio: en_blanco == Some(true),
+                        });
                         trozo.clear();
                     }
                     en_blanco = Some(blanco);
                     trozo.push(if ch == '\t' { ' ' } else { ch });
                 }
                 if !trozo.is_empty() {
-                    v.push(Atomo { caja: caja_de_texto(&trozo, t, o.familia, &e), espacio: en_blanco == Some(true) });
+                    v.push(Atomo {
+                        caja: caja_de_texto(&trozo, t, o.familia, &e),
+                        espacio: en_blanco == Some(true),
+                    });
                 }
             }
-            Tramo::Formula { fuente, estilo, alta } => {
+            Tramo::Formula {
+                fuente,
+                estilo,
+                alta,
+            } => {
                 let t = o.tam * estilo.escala;
                 let familia = o.familia;
                 let medir = |s: &str, t: f32| {
-                    (texto::ancho_real(s, t, familia, EstiloDeTexto::default()), alto_de_renglon(t, familia))
+                    (
+                        texto::ancho_real(s, t, familia, EstiloDeTexto::default()),
+                        alto_de_renglon(t, familia),
+                    )
                 };
                 let arbol = crate::formulas::leer(fuente);
                 let mut c = caja::de_formula(&arbol, t, &medir, !alta);
@@ -652,7 +735,10 @@ fn atomos(r: &Renglon, o: &Opciones<'_>) -> Vec<Atomo> {
                 if estilo.negrita || base.negrita {
                     c = c.en_negrita();
                 }
-                v.push(Atomo { caja: c, espacio: false });
+                v.push(Atomo {
+                    caja: c,
+                    espacio: false,
+                });
             }
         }
     }
@@ -692,7 +778,11 @@ pub fn componer(fuente: &str, o: &Opciones<'_>) -> Maqueta {
                 visuales.push((std::mem::take(&mut linea), al, false, k));
                 ancho = 0.0;
             }
-            if a.espacio && linea.is_empty() && !visuales.is_empty() && visuales.last().is_some_and(|v| v.3 == k) {
+            if a.espacio
+                && linea.is_empty()
+                && !visuales.is_empty()
+                && visuales.last().is_some_and(|v| v.3 == k)
+            {
                 continue; // el blanco donde se partio no empieza el renglon
             }
             ancho += a.caja.ancho;
@@ -704,8 +794,15 @@ pub fn componer(fuente: &str, o: &Opciones<'_>) -> Maqueta {
         let fin = ats.iter().rposition(|a| !a.espacio).map_or(0, |p| p + 1);
         ats[..fin].iter().map(|a| a.caja.ancho).sum()
     };
-    let bloque = visuales.iter().map(|v| ancho_natural(&v.0)).fold(0.0f32, f32::max);
-    let bloque = if partir { bloque.max(o.ancho_max) } else { bloque };
+    let bloque = visuales
+        .iter()
+        .map(|v| ancho_natural(&v.0))
+        .fold(0.0f32, f32::max);
+    let bloque = if partir {
+        bloque.max(o.ancho_max)
+    } else {
+        bloque
+    };
     let mut piezas = Vec::new();
     let mut y = 0.0f32;
     let mut inicio_de_renglon = vec![0.0f32; n];
@@ -715,8 +812,14 @@ pub fn componer(fuente: &str, o: &Opciones<'_>) -> Maqueta {
             visto[*k] = true;
             inicio_de_renglon[*k] = y;
         }
-        let arriba = ats.iter().map(|a| a.caja.eje).fold(alto_base * 0.55, f32::max);
-        let abajo = ats.iter().map(|a| a.caja.alto - a.caja.eje).fold(alto_base * 0.45, f32::max);
+        let arriba = ats
+            .iter()
+            .map(|a| a.caja.eje)
+            .fold(alto_base * 0.55, f32::max);
+        let abajo = ats
+            .iter()
+            .map(|a| a.caja.alto - a.caja.eje)
+            .fold(alto_base * 0.45, f32::max);
         let natural = ancho_natural(ats);
         let fin = ats.iter().rposition(|a| !a.espacio).map_or(0, |p| p + 1);
         let huecos = ats[..fin].iter().filter(|a| a.espacio).count();
@@ -724,7 +827,9 @@ pub fn componer(fuente: &str, o: &Opciones<'_>) -> Maqueta {
             Alineado::Izquierda => (0.0, 0.0),
             Alineado::Centro => ((bloque - natural) / 2.0, 0.0),
             Alineado::Derecha => (bloque - natural, 0.0),
-            Alineado::Justificado if !*ultimo && huecos > 0 => (0.0, (bloque - natural).max(0.0) / huecos as f32),
+            Alineado::Justificado if !*ultimo && huecos > 0 => {
+                (0.0, (bloque - natural).max(0.0) / huecos as f32)
+            }
             Alineado::Justificado => (0.0, 0.0),
         };
         x = x.max(0.0);
@@ -746,7 +851,12 @@ pub fn componer(fuente: &str, o: &Opciones<'_>) -> Maqueta {
         }
         y += arriba + abajo;
     }
-    Maqueta { ancho: bloque, alto: y.max(alto_base), piezas, renglones: inicio_de_renglon }
+    Maqueta {
+        ancho: bloque,
+        alto: y.max(alto_base),
+        piezas,
+        renglones: inicio_de_renglon,
+    }
 }
 
 /// Junta los textos seguidos de un renglon con la misma cara, tamano, color
@@ -757,9 +867,29 @@ fn juntar_palabras(v: Vec<Pieza>) -> Vec<Pieza> {
     // su texto y no cortan la racha).
     let mut ultimo: Option<usize> = None;
     for p in v {
-        if let Pieza::Texto { x, y, ancho, texto: t, tam, cursiva, negrita, color, .. } = &p
+        if let Pieza::Texto {
+            x,
+            y,
+            ancho,
+            texto: t,
+            tam,
+            cursiva,
+            negrita,
+            color,
+            ..
+        } = &p
             && let Some(i) = ultimo
-            && let Pieza::Texto { x: ax, y: ay, ancho: aa, texto: at, tam: atam, cursiva: ac, negrita: an, color: acol, .. } = &mut out[i]
+            && let Pieza::Texto {
+                x: ax,
+                y: ay,
+                ancho: aa,
+                texto: at,
+                tam: atam,
+                cursiva: ac,
+                negrita: an,
+                color: acol,
+                ..
+            } = &mut out[i]
             && (*ay - y).abs() < 0.01
             && (*atam - tam).abs() < 0.01
             && ac == cursiva
@@ -784,9 +914,18 @@ fn juntar_palabras(v: Vec<Pieza>) -> Vec<Pieza> {
 pub fn medida(fuente: &str, tam: f32, familia: &str, estilo: EstiloDeTexto) -> (f32, f32) {
     let m = componer(
         fuente,
-        &Opciones { tam, familia, estilo, alineacion: None, ancho_max: texto::SIN_PARTIR },
+        &Opciones {
+            tam,
+            familia,
+            estilo,
+            alineacion: None,
+            ancho_max: texto::SIN_PARTIR,
+        },
     );
-    (m.ancho.max(texto::ancho_real(" ", tam, familia, estilo)), m.alto)
+    (
+        m.ancho.max(texto::ancho_real(" ", tam, familia, estilo)),
+        m.alto,
+    )
 }
 
 /// **Le pone a un texto del lienzo lo escrito en formato rico**: si lleva
@@ -796,8 +935,17 @@ pub fn medida(fuente: &str, tam: f32, familia: &str, estilo: EstiloDeTexto) -> (
 /// Devuelve si quedo rico.
 pub fn poner_fuente(e: &mut crate::elemento::Elemento, fuente: &str) -> bool {
     let rico = tiene_marcas(fuente);
-    let estilo = EstiloDeTexto { negrita: e.extras.negrita, cursiva: e.extras.cursiva, tachado: e.extras.tachado };
-    let crate::elemento::Figura::Texto { texto, tam, familia } = &mut e.figura else {
+    let estilo = EstiloDeTexto {
+        negrita: e.extras.negrita,
+        cursiva: e.extras.cursiva,
+        tachado: e.extras.tachado,
+    };
+    let crate::elemento::Figura::Texto {
+        texto,
+        tam,
+        familia,
+    } = &mut e.figura
+    else {
         return false;
     };
     let (ancho, alto) = if rico {
@@ -823,7 +971,11 @@ pub fn medida_del_elemento(e: &crate::elemento::Elemento) -> Option<(f32, f32)> 
     let crate::elemento::Figura::Texto { tam, familia, .. } = &e.figura else {
         return None;
     };
-    let estilo = EstiloDeTexto { negrita: e.extras.negrita, cursiva: e.extras.cursiva, tachado: e.extras.tachado };
+    let estilo = EstiloDeTexto {
+        negrita: e.extras.negrita,
+        cursiva: e.extras.cursiva,
+        tachado: e.extras.tachado,
+    };
     Some(medida(rico, *tam, familia, estilo))
 }
 
@@ -832,27 +984,44 @@ pub fn medida_del_elemento(e: &crate::elemento::Elemento) -> Option<(f32, f32)> 
 /// llevan la misma opacidad.
 pub fn ordenes(m: &Maqueta, x: f32, y: f32, familia: &str, color: ColorRgba) -> Vec<Orden> {
     let tinta = |c: Option<ColorRgba>| match c {
-        Some(c) => ColorRgba { a: c.a * color.a, ..c },
+        Some(c) => ColorRgba {
+            a: c.a * color.a,
+            ..c
+        },
         None => color,
     };
     m.piezas
         .iter()
         .filter_map(|p| match p {
-            Pieza::Texto { x: px, y: py, texto: s, tam, cursiva, negrita, color: c, .. } => {
-                (!s.trim().is_empty()).then(|| Orden::Texto {
-                    texto: s.clone(),
-                    x: x + px,
-                    y: y + py,
-                    tam: *tam,
-                    familia: familia.to_string(),
-                    color: tinta(*c),
-                    ancho_max: texto::SIN_PARTIR,
-                    negrita: *negrita,
-                    cursiva: *cursiva,
-                })
-            }
-            Pieza::Raya { puntos, grosor, color: c } => Some(Orden::Polilinea {
-                puntos: puntos.iter().map(|q| Punto2::nuevo(q.x + x, q.y + y)).collect(),
+            Pieza::Texto {
+                x: px,
+                y: py,
+                texto: s,
+                tam,
+                cursiva,
+                negrita,
+                color: c,
+                ..
+            } => (!s.trim().is_empty()).then(|| Orden::Texto {
+                texto: s.clone(),
+                x: x + px,
+                y: y + py,
+                tam: *tam,
+                familia: familia.to_string(),
+                color: tinta(*c),
+                ancho_max: texto::SIN_PARTIR,
+                negrita: *negrita,
+                cursiva: *cursiva,
+            }),
+            Pieza::Raya {
+                puntos,
+                grosor,
+                color: c,
+            } => Some(Orden::Polilinea {
+                puntos: puntos
+                    .iter()
+                    .map(|q| Punto2::nuevo(q.x + x, q.y + y))
+                    .collect(),
                 color: tinta(*c),
                 grosor: *grosor,
                 estilo: EstiloTrazo::Solido,
@@ -875,14 +1044,27 @@ mod pruebas {
     }
 
     fn opciones(tam: f32) -> Opciones<'static> {
-        Opciones { tam, familia: "Nunito", estilo: EstiloDeTexto::default(), alineacion: None, ancho_max: texto::SIN_PARTIR }
+        Opciones {
+            tam,
+            familia: "Nunito",
+            estilo: EstiloDeTexto::default(),
+            alineacion: None,
+            ancho_max: texto::SIN_PARTIR,
+        }
     }
 
     fn textos(m: &Maqueta) -> Vec<(String, f32, f32, f32, Option<ColorRgba>)> {
         m.piezas
             .iter()
             .filter_map(|p| match p {
-                Pieza::Texto { texto, x, y, tam, color, .. } => Some((texto.clone(), *x, *y, *tam, *color)),
+                Pieza::Texto {
+                    texto,
+                    x,
+                    y,
+                    tam,
+                    color,
+                    ..
+                } => Some((texto.clone(), *x, *y, *tam, *color)),
                 _ => None,
             })
             .collect()
@@ -907,9 +1089,19 @@ mod pruebas {
             // mismo eje.
             let ys: Vec<f32> = t.iter().map(|x| x.2).collect();
             assert!(ys.iter().all(|y| (y - ys[0]).abs() < 0.01), "{t:?}");
-            assert!(!t.iter().any(|x| x.0.contains('∢')), "el angulo va dibujado: {t:?}");
-            assert_eq!(rayas(&m).len(), 2, "el signo del angulo: sus lados y su arco");
-            assert!(!t.iter().any(|x| x.0.contains('\\')), "sin mandatos a la vista: {t:?}");
+            assert!(
+                !t.iter().any(|x| x.0.contains('∢')),
+                "el angulo va dibujado: {t:?}"
+            );
+            assert_eq!(
+                rayas(&m).len(),
+                2,
+                "el signo del angulo: sus lados y su arco"
+            );
+            assert!(
+                !t.iter().any(|x| x.0.contains('\\')),
+                "sin mandatos a la vista: {t:?}"
+            );
             // Un solo renglon de alto.
             assert!((m.alto - 25.0).abs() < 0.01, "{}", m.alto);
         });
@@ -936,8 +1128,14 @@ mod pruebas {
             let r = rayas(&m);
             assert_eq!(r.len(), 1, "la barra de la fraccion: {r:?}");
             let barra_y = r[0].0[0].y;
-            let num = t.iter().find(|p| p.0.starts_with('2') && p.2 < barra_y).expect("numerador encima");
-            let den = t.iter().find(|p| p.0.starts_with('2') && p.2 > barra_y).expect("denominador debajo");
+            let num = t
+                .iter()
+                .find(|p| p.0.starts_with('2') && p.2 < barra_y)
+                .expect("numerador encima");
+            let den = t
+                .iter()
+                .find(|p| p.0.starts_with('2') && p.2 > barra_y)
+                .expect("denominador debajo");
             assert!(num.3 < 20.0 && den.3 < 20.0, "en linea encoge: {num:?}");
             // El texto de despues va en la linea del «=».
             let fin = t.iter().find(|p| p.0.trim() == "fin").unwrap();
@@ -951,19 +1149,31 @@ mod pruebas {
     #[test]
     fn la_raya_y_el_arco_van_encima_y_del_ancho_de_las_letras() {
         con(|| {
-            let m = componer("$\\overline{AB}$ y $m\\overset{\\frown}{AC}$", &opciones(20.0));
+            let m = componer(
+                "$\\overline{AB}$ y $m\\overset{\\frown}{AC}$",
+                &opciones(20.0),
+            );
             let t = textos(&m);
             let r = rayas(&m);
             assert_eq!(r.len(), 2, "{r:?}");
-            let a = t.iter().find(|p| p.0 == "AB").expect("A y B juntas, del mismo estilo");
+            let a = t
+                .iter()
+                .find(|p| p.0 == "AB")
+                .expect("A y B juntas, del mismo estilo");
             let b = (a.0.clone(), a.1 + 10.0, a.2, a.3, a.4);
             let raya = &r[0].0;
             assert_eq!(raya.len(), 2, "la raya es recta");
-            assert!(raya[0].x >= a.1 - 0.01 && raya[1].x <= b.1 + 10.0 + 0.01, "{raya:?} {a:?} {b:?}");
+            assert!(
+                raya[0].x >= a.1 - 0.01 && raya[1].x <= b.1 + 10.0 + 0.01,
+                "{raya:?} {a:?} {b:?}"
+            );
             assert!(raya[0].y < a.2 + 20.0 * 0.6, "encima de la letra");
             let arco = &r[1].0;
             assert!(arco.len() > 5, "el arco es curvo");
-            assert!(arco.iter().all(|p| p.x.is_finite() && p.y.is_finite()), "sin NaN: {arco:?}");
+            assert!(
+                arco.iter().all(|p| p.x.is_finite() && p.y.is_finite()),
+                "sin NaN: {arco:?}"
+            );
             let medio = arco[arco.len() / 2].y;
             assert!(medio < arco[0].y, "sube por el medio: {arco:?}");
         });
@@ -974,23 +1184,39 @@ mod pruebas {
         con(|| {
             let rojo = color_de_nombre("rojo").unwrap();
             let azul = color_de_nombre("blue").unwrap();
-            let m = componer("Nos piden \\color{rojo}{X} y $a + \\color{blue}{b}$ **ya**", &opciones(20.0));
+            let m = componer(
+                "Nos piden \\color{rojo}{X} y $a + \\color{blue}{b}$ **ya**",
+                &opciones(20.0),
+            );
             let t = textos(&m);
             assert_eq!(t.iter().find(|p| p.0 == "X").unwrap().4, Some(rojo));
             assert_eq!(t.iter().find(|p| p.0 == "b").unwrap().4, Some(azul));
             assert_eq!(t.iter().find(|p| p.0 == "a").unwrap().4, None);
-            assert!(m.piezas.iter().any(|p| matches!(p, Pieza::Texto { texto, negrita: true, .. } if texto == "ya")));
+            assert!(
+                m.piezas.iter().any(
+                    |p| matches!(p, Pieza::Texto { texto, negrita: true, .. } if texto == "ya")
+                )
+            );
             // Un color de la formula de fuera no pisa al de dentro.
             let m = componer("$\\color{red}{a + \\color{green}{b}}$", &opciones(20.0));
             let t = textos(&m);
-            assert_eq!(t.iter().find(|p| p.0 == "a").unwrap().4, color_de_nombre("red"));
-            assert_eq!(t.iter().find(|p| p.0 == "b").unwrap().4, color_de_nombre("green"));
+            assert_eq!(
+                t.iter().find(|p| p.0 == "a").unwrap().4,
+                color_de_nombre("red")
+            );
+            assert_eq!(
+                t.iter().find(|p| p.0 == "b").unwrap().4,
+                color_de_nombre("green")
+            );
         });
     }
 
     #[test]
     fn el_plano_de_reserva_se_lee_sin_formato() {
-        assert_eq!(plano("Nos piden $m\\sphericalangle COD = \\color{red}{X}$"), "Nos piden m∢COD = X");
+        assert_eq!(
+            plano("Nos piden $m\\sphericalangle COD = \\color{red}{X}$"),
+            "Nos piden m∢COD = X"
+        );
         assert_eq!(plano("**Si** $x^2$ y *ya*"), "Si x² y ya");
         assert_eq!(plano("$45^\\circ = \\frac{2a+2b}{2}$"), "45° = (2a + 2b)/2");
         assert_eq!(plano("\\centro $\\overline{AB}$"), "A̅B̅");
@@ -1003,7 +1229,10 @@ mod pruebas {
         assert!(!tiene_marcas("Hola mundo"));
         assert!(!tiene_marcas("2*3*4 y nombre_de_fichero"));
         assert!(!tiene_marcas("cuesta $5 y $10"), "dinero no es formula");
-        assert!(!tiene_marcas("C:\\Users\\max"), "una ruta se queda como esta");
+        assert!(
+            !tiene_marcas("C:\\Users\\max"),
+            "una ruta se queda como esta"
+        );
         assert!(tiene_marcas("$x^2$"));
         assert!(tiene_marcas("**ojo**"));
         assert!(tiene_marcas("\\centro hola"));
@@ -1045,16 +1274,30 @@ mod pruebas {
     #[test]
     fn centrado_y_justificado_por_renglon() {
         con(|| {
-            let m = componer("una linea bastante larga\n\\centro corta\n\\derecha fin", &opciones(20.0));
+            let m = componer(
+                "una linea bastante larga\n\\centro corta\n\\derecha fin",
+                &opciones(20.0),
+            );
             let t = textos(&m);
             let corta = t.iter().find(|p| p.0 == "corta").unwrap();
             let fin = t.iter().find(|p| p.0 == "fin").unwrap();
-            assert!((corta.1 - (m.ancho - 50.0) / 2.0).abs() < 0.1, "{corta:?} {}", m.ancho);
+            assert!(
+                (corta.1 - (m.ancho - 50.0) / 2.0).abs() < 0.1,
+                "{corta:?} {}",
+                m.ancho
+            );
             assert!((fin.1 + 30.0 - m.ancho).abs() < 0.1, "{fin:?}");
-            let m = componer("\\justificado a b c\nuna linea bastante larga\n", &opciones(20.0));
+            let m = componer(
+                "\\justificado a b c\nuna linea bastante larga\n",
+                &opciones(20.0),
+            );
             let t = textos(&m);
             let c = t.iter().find(|p| p.0 == "c").unwrap();
-            assert!((c.1 + 10.0 - m.ancho).abs() < 0.1, "la ultima letra llega al borde: {c:?} {}", m.ancho);
+            assert!(
+                (c.1 + 10.0 - m.ancho).abs() < 0.1,
+                "la ultima letra llega al borde: {c:?} {}",
+                m.ancho
+            );
         });
     }
 
@@ -1067,7 +1310,11 @@ mod pruebas {
             let t = textos(&m);
             let ys: std::collections::BTreeSet<i32> = t.iter().map(|p| p.2 as i32).collect();
             assert!(ys.len() >= 2, "{t:?}");
-            assert!(t.iter().all(|p| p.1 + p.0.chars().count() as f32 * p.3 * 0.5 <= 100.5), "{t:?}");
+            assert!(
+                t.iter()
+                    .all(|p| p.1 + p.0.chars().count() as f32 * p.3 * 0.5 <= 100.5),
+                "{t:?}"
+            );
         });
     }
 
@@ -1088,7 +1335,12 @@ mod pruebas {
     fn las_ordenes_llevan_su_color_y_la_opacidad_del_elemento() {
         con(|| {
             let m = componer("a \\color{red}{b}", &opciones(20.0));
-            let base = ColorRgba { r: 0.0, g: 0.0, b: 0.0, a: 0.5 };
+            let base = ColorRgba {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.5,
+            };
             let o = ordenes(&m, 10.0, 20.0, "Nunito", base);
             let colores: Vec<ColorRgba> = o
                 .iter()
@@ -1123,7 +1375,10 @@ mod pruebas_lector_de_formulas {
         assert!(!a.contains("texto: \"}\""), "{a}");
         // Todo el «(x; y)» va abajo, como subindice de la F.
         let abajo = a.split("abajo: ").nth(1).unwrap_or_default();
-        assert!(abajo.find("\"y\"").unwrap_or(usize::MAX) < abajo.find("\" = \"").unwrap_or(0), "{a}");
+        assert!(
+            abajo.find("\"y\"").unwrap_or(usize::MAX) < abajo.find("\" = \"").unwrap_or(0),
+            "{a}"
+        );
     }
 }
 
@@ -1131,10 +1386,16 @@ mod pruebas_lector_de_formulas {
 mod pruebas_llave_debajo {
     #[test]
     fn underbrace_con_su_rotulo_y_underset() {
-        let a = format!("{:?}", crate::formulas::leer(r#"\underbrace{SS\ldots S}_{\text{"n" veces}}=\alpha"#));
+        let a = format!(
+            "{:?}",
+            crate::formulas::leer(r#"\underbrace{SS\ldots S}_{\text{"n" veces}}=\alpha"#)
+        );
         assert!(a.contains("LlaveDebajo") && a.contains("Debajo {"), "{a}");
         assert!(!a.contains("underbrace"), "no sale como codigo: {a}");
-        let b = format!("{:?}", crate::formulas::leer(r#"\underset{variables}{(x; y)}"#));
+        let b = format!(
+            "{:?}",
+            crate::formulas::leer(r#"\underset{variables}{(x; y)}"#)
+        );
         assert!(b.contains("Debajo {"), "{b}");
     }
 }

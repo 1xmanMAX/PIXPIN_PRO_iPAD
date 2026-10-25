@@ -1,6 +1,7 @@
 // La barra de arriba del chat «Asistente» (Windows, 17-oct): la pastilla
 // del modelo (Local / Claude Haiku / DeepSeek), que cambia el MISMO ajuste
-// que Ajustes → Asistente → Motor, al instante; y «Conversación nueva», una
+// que Ajustes → Asistente → Motor, al instante; y «+ Nuevo chat» (la
+// «Conversación nueva» de Windows, 22 y 23-oct, siempre a la vista), una
 // nota del asistente que corta el contexto que se le manda (lo de antes
 // sigue a la vista y viaja como siempre); y «Borrar chat», que vacia el
 // chat «Asistente» (sus mensajes y sus adjuntos) tras preguntar.
@@ -23,7 +24,11 @@ struct CabeceraDelAsistente: View {
     }
 
     var body: some View {
+        // «+ Nuevo chat» siempre a la vista y pegado a la derecha (Windows,
+        // 23-oct: «el asistente no tiene un boton de nuevo chat»), y a su
+        // izquierda la pastilla del modelo. Sin sitio, solo el «+».
         HStack(spacing: 8) {
+            Spacer(minLength: 0)
             Menu {
                 ForEach(Self.motores, id: \.id) { m in
                     Button {
@@ -42,15 +47,10 @@ struct CabeceraDelAsistente: View {
             .buttonStyle(.borderless)
             .fixedSize()
             .help("Quién contesta (el mismo ajuste que Ajustes → Asistente)")
-            Spacer()
-            Button {
-                nueva()
-            } label: {
-                Label("Conversación nueva", systemImage: "square.and.pencil")
-                    .font(.caption)
+            ViewThatFits(in: .horizontal) {
+                botonNuevo(conRotulo: true)
+                botonNuevo(conRotulo: false)
             }
-            .buttonStyle(.borderless)
-            .help("Lo de arriba ya no se le manda al asistente")
             Button(role: .destructive) {
                 preguntarBorrar = true
             } label: {
@@ -67,6 +67,28 @@ struct CabeceraDelAsistente: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .task { motor = (try? almacen.nucleo.ajustes().asistenteMotor) ?? "" }
+    }
+
+    /// «+ Nuevo chat» (`asistente-nuevo-chat`): una «Conversación nueva»,
+    /// lo mismo que la entrada del menu.
+    private func botonNuevo(conRotulo: Bool) -> some View {
+        Button {
+            nueva()
+        } label: {
+            Group {
+                if conRotulo {
+                    Label("Nuevo chat", systemImage: "plus")
+                } else {
+                    Image(systemName: "plus")
+                }
+            }
+            .font(.caption)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Color.accentColor.opacity(0.15), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help("Conversación nueva: lo de arriba ya no se le manda al asistente")
     }
 
     private func elegir(_ nuevo: String) {

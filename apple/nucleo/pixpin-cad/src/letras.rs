@@ -59,24 +59,39 @@ pub fn poner_carpeta(carpeta: Option<PathBuf>) {
 
 /// Las carpetas de letras del usuario (hoy, una o ninguna).
 pub fn carpetas_del_usuario() -> Vec<PathBuf> {
-    CARPETA_DEL_USUARIO.lock().ok().and_then(|c| c.clone()).filter(|c| c.is_dir()).into_iter().collect()
+    CARPETA_DEL_USUARIO
+        .lock()
+        .ok()
+        .and_then(|c| c.clone())
+        .filter(|c| c.is_dir())
+        .into_iter()
+        .collect()
 }
 
 /// Las letras que puso el usuario en `carpeta`, por nombre.
 pub fn letras_en(carpeta: &Path) -> Vec<PathBuf> {
-    let Ok(d) = std::fs::read_dir(carpeta) else { return Vec::new() };
+    let Ok(d) = std::fs::read_dir(carpeta) else {
+        return Vec::new();
+    };
     let mut v: Vec<PathBuf> = d
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.is_file() && es_letra(p))
         .collect();
-    v.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default());
+    v.sort_by_key(|p| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_default()
+    });
     v
 }
 
 /// Si el fichero es una letra (por su terminacion).
 pub fn es_letra(ruta: &Path) -> bool {
-    let ext = ruta.extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let ext = ruta
+        .extension()
+        .map(|x| x.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
     TIPOS_DE_LETRA.contains(&ext.as_str())
 }
 
@@ -96,7 +111,9 @@ pub fn parece_letra(ruta: &Path) -> bool {
     let Ok(n) = leidos else { return false };
     let c = &cabeza[..n];
     c.starts_with(b"AutoCAD-86")
-        || [&[0u8, 1, 0, 0][..], b"true", b"typ1", b"OTTO", b"ttcf"].iter().any(|m| c.starts_with(m))
+        || [&[0u8, 1, 0, 0][..], b"true", b"typ1", b"OTTO", b"ttcf"]
+            .iter()
+            .any(|m| c.starts_with(m))
 }
 
 /// **Una huella corta de las letras del usuario** (nombres y pesos, como
@@ -110,7 +127,10 @@ pub fn huella(carpeta: &Path) -> String {
     let texto: Vec<String> = l
         .iter()
         .map(|p| {
-            let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let n = p
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
             let peso = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
             format!("{n}:{peso}")
         })
@@ -133,7 +153,9 @@ pub fn anadir(carpeta: &Path, rutas: &[PathBuf]) -> usize {
     }
     let mut n = 0;
     for r in rutas {
-        let Some(nombre) = r.file_name() else { continue };
+        let Some(nombre) = r.file_name() else {
+            continue;
+        };
         if !r.is_file() || !es_letra(r) {
             continue;
         }
@@ -150,7 +172,10 @@ pub fn anadir(carpeta: &Path, rutas: &[PathBuf]) -> usize {
 
 /// Quita todas las letras del usuario («Quitar las mias»). Devuelve cuantas.
 pub fn quitar_todas(carpeta: &Path) -> usize {
-    letras_en(carpeta).iter().filter(|p| std::fs::remove_file(p).is_ok()).count()
+    letras_en(carpeta)
+        .iter()
+        .filter(|p| std::fs::remove_file(p).is_ok())
+        .count()
 }
 
 /// El fichero `nombre` (sin mirar mayusculas) en las carpetas del usuario.
@@ -163,7 +188,9 @@ pub fn del_usuario(nombre: &str) -> Option<PathBuf> {
         return None;
     }
     for c in carpetas_del_usuario() {
-        let Ok(d) = std::fs::read_dir(&c) else { continue };
+        let Ok(d) = std::fs::read_dir(&c) else {
+            continue;
+        };
         for e in d.flatten() {
             if e.file_name().to_string_lossy().eq_ignore_ascii_case(base) {
                 return Some(e.path());
@@ -180,7 +207,10 @@ pub fn del_usuario(nombre: &str) -> Option<PathBuf> {
 pub fn familias_del_usuario() -> HashMap<String, PathBuf> {
     static CACHE: Mutex<Option<(String, HashMap<String, PathBuf>)>> = Mutex::new(None);
     let carpetas = carpetas_del_usuario();
-    let firma: String = carpetas.iter().map(|c| format!("{}#{}", c.display(), huella(c))).collect();
+    let firma: String = carpetas
+        .iter()
+        .map(|c| format!("{}#{}", c.display(), huella(c)))
+        .collect();
     let mut g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
     if let Some((f, m)) = g.as_ref()
         && *f == firma
@@ -190,20 +220,40 @@ pub fn familias_del_usuario() -> HashMap<String, PathBuf> {
     let mut mapa = HashMap::new();
     for c in &carpetas {
         for ruta in letras_en(c) {
-            let ext = ruta.extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            let ext = ruta
+                .extension()
+                .map(|x| x.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
             if ext == "shx" {
                 continue;
             }
-            let Ok(datos) = std::fs::read(&ruta) else { continue };
-            let Ok(cara) = ttf_parser::Face::parse(&datos, 0) else { continue };
-            let nombre = |id: u16| cara.names().into_iter().filter(|n| n.name_id == id && n.is_unicode()).find_map(|n| n.to_string());
-            let Some(familia) = nombre(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| nombre(ttf_parser::name_id::FAMILY)) else { continue };
+            let Ok(datos) = std::fs::read(&ruta) else {
+                continue;
+            };
+            let Ok(cara) = ttf_parser::Face::parse(&datos, 0) else {
+                continue;
+            };
+            let nombre = |id: u16| {
+                cara.names()
+                    .into_iter()
+                    .filter(|n| n.name_id == id && n.is_unicode())
+                    .find_map(|n| n.to_string())
+            };
+            let Some(familia) = nombre(ttf_parser::name_id::TYPOGRAPHIC_FAMILY)
+                .or_else(|| nombre(ttf_parser::name_id::FAMILY))
+            else {
+                continue;
+            };
             let sub = nombre(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY)
                 .or_else(|| nombre(ttf_parser::name_id::SUBFAMILY))
                 .unwrap_or_default()
                 .to_lowercase();
             let familia = familia.trim().to_lowercase();
-            let clave = if sub.is_empty() || sub == "regular" || sub == "normal" { familia.clone() } else { format!("{familia} {sub}") };
+            let clave = if sub.is_empty() || sub == "regular" || sub == "normal" {
+                familia.clone()
+            } else {
+                format!("{familia} {sub}")
+            };
             mapa.insert(clave, ruta.clone());
             if sub.contains("bold") {
                 mapa.insert(format!("{familia} negrita"), ruta.clone());
@@ -227,7 +277,11 @@ pub fn falta(nombre: &str) {
 pub fn falta_shx(clave: &str) {
     if crate::shx::reserva_para(clave).is_some() {
         let base = clave.rsplit(['/', '\\']).next().unwrap_or(clave);
-        falta(&if base.to_ascii_lowercase().ends_with(".shx") { base.to_string() } else { format!("{base}.shx") });
+        falta(&if base.to_ascii_lowercase().ends_with(".shx") {
+            base.to_string()
+        } else {
+            format!("{base}.shx")
+        });
     }
 }
 
@@ -235,7 +289,8 @@ pub fn falta_shx(clave: &str) {
 /// esta ni en las del usuario ni en la carpeta de Windows ni registrada.
 pub fn revisar_ttf(clave: &str, sistema: &Path) {
     let c = clave.trim().to_ascii_lowercase();
-    if c.starts_with("ttf:") || !(c.ends_with(".ttf") || c.ends_with(".otf") || c.ends_with(".ttc")) {
+    if c.starts_with("ttf:") || !(c.ends_with(".ttf") || c.ends_with(".otf") || c.ends_with(".ttc"))
+    {
         return;
     }
     let base = c.rsplit(['\\', '/']).next().unwrap_or(&c).to_string();
@@ -260,19 +315,28 @@ pub fn sacar_lo_que_falta() -> Vec<String> {
 
 /// **Lee un plano con las letras del usuario** (las de `carpeta`) y apunta
 /// en su `sin_dibujar` las que pide y no estan (`convertir_a` de Android).
-pub fn convertir_con_letras(entrada: &Path, carpeta: Option<PathBuf>) -> Result<crate::modelo::Modelo, String> {
+pub fn convertir_con_letras(
+    entrada: &Path,
+    carpeta: Option<PathBuf>,
+) -> Result<crate::modelo::Modelo, String> {
     poner_carpeta(carpeta);
     sacar_lo_que_falta();
     let (mut modelo, _) = crate::convertir::convertir_fichero(entrada)?;
     for f in sacar_lo_que_falta() {
-        modelo.sin_dibujar.push((format!("{FUENTE_QUE_FALTA}{f}"), 1));
+        modelo
+            .sin_dibujar
+            .push((format!("{FUENTE_QUE_FALTA}{f}"), 1));
     }
     Ok(modelo)
 }
 
 /// Las letras que faltan, de lo que el plano apunto en `sin_dibujar`.
 pub fn las_que_faltan(sin_dibujar: &[(String, u32)]) -> Vec<String> {
-    sin_dibujar.iter().filter_map(|(t, _)| t.strip_prefix(FUENTE_QUE_FALTA)).map(str::to_string).collect()
+    sin_dibujar
+        .iter()
+        .filter_map(|(t, _)| t.strip_prefix(FUENTE_QUE_FALTA))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Lo global (la carpeta del usuario) lo comparten las pruebas de aqui y
@@ -328,7 +392,10 @@ mod pruebas_letras_del_usuario {
             assert_eq!(del_usuario("/Library/Fonts/romans.shx"), None);
             // Fuera de Windows, la ruta de Windows que trae el plano no
             // existe: la letra se busca por su nombre en las del usuario.
-            assert_eq!(del_usuario("C:\\Fuentes\\romans.shx"), Some(d.join("romans.shx")));
+            assert_eq!(
+                del_usuario("C:\\Fuentes\\romans.shx"),
+                Some(d.join("romans.shx"))
+            );
         }
         assert_eq!(del_usuario("  "), None);
         // Un estilo sin SHX («Standard») no cuenta como letra que falta; un
@@ -352,10 +419,24 @@ mod pruebas_letras_del_usuario {
         std::fs::write(fuera.join("isocp.shx"), b"AutoCAD-86 shapes 1.0").unwrap();
         std::fs::write(fuera.join("ArialN.TTF"), b"ttf").unwrap();
         std::fs::write(fuera.join("leeme.txt"), b"no").unwrap();
-        let n = anadir(&d, &[fuera.join("isocp.shx"), fuera.join("ArialN.TTF"), fuera.join("leeme.txt"), fuera.join("no-esta.shx")]);
+        let n = anadir(
+            &d,
+            &[
+                fuera.join("isocp.shx"),
+                fuera.join("ArialN.TTF"),
+                fuera.join("leeme.txt"),
+                fuera.join("no-esta.shx"),
+            ],
+        );
         assert_eq!(n, 2);
-        let nombres: Vec<String> = letras_en(&d).iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
-        assert_eq!(nombres, vec!["ArialN.TTF".to_string(), "isocp.shx".to_string()]);
+        let nombres: Vec<String> = letras_en(&d)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            nombres,
+            vec!["ArialN.TTF".to_string(), "isocp.shx".to_string()]
+        );
         let h1 = huella(&d);
         assert_eq!(h1.len(), 8);
         std::fs::write(fuera.join("romans.shx"), b"otra").unwrap();
@@ -370,15 +451,27 @@ mod pruebas_letras_del_usuario {
     #[test]
     fn solo_parece_letra_lo_que_lo_es_por_dentro() {
         let d = carpeta_de_prueba("parece");
-        std::fs::write(d.join("romans.shx"), include_bytes!("../fuentes-shx/romans.shx")).unwrap();
+        std::fs::write(
+            d.join("romans.shx"),
+            include_bytes!("../fuentes-shx/romans.shx"),
+        )
+        .unwrap();
         std::fs::write(d.join("libre.ttf"), [0u8, 1, 0, 0, 0, 9]).unwrap();
         std::fs::write(d.join("libre.otf"), b"OTTO\0\x01").unwrap();
-        assert!(parece_letra(&d.join("romans.shx")) && parece_letra(&d.join("libre.ttf")) && parece_letra(&d.join("libre.otf")));
+        assert!(
+            parece_letra(&d.join("romans.shx"))
+                && parece_letra(&d.join("libre.ttf"))
+                && parece_letra(&d.join("libre.otf"))
+        );
         // Casos negativos: un programa rebautizado, un fichero vacio, otra
         // terminacion aunque por dentro sea una SHX, y uno que no esta.
         std::fs::write(d.join("trampa.shx"), b"MZ\x90\0programa").unwrap();
         std::fs::write(d.join("vacia.ttf"), b"").unwrap();
-        std::fs::write(d.join("romans.txt"), include_bytes!("../fuentes-shx/romans.shx")).unwrap();
+        std::fs::write(
+            d.join("romans.txt"),
+            include_bytes!("../fuentes-shx/romans.shx"),
+        )
+        .unwrap();
         for n in ["trampa.shx", "vacia.ttf", "romans.txt", "no-esta.shx"] {
             assert!(!parece_letra(&d.join(n)), "{n}");
         }
@@ -392,7 +485,10 @@ mod pruebas_letras_del_usuario {
             ("sin dibujo: AeccDbSurfaceTin".to_string(), 3),
             (format!("{FUENTE_QUE_FALTA}arialn.ttf"), 1),
         ];
-        assert_eq!(las_que_faltan(&v), vec!["romans.shx".to_string(), "arialn.ttf".to_string()]);
+        assert_eq!(
+            las_que_faltan(&v),
+            vec!["romans.shx".to_string(), "arialn.ttf".to_string()]
+        );
         assert!(las_que_faltan(&[]).is_empty());
     }
 }

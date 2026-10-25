@@ -38,7 +38,10 @@ struct Ficha {
 
 /// Sin mayusculas, tildes ni signos: solo letras y numeros.
 fn norma(s: &str) -> String {
-    normalizar(s).chars().filter(|c| c.is_alphanumeric()).collect()
+    normalizar(s)
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
 }
 
 fn fichas(p: &Pagina) -> Vec<Ficha> {
@@ -47,7 +50,11 @@ fn fichas(p: &Pagina) -> Vec<Ficha> {
         for (k, w) in ren.palabras.iter().enumerate() {
             let n = norma(&w.texto);
             if !n.is_empty() {
-                v.push(Ficha { renglon: r, palabra: k, norma: n });
+                v.push(Ficha {
+                    renglon: r,
+                    palabra: k,
+                    norma: n,
+                });
             }
         }
     }
@@ -61,12 +68,20 @@ fn cajas_de(p: &Pagina, f: &[Ficha], desde: usize, hasta: usize, exacto: bool) -
     let ultimo = tramo.last()?.renglon;
     let mut cajas = Vec::new();
     for r in primero..=ultimo {
-        let de_r = tramo.iter().filter(|x| x.renglon == r).map(|x| p.renglones[r].palabras[x.palabra].caja);
+        let de_r = tramo
+            .iter()
+            .filter(|x| x.renglon == r)
+            .map(|x| p.renglones[r].palabras[x.palabra].caja);
         if let Some(c) = union(de_r) {
             cajas.push(c);
         }
     }
-    (!cajas.is_empty()).then_some(Anclaje { cajas, renglon: primero, ultimo, exacto })
+    (!cajas.is_empty()).then_some(Anclaje {
+        cajas,
+        renglon: primero,
+        ultimo,
+        exacto,
+    })
 }
 
 /// **Ancla `ancla` en la pagina.** `linea`: el renglon que dijo el modelo
@@ -92,7 +107,11 @@ pub fn anclar(p: &Pagina, ancla: &str, linea: Option<usize>) -> Option<Anclaje> 
         return cajas_de(p, &f, *d, *h, true);
     }
     // 2. Por parecido, palabra a palabra.
-    let palabras: Vec<String> = ancla.split_whitespace().map(norma).filter(|s| !s.is_empty()).collect();
+    let palabras: Vec<String> = ancla
+        .split_whitespace()
+        .map(norma)
+        .filter(|s| !s.is_empty())
+        .collect();
     if let Some((d, h)) = parecido(&f, &palabras, &cerca) {
         return cajas_de(p, &f, d, h, false);
     }
@@ -124,7 +143,9 @@ fn tal_cual(f: &[Ficha], pedido: &str) -> Vec<(usize, usize)> {
                     // A medias: el pedido dentro, cortado solo en la primera
                     // y la ultima palabra (sin la primera ya no estaria), y
                     // cubriendo casi todo el tramo.
-                    acum.contains(pedido) && !acum[f[d].norma.len()..].contains(pedido) && pedido.len() * 10 >= acum.len() * 7
+                    acum.contains(pedido)
+                        && !acum[f[d].norma.len()..].contains(pedido)
+                        && pedido.len() * 10 >= acum.len() * 7
                 };
                 if ok {
                     v.push((d, h + 1));
@@ -182,7 +203,11 @@ fn semejanza(a: &str, b: &str) -> f32 {
 /// El tramo de la pagina que mas se parece a `palabras`: `(desde, hasta)`.
 /// Tiene que parecerse en un 70 % o mas (y en dos palabras como minimo, o
 /// en una larga casi igual).
-fn parecido(f: &[Ficha], palabras: &[String], cerca: &dyn Fn(usize) -> usize) -> Option<(usize, usize)> {
+fn parecido(
+    f: &[Ficha],
+    palabras: &[String],
+    cerca: &dyn Fn(usize) -> usize,
+) -> Option<(usize, usize)> {
     let n = palabras.len();
     if n == 0 {
         return None;
@@ -194,7 +219,13 @@ fn parecido(f: &[Ficha], palabras: &[String], cerca: &dyn Fn(usize) -> usize) ->
     // vez (y solo las que se parecen algo): las ventanas solo suman.
     let parecidas: Vec<Vec<(usize, f32)>> = palabras
         .iter()
-        .map(|q| f.iter().enumerate().map(|(i, w)| (i, semejanza(q, &w.norma))).filter(|x| x.1 > 0.0).collect())
+        .map(|q| {
+            f.iter()
+                .enumerate()
+                .map(|(i, w)| (i, semejanza(q, &w.norma)))
+                .filter(|x| x.1 > 0.0)
+                .collect()
+        })
         .collect();
     let mut mejor: Option<(f32, usize, usize)> = None;
     for largo in [n, n + 1, n.saturating_sub(1).max(1)] {
@@ -204,12 +235,20 @@ fn parecido(f: &[Ficha], palabras: &[String], cerca: &dyn Fn(usize) -> usize) ->
         for d in 0..=(f.len() - largo) {
             let suma: f32 = parecidas
                 .iter()
-                .map(|l| l.iter().filter(|(i, _)| (d..d + largo).contains(i)).map(|x| x.1).fold(0.0, f32::max))
+                .map(|l| {
+                    l.iter()
+                        .filter(|(i, _)| (d..d + largo).contains(i))
+                        .map(|x| x.1)
+                        .fold(0.0, f32::max)
+                })
                 .sum();
             let nota = suma / n.max(largo) as f32;
             let mejor_que = match mejor {
                 None => true,
-                Some((m, md, _)) => nota > m + 1e-4 || ((nota - m).abs() <= 1e-4 && cerca(f[d].renglon) < cerca(f[md].renglon)),
+                Some((m, md, _)) => {
+                    nota > m + 1e-4
+                        || ((nota - m).abs() <= 1e-4 && cerca(f[d].renglon) < cerca(f[md].renglon))
+                }
             };
             if mejor_que {
                 mejor = Some((nota, d, d + largo));
@@ -222,8 +261,17 @@ fn parecido(f: &[Ficha], palabras: &[String], cerca: &dyn Fn(usize) -> usize) ->
 
 /// El primer renglon con texto (el ancla de un resumen de la pagina).
 pub fn primer_renglon(p: &Pagina) -> Option<Anclaje> {
-    let (r, ren) = p.renglones.iter().enumerate().find(|(_, r)| !r.palabras.is_empty())?;
-    Some(Anclaje { cajas: vec![ren.caja()?], renglon: r, ultimo: r, exacto: true })
+    let (r, ren) = p
+        .renglones
+        .iter()
+        .enumerate()
+        .find(|(_, r)| !r.palabras.is_empty())?;
+    Some(Anclaje {
+        cajas: vec![ren.caja()?],
+        renglon: r,
+        ultimo: r,
+        exacto: true,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -234,10 +282,18 @@ pub fn celda(s: &str) -> Option<(u32, u32)> {
     let s = s.trim().trim_start_matches('$').replace('$', "");
     let letras: String = s.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
     let numero = &s[letras.len()..];
-    if letras.is_empty() || letras.len() > 3 || numero.is_empty() || !numero.chars().all(|c| c.is_ascii_digit()) {
+    if letras.is_empty()
+        || letras.len() > 3
+        || numero.is_empty()
+        || !numero.chars().all(|c| c.is_ascii_digit())
+    {
         return None;
     }
-    let col = letras.to_ascii_uppercase().bytes().fold(0u32, |a, b| a * 26 + (b - b'A' + 1) as u32) - 1;
+    let col = letras
+        .to_ascii_uppercase()
+        .bytes()
+        .fold(0u32, |a, b| a * 26 + (b - b'A' + 1) as u32)
+        - 1;
     let fila: u32 = numero.parse().ok()?;
     (fila >= 1).then_some((fila - 1, col))
 }
@@ -256,8 +312,11 @@ fn por_celda(p: &Pagina, ancla: &str) -> Option<Anclaje> {
     let mut cajas = Vec::new();
     let (mut primero, mut ultimo) = (usize::MAX, 0);
     for (i, r) in p.renglones.iter().enumerate() {
-        let Some((f, c)) = r.etiqueta.as_deref().and_then(celda) else { continue };
-        if (f0..=f1).contains(&f) && (c0..=c1).contains(&c)
+        let Some((f, c)) = r.etiqueta.as_deref().and_then(celda) else {
+            continue;
+        };
+        if (f0..=f1).contains(&f)
+            && (c0..=c1).contains(&c)
             && let Some(caja) = r.caja()
         {
             cajas.push(caja);
@@ -266,5 +325,10 @@ fn por_celda(p: &Pagina, ancla: &str) -> Option<Anclaje> {
         }
     }
     let u = union(cajas.iter().copied())?;
-    Some(Anclaje { cajas: vec![u], renglon: primero, ultimo, exacto: true })
+    Some(Anclaje {
+        cajas: vec![u],
+        renglon: primero,
+        ultimo,
+        exacto: true,
+    })
 }

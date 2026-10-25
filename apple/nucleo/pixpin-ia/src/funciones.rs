@@ -89,11 +89,20 @@ pub enum Curva {
     /// `y = f(x)`.
     Explicita { texto: String, f: Compilada },
     /// `x = x(t), y = y(t)`.
-    Parametrica { tx: String, ty: String, x: Compilada, y: Compilada },
+    Parametrica {
+        tx: String,
+        ty: String,
+        x: Compilada,
+        y: Compilada,
+    },
     /// `r = r(θ)` (en la formula, `t`).
     Polar { texto: String, r: Compilada },
     /// Una tabla de datos.
-    Puntos { nombre: String, puntos: Vec<(f64, f64)>, unir: bool },
+    Puntos {
+        nombre: String,
+        puntos: Vec<(f64, f64)>,
+        unir: bool,
+    },
 }
 
 impl Curva {
@@ -101,7 +110,9 @@ impl Curva {
     pub fn rotulo(&self) -> String {
         match self {
             Curva::Explicita { texto, .. } => format!("y = {}", sin_igual(texto)),
-            Curva::Parametrica { tx, ty, .. } => format!("x = {}, y = {}", sin_igual(tx), sin_igual(ty)),
+            Curva::Parametrica { tx, ty, .. } => {
+                format!("x = {}, y = {}", sin_igual(tx), sin_igual(ty))
+            }
             Curva::Polar { texto, .. } => format!("r = {}", sin_igual(texto).replace("theta", "θ")),
             Curva::Puntos { nombre, .. } => nombre.clone(),
         }
@@ -184,13 +195,21 @@ impl Funciones {
 fn numero_en(v: Option<&Value>, k: &str) -> Result<Option<f64>, ErrorHerramienta> {
     match v {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::Number(n)) => n.as_f64().filter(|v| v.is_finite()).map(Some).ok_or_else(|| mal(format!("«{k}» no es un numero"))),
+        Some(Value::Number(n)) => n
+            .as_f64()
+            .filter(|v| v.is_finite())
+            .map(Some)
+            .ok_or_else(|| mal(format!("«{k}» no es un numero"))),
         Some(Value::String(s)) => {
             let t = s.trim().replace(',', ".");
             // «2pi», «π/2»: con el interprete de formulas.
             t.parse::<f64>()
                 .ok()
-                .or_else(|| formula::compilar(&preparar(&t)).filter(|c| c.variables().is_empty()).map(|c| c.en(0.0)))
+                .or_else(|| {
+                    formula::compilar(&preparar(&t))
+                        .filter(|c| c.variables().is_empty())
+                        .map(|c| c.en(0.0))
+                })
                 .filter(|v| v.is_finite())
                 .map(Some)
                 .ok_or_else(|| mal(format!("«{k}» = «{s}» no es un numero")))
@@ -223,7 +242,11 @@ fn sin_igual(f: &str) -> String {
     {
         let resto: String = c.collect();
         let resto = resto.trim_start();
-        let resto = if resto.starts_with('(') { resto.split_once(')').map_or(resto, |(_, r)| r).trim_start() } else { resto };
+        let resto = if resto.starts_with('(') {
+            resto.split_once(')').map_or(resto, |(_, r)| r).trim_start()
+        } else {
+            resto
+        };
         if let Some(r) = resto.strip_prefix('=')
             && !r.starts_with('=')
         {
@@ -235,13 +258,21 @@ fn sin_igual(f: &str) -> String {
 
 fn compilar_en(f: &str, variable: char) -> Result<Compilada, ErrorHerramienta> {
     if f.chars().count() > 160 {
-        return Err(mal(format!("la formula «{}...» es demasiado larga", f.chars().take(30).collect::<String>())));
+        return Err(mal(format!(
+            "la formula «{}...» es demasiado larga",
+            f.chars().take(30).collect::<String>()
+        )));
     }
-    let c = formula::compilar(&preparar(f))
-        .ok_or_else(|| mal(format!("la formula «{f}» no se entiende; escribela como x^2 + 3x - 1 o sin(x)/x")))?;
+    let c = formula::compilar(&preparar(f)).ok_or_else(|| {
+        mal(format!(
+            "la formula «{f}» no se entiende; escribela como x^2 + 3x - 1 o sin(x)/x"
+        ))
+    })?;
     if let Some(v) = c.variables().into_iter().find(|v| *v != variable) {
         return Err(mal(match variable {
-            'x' if v == 't' => format!("«{f}» usa t: para una parametrica pon {{\"x\":\"...\",\"y\":\"...\"}} y para una polar {{\"r\":\"...\"}}"),
+            'x' if v == 't' => format!(
+                "«{f}» usa t: para una parametrica pon {{\"x\":\"...\",\"y\":\"...\"}} y para una polar {{\"r\":\"...\"}}"
+            ),
             _ => format!("«{f}» usa la variable «{v}»; aqui solo vale {variable}"),
         }));
     }
@@ -266,13 +297,19 @@ fn partir_arriba(s: &str) -> Vec<String> {
         actual.push(ch);
     }
     v.push(actual);
-    v.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    v.into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// Lo que va antes del igual de `x = ...` (una palabra), y lo de detras.
 fn lado_izquierdo(s: &str) -> Option<(String, String)> {
     // «r = ...» y tambien «r: ...» (lo escribe asi el 2B).
-    let (izq, der) = s.split_once('=').or_else(|| s.split_once(':').filter(|(i, _)| i.trim().chars().count() <= 2))?;
+    let (izq, der) = s.split_once('=').or_else(|| {
+        s.split_once(':')
+            .filter(|(i, _)| i.trim().chars().count() <= 2)
+    })?;
     let izq = izq.trim().to_lowercase();
     let nombre: String = izq.chars().take_while(|c| c.is_alphabetic()).collect();
     (!nombre.is_empty() && !der.starts_with('=')).then(|| (nombre, der.trim().to_string()))
@@ -293,7 +330,8 @@ fn curva_de_texto(s: &str) -> Result<Curva, ErrorHerramienta> {
     if !t.contains(" si ") {
         let trozos = partir_arriba(t);
         if trozos.len() == 2
-            && let (Some((na, fa)), Some((nb, fb))) = (lado_izquierdo(&trozos[0]), lado_izquierdo(&trozos[1]))
+            && let (Some((na, fa)), Some((nb, fb))) =
+                (lado_izquierdo(&trozos[0]), lado_izquierdo(&trozos[1]))
         {
             if na == "x" && nb == "y" {
                 return parametrica(&fa, &fb);
@@ -314,19 +352,34 @@ fn curva_de_texto(s: &str) -> Result<Curva, ErrorHerramienta> {
         return polar(&sin_igual(t));
     }
     let f = compilar_en(t, 'x')?;
-    Ok(Curva::Explicita { texto: t.to_string(), f })
+    Ok(Curva::Explicita {
+        texto: t.to_string(),
+        f,
+    })
 }
 
 fn parametrica(fx: &str, fy: &str) -> Result<Curva, ErrorHerramienta> {
-    Ok(Curva::Parametrica { tx: fx.to_string(), ty: fy.to_string(), x: compilar_en(fx, 't')?, y: compilar_en(fy, 't')? })
+    Ok(Curva::Parametrica {
+        tx: fx.to_string(),
+        ty: fy.to_string(),
+        x: compilar_en(fx, 't')?,
+        y: compilar_en(fy, 't')?,
+    })
 }
 
 fn polar(f: &str) -> Result<Curva, ErrorHerramienta> {
-    Ok(Curva::Polar { texto: f.to_string(), r: compilar_en(f, 't')? })
+    Ok(Curva::Polar {
+        texto: f.to_string(),
+        r: compilar_en(f, 't')?,
+    })
 }
 
 fn tabla(v: &Value, que: &str) -> Result<Vec<(f64, f64)>, ErrorHerramienta> {
-    let Value::Array(l) = v else { return Err(mal(format!("«{que}» tiene que ser una lista [[x, y], ...]"))) };
+    let Value::Array(l) = v else {
+        return Err(mal(format!(
+            "«{que}» tiene que ser una lista [[x, y], ...]"
+        )));
+    };
     if l.len() > MAX_PUNTOS {
         return Err(mal(format!("como mucho {MAX_PUNTOS} puntos")));
     }
@@ -334,12 +387,17 @@ fn tabla(v: &Value, que: &str) -> Result<Vec<(f64, f64)>, ErrorHerramienta> {
     for p in l {
         let par: Option<(f64, f64)> = match p {
             Value::Array(xy) if xy.len() == 2 => xy[0].as_f64().zip(xy[1].as_f64()),
-            Value::Object(o) => o.get("x").and_then(Value::as_f64).zip(o.get("y").and_then(Value::as_f64)),
+            Value::Object(o) => o
+                .get("x")
+                .and_then(Value::as_f64)
+                .zip(o.get("y").and_then(Value::as_f64)),
             _ => None,
         };
         let (x, y) = par.ok_or_else(|| mal(format!("cada punto de «{que}» es [x, y]")))?;
         if !(x.is_finite() && y.is_finite()) || x.abs() > LIMITE || y.abs() > LIMITE {
-            return Err(mal(format!("el punto ({x}, {y}) es enorme o no es un numero")));
+            return Err(mal(format!(
+                "el punto ({x}, {y}) es enorme o no es un numero"
+            )));
         }
         v.push((x, y));
     }
@@ -350,11 +408,20 @@ fn tabla(v: &Value, que: &str) -> Result<Vec<(f64, f64)>, ErrorHerramienta> {
 }
 
 fn curva_de_objeto(o: &Map<String, Value>) -> Result<Curva, ErrorHerramienta> {
-    let s = |k: &str| o.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+    let s = |k: &str| {
+        o.get(k)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    };
     if let Some(p) = o.get("puntos") {
         let nombre = s("nombre").unwrap_or("datos").chars().take(40).collect();
         let unir = o.get("unir").and_then(Value::as_bool).unwrap_or(false);
-        return Ok(Curva::Puntos { nombre, puntos: tabla(p, "puntos")?, unir });
+        return Ok(Curva::Puntos {
+            nombre,
+            puntos: tabla(p, "puntos")?,
+            unir,
+        });
     }
     if let Some(r) = s("r") {
         return polar(r);
@@ -365,7 +432,9 @@ fn curva_de_objeto(o: &Map<String, Value>) -> Result<Curva, ErrorHerramienta> {
         (Some(x), None) => Err(mal(format!("falta «y» para la parametrica de x = {x}"))),
         (None, None) => match s("formula").or(s("funcion")).or(s("f")) {
             Some(f) => curva_de_texto(f),
-            None => Err(mal("cada curva es una formula, {\"x\":..,\"y\":..}, {\"r\":..} o {\"puntos\":[[x,y],...]}")),
+            None => Err(mal(
+                "cada curva es una formula, {\"x\":..,\"y\":..}, {\"r\":..} o {\"puntos\":[[x,y],...]}",
+            )),
         },
     }
 }
@@ -387,14 +456,23 @@ fn muestras_t(c: &Curva, t0: f64, t1: f64) -> Vec<Option<(f64, f64)>> {
     match c {
         Curva::Puntos { puntos, .. } => puntos.iter().map(|&p| Some(p)).collect(),
         Curva::Explicita { .. } => Vec::new(),
-        _ => (0..=MUESTRAS_T).map(|i| punto(t0 + (t1 - t0) * i as f64 / MUESTRAS_T as f64)).collect(),
+        _ => (0..=MUESTRAS_T)
+            .map(|i| punto(t0 + (t1 - t0) * i as f64 / MUESTRAS_T as f64))
+            .collect(),
     }
 }
 
 fn indices(v: &Value) -> Vec<usize> {
     match v {
-        Value::Array(l) => l.iter().filter_map(|x| x.as_f64()).map(|x| x.max(0.0) as usize).collect(),
-        Value::Number(n) => n.as_f64().map(|x| vec![x.max(0.0) as usize]).unwrap_or_default(),
+        Value::Array(l) => l
+            .iter()
+            .filter_map(|x| x.as_f64())
+            .map(|x| x.max(0.0) as usize)
+            .collect(),
+        Value::Number(n) => n
+            .as_f64()
+            .map(|x| vec![x.max(0.0) as usize])
+            .unwrap_or_default(),
         _ => Vec::new(),
     }
 }
@@ -423,7 +501,10 @@ fn dominio_automatico(fs: &[&Compilada]) -> (f64, f64) {
     let margen = ((hi - lo) * 0.25).max(1.0);
     // Lo interesante con un margen, el origen dentro y al menos 4 de ancho
     // (el instrumento es simetrico: un dominio de mas estira la y).
-    let (mut a, mut b) = ((lo - margen).min(0.0).floor(), (hi + margen).max(0.0).ceil());
+    let (mut a, mut b) = (
+        (lo - margen).min(0.0).floor(),
+        (hi + margen).max(0.0).ceil(),
+    );
     if b - a < 4.0 {
         let falta = (4.0 - (b - a)) / 2.0;
         a -= falta;
@@ -442,7 +523,12 @@ fn juntar_parametricas(lista: Vec<Value>) -> Vec<Value> {
             Value::String(s) => Some(s.trim().to_string()),
             Value::Object(o) if o.len() <= 2 => o
                 .iter()
-                .find(|(k, _)| matches!(crate::acciones::normalizar(k).as_str(), "funcion" | "formula" | "f" | "expresion" | "ecuacion"))
+                .find(|(k, _)| {
+                    matches!(
+                        crate::acciones::normalizar(k).as_str(),
+                        "funcion" | "formula" | "f" | "expresion" | "ecuacion"
+                    )
+                })
                 .and_then(|(_, v)| v.as_str())
                 .map(|s| s.trim().to_string()),
             _ => None,
@@ -472,19 +558,38 @@ fn juntar_parametricas(lista: Vec<Value>) -> Vec<Value> {
     salida
 }
 
-pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Funciones, ErrorHerramienta> {
-    let lista: Vec<Value> = match args.get("funciones").or(args.get("funcion")).or(args.get("formula")).or(args.get("curvas")) {
-        Some(Value::String(s)) => s.split(['\n', '|']).map(|s| Value::String(s.to_string())).collect(),
+pub fn validar(
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<Funciones, ErrorHerramienta> {
+    let lista: Vec<Value> = match args
+        .get("funciones")
+        .or(args.get("funcion"))
+        .or(args.get("formula"))
+        .or(args.get("curvas"))
+    {
+        Some(Value::String(s)) => s
+            .split(['\n', '|'])
+            .map(|s| Value::String(s.to_string()))
+            .collect(),
         Some(Value::Array(l)) => l.clone(),
         Some(o @ Value::Object(_)) => vec![o.clone()],
         None if args.get("puntos").is_some() => Vec::new(),
-        _ => return Err(mal("falta «funciones» (una lista de formulas en x, como \"x^2\")")),
+        _ => {
+            return Err(mal(
+                "falta «funciones» (una lista de formulas en x, como \"x^2\")",
+            ));
+        }
     };
     // Un objeto escrito como texto (`"{\"x\":\"3cos(t)\",...}"`, del 2B): el objeto.
     let lista: Vec<Value> = lista
         .into_iter()
         .map(|v| {
-            let objeto = v.as_str().filter(|s| s.trim_start().starts_with('{')).and_then(|s| serde_json::from_str::<Value>(s.trim()).ok()).filter(Value::is_object);
+            let objeto = v
+                .as_str()
+                .filter(|s| s.trim_start().starts_with('{'))
+                .and_then(|s| serde_json::from_str::<Value>(s.trim()).ok())
+                .filter(Value::is_object);
             objeto.unwrap_or(v)
         })
         .collect();
@@ -499,15 +604,27 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
         }
     }
     if let Some(p) = args.get("puntos") {
-        let nombre = args.get("nombre_puntos").and_then(Value::as_str).unwrap_or("datos").chars().take(40).collect();
+        let nombre = args
+            .get("nombre_puntos")
+            .and_then(Value::as_str)
+            .unwrap_or("datos")
+            .chars()
+            .take(40)
+            .collect();
         let unir = args.get("unir").and_then(Value::as_bool).unwrap_or(false);
-        curvas.push(Curva::Puntos { nombre, puntos: tabla(p, "puntos")?, unir });
+        curvas.push(Curva::Puntos {
+            nombre,
+            puntos: tabla(p, "puntos")?,
+            unir,
+        });
     }
     if curvas.is_empty() {
         return Err(mal("«funciones» esta vacia"));
     }
     if curvas.len() > MAX_FUNCIONES {
-        return Err(mal(format!("como mucho {MAX_FUNCIONES} funciones por grafica")));
+        return Err(mal(format!(
+            "como mucho {MAX_FUNCIONES} funciones por grafica"
+        )));
     }
     let explicitas: Vec<&Compilada> = curvas
         .iter()
@@ -520,15 +637,23 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
         (None, None) if !explicitas.is_empty() => dominio_automatico(&explicitas),
         (None, None) => (f64::NAN, f64::NAN),
         (Some(a), Some(b)) => (a, b),
-        _ => return Err(mal("pon los dos limites del dominio: «x_desde» y «x_hasta»")),
+        _ => {
+            return Err(mal(
+                "pon los dos limites del dominio: «x_desde» y «x_hasta»",
+            ));
+        }
     };
     let x_dado = x_desde.is_finite();
     if x_dado {
         if !(x_desde < x_hasta) {
-            return Err(mal(format!("el dominio esta al reves o vacio: x_desde = {x_desde} tiene que ser menor que x_hasta = {x_hasta}")));
+            return Err(mal(format!(
+                "el dominio esta al reves o vacio: x_desde = {x_desde} tiene que ser menor que x_hasta = {x_hasta}"
+            )));
         }
         if x_desde.abs() > LIMITE || x_hasta.abs() > LIMITE || x_hasta - x_desde < 1e-9 {
-            return Err(mal(format!("el dominio tiene que estar entre -{LIMITE} y {LIMITE} y no ser un punto")));
+            return Err(mal(format!(
+                "el dominio tiene que estar entre -{LIMITE} y {LIMITE} y no ser un punto"
+            )));
         }
     }
     let (t_desde, t_hasta) = match (numero_arg(args, "t_desde")?, numero_arg(args, "t_hasta")?) {
@@ -538,7 +663,9 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
         (Some(a), Some(b)) => (a, b),
     };
     if !(t_desde < t_hasta) || t_desde.abs() > 1e4 || t_hasta.abs() > 1e4 {
-        return Err(mal(format!("el intervalo de t esta al reves o es enorme: t_desde = {t_desde}, t_hasta = {t_hasta}")));
+        return Err(mal(format!(
+            "el intervalo de t esta al reves o es enorme: t_desde = {t_desde}, t_hasta = {t_hasta}"
+        )));
     }
     // Las muestras, para ver si hay curva y ajustar la ventana.
     let mut ys: Vec<f64> = Vec::new();
@@ -556,13 +683,21 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
                     }
                 }
                 if ys.len() - antes < 2 {
-                    return Err(mal(format!("«{texto}» no tiene valores reales entre x = {x_desde} y x = {x_hasta}: cambia el dominio")));
+                    return Err(mal(format!(
+                        "«{texto}» no tiene valores reales entre x = {x_desde} y x = {x_hasta}: cambia el dominio"
+                    )));
                 }
             }
             otra => {
-                let m: Vec<(f64, f64)> = muestras_t(otra, t_desde, t_hasta).into_iter().flatten().collect();
+                let m: Vec<(f64, f64)> = muestras_t(otra, t_desde, t_hasta)
+                    .into_iter()
+                    .flatten()
+                    .collect();
                 if m.is_empty() || (!matches!(otra, Curva::Puntos { .. }) && m.len() < 2) {
-                    return Err(mal(format!("«{}» no tiene valores reales entre t = {t_desde} y t = {t_hasta}", otra.rotulo())));
+                    return Err(mal(format!(
+                        "«{}» no tiene valores reales entre t = {t_desde} y t = {t_hasta}",
+                        otra.rotulo()
+                    )));
                 }
                 xs_otras.extend(m.iter().map(|p| p.0));
                 ys_otras.extend(m.iter().map(|p| p.1));
@@ -581,7 +716,11 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
         let (a, b) = ventana_de(&xs_otras);
         (a.min(-1.0), b.max(1.0))
     };
-    let (mut y_auto_lo, mut y_auto_hi) = if ys.is_empty() { (f64::MAX, f64::MIN) } else { ventana(&mut ys) };
+    let (mut y_auto_lo, mut y_auto_hi) = if ys.is_empty() {
+        (f64::MAX, f64::MIN)
+    } else {
+        ventana(&mut ys)
+    };
     if !ys_otras.is_empty() {
         let (a, b) = ventana_de(&ys_otras);
         y_auto_lo = y_auto_lo.min(a);
@@ -589,7 +728,11 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
     }
     let (y_desde, y_hasta) = match (numero_arg(args, "y_desde")?, numero_arg(args, "y_hasta")?) {
         (Some(a), Some(b)) if a < b && a.abs() <= LIMITE && b.abs() <= LIMITE => (a, b),
-        (Some(a), Some(b)) => return Err(mal(format!("la ventana de y esta al reves o fuera de rango: y_desde = {a}, y_hasta = {b}"))),
+        (Some(a), Some(b)) => {
+            return Err(mal(format!(
+                "la ventana de y esta al reves o fuera de rango: y_desde = {a}, y_hasta = {b}"
+            )));
+        }
         (None, None) => (y_auto_lo, y_auto_hi),
         (Some(a), None) => (a, y_auto_hi.max(a + 1.0)),
         (None, Some(b)) => (y_auto_lo.min(b - 1.0), b),
@@ -608,7 +751,14 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
     } else {
         (y_desde, y_hasta)
     };
-    let titulo = args.get("titulo").and_then(Value::as_str).unwrap_or("").trim().chars().take(120).collect();
+    let titulo = args
+        .get("titulo")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .chars()
+        .take(120)
+        .collect();
     let mut p = Funciones {
         curvas,
         x_desde,
@@ -631,14 +781,23 @@ pub fn validar(args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<Fu
 fn explicita(p: &Funciones, k: usize, para: &str) -> Result<Compilada, ErrorHerramienta> {
     match p.curvas.get(k) {
         Some(Curva::Explicita { f, .. }) => Ok(f.clone()),
-        Some(_) => Err(mal(format!("{para} solo se hace con curvas y = f(x); la curva {k} no lo es"))),
-        None => Err(mal(format!("{para}: no hay curva {k} (se cuentan desde 0; hay {})", p.curvas.len()))),
+        Some(_) => Err(mal(format!(
+            "{para} solo se hace con curvas y = f(x); la curva {k} no lo es"
+        ))),
+        None => Err(mal(format!(
+            "{para}: no hay curva {k} (se cuentan desde 0; hay {})",
+            p.curvas.len()
+        ))),
     }
 }
 
 /// **Las cuentas**: marcas, area, tangente y asintotas, y lo calculado
 /// dicho al modelo (en `avisos`).
-fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<String>) -> Result<(), ErrorHerramienta> {
+fn analizar(
+    p: &mut Funciones,
+    args: &Map<String, Value>,
+    avisos: &mut Vec<String>,
+) -> Result<(), ErrorHerramienta> {
     let (a, b) = (p.x_desde, p.x_hasta);
     let explicitas: Vec<(usize, Compilada)> = p
         .curvas
@@ -651,15 +810,28 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
         .collect();
     // Que marcar.
     let pedidas: Vec<String> = match args.get("marcar") {
-        Some(Value::String(s)) => s.split([',', ' ']).map(crate::acciones::normalizar).collect(),
-        Some(Value::Array(l)) => l.iter().filter_map(Value::as_str).map(crate::acciones::normalizar).collect(),
+        Some(Value::String(s)) => s
+            .split([',', ' '])
+            .map(crate::acciones::normalizar)
+            .collect(),
+        Some(Value::Array(l)) => l
+            .iter()
+            .filter_map(Value::as_str)
+            .map(crate::acciones::normalizar)
+            .collect(),
         Some(Value::Bool(true)) => vec!["todo".into()],
         _ => Vec::new(),
     };
     let pedidas: Vec<String> = pedidas.into_iter().filter(|s| !s.is_empty()).collect();
-    let quiere = |raiz: &[&str]| pedidas.iter().any(|q| q == "todo" || raiz.iter().any(|r| q.starts_with(r)));
+    let quiere = |raiz: &[&str]| {
+        pedidas
+            .iter()
+            .any(|q| q == "todo" || raiz.iter().any(|r| q.starts_with(r)))
+    };
     if !pedidas.is_empty() && explicitas.is_empty() {
-        return Err(mal("marcar raices, extremos o intersecciones solo se hace con curvas y = f(x)"));
+        return Err(mal(
+            "marcar raices, extremos o intersecciones solo se hace con curvas y = f(x)",
+        ));
     }
     let mut dichos: Vec<String> = Vec::new();
     for (k, f) in &explicitas {
@@ -668,27 +840,63 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
         if quiere(&["raic", "raiz", "cero"]) {
             let (r, _) = calculo::ceros(&g, a, b);
             dichos.push(if r.is_empty() {
-                format!("{nombre} no corta el eje x entre {} y {}", numero(a), numero(b))
+                format!(
+                    "{nombre} no corta el eje x entre {} y {}",
+                    numero(a),
+                    numero(b)
+                )
             } else {
-                format!("raices de {nombre}: {}", r.iter().map(|x| format!("x = {}", numero(*x))).collect::<Vec<_>>().join(", "))
+                format!(
+                    "raices de {nombre}: {}",
+                    r.iter()
+                        .map(|x| format!("x = {}", numero(*x)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             });
-            p.marcas.extend(r.into_iter().map(|x| Marca { x, y: 0.0, tipo: TipoMarca::Raiz }));
+            p.marcas.extend(r.into_iter().map(|x| Marca {
+                x,
+                y: 0.0,
+                tipo: TipoMarca::Raiz,
+            }));
         }
         if quiere(&["extrem", "maxim", "minim", "vertic"]) {
             let e = calculo::extremos(&g, a, b);
             if e.is_empty() {
-                dichos.push(format!("{nombre} no tiene maximos ni minimos locales entre {} y {}", numero(a), numero(b)));
+                dichos.push(format!(
+                    "{nombre} no tiene maximos ni minimos locales entre {} y {}",
+                    numero(a),
+                    numero(b)
+                ));
             }
             for (x, es_max) in e {
                 let y = calculo::limpio(g(x));
-                dichos.push(format!("{} de {nombre} en ({}, {})", if es_max { "maximo" } else { "minimo" }, numero(x), numero(y)));
-                p.marcas.push(Marca { x, y, tipo: if es_max { TipoMarca::Maximo } else { TipoMarca::Minimo } });
+                dichos.push(format!(
+                    "{} de {nombre} en ({}, {})",
+                    if es_max { "maximo" } else { "minimo" },
+                    numero(x),
+                    numero(y)
+                ));
+                p.marcas.push(Marca {
+                    x,
+                    y,
+                    tipo: if es_max {
+                        TipoMarca::Maximo
+                    } else {
+                        TipoMarca::Minimo
+                    },
+                });
             }
         }
-        if quiere(&["corte_y", "corte y", "ordenada"]) && a <= 0.0 && 0.0 <= b && g(0.0).is_finite() {
+        if quiere(&["corte_y", "corte y", "ordenada"]) && a <= 0.0 && 0.0 <= b && g(0.0).is_finite()
+        {
             let y = calculo::limpio(g(0.0));
             dichos.push(format!("{nombre} corta el eje y en (0, {})", numero(y)));
-            p.marcas.push(Marca { x: 0.0, y, tipo: TipoMarca::CorteY });
+            p.marcas.push(Marca {
+                x: 0.0,
+                y,
+                tipo: TipoMarca::CorteY,
+            });
         }
     }
     if quiere(&["inters", "cortes"]) && explicitas.len() >= 2 {
@@ -701,7 +909,11 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
                     let y = calculo::limpio(fi.en(x));
                     if y.is_finite() {
                         dichos.push(format!("se cortan en ({}, {})", numero(x), numero(y)));
-                        p.marcas.push(Marca { x, y, tipo: TipoMarca::Interseccion });
+                        p.marcas.push(Marca {
+                            x,
+                            y,
+                            tipo: TipoMarca::Interseccion,
+                        });
                     }
                 }
             }
@@ -712,7 +924,11 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
     if let Some(s) = args.get("sombrear").or(args.get("area")) {
         let (entre, desde, hasta) = match s {
             Value::Object(o) => (
-                o.get("entre").or(o.get("curvas")).or(o.get("curva")).map(indices).unwrap_or_else(|| vec![0]),
+                o.get("entre")
+                    .or(o.get("curvas"))
+                    .or(o.get("curva"))
+                    .map(indices)
+                    .unwrap_or_else(|| vec![0]),
                 numero_en(o.get("desde"), "desde")?,
                 numero_en(o.get("hasta"), "hasta")?,
             ),
@@ -731,24 +947,55 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
             _ => {
                 // Entre los cortes de las dos (o con el eje), si los hay.
                 let (r, _) = calculo::ceros(&dif, a, b);
-                if r.len() >= 2 { (r[0], r[r.len() - 1]) } else { (desde.unwrap_or(a), hasta.unwrap_or(b)) }
+                if r.len() >= 2 {
+                    (r[0], r[r.len() - 1])
+                } else {
+                    (desde.unwrap_or(a), hasta.unwrap_or(b))
+                }
             }
         };
         if !(desde < hasta) {
-            return Err(mal(format!("el area va de «desde» = {desde} a «hasta» = {hasta}: al reves o vacia")));
+            return Err(mal(format!(
+                "el area va de «desde» = {desde} a «hasta» = {hasta}: al reves o vacia"
+            )));
         }
-        let area = calculo::area_entre(&|x| f.en(x), &|x| g.as_ref().map_or(0.0, |g| g.en(x)), desde, hasta).ok_or_else(|| {
-            mal(format!("el area entre x = {} y x = {} no es finita (hay un polo o un hueco en medio)", numero(desde), numero(hasta)))
+        let area = calculo::area_entre(
+            &|x| f.en(x),
+            &|x| g.as_ref().map_or(0.0, |g| g.en(x)),
+            desde,
+            hasta,
+        )
+        .ok_or_else(|| {
+            mal(format!(
+                "el area entre x = {} y x = {} no es finita (hay un polo o un hueco en medio)",
+                numero(desde),
+                numero(hasta)
+            ))
         })?;
-        dichos.push(format!("area sombreada entre x = {} y x = {}: {}", numero(desde), numero(hasta), numero(area)));
-        p.sombra = Some(Sombra { curva: entre[0], otra: g.as_ref().map(|_| entre[1]), desde, hasta, area });
+        dichos.push(format!(
+            "area sombreada entre x = {} y x = {}: {}",
+            numero(desde),
+            numero(hasta),
+            numero(area)
+        ));
+        p.sombra = Some(Sombra {
+            curva: entre[0],
+            otra: g.as_ref().map(|_| entre[1]),
+            desde,
+            hasta,
+            area,
+        });
     }
     // La tangente.
     if let Some(t) = args.get("tangente") {
         let (k, x0) = match t {
             Value::Object(o) => (
-                o.get("curva").and_then(Value::as_f64).unwrap_or(0.0).max(0.0) as usize,
-                numero_en(o.get("x").or(o.get("en")), "x")?.ok_or_else(|| mal("la tangente necesita «x»: {\"curva\":0,\"x\":1}"))?,
+                o.get("curva")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+                    .max(0.0) as usize,
+                numero_en(o.get("x").or(o.get("en")), "x")?
+                    .ok_or_else(|| mal("la tangente necesita «x»: {\"curva\":0,\"x\":1}"))?,
             ),
             Value::Number(n) => (0, n.as_f64().unwrap_or(0.0)),
             _ => return Err(mal("«tangente» es {\"curva\":0,\"x\":1}")),
@@ -757,15 +1004,31 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
         let g = |x: f64| f.en(x);
         let y0 = g(x0);
         if !y0.is_finite() {
-            return Err(mal(format!("la curva {k} no existe en x = {}: no hay tangente", numero(x0))));
+            return Err(mal(format!(
+                "la curva {k} no existe en x = {}: no hay tangente",
+                numero(x0)
+            )));
         }
         if !calculo::derivable(&g, x0) {
-            return Err(mal(format!("la curva {k} no es derivable en x = {} (tiene un pico): no hay tangente", numero(x0))));
+            return Err(mal(format!(
+                "la curva {k} no es derivable en x = {} (tiene un pico): no hay tangente",
+                numero(x0)
+            )));
         }
         let m = calculo::limpio((calculo::derivada(&g, x0) * 1e6).round() / 1e6);
         let y0 = calculo::limpio(y0);
-        dichos.push(format!("tangente en x = {}: pendiente {}, recta y = {}", numero(x0), numero(m), recta(m, calculo::limpio(y0 - m * x0))));
-        p.tangente = Some(Tangente { curva: k, x: x0, y: y0, m });
+        dichos.push(format!(
+            "tangente en x = {}: pendiente {}, recta y = {}",
+            numero(x0),
+            numero(m),
+            recta(m, calculo::limpio(y0 - m * x0))
+        ));
+        p.tangente = Some(Tangente {
+            curva: k,
+            x: x0,
+            y: y0,
+            m,
+        });
     }
     // Las asintotas: las verticales siempre que haya polos; las demas si se
     // piden o si la curva tiene polos (una racional).
@@ -775,7 +1038,11 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
             let g = |x: f64| f.en(x);
             let polos = calculo::polos(&g, a, b);
             for &x in &polos {
-                dichos.push(format!("asintota vertical x = {} ({})", numero(x), p.curvas[*k].rotulo()));
+                dichos.push(format!(
+                    "asintota vertical x = {} ({})",
+                    numero(x),
+                    p.curvas[*k].rotulo()
+                ));
                 p.asintotas.push(Asintota::Vertical(x));
             }
             if pide == Some(true) || !polos.is_empty() {
@@ -810,14 +1077,14 @@ fn analizar(p: &mut Funciones, args: &Map<String, Value>, avisos: &mut Vec<Strin
 /// `y = m x + b` escrito bonito.
 fn recta(m: f64, b: f64) -> String {
     let m_txt = match m {
-        m if m == 0.0 => String::new(),
-        m if m == 1.0 => "x".into(),
-        m if m == -1.0 => "-x".into(),
+        0.0 => String::new(),
+        1.0 => "x".into(),
+        -1.0 => "-x".into(),
         m => format!("{}x", numero(m)),
     };
     match (m_txt.is_empty(), b) {
         (true, b) => numero(b),
-        (false, b) if b == 0.0 => m_txt,
+        (false, 0.0) => m_txt,
         (false, b) if b < 0.0 => format!("{m_txt} - {}", numero(-b)),
         (false, b) => format!("{m_txt} + {}", numero(b)),
     }
@@ -847,7 +1114,10 @@ fn ventana(ys: &mut [f64]) -> (f64, f64) {
 
 /// Los colores de las curvas (los de la grafica del lienzo).
 fn color_de_curva(k: usize) -> ColorRgba {
-    pixpin_motor2d::grafica::color_de(pixpin_motor2d::grafica::COLORES_DE_CURVAS[k % pixpin_motor2d::grafica::COLORES_DE_CURVAS.len()])
+    pixpin_motor2d::grafica::color_de(
+        pixpin_motor2d::grafica::COLORES_DE_CURVAS
+            [k % pixpin_motor2d::grafica::COLORES_DE_CURVAS.len()],
+    )
 }
 
 /// **Los elementos**: el instrumento, las curvas por ramas, la leyenda con
@@ -871,7 +1141,9 @@ fn medida(els: &[Elemento]) -> (f32, f32) {
     (x1, y1)
 }
 
-/// Sobre que se dibuja la grafica.
+/// Sobre que se dibuja la grafica. (Una por grafica y de vida corta: no
+/// vale la pena encajonar el instrumento para igualar los tamanos.)
+#[allow(clippy::large_enum_variant)]
 enum Marco {
     /// El instrumento plano cartesiano (una unidad, el origen en el centro,
     /// como `Plano.kt` de Android): editable y medible en el lienzo.
@@ -899,7 +1171,11 @@ fn marco_de(p: &Funciones) -> MarcoElegido {
     // Con una sola unidad, una y que sube mucho mas que la x deja la grafica
     // en un hilo (la tangente de x³ - 3x: ±12 frente a ±3).
     let llena = ay / ax <= 3.5 && ax / ay <= 3.5;
-    if simetrica_x && simetrica_y && llena { MarcoElegido::Instrumento } else { MarcoElegido::Ejes }
+    if simetrica_x && simetrica_y && llena {
+        MarcoElegido::Instrumento
+    } else {
+        MarcoElegido::Ejes
+    }
 }
 
 /// Las piezas del motor dentro de la caja `(x, y, ancho, alto)` del lienzo
@@ -908,7 +1184,12 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
     let negro = pizarra::TINTA;
     let familia = "Fraunces";
     let medir = |t: &str, tam: f32| crate::lienzo::medir_con(t, tam, familia);
-    let estilo = Estilo { color: negro, tam: 18.0, opacidad: 1.0, familia: familia.into() };
+    let estilo = Estilo {
+        color: negro,
+        tam: 18.0,
+        opacidad: 1.0,
+        familia: familia.into(),
+    };
     // La leyenda, para saber cuanto sitio deja: la ecuacion compuesta de
     // cada y = f(x) y el rotulo de las demas.
     let leyenda: Vec<Vec<Elemento>> = p
@@ -918,26 +1199,39 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         .map(|(k, c)| {
             let color = color_de_curva(k);
             match c {
-                Curva::Explicita { f, .. } => {
-                    ecuacion::caja_de_la_ecuacion("y", f, estilo.tam, &medir).elementos(0.0, 0.0, &estilo.con_color(color))
-                }
+                Curva::Explicita { f, .. } => ecuacion::caja_de_la_ecuacion(
+                    "y", f, estilo.tam, &medir,
+                )
+                .elementos(0.0, 0.0, &estilo.con_color(color)),
                 Curva::Puntos { nombre, .. } => {
                     let mut pz = Pizarra::nueva();
                     pz.punto(4.0, 10.0, "", color);
-                    pz.texto(nombre, 16.0, 0.0, estilo.tam * 0.9, color, pizarra::Alinear::Izquierda);
+                    pz.texto(
+                        nombre,
+                        16.0,
+                        0.0,
+                        estilo.tam * 0.9,
+                        color,
+                        pizarra::Alinear::Izquierda,
+                    );
                     pz.el
                 }
                 // La parametrica, en dos renglones (x arriba, y abajo).
                 // La polar, con θ (la formula la escribe con t) y sin los `*`
                 // de la cuenta: «r = 2 sin(3θ)», no «r = 2·sin3·t».
-                otra => pizarra::caja_de_ecuacion(
-                    &pizarra::para_ver(&otra.rotulo().replace(", y = ", "\ny = "), matches!(otra, Curva::Polar { .. })),
-                    0.0,
-                    0.0,
-                    estilo.tam * 0.9,
-                    color,
-                )
-                .0,
+                otra => {
+                    pizarra::caja_de_ecuacion(
+                        &pizarra::para_ver(
+                            &otra.rotulo().replace(", y = ", "\ny = "),
+                            matches!(otra, Curva::Polar { .. }),
+                        ),
+                        0.0,
+                        0.0,
+                        estilo.tam * 0.9,
+                        color,
+                    )
+                    .0
+                }
             }
         })
         .collect();
@@ -946,7 +1240,10 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         extra_leyenda.push(format!("Área ≈ {}", numero(s.area)));
     }
     if let Some(t) = &p.tangente {
-        extra_leyenda.push(format!("tangente: y = {}", recta(t.m, calculo::limpio(t.y - t.m * t.x))));
+        extra_leyenda.push(format!(
+            "tangente: y = {}",
+            recta(t.m, calculo::limpio(t.y - t.m * t.x))
+        ));
     }
     let ancho_leyenda = leyenda
         .iter()
@@ -967,7 +1264,8 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
             if let pixpin_motor2d::elemento::Figura::Instrumento(i) = &mut e.figura {
                 i.unidad = Some(u);
                 // Numeros cada 1, 2, 5, 10...: ni amontonados ni sueltos.
-                let paso = pixpin_motor2d::grafica::paso_bonito(2.0 * ax.max(ay)).max(ins::paso_util(1.0, u, 34.0).min(1e9));
+                let paso = pixpin_motor2d::grafica::paso_bonito(2.0 * ax.max(ay))
+                    .max(ins::paso_util(1.0, u, 34.0).min(1e9));
                 i.paso_numeros = Some(paso);
                 i.paso_cuadros = Some(paso / if paso >= 2.0 { 2.0 } else { 1.0 });
             }
@@ -981,7 +1279,12 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         // El rango pedido tal cual (0 a π no es -π a π) y una escala por eje
         // (la tangente de x^3 ya no sale en un hilo): los ejes de la pizarra.
         MarcoElegido::Ejes => Marco::Ejes(pizarra::Ejes {
-            caja: [cx + 34.0, cy + alto_titulo + 14.0, (w - 54.0).max(80.0), (h - 40.0).max(80.0)],
+            caja: [
+                cx + 34.0,
+                cy + alto_titulo + 14.0,
+                (w - 54.0).max(80.0),
+                (h - 40.0).max(80.0),
+            ],
             x0: p.x_desde,
             x1: p.x_hasta,
             y0: p.y_desde,
@@ -1010,7 +1313,9 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         Marco::Instrumento(e, _) => [e.x as f64, e.y as f64, e.ancho as f64, e.alto as f64],
         Marco::Ejes(j) => j.caja,
     };
-    let dentro = |x: f64, y: f64| x >= xa - 1e-9 && x <= xb + 1e-9 && y >= p.y_desde - 1e-9 && y <= p.y_hasta + 1e-9;
+    let dentro = |x: f64, y: f64| {
+        x >= xa - 1e-9 && x <= xb + 1e-9 && y >= p.y_desde - 1e-9 && y <= p.y_hasta + 1e-9
+    };
     let mut salida = match &marco {
         Marco::Instrumento(e, _) => vec![e.clone()],
         Marco::Ejes(j) => {
@@ -1064,7 +1369,11 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         let mut rama: Vec<Punto2> = Vec::new();
         let cerrar = |rama: &mut Vec<Punto2>, salida: &mut Vec<Elemento>| {
             if rama.len() >= 2 {
-                salida.push(ecuacion::elemento_linea(std::mem::take(rama), 2.5, &de_curva));
+                salida.push(ecuacion::elemento_linea(
+                    std::mem::take(rama),
+                    2.5,
+                    &de_curva,
+                ));
             }
             rama.clear();
         };
@@ -1075,7 +1384,8 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
                     let x = p.x_desde + (p.x_hasta - p.x_desde) * s as f64 / MUESTRAS as f64;
                     let y = f.en(x);
                     // Un salto enorme entre dos muestras es un polo: se corta.
-                    let salto = anterior.is_some_and(|a| (y - a).abs() > (p.y_hasta - p.y_desde) * 0.9);
+                    let salto =
+                        anterior.is_some_and(|a| (y - a).abs() > (p.y_hasta - p.y_desde) * 0.9);
                     if !y.is_finite() || y < p.y_desde || y > p.y_hasta || salto {
                         cerrar(&mut rama, &mut salida);
                         anterior = y.is_finite().then_some(y);
@@ -1090,9 +1400,17 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
             }
             Curva::Puntos { puntos, unir, .. } => {
                 let mut pz = Pizarra::nueva();
-                let dentro_p: Vec<(f64, f64)> = puntos.iter().copied().filter(|&(x, y)| dentro(x, y)).collect();
+                let dentro_p: Vec<(f64, f64)> = puntos
+                    .iter()
+                    .copied()
+                    .filter(|&(x, y)| dentro(x, y))
+                    .collect();
                 if *unir {
-                    pz.linea(&dentro_p.iter().map(|&(x, y)| en(x, y)).collect::<Vec<_>>(), color_de_curva(k), 2.0);
+                    pz.linea(
+                        &dentro_p.iter().map(|&(x, y)| en(x, y)).collect::<Vec<_>>(),
+                        color_de_curva(k),
+                        2.0,
+                    );
                 }
                 for &(x, y) in &dentro_p {
                     let (px, py) = en(x, y);
@@ -1106,7 +1424,9 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
                 for m in muestras_t(otra, p.t_desde, p.t_hasta) {
                     match m {
                         Some((x, y)) if dentro(x, y) => {
-                            let salto = anterior.is_some_and(|(a, b)| (x - a).abs() > sx * 0.5 || (y - b).abs() > sy * 0.5);
+                            let salto = anterior.is_some_and(|(a, b)| {
+                                (x - a).abs() > sx * 0.5 || (y - b).abs() > sy * 0.5
+                            });
                             if salto {
                                 cerrar(&mut rama, &mut salida);
                             }
@@ -1138,7 +1458,11 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
     // arriba a la derecha y en las raices juntas salian montados.
     let mut marcados: Vec<((f64, f64), String, ColorRgba)> = Vec::new();
     if let Some(t) = &p.tangente {
-        marcados.push((en(t.x, t.y), format!("({}, {})", numero(t.x), numero(t.y)), pizarra::MORADO));
+        marcados.push((
+            en(t.x, t.y),
+            format!("({}, {})", numero(t.x), numero(t.y)),
+            pizarra::MORADO,
+        ));
     }
     for m in p.marcas.iter().filter(|m| dentro(m.x, m.y)) {
         let rotulo = format!("({}, {})", numero(m.x), numero(m.y));
@@ -1152,8 +1476,10 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         let mut ocupado: Vec<crate::rotulos::Caja> = Vec::new();
         for el in salida.iter().chain(&pz.el) {
             match &el.figura {
-                pixpin_motor2d::Figura::Linea { puntos } | pixpin_motor2d::Figura::Flecha { puntos, .. } => {
-                    let v: Vec<(f64, f64)> = puntos.iter().map(|q| (q.x as f64, q.y as f64)).collect();
+                pixpin_motor2d::Figura::Linea { puntos }
+                | pixpin_motor2d::Figura::Flecha { puntos, .. } => {
+                    let v: Vec<(f64, f64)> =
+                        puntos.iter().map(|q| (q.x as f64, q.y as f64)).collect();
                     ocupado.extend(crate::rotulos::cajas_de_linea(&v, 5.0));
                 }
                 pixpin_motor2d::Figura::Texto { .. } => {
@@ -1165,8 +1491,14 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
         }
         // Los ejes del instrumento (no son lineas sueltas).
         if let Marco::Instrumento(..) = &marco {
-            ocupado.extend(crate::rotulos::cajas_de_linea(&[en(xa, 0.0), en(xb, 0.0)], 4.0));
-            ocupado.extend(crate::rotulos::cajas_de_linea(&[en(0.0, p.y_desde), en(0.0, p.y_hasta)], 4.0));
+            ocupado.extend(crate::rotulos::cajas_de_linea(
+                &[en(xa, 0.0), en(xb, 0.0)],
+                4.0,
+            ));
+            ocupado.extend(crate::rotulos::cajas_de_linea(
+                &[en(0.0, p.y_desde), en(0.0, p.y_hasta)],
+                4.0,
+            ));
         }
         let pedidos: Vec<crate::rotulos::Rotulo> = marcados
             .iter()
@@ -1195,16 +1527,34 @@ pub fn piezas(p: &Funciones, (cx, cy, cw, ch): (f64, f64, f64, f64)) -> Vec<Elem
     }
     let mut pz = Pizarra::nueva();
     for t in &extra_leyenda {
-        let (_, alto) = pz.texto(t, x_ley, y_ley, 15.0, pizarra::GRIS, pizarra::Alinear::Izquierda);
+        let (_, alto) = pz.texto(
+            t,
+            x_ley,
+            y_ley,
+            15.0,
+            pizarra::GRIS,
+            pizarra::Alinear::Izquierda,
+        );
         y_ley += alto as f64 + 8.0;
     }
     salida.append(&mut pz.el);
     if !p.titulo.is_empty() {
         let tam = 26.0;
         // Con x³, π y θ, no «x^3», «pi» ni la t de las polares.
-        let titulo = pizarra::a_pizarra(&p.titulo, p.curvas.iter().any(|c| matches!(c, Curva::Polar { .. })));
+        let titulo = pizarra::a_pizarra(
+            &p.titulo,
+            p.curvas.iter().any(|c| matches!(c, Curva::Polar { .. })),
+        );
         let (aw, ah) = medir(&titulo, tam);
-        salida.push(ecuacion::elemento_texto(&titulo, (cx + cw / 2.0) as f32 - aw / 2.0, cy as f32, (aw, ah), tam, false, &estilo));
+        salida.push(ecuacion::elemento_texto(
+            &titulo,
+            (cx + cw / 2.0) as f32 - aw / 2.0,
+            cy as f32,
+            (aw, ah),
+            tam,
+            false,
+            &estilo,
+        ));
     }
     salida
 }
@@ -1227,33 +1577,46 @@ mod pruebas {
     }
 
     fn curvas_largas(els: &[Elemento], n: usize) -> usize {
-        els.iter().filter(|e| matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > n)).count()
+        els.iter()
+            .filter(|e| matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > n))
+            .count()
     }
 
     #[test]
     fn dos_curvas_sobre_el_instrumento() {
-        let p = validar_(json!({"funciones": ["x^2", "y = 2x + 1"], "x_desde": -3, "x_hasta": 3})).unwrap();
+        let p = validar_(json!({"funciones": ["x^2", "y = 2x + 1"], "x_desde": -3, "x_hasta": 3}))
+            .unwrap();
         assert_eq!(p.formulas().len(), 2);
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
         assert!(matches!(els[0].figura, Figura::Instrumento(_)));
-        let curvas: Vec<_> = els.iter().filter(|e| matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > 50)).collect();
+        let curvas: Vec<_> = els
+            .iter()
+            .filter(|e| matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > 50))
+            .collect();
         assert_eq!(curvas.len(), 2);
         // El (2, 4) de la parabola cae donde el instrumento dice.
         let i = *ins::de(&els[0]).unwrap();
         let p24 = ins::punto(&els[0], &i, 2.0, 4.0, 0.0);
         let pasa = match &curvas[0].figura {
-            Figura::Linea { puntos } => puntos.iter().any(|q| (q.x - p24.x).abs() < 2.0 && (q.y - p24.y).abs() < 2.0),
+            Figura::Linea { puntos } => puntos
+                .iter()
+                .any(|q| (q.x - p24.x).abs() < 2.0 && (q.y - p24.y).abs() < 2.0),
             _ => false,
         };
         assert!(pasa, "la curva no pasa por (2, 4)");
         // Lo lee el lienzo, todo editable y en un grupo.
         let mut f = Fabrica::nueva((0.0, 0.0), 5);
         elementos(&mut f, &p);
-        let l = pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
+        let l =
+            pixpin_motor2d::excalidraw::leer(&crate::lienzo::documento(f.salida.clone())).unwrap();
         assert_eq!(l.cuantos_ajenos(), 0);
         assert_eq!(f.salida[0]["type"], "pixpin-axes");
         let leidos = l.elementos();
-        assert!(leidos.iter().all(|e| e.grupos.last() == leidos[0].grupos.last() && !e.grupos.is_empty()));
+        assert!(
+            leidos
+                .iter()
+                .all(|e| e.grupos.last() == leidos[0].grupos.last() && !e.grupos.is_empty())
+        );
     }
 
     #[test]
@@ -1262,24 +1625,53 @@ mod pruebas {
         let els = piezas(&p, (0.0, 0.0, 800.0, 600.0));
         let ramas = els
             .iter()
-            .filter(|e| e.estilo == pixpin_motor2d::EstiloTrazo::Solido && matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > 20))
+            .filter(|e| {
+                e.estilo == pixpin_motor2d::EstiloTrazo::Solido
+                    && matches!(&e.figura, Figura::Linea { puntos } if puntos.len() > 20)
+            })
             .count();
         assert_eq!(ramas, 2, "1/x son dos ramas");
-        assert!(p.asintotas.contains(&Asintota::Vertical(0.0)), "{:?}", p.asintotas);
-        assert!(p.asintotas.contains(&Asintota::Recta(0.0, 0.0)), "y la horizontal: {:?}", p.asintotas);
+        assert!(
+            p.asintotas.contains(&Asintota::Vertical(0.0)),
+            "{:?}",
+            p.asintotas
+        );
+        assert!(
+            p.asintotas.contains(&Asintota::Recta(0.0, 0.0)),
+            "y la horizontal: {:?}",
+            p.asintotas
+        );
         assert!(avisos.contains("asintota vertical x = 0"), "{avisos}");
-        assert!(els.iter().any(|e| e.estilo == pixpin_motor2d::EstiloTrazo::Discontinuo));
+        assert!(
+            els.iter()
+                .any(|e| e.estilo == pixpin_motor2d::EstiloTrazo::Discontinuo)
+        );
     }
 
     #[test]
     fn marca_las_raices_de_x2_menos_4() {
-        let (p, avisos) = con_avisos(json!({"funciones": ["x^2-4"], "marcar": ["raices", "extremos"]}));
-        let raices: Vec<f64> = p.marcas.iter().filter(|m| m.tipo == TipoMarca::Raiz).map(|m| m.x).collect();
+        let (p, avisos) =
+            con_avisos(json!({"funciones": ["x^2-4"], "marcar": ["raices", "extremos"]}));
+        let raices: Vec<f64> = p
+            .marcas
+            .iter()
+            .filter(|m| m.tipo == TipoMarca::Raiz)
+            .map(|m| m.x)
+            .collect();
         assert_eq!(raices, vec![-2.0, 2.0]);
-        assert!(p.marcas.iter().any(|m| m.tipo == TipoMarca::Minimo && m.x == 0.0 && m.y == -4.0));
+        assert!(
+            p.marcas
+                .iter()
+                .any(|m| m.tipo == TipoMarca::Minimo && m.x == 0.0 && m.y == -4.0)
+        );
         assert!(avisos.contains("x = -2, x = 2"), "{avisos}");
         // El dominio solo: el de siempre, con las raices dentro.
-        assert!(p.x_desde <= -3.0 && p.x_hasta >= 3.0, "{} {}", p.x_desde, p.x_hasta);
+        assert!(
+            p.x_desde <= -3.0 && p.x_hasta >= 3.0,
+            "{} {}",
+            p.x_desde,
+            p.x_hasta
+        );
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
         // Los rotulos van aparte del punto (colocados sin pisarse).
         let puntos: Vec<String> = els
@@ -1289,7 +1681,10 @@ mod pruebas {
                 _ => None,
             })
             .collect();
-        assert!(puntos.contains(&"(-2, 0)".to_string()) && puntos.contains(&"(0, -4)".to_string()), "{puntos:?}");
+        assert!(
+            puntos.contains(&"(-2, 0)".to_string()) && puntos.contains(&"(0, -4)".to_string()),
+            "{puntos:?}"
+        );
     }
 
     fn caja_de(e: &Elemento) -> crate::rotulos::Caja {
@@ -1308,10 +1703,19 @@ mod pruebas {
             .filter(|e| matches!(&e.figura, Figura::Texto { texto, .. } if texto.starts_with('(')))
             .map(caja_de)
             .collect();
-        assert_eq!(rotulos.len(), 6, "3 raices, 2 extremos y el punto de la tangente");
+        assert_eq!(
+            rotulos.len(),
+            6,
+            "3 raices, 2 extremos y el punto de la tangente"
+        );
         for i in 0..rotulos.len() {
             for j in i + 1..rotulos.len() {
-                assert!(crate::rotulos::solape(&rotulos[i], &rotulos[j]) < 1.0, "{:?} pisa {:?}", rotulos[i], rotulos[j]);
+                assert!(
+                    crate::rotulos::solape(&rotulos[i], &rotulos[j]) < 1.0,
+                    "{:?} pisa {:?}",
+                    rotulos[i],
+                    rotulos[j]
+                );
             }
         }
     }
@@ -1322,7 +1726,11 @@ mod pruebas {
     fn el_rango_pedido_se_respeta_y_la_grafica_no_sale_en_un_hilo() {
         let p = validar_(json!({"funciones": ["sin(x)"], "x_desde": 0, "x_hasta": "pi", "sombrear": {"entre": [0]}, "titulo": "y = sin x en [0, pi]"})).unwrap();
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
-        assert!(!els.iter().any(|e| matches!(e.figura, Figura::Instrumento(_))), "con ejes propios");
+        assert!(
+            !els.iter()
+                .any(|e| matches!(e.figura, Figura::Instrumento(_))),
+            "con ejes propios"
+        );
         let numeros: Vec<String> = els
             .iter()
             .filter_map(|e| match &e.figura {
@@ -1331,8 +1739,16 @@ mod pruebas {
             })
             .collect();
         // Ninguna marca negativa en el eje x.
-        assert!(!numeros.iter().any(|t| t.parse::<f64>().is_ok_and(|v| v < -0.5)), "{numeros:?}");
-        assert!(numeros.iter().any(|t| t == "y = sin x en [0, π]"), "titulo compuesto: {numeros:?}");
+        assert!(
+            !numeros
+                .iter()
+                .any(|t| t.parse::<f64>().is_ok_and(|v| v < -0.5)),
+            "{numeros:?}"
+        );
+        assert!(
+            numeros.iter().any(|t| t == "y = sin x en [0, π]"),
+            "titulo compuesto: {numeros:?}"
+        );
         // La curva llena casi todo el ancho.
         let ancho_de = |els: &[Elemento]| {
             els.iter()
@@ -1342,12 +1758,23 @@ mod pruebas {
                 .fold(0.0, f64::max)
         };
         assert!(ancho_de(&els) > 400.0, "{}", ancho_de(&els));
-        let p = validar_(json!({"funciones": ["x^3 - 3x"], "x_desde": -3, "x_hasta": 3, "tangente": {"x": 2}})).unwrap();
+        let p = validar_(
+            json!({"funciones": ["x^3 - 3x"], "x_desde": -3, "x_hasta": 3, "tangente": {"x": 2}}),
+        )
+        .unwrap();
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
-        assert!(ancho_de(&els) > 350.0, "la cubica no en un hilo: {}", ancho_de(&els));
+        assert!(
+            ancho_de(&els) > 350.0,
+            "la cubica no en un hilo: {}",
+            ancho_de(&els)
+        );
         // Una ventana simetrica sigue en el instrumento.
-        let p = validar_(json!({"funciones": ["x^2", "2x+1"], "x_desde": -3, "x_hasta": 3})).unwrap();
-        assert!(matches!(piezas(&p, (60.0, 40.0, 680.0, 520.0))[0].figura, Figura::Instrumento(_)));
+        let p =
+            validar_(json!({"funciones": ["x^2", "2x+1"], "x_desde": -3, "x_hasta": 3})).unwrap();
+        assert!(matches!(
+            piezas(&p, (60.0, 40.0, 680.0, 520.0))[0].figura,
+            Figura::Instrumento(_)
+        ));
     }
 
     #[test]
@@ -1356,7 +1783,12 @@ mod pruebas {
         assert!(matches!(p.curvas[0], Curva::Polar { .. }));
         assert_eq!(p.curvas[0].rotulo(), "r = 1 + cos θ");
         // La cardioide va de x = -0.25 a 2: la ventana la abarca.
-        assert!(p.x_hasta >= 2.0 && p.x_desde <= -0.25, "{} {}", p.x_desde, p.x_hasta);
+        assert!(
+            p.x_hasta >= 2.0 && p.x_desde <= -0.25,
+            "{} {}",
+            p.x_desde,
+            p.x_hasta
+        );
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
         assert!(curvas_largas(&els, 500) >= 1, "la cardioide entera");
         let p = validar_(json!({"funciones": [{"x": "3cos(t)", "y": "2sin(t)"}]})).unwrap();
@@ -1365,11 +1797,17 @@ mod pruebas {
         // Escrita como texto, tambien.
         let p = validar_(json!({"funciones": ["x = 3cos(t), y = 2sin(t)"]})).unwrap();
         assert!(matches!(p.curvas[0], Curva::Parametrica { .. }));
-        let p = validar_(json!({"funciones": ["(cos(t), sin(t))"], "t_desde": 0, "t_hasta": "pi"})).unwrap();
+        let p = validar_(json!({"funciones": ["(cos(t), sin(t))"], "t_desde": 0, "t_hasta": "pi"}))
+            .unwrap();
         assert!((p.t_hasta - std::f64::consts::PI).abs() < 1e-12);
         // Lo que mando el 2B: «r:» en vez de «r =», y un objeto escrito
         // como texto.
-        assert!(matches!(validar_(json!({"funciones": ["r: 1 + cos(t)"]})).unwrap().curvas[0], Curva::Polar { .. }));
+        assert!(matches!(
+            validar_(json!({"funciones": ["r: 1 + cos(t)"]}))
+                .unwrap()
+                .curvas[0],
+            Curva::Polar { .. }
+        ));
         let p = validar_(json!({"funciones": ["{\"x\":\"3cos(t)\", \"y\":\"2sin(t)\"}"]})).unwrap();
         assert!(matches!(p.curvas[0], Curva::Parametrica { .. }));
         // Y dos objetos con tilde, uno por coordenada.
@@ -1386,8 +1824,16 @@ mod pruebas {
         let p = validar_(json!({"funciones": ["2x"], "puntos": [[0, 0.1], [1, 2.2], [2, 3.9]], "nombre_puntos": "medidas"})).unwrap();
         assert_eq!(p.curvas.len(), 2);
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
-        assert!(els.iter().filter(|e| matches!(e.figura, Figura::Punto { .. })).count() >= 3);
-        assert!(els.iter().any(|e| matches!(&e.figura, Figura::Texto { texto, .. } if texto == "medidas")));
+        assert!(
+            els.iter()
+                .filter(|e| matches!(e.figura, Figura::Punto { .. }))
+                .count()
+                >= 3
+        );
+        assert!(
+            els.iter()
+                .any(|e| matches!(&e.figura, Figura::Texto { texto, .. } if texto == "medidas"))
+        );
     }
 
     #[test]
@@ -1399,10 +1845,20 @@ mod pruebas {
         assert_eq!((s.desde, s.hasta), (-1.0, 2.0));
         assert!((s.area - 4.5).abs() < 1e-6, "{}", s.area);
         assert!(avisos.contains("4.5"), "{avisos}");
-        assert_eq!(p.marcas.iter().filter(|m| m.tipo == TipoMarca::Interseccion).count(), 2);
+        assert_eq!(
+            p.marcas
+                .iter()
+                .filter(|m| m.tipo == TipoMarca::Interseccion)
+                .count(),
+            2
+        );
         let els = piezas(&p, (60.0, 40.0, 680.0, 520.0));
-        assert!(els.iter().any(|e| matches!(e.figura, Figura::Region { .. })));
-        let (p, avisos) = con_avisos(json!({"funciones": ["x^3-3x"], "tangente": {"curva": 0, "x": 2}}));
+        assert!(
+            els.iter()
+                .any(|e| matches!(e.figura, Figura::Region { .. }))
+        );
+        let (p, avisos) =
+            con_avisos(json!({"funciones": ["x^3-3x"], "tangente": {"curva": 0, "x": 2}}));
         let t = p.tangente.unwrap();
         assert_eq!((t.x, t.y, t.m), (2.0, 2.0, 9.0));
         assert!(avisos.contains("y = 9x - 16"), "{avisos}");
@@ -1411,28 +1867,73 @@ mod pruebas {
     #[test]
     fn dominios_y_formulas_malas_se_rechazan() {
         for (v, motivo) in [
-            (json!({"funciones": ["x^2"], "x_desde": 5, "x_hasta": -5}), "al reves"),
-            (json!({"funciones": ["x^2"], "x_desde": 1, "x_hasta": 1}), "al reves"),
-            (json!({"funciones": ["x^2"], "x_desde": 0}), "los dos limites"),
-            (json!({"funciones": ["x^2"], "x_desde": -1e9, "x_hasta": 1}), "entre"),
-            (json!({"funciones": ["sqrt(x)"], "x_desde": -5, "x_hasta": -1}), "valores reales"),
+            (
+                json!({"funciones": ["x^2"], "x_desde": 5, "x_hasta": -5}),
+                "al reves",
+            ),
+            (
+                json!({"funciones": ["x^2"], "x_desde": 1, "x_hasta": 1}),
+                "al reves",
+            ),
+            (
+                json!({"funciones": ["x^2"], "x_desde": 0}),
+                "los dos limites",
+            ),
+            (
+                json!({"funciones": ["x^2"], "x_desde": -1e9, "x_hasta": 1}),
+                "entre",
+            ),
+            (
+                json!({"funciones": ["sqrt(x)"], "x_desde": -5, "x_hasta": -1}),
+                "valores reales",
+            ),
             (json!({"funciones": ["x +* )"]}), "no se entiende"),
             (json!({"funciones": ["x + t"]}), "parametrica"),
             (json!({"funciones": ["x + z"]}), "no se entiende"),
             (json!({"funciones": []}), "vacia"),
             (json!({}), "falta"),
-            (json!({"funciones": ["x"], "y_desde": 3, "y_hasta": 1}), "al reves"),
-            (json!({"funciones": ["x", "x", "x", "x", "x", "x", "x"]}), "como mucho"),
-            (json!({"funciones": ["x"], "x_desde": "mucho", "x_hasta": 1}), "no es un numero"),
+            (
+                json!({"funciones": ["x"], "y_desde": 3, "y_hasta": 1}),
+                "al reves",
+            ),
+            (
+                json!({"funciones": ["x", "x", "x", "x", "x", "x", "x"]}),
+                "como mucho",
+            ),
+            (
+                json!({"funciones": ["x"], "x_desde": "mucho", "x_hasta": 1}),
+                "no es un numero",
+            ),
             // Negativos de lo nuevo.
             (json!({"funciones": [{"x": "cos(t)"}]}), "falta «y»"),
-            (json!({"funciones": [{"r": "sqrt(-1-cos(t)-1)"}]}), "valores reales"),
-            (json!({"funciones": ["x^2"], "t_desde": 5, "t_hasta": 1}), "al reves"),
-            (json!({"funciones": ["1/x"], "x_desde": -1, "x_hasta": 1, "sombrear": {"entre": [0]}}), "no es finita"),
-            (json!({"funciones": ["abs(x)"], "tangente": {"x": 0}}), "no es derivable"),
-            (json!({"funciones": ["1/x"], "tangente": {"x": 0}}), "no existe"),
-            (json!({"funciones": ["x"], "tangente": {"curva": 3, "x": 0}}), "no hay curva 3"),
-            (json!({"funciones": [{"r": "1"}], "marcar": ["raices"]}), "y = f(x)"),
+            (
+                json!({"funciones": [{"r": "sqrt(-1-cos(t)-1)"}]}),
+                "valores reales",
+            ),
+            (
+                json!({"funciones": ["x^2"], "t_desde": 5, "t_hasta": 1}),
+                "al reves",
+            ),
+            (
+                json!({"funciones": ["1/x"], "x_desde": -1, "x_hasta": 1, "sombrear": {"entre": [0]}}),
+                "no es finita",
+            ),
+            (
+                json!({"funciones": ["abs(x)"], "tangente": {"x": 0}}),
+                "no es derivable",
+            ),
+            (
+                json!({"funciones": ["1/x"], "tangente": {"x": 0}}),
+                "no existe",
+            ),
+            (
+                json!({"funciones": ["x"], "tangente": {"curva": 3, "x": 0}}),
+                "no hay curva 3",
+            ),
+            (
+                json!({"funciones": [{"r": "1"}], "marcar": ["raices"]}),
+                "y = f(x)",
+            ),
             (json!({"funciones": ["x"], "puntos": [[1, 2, 3]]}), "[x, y]"),
         ] {
             let e = validar_(v.clone()).unwrap_err().to_string();
@@ -1443,14 +1944,20 @@ mod pruebas {
     #[test]
     fn la_ventana_se_ajusta_y_no_deja_la_x_en_un_hilo() {
         let mut avisos = Vec::new();
-        let Value::Object(m) = json!({"funciones": ["x^3"], "x_desde": -10, "x_hasta": 10}) else { panic!() };
+        let Value::Object(m) = json!({"funciones": ["x^3"], "x_desde": -10, "x_hasta": 10}) else {
+            panic!()
+        };
         let p = validar(&m, &mut avisos).unwrap();
         assert!(p.y_hasta <= 40.0 + 1e-9, "{}", p.y_hasta);
         assert_eq!(avisos.len(), 1);
-        let p = validar_(json!({"funciones": ["sin(x)"], "x_desde": -6.28, "x_hasta": 6.28})).unwrap();
+        let p = validar_(json!({"funciones": ["sin(x)"], "x_desde": -std::f64::consts::TAU, "x_hasta": std::f64::consts::TAU})).unwrap();
         assert!(p.y_desde < -0.9 && p.y_hasta > 0.9 && p.y_hasta < 2.0);
         // Sin dominio, una periodica sale con dos vueltas.
         let p = validar_(json!({"funciones": ["sin(x)"]})).unwrap();
-        assert!((p.x_hasta - 2.0 * std::f64::consts::PI).abs() < 1e-9, "{}", p.x_hasta);
+        assert!(
+            (p.x_hasta - 2.0 * std::f64::consts::PI).abs() < 1e-9,
+            "{}",
+            p.x_hasta
+        );
     }
 }

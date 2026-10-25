@@ -21,7 +21,10 @@
 //!   borran con ella. La hoja del chat es la de la ultima respuesta que la
 //!   tenga ([`hoja_del_chat`]).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -29,6 +32,7 @@ use pixpin_ia::agente::Evento;
 use pixpin_ia::contexto::Fuente;
 use pixpin_ia::hoja_trabajo::{HojaDeTrabajo, Registro};
 use pixpin_ia::motor::Seguir;
+use pixpin_ia::preguntar::{Contestada, Pregunta};
 use pixpin_proyecto::almacen::{self, Indice};
 use pixpin_proyecto::cuaderno::{self, Cuaderno, Mensaje as Nota};
 use pixpin_sincro::anotado as an;
@@ -68,7 +72,27 @@ pub struct VivoIa {
     pub pensado: PensadoIa,
     /// La pregunta de «¿seguro?» que espera el «Sí» o el «No».
     pub pregunta: Option<String>,
+    /// **La duda con opciones** que espera (`preguntar_usuario`): la
+    /// tarjeta con un boton por opcion y «Otro…» ([`Nucleo::ia_elegir`]).
+    pub eleccion: Option<EleccionIa>,
     pub acabado: bool,
+}
+
+/// **Una duda con opciones** en la burbuja (Windows, 22-oct): la primera
+/// opcion es la recomendada.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct EleccionIa {
+    pub pregunta: String,
+    pub opciones: Vec<OpcionIa>,
+    /// Se pulso «Otro…»: lo siguiente que se escriba es la respuesta.
+    pub otro: bool,
+}
+
+/// Una opcion de la tarjeta: lo que pone el boton y que pasa si se elige.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OpcionIa {
+    pub etiqueta: String,
+    pub descripcion: String,
 }
 
 /// **Lo que se pinta encima de una respuesta** (`pensado::Seccion` de
@@ -254,12 +278,105 @@ struct Burbuja {
     oyente: Arc<dyn OyenteChatIa>,
     estado: Mutex<Estado>,
     cruzar_cada: Duration,
+    /// Lo que el usuario escribe mientras trabaja: lo recoge el turno antes
+    /// de cada vuelta (`agente::Opciones::entrantes`).
+    entrantes: Mutex<Vec<String>>,
+    /// Alguna herramienta ya hizo algo (lo apunta tambien el disco): si
+    /// PixPin se cierra a medias, no se repite solo ([`super::de_fondo`]).
+    actuo: AtomicBool,
 }
 
 struct Estado {
     vivo: EnVivo,
     cruzado: Instant,
     guardado: Instant,
+    /// La duda con opciones que espera y por donde contestarla.
+    eleccion: Option<Eleccion>,
+}
+
+/// Una duda con opciones en el aire.
+struct Eleccion {
+    pregunta: Pregunta,
+    responder: Sender<Contestada>,
+    otro: bool,
+}
+
+impl Estado {
+    fn nuevo(vivo: EnVivo, cruzado: Instant) -> Estado {
+        Estado {
+            vivo,
+            cruzado,
+            guardado: Instant::now(),
+            eleccion: None,
+        }
+    }
+
+    /// **Contesta la duda con opciones** (al turno y en la burbuja). `false`
+    /// si no habia ninguna.
+    fn elegir(&mut self, c: Contestada) -> bool {
+        let Some(e) = self.eleccion.take() else { return false };
+        let recomendada = e.pregunta.opciones.first().map(|o| o.etiqueta.as_str()).unwrap_or("");
+        let respuesta = match &c {
+            Contestada::Opcion(n) => e.pregunta.opciones.get(*n).map(|o| o.etiqueta.clone()),
+            Contestada::Texto(t) => Some(t.clone()),
+            Contestada::SinRespuesta => None,
+        };
+        self.vivo.contestada_con_opciones(&e.pregunta.texto, respuesta.as_deref(), recomendada);
+        let _ = e.responder.send(c);
+        true
+    }
+}
+
+/// **Los turnos en marcha**, por chat: lo que se escribe mientras trabaja y
+/// lo que se elige en la tarjeta de opciones les llega por aqui.
+static EN_MARCHA: Mutex<Option<HashMap<String, Arc<Burbuja>>>> = Mutex::new(None);
+
+fn en_marcha<R>(f: impl FnOnce(&mut HashMap<String, Arc<Burbuja>>) -> R) -> R {
+    f(EN_MARCHA.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new))
+}
+
+/// El turno en marcha en `chat`, si lo hay.
+fn burbuja_de(chat: &str) -> Option<Arc<Burbuja>> {
+    en_marcha(|m| m.get(chat).cloned())
+}
+
+/// Mientras vive, el turno esta apuntado como en marcha en su chat (en
+/// memoria y en el disco) y al soltarse se quita, acabe como acabe.
+struct Apuntado {
+    burbuja: Arc<Burbuja>,
+}
+
+impl Apuntado {
+    fn nuevo(burbuja: Arc<Burbuja>, pregunta: &str, del_asistente: bool) -> Apuntado {
+        super::de_fondo::apuntar(
+            burbuja.nucleo.ruta(),
+            super::de_fondo::EnMarcha {
+                proyecto: burbuja.chat.clone(),
+                nota: burbuja.nota.clone(),
+                pregunta: pregunta.to_string(),
+                asistente: del_asistente,
+                desde: crate::ahora_ms(),
+                actuo: false,
+                intentos: 0,
+            },
+        );
+        en_marcha(|m| m.insert(burbuja.chat.clone(), burbuja.clone()));
+        Apuntado { burbuja }
+    }
+}
+
+impl Drop for Apuntado {
+    fn drop(&mut self) {
+        let b = &self.burbuja;
+        en_marcha(|m| {
+            if m.get(&b.chat).is_some_and(|x| Arc::ptr_eq(x, b)) {
+                m.remove(&b.chat);
+            }
+        });
+        // Una duda sin contestar no se queda colgada.
+        b.tomar().elegir(Contestada::SinRespuesta);
+        super::de_fondo::quitar(b.nucleo.ruta(), &b.nota);
+    }
 }
 
 impl Burbuja {
@@ -269,6 +386,11 @@ impl Burbuja {
 
     /// Un evento del turno: a la burbuja y, si toca, a Swift y al disco.
     fn aplicar(&self, e: &Evento) {
+        // La primera herramienta que hace algo: ya no se repite solo si
+        // PixPin se cierra a medias.
+        if matches!(e, Evento::Resultado { ok: true, .. }) && !self.actuo.swap(true, Ordering::Relaxed) {
+            super::de_fondo::marcar_que_actuo(self.nucleo.ruta(), &self.nota);
+        }
         let mut st = self.tomar();
         st.vivo.aplicar(e);
         let ya = !matches!(e, Evento::Texto(_) | Evento::Pensando(_));
@@ -293,12 +415,65 @@ impl Burbuja {
         }
     }
 
-    fn vivo_ia(&self, v: &EnVivo) -> VivoIa {
+    /// **Una duda con opciones** (`preguntar_usuario`): la tarjeta en la
+    /// burbuja y se espera (en el hilo del turno) lo que elija o escriba. Al
+    /// pararse o pasar [`ia_chat::CADUCA_LA_PREGUNTA`], sin respuesta: el
+    /// turno sigue con la recomendada.
+    fn preguntar_con_opciones(&self, p: &Pregunta, corte: &CorteIa) -> Contestada {
+        let (tx, rx) = channel();
+        {
+            let mut st = self.tomar();
+            st.elegir(Contestada::SinRespuesta);
+            st.vivo.preguntar_con_opciones();
+            st.eleccion = Some(Eleccion {
+                pregunta: p.clone(),
+                responder: tx,
+                otro: false,
+            });
+            st.guardado = Instant::now() - GUARDAR_CADA;
+            self.contar(&mut st, true);
+        }
+        let desde = Instant::now();
+        loop {
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(c) => {
+                    let mut st = self.tomar();
+                    st.guardado = Instant::now() - GUARDAR_CADA;
+                    self.contar(&mut st, true);
+                    return c;
+                }
+                Err(RecvTimeoutError::Disconnected) => return Contestada::SinRespuesta,
+                Err(RecvTimeoutError::Timeout) => {}
+            }
+            if corte.cortado() || desde.elapsed() >= ia_chat::CADUCA_LA_PREGUNTA {
+                let mut st = self.tomar();
+                st.elegir(Contestada::SinRespuesta);
+                self.contar(&mut st, true);
+                return Contestada::SinRespuesta;
+            }
+        }
+    }
+
+    fn vivo_ia(&self, st: &Estado) -> VivoIa {
+        let v = &st.vivo;
         VivoIa {
             nota: self.nota.clone(),
             texto: v.mostrar(),
             pensado: PensadoIa::de_vivo(v),
             pregunta: v.pendiente.clone(),
+            eleccion: st.eleccion.as_ref().map(|e| EleccionIa {
+                pregunta: e.pregunta.texto.clone(),
+                opciones: e
+                    .pregunta
+                    .opciones
+                    .iter()
+                    .map(|o| OpcionIa {
+                        etiqueta: o.etiqueta.clone(),
+                        descripcion: o.descripcion.clone(),
+                    })
+                    .collect(),
+                otro: e.otro,
+            }),
             acabado: v.acabado,
         }
     }
@@ -307,7 +482,7 @@ impl Burbuja {
     fn contar(&self, st: &mut Estado, ya: bool) {
         if ya || st.cruzado.elapsed() >= self.cruzar_cada {
             st.cruzado = Instant::now();
-            self.oyente.vivo(self.vivo_ia(&st.vivo));
+            self.oyente.vivo(self.vivo_ia(st));
         }
         if st.guardado.elapsed() >= GUARDAR_CADA {
             st.guardado = Instant::now();
@@ -368,6 +543,77 @@ impl AppIa for ManosEnLaBurbuja {
     }
 }
 
+/// **La memoria de largo plazo, encendida** (siempre en la app). Las pruebas
+/// la apagan: guardar lo duradero llama al motor, y el guionado se quedaria
+/// sin respuestas; la que la prueba la enciende con [`encender_memoria`].
+#[cfg(not(test))]
+fn memoria_encendida() -> bool {
+    true
+}
+
+#[cfg(test)]
+static MEMORIA_EN_PRUEBAS: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+fn memoria_encendida() -> bool {
+    MEMORIA_EN_PRUEBAS.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+pub(crate) fn encender_memoria(si: bool) {
+    MEMORIA_EN_PRUEBAS.store(si, Ordering::Relaxed);
+}
+
+#[uniffi::export]
+impl Nucleo {
+    /// **Lo escrito mientras el asistente trabaja** en `chat` (Windows,
+    /// 25-oct-2026, «como en Claude Code»): si hay una duda con opciones
+    /// esperando y el mensaje es para el (o se pulso «Otro…»), es su
+    /// respuesta; si no, y es para el, va al turno en marcha, que lo lee
+    /// antes de su siguiente paso y corrige, anade o para («para» a secas lo
+    /// corta). `false` si no habia turno en marcha que lo recoja (Swift dice
+    /// entonces que esta ocupado).
+    pub fn ia_escribir_mientras_trabaja(&self, chat: String, mensaje: String) -> bool {
+        let Some(b) = burbuja_de(&chat) else { return false };
+        let Some(m) = self.notas_de(&chat).into_iter().rev().find(|m| m.id == mensaje) else { return false };
+        let para_el = ia_chat::pregunta_de(&m, self.es_chat_del_asistente(&chat));
+        {
+            let mut st = b.tomar();
+            if st.eleccion.as_ref().is_some_and(|e| e.otro || para_el.is_some()) {
+                let texto = para_el.clone().unwrap_or_else(|| m.texto.clone());
+                st.elegir(Contestada::Texto(texto.trim().to_string()));
+                b.contar(&mut st, true);
+                return true;
+            }
+        }
+        let Some(pregunta) = para_el else { return false };
+        b.entrantes.lock().unwrap_or_else(|e| e.into_inner()).push(pregunta);
+        true
+    }
+
+    /// **Un boton de la tarjeta de opciones** de la respuesta `nota`:
+    /// `Some(n)`, la opcion `n` (desde 0); `None`, «Otro…» (lo siguiente que
+    /// se escriba es la respuesta). `false` si ya no esperaba nada.
+    pub fn ia_elegir(&self, chat: String, nota: String, opcion: Option<u32>) -> bool {
+        let Some(b) = burbuja_de(&chat).filter(|b| b.nota == nota) else { return false };
+        let mut st = b.tomar();
+        let hecho = match opcion {
+            Some(n) => st.elegir(Contestada::Opcion(n as usize)),
+            None => match st.eleccion.as_mut() {
+                Some(e) => {
+                    e.otro = true;
+                    true
+                }
+                None => false,
+            },
+        };
+        if hecho {
+            b.contar(&mut st, true);
+        }
+        hecho
+    }
+}
+
 // ---------------------------------------------------------------------------
 // El cuaderno
 
@@ -396,6 +642,21 @@ impl Nucleo {
     }
 
     /// Si `chat` es el chat fijo del asistente.
+    /// **Junta los chats del asistente en uno** (`vista::asistente_unico`,
+    /// el mas antiguo, el mismo en todos los aparatos): al arrancar (con
+    /// [`Nucleo::chat_asistente`]) y tras cada vuelta de sincronizar. Lo que
+    /// falle no para nada (la proxima vez se vuelve a probar, y `sellar` lo
+    /// hace tambien antes de cada vuelta). Devuelve cuantos se juntaron.
+    pub(crate) fn unificar_asistentes(&self) -> usize {
+        let n = pixpin_proyecto::vista::DiscoPc::nuevo(self.ruta())
+            .unificar_asistentes()
+            .unwrap_or(0);
+        if n > 0 {
+            self.vaciar_caches();
+        }
+        n
+    }
+
     fn es_chat_del_asistente(&self, chat: &str) -> bool {
         Indice::leer_si_esta(self.ruta())
             .ok()
@@ -437,7 +698,13 @@ impl Nucleo {
 impl Nucleo {
     /// **El chat «Asistente»**, creandolo si no esta (como «Mensajes
     /// guardados»: fijo, detras de el en la lista).
+    ///
+    /// **Uno solo en todos los aparatos** (Windows, 22-oct): antes de mirar
+    /// si hay que crearlo se juntan los que hayan llegado de otros aparatos
+    /// ([`Nucleo::unificar_asistentes`]); el que queda lleva la marca
+    /// (`"asistente": true`, que viaja en `proyecto.json`).
     pub fn chat_asistente(&self) -> Result<FichaChat, ErrorNucleo> {
+        self.unificar_asistentes();
         let aparato = self.identidad()?.yo.codigo();
         let f = almacen::asegurar_asistente(self.ruta(), crate::ahora_ms(), &aparato)?;
         Ok(FichaChat::from(&f))
@@ -478,6 +745,18 @@ impl Nucleo {
     /// viaja como siempre; Windows, 17-oct).
     pub fn ia_conversacion_nueva(&self, chat: String) -> Result<MensajeChat, ErrorNucleo> {
         validar_chat(&chat)?;
+        // Lo duradero de la que se cierra, a la memoria de largo plazo (con
+        // la nube y su clave; sin ellas no se hace nada), en segundo plano.
+        let notas = self.notas_de(&chat);
+        let cerrada: Vec<(bool, String)> = ia_chat::desde_el_corte(&notas)
+            .iter()
+            .filter(|m| !cuaderno::es_de_sistema(m) && !m.texto.trim().is_empty())
+            .map(|m| (!ia_chat::es_del_asistente(m), m.texto.clone()))
+            .collect();
+        if !cerrada.is_empty() && memoria_encendida() {
+            // Sin el huso de quien escribe: la fecha de lo guardado va en UTC.
+            super::memoria::al_cerrar(self, cerrada, 0);
+        }
         let nota = self.escribir_nota_con(chat, ia_chat::TEXTO_NUEVA_CONVERSACION.into(), None, |n| {
             n.aparato = Some(ia_chat::APARATO.into());
             n.resto.insert(ia_chat::NUEVA_CONVERSACION.into(), serde_json::Value::Bool(true));
@@ -626,6 +905,7 @@ pub fn ia_turno_en_chat(
             pensar,
             ventana: if nube { VENTANA_NUBE } else { pixpin_ia::servidor::CONTEXTO },
             cada: Duration::from_millis(super::CADA_TANDA_MS),
+            guardar_con: Some(motor.clone()),
         };
         (motor, entorno)
     });
@@ -638,12 +918,10 @@ pub fn ia_turno_en_chat(
                 chat: chat.clone(),
                 nota: inicio.respuesta.id.clone(),
                 oyente: oyente.clone(),
-                estado: Mutex::new(Estado {
-                    vivo: EnVivo::default(),
-                    cruzado: Instant::now(),
-                    guardado: Instant::now(),
-                }),
+                estado: Mutex::new(Estado::nuevo(EnVivo::default(), Instant::now())),
                 cruzar_cada: CRUZAR_CADA,
+                entrantes: Mutex::default(),
+                actuo: AtomicBool::new(false),
             };
             let detalle = match e {
                 ErrorNucleo::Asistente { detalle } => detalle,
@@ -677,7 +955,7 @@ pub(crate) fn turno_en_chat_con(
     desfase_ms: i64,
     app: Arc<dyn AppIa>,
     oyente: Arc<dyn OyenteChatIa>,
-    corte: &CorteIa,
+    corte: &Arc<CorteIa>,
     cruzar_cada: Duration,
 ) -> Result<FinChatIa, ErrorNucleo> {
     let raiz = nucleo.ruta().to_path_buf();
@@ -707,16 +985,19 @@ pub(crate) fn turno_en_chat_con(
         chat: chat.clone(),
         nota: inicio.respuesta.id.clone(),
         oyente,
-        estado: Mutex::new(Estado {
-            vivo: EnVivo {
+        estado: Mutex::new(Estado::nuevo(
+            EnVivo {
                 estado: Some(ia_chat::ESTADO_INICIAL.into()),
                 ..Default::default()
             },
-            cruzado: Instant::now() - cruzar_cada,
-            guardado: Instant::now(),
-        }),
+            Instant::now() - cruzar_cada,
+        )),
         cruzar_cada,
+        entrantes: Mutex::default(),
+        actuo: AtomicBool::new(false),
     });
+    // En marcha desde ya (en memoria y en el disco), hasta que acabe.
+    let _apuntado = Apuntado::nuevo(burbuja.clone(), &inicio.pregunta_id, del_asistente);
     let manos: Arc<dyn AppIa> = Arc::new(ManosEnLaBurbuja {
         dentro: app,
         burbuja: burbuja.clone(),
@@ -729,14 +1010,24 @@ pub(crate) fn turno_en_chat_con(
         hoja: hoja.a_json().to_string(),
         desfase_ms,
     };
-    let mut ejecutor = EjecutorDelMac::nuevo(adjuntos, peticion.desfase_ms)
+    let ejecutor = EjecutorDelMac::nuevo(adjuntos, peticion.desfase_ms)
         .con_app(manos)
         .con_nucleo(Some(nucleo.clone()))
         .en_la_nube(entorno.nube)
         .en_el_chat(EnChat::nuevo(nucleo.clone(), chat.clone(), destino));
+    // Las dudas con opciones, en la tarjeta de la burbuja.
+    let (b, c) = (burbuja.clone(), corte.clone());
+    let mut ejecutor = ejecutor.con_preguntar(Arc::new(move |p: &Pregunta| b.preguntar_con_opciones(p, &c)));
+    // La memoria de largo plazo, solo con la nube (la firma el modelo).
+    let largo_plazo = (entorno.nube && memoria_encendida())
+        .then(|| super::memoria::de(&nucleo, &entorno.nombre, desfase_ms))
+        .flatten();
+    let b = burbuja.clone();
     let extra = Extra {
         fuentes: Some(fuentes),
         cortado: corte.cortado(),
+        largo_plazo,
+        entrantes: Some(Arc::new(move || std::mem::take(&mut *b.entrantes.lock().unwrap_or_else(|e| e.into_inner())))),
     };
     let r = super::turno::turno_nucleo(motor, entorno, peticion, &mut ejecutor, extra, &mut |e| {
         burbuja.aplicar(e);
@@ -780,8 +1071,9 @@ fn acabar(
 ) -> Result<FinChatIa, ErrorNucleo> {
     let (texto, vivo) = {
         let mut st = burbuja.tomar();
+        st.elegir(Contestada::SinRespuesta);
         st.vivo.acabar(&fin);
-        (st.vivo.mostrar(), burbuja.vivo_ia(&st.vivo))
+        (st.vivo.mostrar(), burbuja.vivo_ia(&st))
     };
     let fuentes = ia_chat::fuentes_para_la_nota(&citas, &texto);
     let hecho = nucleo.cambiar_nota(chat, &burbuja.nota, |m| {

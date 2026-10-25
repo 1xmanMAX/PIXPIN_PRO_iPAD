@@ -43,7 +43,10 @@ pub enum Parte {
     /// Una imagen ya codificada (PNG o JPEG) y su tipo MIME. El chat la
     /// reduce antes (ver el documento: ~768 px de lado bastan y ahorran
     /// segundos de vision).
-    Imagen { bytes: Vec<u8>, mime: String },
+    Imagen {
+        bytes: Vec<u8>,
+        mime: String,
+    },
 }
 
 /// Una llamada a herramienta tal como la escribio el modelo, sin validar.
@@ -121,7 +124,9 @@ impl Mensaje {
     }
 
     pub fn tiene_imagen(&self) -> bool {
-        self.partes.iter().any(|p| matches!(p, Parte::Imagen { .. }))
+        self.partes
+            .iter()
+            .any(|p| matches!(p, Parte::Imagen { .. }))
     }
 
     /// El mensaje en la forma de la API de chat de OpenAI.
@@ -223,7 +228,9 @@ pub enum Trozo {
     /// El razonamiento, si se pidio pensar. El chat puede plegarlo.
     Pensando(String),
     /// Empezo a escribir una llamada a herramienta (para ensenar «dibujando…»).
-    Llamando { nombre: String },
+    Llamando {
+        nombre: String,
+    },
 }
 
 /// Si seguir escuchando o cortar (el usuario pulso «parar»).
@@ -327,6 +334,14 @@ pub trait Motor: Send + Sync {
         false
     }
 
+    /// **Si es el modelo local** (llama.cpp en este PC). Esta congelado por
+    /// decision del usuario (15-oct): lo que se le anada a la nube (la
+    /// revision con rubrica, 22-oct) no se le enciende aunque un dia vea
+    /// imagenes. Por omision, no.
+    fn es_local(&self) -> bool {
+        false
+    }
+
     /// **Cuantas peticiones a la vez** aguanta (15-oct: una lamina se
     /// secciona y cada zona va a su trabajador en paralelo). Claude, 8;
     /// DeepSeek, 3 (pocos creditos y limites mas bajos); el local, 1.
@@ -343,6 +358,9 @@ pub struct MotorGuionado {
     pub recibido: Mutex<Vec<Peticion>>,
     /// Si dice que ve imagenes ([`Motor::ve_imagenes`]).
     pub vision: bool,
+    /// Si hace de motor de la nube ([`Motor::catalogo_completo`]): las
+    /// pruebas de lo que solo tiene la nube (preguntar al usuario).
+    pub nube: bool,
 }
 
 impl MotorGuionado {
@@ -351,7 +369,14 @@ impl MotorGuionado {
             guion: Mutex::new(guion.into()),
             recibido: Mutex::new(Vec::new()),
             vision: false,
+            nube: false,
         }
+    }
+
+    /// El mismo, como si fuera de la nube.
+    pub fn como_nube(mut self) -> MotorGuionado {
+        self.nube = true;
+        self
     }
 
     /// El mismo, diciendo que ve imagenes.
@@ -362,6 +387,10 @@ impl MotorGuionado {
 }
 
 impl Motor for MotorGuionado {
+    fn catalogo_completo(&self) -> bool {
+        self.nube
+    }
+
     fn ve_imagenes(&self) -> bool {
         self.vision
     }
@@ -417,7 +446,10 @@ mod pruebas {
         let j = m.a_json();
         assert_eq!(j["role"], "user");
         assert_eq!(j["content"][0]["type"], "image_url");
-        assert_eq!(j["content"][0]["image_url"]["url"], "data:image/png;base64,AQID");
+        assert_eq!(
+            j["content"][0]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
         assert_eq!(j["content"][1]["text"], "dibujala");
     }
 

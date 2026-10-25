@@ -17,12 +17,12 @@
 //! El editor que se abre ahora es el de Windows (`web`): su misma pagina en
 //! un `WKWebView`. Lo de arriba queda para el editor de antes (AppKit).
 
-mod adjuntos;
+pub(crate) mod adjuntos;
 mod comentarios;
 mod comentarios_nativos;
 mod nativo_md;
-pub use nativo_md::{ComandoBarraMd, ConsultaBarraMd, FotoMd, TablaMd};
 pub use comentarios_nativos::{ComentariosNota, HiloNota, RespuestaNota};
+pub use nativo_md::{ComandoBarraMd, ConsultaBarraMd, FotoMd, TablaMd};
 pub mod vista;
 pub mod web;
 

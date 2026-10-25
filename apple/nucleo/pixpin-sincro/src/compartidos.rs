@@ -550,7 +550,12 @@ pub fn invitar(
         firma_fuera: antes.and_then(|a| a.firma_fuera.clone()),
     };
     p.firma = yo.llaves.firmar(&texto_de_entrada(&c.chat, &p));
-    let mut personas: Vec<Persona> = c.personas.iter().filter(|x| x.id != p.id).cloned().collect();
+    let mut personas: Vec<Persona> = c
+        .personas
+        .iter()
+        .filter(|x| x.id != p.id)
+        .cloned()
+        .collect();
     personas.push(p);
     Ok(ChatCompartido {
         personas,

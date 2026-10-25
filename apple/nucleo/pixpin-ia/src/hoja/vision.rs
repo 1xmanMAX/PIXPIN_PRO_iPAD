@@ -35,24 +35,47 @@ responde SOLO un JSON como {\"funciones\":[\"x^2\"],\"x_desde\":-3,\"x_hasta\":3
 (formulas en x con ^, sqrt(), sin(), cos(), ln(), e^x; la ventana que se ve). Si no lo es (barras, datos, un dibujo), responde NO.";
 
 /// Pregunta con una imagen y devuelve el texto de la respuesta.
-pub fn preguntar(motor: &dyn Motor, sistema: &str, png: Vec<u8>, pregunta: &str) -> Result<String, String> {
+pub fn preguntar(
+    motor: &dyn Motor,
+    sistema: &str,
+    png: Vec<u8>,
+    pregunta: &str,
+) -> Result<String, String> {
     preguntar_con(motor, sistema, png, pregunta, TOKENS)
 }
 
 /// Lo mismo con otro tope de tokens (la lista de rotulos de una figura es
 /// mas larga que una formula).
-pub fn preguntar_con(motor: &dyn Motor, sistema: &str, png: Vec<u8>, pregunta: &str, tokens: u32) -> Result<String, String> {
-    let mut p = Peticion::nueva(vec![Mensaje::sistema(sistema), Mensaje::usuario_con_imagen(pregunta, png, "image/png")]);
+pub fn preguntar_con(
+    motor: &dyn Motor,
+    sistema: &str,
+    png: Vec<u8>,
+    pregunta: &str,
+    tokens: u32,
+) -> Result<String, String> {
+    let mut p = Peticion::nueva(vec![
+        Mensaje::sistema(sistema),
+        Mensaje::usuario_con_imagen(pregunta, png, "image/png"),
+    ]);
     p.max_tokens = tokens;
     p.temperatura = 0.0;
-    let r = motor.completar(&p, &mut |_| Seguir::Si).map_err(|e| e.to_string())?;
+    let r = motor
+        .completar(&p, &mut |_| Seguir::Si)
+        .map_err(|e| e.to_string())?;
     Ok(r.texto.trim().to_string())
 }
 
 /// **La formula del recorte, en LaTeX** (una linea por renglon).
 pub fn pedir_latex(motor: &dyn Motor, png: Vec<u8>) -> Result<Leido, String> {
-    let t = preguntar(motor, SISTEMA_LATEX, png, "Transcribe esta formula a LaTeX.")?;
-    leer_latex(&t).map(Leido::Latex).ok_or_else(|| format!("el modelo no dio una formula: «{}»", corto(&t)))
+    let t = preguntar(
+        motor,
+        SISTEMA_LATEX,
+        png,
+        "Transcribe esta formula a LaTeX.",
+    )?;
+    leer_latex(&t)
+        .map(Leido::Latex)
+        .ok_or_else(|| format!("el modelo no dio una formula: «{}»", corto(&t)))
 }
 
 /// **Que es una zona dudosa.**
@@ -76,7 +99,9 @@ pub fn leer_dudosa(t: &str) -> Option<Leido> {
         return Some(Leido::Tipo(Tipo::Formula));
     }
     // Con una frase delante: la primera palabra de la lista que salga.
-    leer_tipo(s).or_else(|| s.split(|c: char| !c.is_alphanumeric()).find_map(leer_tipo)).map(Leido::Tipo)
+    leer_tipo(s)
+        .or_else(|| s.split(|c: char| !c.is_alphanumeric()).find_map(leer_tipo))
+        .map(Leido::Tipo)
 }
 
 /// **Si una grafica es de funciones**: sus argumentos de `graficar_funcion`,
@@ -93,9 +118,27 @@ pub fn pedir_grafica(motor: &dyn Motor, png: Vec<u8>) -> Result<Option<Leido>, S
 pub fn es_charla(t: &str) -> bool {
     let q = crate::acciones::normalizar(t);
     const FRASES: &[&str] = &[
-        "solo veo", "no veo", "no hay ningun", "no hay texto", "no puedo", "enviame", "envia el", "si quieres", "no contiene",
-        "la imagen muestra", "la imagen contiene", "el recorte", "este recorte", "lo siento", "parece ser", "no se ve", "no se distingue",
-        "i can't", "i cannot", "i only see", "the image",
+        "solo veo",
+        "no veo",
+        "no hay ningun",
+        "no hay texto",
+        "no puedo",
+        "enviame",
+        "envia el",
+        "si quieres",
+        "no contiene",
+        "la imagen muestra",
+        "la imagen contiene",
+        "el recorte",
+        "este recorte",
+        "lo siento",
+        "parece ser",
+        "no se ve",
+        "no se distingue",
+        "i can't",
+        "i cannot",
+        "i only see",
+        "the image",
     ];
     FRASES.iter().any(|f| q.contains(f))
 }
@@ -123,13 +166,26 @@ pub fn leer_latex(t: &str) -> Option<Vec<String>> {
     let t = t.trim_start_matches("\\(").trim_end_matches("\\)").trim();
     // (Ni una respuesta que habla de su formato: «answer = LaTeX only... Output».)
     let bajo = t.to_lowercase();
-    let habla = ["answer", "latex only", "output", "formula is", "the image"].iter().any(|p| bajo.contains(p));
-    if t.is_empty() || t.eq_ignore_ascii_case("nada") || t.len() > crate::ecuacion::MAX_LARGO || (es_charla(t) && !t.contains('\\')) || habla {
+    let habla = ["answer", "latex only", "output", "formula is", "the image"]
+        .iter()
+        .any(|p| bajo.contains(p));
+    if t.is_empty()
+        || t.eq_ignore_ascii_case("nada")
+        || t.len() > crate::ecuacion::MAX_LARGO
+        || (es_charla(t) && !t.contains('\\'))
+        || habla
+    {
         return None;
     }
     // Una frase de mas («Aqui esta: ...»): lo de despues de los dos puntos.
     let t = match t.split_once(": ") {
-        Some((antes, despues)) if antes.split_whitespace().count() >= 2 && !antes.contains('\\') && !antes.contains('=') => despues,
+        Some((antes, despues))
+            if antes.split_whitespace().count() >= 2
+                && !antes.contains('\\')
+                && !antes.contains('=') =>
+        {
+            despues
+        }
         _ => t,
     };
     // Los renglones, sin partir las matrices (`\\` dentro de un entorno es
@@ -145,7 +201,9 @@ pub fn leer_latex(t: &str) -> Option<Vec<String>> {
 /// Lee el tipo de una palabra (con tildes, mayusculas o punto).
 pub fn leer_tipo(t: &str) -> Option<Tipo> {
     let q = crate::acciones::normalizar(t);
-    let p = q.split(|c: char| !c.is_alphanumeric()).find(|p| !p.is_empty())?;
+    let p = q
+        .split(|c: char| !c.is_alphanumeric())
+        .find(|p| !p.is_empty())?;
     Some(match p {
         "texto" | "parrafo" => Tipo::Parrafo,
         "titulo" | "encabezado" => Tipo::Encabezado,
@@ -165,7 +223,10 @@ pub fn leer_grafica(t: &str) -> Option<Map<String, Value>> {
     let (a, b) = (t.find('{')?, t.rfind('}')?);
     let v: Value = serde_json::from_str(t.get(a..=b)?).ok()?;
     let m = v.as_object()?.clone();
-    let n = m.get("funciones").and_then(Value::as_array).map_or(0, Vec::len);
+    let n = m
+        .get("funciones")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
     (n > 0).then_some(m)
 }
 
@@ -201,10 +262,32 @@ No juntes, partas, anadas ni quites renglones; no resumas; si un renglon esta bi
 /// va con el recorte, y vuelve la misma lista arreglada. Cada renglon se
 /// queda en su sitio; un renglon que no se parece a lo leido (el modelo
 /// inventando o hablando) se queda como lo leyo el OCR.
-pub fn pedir_renglones(motor: &dyn Motor, png: Vec<u8>, ocr: &[String], contexto: &str) -> Result<Leido, String> {
-    let lista: String = ocr.iter().enumerate().map(|(i, r)| format!("{}. {r}\n", i + 1)).collect();
-    let contexto = if contexto.is_empty() { String::new() } else { format!("{contexto}\n") };
-    let t = preguntar_con(motor, SISTEMA_RENGLONES, png, &format!("{contexto}Lo que leyo el OCR ({} renglones):\n{lista}", ocr.len()), 2500)?;
+pub fn pedir_renglones(
+    motor: &dyn Motor,
+    png: Vec<u8>,
+    ocr: &[String],
+    contexto: &str,
+) -> Result<Leido, String> {
+    let lista: String = ocr
+        .iter()
+        .enumerate()
+        .map(|(i, r)| format!("{}. {r}\n", i + 1))
+        .collect();
+    let contexto = if contexto.is_empty() {
+        String::new()
+    } else {
+        format!("{contexto}\n")
+    };
+    let t = preguntar_con(
+        motor,
+        SISTEMA_RENGLONES,
+        png,
+        &format!(
+            "{contexto}Lo que leyo el OCR ({} renglones):\n{lista}",
+            ocr.len()
+        ),
+        2500,
+    )?;
     leer_renglones(&t, ocr)
         .or_else(|| renglones_libres(&t, ocr))
         .map(Leido::Renglones)
@@ -225,7 +308,10 @@ pub fn renglones_libres(t: &str, ocr: &[String]) -> Option<Vec<String>> {
         .into_iter()
         .filter_map(|x| match x {
             Value::String(s) => Some(s),
-            Value::Object(m) => ["texto", "text", "t"].iter().find_map(|k| m.get(*k).and_then(Value::as_str)).map(str::to_string),
+            Value::Object(m) => ["texto", "text", "t"]
+                .iter()
+                .find_map(|k| m.get(*k).and_then(Value::as_str))
+                .map(str::to_string),
             _ => None,
         })
         .map(|s| pixpin_motor2d::texto_rico::sin_barras_dobles(s.trim()))
@@ -236,8 +322,14 @@ pub fn renglones_libres(t: &str, ocr: &[String]) -> Option<Vec<String>> {
     }
     let todo_nuevo = v.join(" ");
     let todo_viejo = ocr.join(" ");
-    let (n, o) = (cuantas_letras(&todo_nuevo) as f64, cuantas_letras(&todo_viejo).max(1) as f64);
-    let parecido = parecido_de_letras(&todo_nuevo, &todo_viejo).max(parecido_de_letras(&fuera_de_formulas(&todo_nuevo), &todo_viejo));
+    let (n, o) = (
+        cuantas_letras(&todo_nuevo) as f64,
+        cuantas_letras(&todo_viejo).max(1) as f64,
+    );
+    let parecido = parecido_de_letras(&todo_nuevo, &todo_viejo).max(parecido_de_letras(
+        &fuera_de_formulas(&todo_nuevo),
+        &todo_viejo,
+    ));
     if parecido < 0.45 || n < o * 0.5 || n > o * 2.5 + 10.0 {
         return None;
     }
@@ -251,11 +343,20 @@ pub fn leer_renglones(t: &str, ocr: &[String]) -> Option<Vec<String>> {
     let t = sin_bloque(t);
     let (a, b) = (t.find('[')?, t.rfind(']')?);
     // (Haiku a veces devuelve objetos, `{"renglon":1,"texto":"..."}`: su texto.)
-    let v: Vec<String> = serde_json::from_str::<Vec<Value>>(t.get(a..=b)?).ok()?.into_iter().map(|x| match x {
-        Value::String(s) => s,
-        Value::Object(m) => ["texto", "text", "t", "renglon_corregido"].iter().find_map(|k| m.get(*k).and_then(Value::as_str)).or_else(|| m.values().find_map(Value::as_str)).unwrap_or_default().to_string(),
-        otro => otro.to_string(),
-    }).collect();
+    let v: Vec<String> = serde_json::from_str::<Vec<Value>>(t.get(a..=b)?)
+        .ok()?
+        .into_iter()
+        .map(|x| match x {
+            Value::String(s) => s,
+            Value::Object(m) => ["texto", "text", "t", "renglon_corregido"]
+                .iter()
+                .find_map(|k| m.get(*k).and_then(Value::as_str))
+                .or_else(|| m.values().find_map(Value::as_str))
+                .unwrap_or_default()
+                .to_string(),
+            otro => otro.to_string(),
+        })
+        .collect();
     // **Menos renglones que el OCR** (18-oct, Polinomios: la fraccion
     // «M = (x+2)/(y-1)» eran tres renglones del OCR y uno de verdad): cada
     // renglon de la nube va, en orden, al del OCR que mas se le parece; los
@@ -266,9 +367,14 @@ pub fn leer_renglones(t: &str, ocr: &[String]) -> Option<Vec<String>> {
         for (k, nuevo) in v.iter().enumerate() {
             // (Que queden sitios para los que faltan.)
             let hasta = ocr.len() - (v.len() - k - 1);
-            let mejor = (desde..hasta).max_by(|&i, &j| parecido_de_letras(nuevo, &ocr[i]).total_cmp(&parecido_de_letras(nuevo, &ocr[j])).then(j.cmp(&i)))?;
+            let mejor = (desde..hasta).max_by(|&i, &j| {
+                parecido_de_letras(nuevo, &ocr[i])
+                    .total_cmp(&parecido_de_letras(nuevo, &ocr[j]))
+                    .then(j.cmp(&i))
+            })?;
             // (Que se parezca de verdad: si no, no es esa hoja.)
-            let p = parecido_de_letras(nuevo, &ocr[mejor]).max(parecido_de_letras(&fuera_de_formulas(nuevo), &ocr[mejor]));
+            let p = parecido_de_letras(nuevo, &ocr[mejor])
+                .max(parecido_de_letras(&fuera_de_formulas(nuevo), &ocr[mejor]));
             if p < 0.4 {
                 return None;
             }
@@ -294,23 +400,36 @@ pub fn leer_renglones(t: &str, ocr: &[String]) -> Option<Vec<String>> {
     let mut hecho: Vec<String> = v
         .into_iter()
         .zip(ocr)
-            .map(|(nuevo, viejo)| {
-                let nuevo = sin_numero_inventado(&pixpin_motor2d::texto_rico::sin_barras_dobles(nuevo.trim()), viejo);
-                // (Ni uno mucho mas largo o mas corto: la frase entera para un
-                // renglon que era un trozo salia encima de la otra mitad.)
-                // (Lo de dentro de `$...$` no cuenta: el OCR no lee las
-                // formulas, «Sea» era «Sea $P_{(x)}=x^3+3x^2+3x+3$».)
-                // (Para lo de mas, solo cuenta lo de fuera; para lo de menos, todo.)
-                let (n, v) = (cuantas_letras(&nuevo) as f64, cuantas_letras(viejo).max(1) as f64);
-                let n_fuera = cuantas_letras(&fuera_de_formulas(&nuevo)) as f64;
-                if nuevo.is_empty() || es_charla(&nuevo) || parecido_de_letras(&nuevo, viejo).max(parecido_de_letras(&fuera_de_formulas(&nuevo), viejo)) < 0.5 || n_fuera > v * 1.35 + 2.0 || n < v * 0.65 - 2.0 {
-                    viejo.clone()
-                } else {
-                    // (LaTeX sin `$` —«16,5^\circ»— se envuelve, como en `leer_rico`.)
-                    leer_rico(&nuevo).unwrap_or(nuevo)
-                }
-            })
-            .collect();
+        .map(|(nuevo, viejo)| {
+            let nuevo = sin_numero_inventado(
+                &pixpin_motor2d::texto_rico::sin_barras_dobles(nuevo.trim()),
+                viejo,
+            );
+            // (Ni uno mucho mas largo o mas corto: la frase entera para un
+            // renglon que era un trozo salia encima de la otra mitad.)
+            // (Lo de dentro de `$...$` no cuenta: el OCR no lee las
+            // formulas, «Sea» era «Sea $P_{(x)}=x^3+3x^2+3x+3$».)
+            // (Para lo de mas, solo cuenta lo de fuera; para lo de menos, todo.)
+            let (n, v) = (
+                cuantas_letras(&nuevo) as f64,
+                cuantas_letras(viejo).max(1) as f64,
+            );
+            let n_fuera = cuantas_letras(&fuera_de_formulas(&nuevo)) as f64;
+            if nuevo.is_empty()
+                || es_charla(&nuevo)
+                || parecido_de_letras(&nuevo, viejo)
+                    .max(parecido_de_letras(&fuera_de_formulas(&nuevo), viejo))
+                    < 0.5
+                || n_fuera > v * 1.35 + 2.0
+                || n < v * 0.65 - 2.0
+            {
+                viejo.clone()
+            } else {
+                // (LaTeX sin `$` —«16,5^\circ»— se envuelve, como en `leer_rico`.)
+                leer_rico(&nuevo).unwrap_or(nuevo)
+            }
+        })
+        .collect();
     sin_lo_ya_dicho(&mut hecho, ocr);
     Some(hecho)
 }
@@ -340,7 +459,12 @@ fn sin_lo_ya_dicho(hecho: &mut [String], ocr: &[String]) {
         if pj.chars().count() < 3 || hecho[j] != ocr[j] {
             continue;
         }
-        let dicho = (0..n).any(|i| i != j && hecho[i] != ocr[i] && plano(&hecho[i]).contains(&pj) && !plano(&ocr[i]).contains(&pj));
+        let dicho = (0..n).any(|i| {
+            i != j
+                && hecho[i] != ocr[i]
+                && plano(&hecho[i]).contains(&pj)
+                && !plano(&ocr[i]).contains(&pj)
+        });
         if dicho {
             hecho[j].clear();
         }
@@ -355,7 +479,10 @@ fn sin_numero_inventado(nuevo: &str, viejo: &str) -> String {
     let viejo_numerado = viejo.trim_start().starts_with(|c: char| c.is_ascii_digit());
     if n > 0 && n <= 2 && !viejo_numerado {
         let resto = &nuevo[n..];
-        if let Some(r) = resto.strip_prefix(". ").or_else(|| resto.strip_prefix(") ")) {
+        if let Some(r) = resto
+            .strip_prefix(". ")
+            .or_else(|| resto.strip_prefix(") "))
+        {
             return r.to_string();
         }
     }
@@ -434,9 +561,17 @@ pub fn parecido_de_letras(a: &str, b: &str) -> f64 {
 /// «Äb» por «AB» con su raya y «m<COD» por «m∢COD».
 pub fn pedir_rico(motor: &dyn Motor, png: Vec<u8>, pista: &str) -> Result<Leido, String> {
     // Con lo que el OCR vio de color (Haiku se olvidaba de los colores).
-    let pregunta = if pista.is_empty() { "Transcribe este bloque.".to_string() } else { format!("Transcribe este bloque. Colores que se ven (del OCR, puede leer mal las letras): {pista}") };
+    let pregunta = if pista.is_empty() {
+        "Transcribe este bloque.".to_string()
+    } else {
+        format!(
+            "Transcribe este bloque. Colores que se ven (del OCR, puede leer mal las letras): {pista}"
+        )
+    };
     let t = preguntar_con(motor, SISTEMA_RICO, png, &pregunta, 3000)?;
-    leer_rico(&t).map(Leido::Rico).ok_or_else(|| format!("el modelo no dio el texto: «{}»", corto(&t)))
+    leer_rico(&t)
+        .map(Leido::Rico)
+        .ok_or_else(|| format!("el modelo no dio el texto: «{}»", corto(&t)))
 }
 
 /// Lee la transcripcion: sin bloque de codigo, sin barras dobles de mas,
@@ -444,7 +579,9 @@ pub fn pedir_rico(motor: &dyn Motor, png: Vec<u8>, pista: &str) -> Result<Leido,
 pub fn leer_rico(t: &str) -> Option<String> {
     let t = sin_bloque(t);
     let t = pixpin_motor2d::texto_rico::sin_barras_dobles(&t);
-    let mut t = t.trim_matches(|c: char| c == '\n' || c == '\r' || c == ' ').replace("\r\n", "\n");
+    let mut t = t
+        .trim_matches(|c: char| c == '\n' || c == '\r' || c == ' ')
+        .replace("\r\n", "\n");
     // Un renglon en blanco entre parrafos se queda (es el aire del papel);
     // mas de uno, no.
     while t.contains("\n\n\n") {
@@ -477,12 +614,23 @@ pub fn leer_rico(t: &str) -> Option<String> {
                 }
                 s
             };
-            let con_palabras = sin_mandatos.split(|c: char| !c.is_alphabetic()).any(|p| p.chars().count() >= 4);
+            let con_palabras = sin_mandatos
+                .split(|c: char| !c.is_alphabetic())
+                .any(|p| p.chars().count() >= 4);
             if n == 0 && !con_palabras && (resto.contains('\\') || resto.contains('^')) {
                 format!("{pre}${resto}$")
             } else if n == 0 && (resto.contains('\\') || resto.contains('^')) {
                 // Con palabras: solo los trozos de formula («x^2»).
-                let t: Vec<String> = resto.split(' ').map(|p| if p.contains('\\') || p.contains('^') { format!("${p}$") } else { p.to_string() }).collect();
+                let t: Vec<String> = resto
+                    .split(' ')
+                    .map(|p| {
+                        if p.contains('\\') || p.contains('^') {
+                            format!("${p}$")
+                        } else {
+                            p.to_string()
+                        }
+                    })
+                    .collect();
                 format!("{pre}{}", t.join(" "))
             } else if n % 2 == 1 {
                 format!("{pre}{resto}$")
@@ -500,9 +648,18 @@ mod pruebas_rico {
     #[test]
     fn el_texto_rico_de_la_nube_se_arregla() {
         assert_eq!(super::leer_rico("θ=90^\\circ").unwrap(), "$θ=90^\\circ$");
-        assert_eq!(super::leer_rico("\\centro X=90^\\circ").unwrap(), "\\centro $X=90^\\circ$");
-        assert_eq!(super::leer_rico("Por ∢ interior:\n$45^\\circ=\\frac{2a").unwrap(), "Por ∢ interior:\n$45^\\circ=\\frac{2a$");
-        assert_eq!(super::leer_rico("```\nNos piden $X$\n\n\n\nY\n```").unwrap(), "Nos piden $X$\n\nY");
+        assert_eq!(
+            super::leer_rico("\\centro X=90^\\circ").unwrap(),
+            "\\centro $X=90^\\circ$"
+        );
+        assert_eq!(
+            super::leer_rico("Por ∢ interior:\n$45^\\circ=\\frac{2a").unwrap(),
+            "Por ∢ interior:\n$45^\\circ=\\frac{2a$"
+        );
+        assert_eq!(
+            super::leer_rico("```\nNos piden $X$\n\n\n\nY\n```").unwrap(),
+            "Nos piden $X$\n\nY"
+        );
         assert!(super::leer_rico("NADA").is_none());
         // El modelo hablando no es texto de la hoja (17-oct, salia en el lienzo).
         assert!(super::leer_rico("Solo veo un ícono de corazón con el número 2293, sin bloque de texto ni fórmulas. Si quieres transcribir una lámina, envíame el recorte correcto.").is_none());
@@ -510,18 +667,36 @@ mod pruebas_rico {
         assert!(super::leer_rico("Nos piden $m\\sphericalangle COD = X$").is_some());
         // Los renglones corregidos: los mismos, y el que no se parece se queda como el OCR.
         let ocr = vec!["A) 16,50".to_string(), "2293".to_string()];
-        let r = super::leer_renglones("[\"A) $16{,}5^\\\\circ$\", \"Solo veo un icono de corazon\"]", &ocr).unwrap();
+        let r = super::leer_renglones(
+            "[\"A) $16{,}5^\\\\circ$\", \"Solo veo un icono de corazon\"]",
+            &ocr,
+        )
+        .unwrap();
         assert_eq!(r[1], "2293");
         assert!(r[0].contains("circ"), "{r:?}");
-        assert!(super::leer_renglones("[\"uno\"]", &ocr).is_none(), "otro numero de renglones");
-        let r = super::leer_renglones("[{\"renglon\":1,\"texto\":\"A) 16,5°\"},{\"n\":2,\"texto\":\"2293\"}]", &ocr).unwrap();
+        assert!(
+            super::leer_renglones("[\"uno\"]", &ocr).is_none(),
+            "otro numero de renglones"
+        );
+        let r = super::leer_renglones(
+            "[{\"renglon\":1,\"texto\":\"A) 16,5°\"},{\"n\":2,\"texto\":\"2293\"}]",
+            &ocr,
+        )
+        .unwrap();
         assert_eq!(r, vec!["A) 16,5°".to_string(), "2293".to_string()]);
         let r = super::leer_renglones(r#"["A) 16,5^\\circ", "2293"]"#, &ocr).unwrap();
         assert!(r[0].contains('$'), "{r:?}");
         // La frase entera para un trozo: se queda el trozo.
         let o2 = vec!["Se tiene un".to_string()];
-        assert_eq!(super::leer_renglones("[\"Se tiene un paralelogramo ABCD y se traza AP\"]", &o2).unwrap(), o2);
-        assert_eq!(super::leer_rico("Grafica de f(x) = x^2 - 2").unwrap(), "Grafica de f(x) = $x^2$ - 2");
+        assert_eq!(
+            super::leer_renglones("[\"Se tiene un paralelogramo ABCD y se traza AP\"]", &o2)
+                .unwrap(),
+            o2
+        );
+        assert_eq!(
+            super::leer_rico("Grafica de f(x) = x^2 - 2").unwrap(),
+            "Grafica de f(x) = $x^2$ - 2"
+        );
     }
 }
 
@@ -529,9 +704,17 @@ mod pruebas_rico {
 /// con su centro en fracciones del recorte: la nube corrige al OCR en lo
 /// que lee mal o no ve (una letra suelta, una griega).
 pub fn pedir_rotulos(motor: &dyn Motor, png: Vec<u8>) -> Result<Leido, String> {
-    let t = preguntar_con(motor, SISTEMA_ROTULOS, png, "Lista los rotulos de esta figura.", 1500)?;
+    let t = preguntar_con(
+        motor,
+        SISTEMA_ROTULOS,
+        png,
+        "Lista los rotulos de esta figura.",
+        1500,
+    )?;
     let hechos = leer_hechos(&t);
-    leer_rotulos(&t).map(|r| Leido::Rotulos(r, hechos)).ok_or_else(|| format!("el modelo no dio los rotulos: «{}»", corto(&t)))
+    leer_rotulos(&t)
+        .map(|r| Leido::Rotulos(r, hechos))
+        .ok_or_else(|| format!("el modelo no dio los rotulos: «{}»", corto(&t)))
 }
 
 /// Los hechos de la lista (`{"h":"AB es diametro"}`), tal cual.
@@ -563,7 +746,11 @@ pub fn leer_rotulos(t: &str) -> Option<Vec<(String, f64, f64)>> {
         let Some(b) = resto[a..].find('}') else { break };
         alguno = true;
         if let Ok(r) = serde_json::from_str::<Value>(&resto[a..a + b + 1]) {
-            let texto = r.get("t").or_else(|| r.get("texto")).and_then(Value::as_str).map(|s| s.trim().to_string());
+            let texto = r
+                .get("t")
+                .or_else(|| r.get("texto"))
+                .and_then(Value::as_str)
+                .map(|s| s.trim().to_string());
             let x = r.get("x").and_then(Value::as_f64);
             let y = r.get("y").and_then(Value::as_f64);
             if let (Some(texto), Some(x), Some(y)) = (texto, x, y)
@@ -587,11 +774,21 @@ mod pruebas_rotulos {
     fn los_rotulos_se_leen_aunque_lleguen_cortados() {
         let t = "```json\n[{\"t\":\"A\",\"x\":0.27,\"y\":0.12},{\"t\":\"2a\",\"x\":0.37,\"y\":0.04},{\"t\":\"B\",\"x\":0.8";
         let v = leer_rotulos(t).unwrap();
-        assert_eq!(v, vec![("A".to_string(), 0.27, 0.12), ("2a".to_string(), 0.37, 0.04)]);
+        assert_eq!(
+            v,
+            vec![
+                ("A".to_string(), 0.27, 0.12),
+                ("2a".to_string(), 0.37, 0.04)
+            ]
+        );
         assert_eq!(leer_rotulos("[]"), Some(Vec::new()));
         assert!(leer_rotulos("No veo rotulos").is_none());
         // Fuera de 0-1: no.
-        assert!(leer_rotulos("[{\"t\":\"A\",\"x\":3,\"y\":0.1}]").unwrap().is_empty());
+        assert!(
+            leer_rotulos("[{\"t\":\"A\",\"x\":3,\"y\":0.1}]")
+                .unwrap()
+                .is_empty()
+        );
     }
 }
 
@@ -599,9 +796,18 @@ mod pruebas_rotulos {
 mod pruebas_numeracion {
     #[test]
     fn la_numeracion_inventada_se_quita() {
-        assert_eq!(super::sin_numero_inventado("1. Si le asignamos valores", "Si Ie asignamos valores"), "Si le asignamos valores");
-        assert_eq!(super::sin_numero_inventado("1. Número de RFIs", "1. Nümero de RFIs"), "1. Número de RFIs");
-        assert_eq!(super::sin_numero_inventado("2026 fue el año", "2026 fue"), "2026 fue el año");
+        assert_eq!(
+            super::sin_numero_inventado("1. Si le asignamos valores", "Si Ie asignamos valores"),
+            "Si le asignamos valores"
+        );
+        assert_eq!(
+            super::sin_numero_inventado("1. Número de RFIs", "1. Nümero de RFIs"),
+            "1. Número de RFIs"
+        );
+        assert_eq!(
+            super::sin_numero_inventado("2026 fue el año", "2026 fue"),
+            "2026 fue el año"
+        );
     }
 }
 
@@ -613,7 +819,11 @@ mod pruebas_formula_que_el_ocr_no_leyo {
         let r = super::leer_renglones(r#"["Sea $P_{(x)}=x^{3}+3x^{2}+3x+3$."]"#, &ocr).unwrap();
         assert!(r[0].contains("x^{3}"), "{r:?}");
         // Pero una frase entera de texto para un trozo, no.
-        let r = super::leer_renglones(r#"["Sea la funcion que se define en todo el dominio real"]"#, &ocr).unwrap();
+        let r = super::leer_renglones(
+            r#"["Sea la funcion que se define en todo el dominio real"]"#,
+            &ocr,
+        )
+        .unwrap();
         assert_eq!(r[0], "Sea");
     }
 }

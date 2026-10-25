@@ -16,7 +16,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
-use pixpin_ia::documentos::{Abrir, Alcance, Cita, Fuente, Firma, Hallazgo, Indice, Lector, Tipo, Unidad};
+use pixpin_ia::documentos::{
+    Abrir, Alcance, Cita, Firma, Fuente, Hallazgo, Indice, Lector, Tipo, Unidad,
+};
 use pixpin_ia::fechas::Momento;
 use pixpin_ia::tareas::{Chat, FuenteTareas, VistaLista, VistaTarea};
 use pixpin_proyecto::cuaderno::{Clase, Cuaderno};
@@ -35,8 +37,12 @@ pub fn raiz() -> PathBuf {
         return PathBuf::from(r);
     }
     // La de la app del Mac (`carpetaDeDatos`): Application Support/PixPinMax.
-    let casa = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-    casa.join("Library").join("Application Support").join("PixPinMax")
+    let casa = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    casa.join("Library")
+        .join("Application Support")
+        .join("PixPinMax")
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +76,9 @@ impl FuenteTareas for FuenteDelDisco {
     fn listas(&self) -> Vec<VistaLista> {
         let mut v = Vec::new();
         for ficha in almacen::Indice::leer(&self.raiz).proyectos {
-            let Ok(c) = Cuaderno::leer_de(&almacen::carpeta(&self.raiz, &ficha.id)) else { continue };
+            let Ok(c) = Cuaderno::leer_de(&almacen::carpeta(&self.raiz, &ficha.id)) else {
+                continue;
+            };
             for m in &c.mensajes {
                 if m.clase != Some(Clase::MiniApp) || m.miniapp.as_deref() != Some(mini::TAREAS) {
                     continue;
@@ -86,12 +94,20 @@ impl FuenteTareas for FuenteDelDisco {
                     codigo: m.id.clone(),
                     titulo,
                     cuando: m.cuando,
-                    tareas: mini::leer_tareas(&m.texto).iter().enumerate().map(|(i, t)| vista_de_tarea(i, t)).collect(),
+                    tareas: mini::leer_tareas(&m.texto)
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| vista_de_tarea(i, t))
+                        .collect(),
                 });
             }
         }
         // El Inbox primero, luego lo mas nuevo (como la ventana de tareas).
-        v.sort_by(|a, b| b.es_inbox().cmp(&a.es_inbox()).then(b.cuando.cmp(&a.cuando)));
+        v.sort_by(|a, b| {
+            b.es_inbox()
+                .cmp(&a.es_inbox())
+                .then(b.cuando.cmp(&a.cuando))
+        });
         v
     }
 
@@ -126,12 +142,19 @@ pub fn listar_chats(_: &Map<String, Value>) -> Resultado {
     let raiz = raiz();
     let indice = almacen::Indice::leer(&raiz);
     if indice.proyectos.is_empty() {
-        return Ok(vec![Contenido::Texto(format!("No hay chats en {}.", raiz.display()))]);
+        return Ok(vec![Contenido::Texto(format!(
+            "No hay chats en {}.",
+            raiz.display()
+        ))]);
     }
     let listas = FuenteDelDisco { raiz: raiz.clone() }.listas();
     let mut s = String::new();
     for f in indice.ordenadas() {
-        let nombre = if f.es_guardados() { "Mensajes guardados".to_string() } else { f.nombre.clone() };
+        let nombre = if f.es_guardados() {
+            "Mensajes guardados".to_string()
+        } else {
+            f.nombre.clone()
+        };
         s.push_str(&format!("- {nombre} (id {})", f.id));
         if let Some(fecha) = pixpin_ia::documentos::herramienta::fecha_corta(f.tocado) {
             s.push_str(&format!(", tocado el {fecha}"));
@@ -139,7 +162,13 @@ pub fn listar_chats(_: &Map<String, Value>) -> Resultado {
         let suyas: Vec<String> = listas
             .iter()
             .filter(|l| l.proyecto == f.id)
-            .map(|l| format!("«{}» ({} pendientes)", l.titulo, l.tareas.iter().filter(|t| !t.hecha).count()))
+            .map(|l| {
+                format!(
+                    "«{}» ({} pendientes)",
+                    l.titulo,
+                    l.tareas.iter().filter(|t| !t.hecha).count()
+                )
+            })
             .collect();
         if !suyas.is_empty() {
             s.push_str(&format!("; listas: {}", suyas.join(", ")));
@@ -154,7 +183,11 @@ pub fn listar_chats(_: &Map<String, Value>) -> Resultado {
 
 /// Como se llama un chat al decirlo.
 fn nombre_de(f: &almacen::Ficha) -> String {
-    if f.es_guardados() { "Mensajes guardados".into() } else { f.nombre.clone() }
+    if f.es_guardados() {
+        "Mensajes guardados".into()
+    } else {
+        f.nombre.clone()
+    }
 }
 
 /// Lee los chats para el indice en memoria (sin el de la app).
@@ -174,7 +207,8 @@ impl Lector for LectorDeChats {
             .filter_map(|m| {
                 let t = match m.clase {
                     Some(Clase::Voz) => m.transcripcion.clone().unwrap_or_default(),
-                    Some(Clase::Archivo) | Some(Clase::Imagen) | Some(Clase::Dibujo) | Some(Clase::Pagina) => {
+                    Some(Clase::Archivo) | Some(Clase::Imagen) | Some(Clase::Dibujo)
+                    | Some(Clase::Pagina) => {
                         format!("{} {}", m.nombre, m.texto)
                     }
                     _ => m.texto.clone(),
@@ -225,7 +259,8 @@ fn indice_de_chats(raiz: &Path) -> Indice {
 /// como abrirlo con las herramientas de la app.
 pub fn texto_de_hallazgos(consulta: &str, hallazgos: &[Hallazgo], aviso: Option<&str>) -> String {
     if hallazgos.is_empty() {
-        let mut s = format!("No hay nada sobre «{consulta}» en los documentos y chats del usuario.");
+        let mut s =
+            format!("No hay nada sobre «{consulta}» en los documentos y chats del usuario.");
         if let Some(a) = aviso {
             s.push(' ');
             s.push_str(a);
@@ -238,20 +273,34 @@ pub fn texto_de_hallazgos(consulta: &str, hallazgos: &[Hallazgo], aviso: Option<
             numero: i + 1,
             hallazgo: h.clone(),
         };
-        s.push_str(&format!("[{}] {} — chat «{}»", i + 1, cita.titulo(), h.proyecto_nombre));
-        if let Some(f) = h.cuando.and_then(pixpin_ia::documentos::herramienta::fecha_corta) {
+        s.push_str(&format!(
+            "[{}] {} — chat «{}»",
+            i + 1,
+            cita.titulo(),
+            h.proyecto_nombre
+        ));
+        if let Some(f) = h
+            .cuando
+            .and_then(pixpin_ia::documentos::herramienta::fecha_corta)
+        {
             s.push_str(&format!(", {f}"));
         }
         s.push_str(&format!("\n«{}»\n", h.fragmento.replace('\n', " ").trim()));
         match &h.abrir {
             Abrir::Fichero { ruta, pagina } => {
-                s.push_str(&format!("abrir: abrir_fichero {}", json!({"ruta": ruta.display().to_string()})));
+                s.push_str(&format!(
+                    "abrir: abrir_fichero {}",
+                    json!({"ruta": ruta.display().to_string()})
+                ));
                 if let Some(p) = pagina {
                     s.push_str(&format!(" (pág. {p})"));
                 }
             }
             Abrir::Mensaje { codigo, .. } if !codigo.is_empty() => {
-                s.push_str(&format!("abrir: abrir_mensaje {}", json!({"codigo": codigo})));
+                s.push_str(&format!(
+                    "abrir: abrir_mensaje {}",
+                    json!({"codigo": codigo})
+                ));
             }
             Abrir::Mensaje { .. } => s.push_str("abrir: abrir_chat"),
         }
@@ -286,7 +335,9 @@ pub fn buscar(args: &Map<String, Value>) -> Resultado {
                 .map(|f| f.id.clone())
                 .collect();
             if ids.is_empty() {
-                aviso = Some(format!("No hay ningun chat llamado «{nombre}»; se busco en todos."));
+                aviso = Some(format!(
+                    "No hay ningun chat llamado «{nombre}»; se busco en todos."
+                ));
                 Alcance::Todo
             } else {
                 Alcance::Proyectos(ids)
@@ -304,5 +355,9 @@ pub fn buscar(args: &Map<String, Value>) -> Resultado {
         );
     }
     let hallazgos = ix.buscar(&p.consulta, &alcance, RESULTADOS);
-    Ok(vec![Contenido::Texto(texto_de_hallazgos(&p.consulta, &hallazgos, aviso.as_deref()))])
+    Ok(vec![Contenido::Texto(texto_de_hallazgos(
+        &p.consulta,
+        &hallazgos,
+        aviso.as_deref(),
+    ))])
 }

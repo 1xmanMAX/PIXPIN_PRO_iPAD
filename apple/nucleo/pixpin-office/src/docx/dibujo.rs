@@ -106,7 +106,12 @@ pub fn dibujo(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
             "inline" => {
                 let (w, h) = extension(e)?;
                 let elementos = grafico_de(ctx, e, w, h);
-                return Some(Dibujo::EnLinea(Objeto { ancho: w, alto: h, bajo: 0.0, elementos }));
+                return Some(Dibujo::EnLinea(Objeto {
+                    ancho: w,
+                    alto: h,
+                    bajo: 0.0,
+                    elementos,
+                }));
             }
             "anchor" => return anclado(ctx, e).map(Dibujo::Anclado),
             _ => {}
@@ -117,7 +122,10 @@ pub fn dibujo(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
 
 fn extension(e: &Nodo) -> Option<(f32, f32)> {
     let x = e.hijo("extent")?;
-    Some((emu(attr_num(x, "cx", 1.0).unwrap_or(0.0)), emu(attr_num(x, "cy", 1.0).unwrap_or(0.0))))
+    Some((
+        emu(attr_num(x, "cx", 1.0).unwrap_or(0.0)),
+        emu(attr_num(x, "cy", 1.0).unwrap_or(0.0)),
+    ))
 }
 
 fn anclado(ctx: &mut Ctx, e: &Nodo) -> Option<Flotante> {
@@ -126,7 +134,11 @@ fn anclado(ctx: &mut Ctx, e: &Nodo) -> Option<Flotante> {
     let elementos = grafico_de(ctx, e, w, h);
     let pos = |nombre: &str| -> Posicion {
         let Some(p) = e.hijo(nombre) else {
-            return Posicion { referencia: Referencia::Columna, desplazamiento: 0.0, alineacion: None };
+            return Posicion {
+                referencia: Referencia::Columna,
+                desplazamiento: 0.0,
+                alineacion: None,
+            };
         };
         let referencia = match p.atributo("relativeFrom") {
             "page" => Referencia::Pagina,
@@ -138,27 +150,50 @@ fn anclado(ctx: &mut Ctx, e: &Nodo) -> Option<Flotante> {
             "bottomMargin" => Referencia::MargenAbajo,
             _ => Referencia::Columna,
         };
-        let desplazamiento = p.hijo("posOffset").and_then(|o| o.texto().trim().parse::<f32>().ok()).map(emu).unwrap_or(0.0);
+        let desplazamiento = p
+            .hijo("posOffset")
+            .and_then(|o| o.texto().trim().parse::<f32>().ok())
+            .map(emu)
+            .unwrap_or(0.0);
         let alineacion = p.hijo("align").map(|a| a.texto().trim().to_string());
-        Posicion { referencia, desplazamiento, alineacion }
+        Posicion {
+            referencia,
+            desplazamiento,
+            alineacion,
+        }
     };
     let (mut hpos, mut vpos) = (pos("positionH"), pos("positionV"));
     if matches!(e.atributo("simplePos"), "1" | "true")
         && let Some(sp) = e.hijo("simplePos")
     {
-        hpos = Posicion { referencia: Referencia::Pagina, desplazamiento: emu(attr_num(sp, "x", 1.0).unwrap_or(0.0)), alineacion: None };
-        vpos = Posicion { referencia: Referencia::Pagina, desplazamiento: emu(attr_num(sp, "y", 1.0).unwrap_or(0.0)), alineacion: None };
+        hpos = Posicion {
+            referencia: Referencia::Pagina,
+            desplazamiento: emu(attr_num(sp, "x", 1.0).unwrap_or(0.0)),
+            alineacion: None,
+        };
+        vpos = Posicion {
+            referencia: Referencia::Pagina,
+            desplazamiento: emu(attr_num(sp, "y", 1.0).unwrap_or(0.0)),
+            alineacion: None,
+        };
     }
     let (ajuste, forma) = if let Some(x) = e.hijo("wrapTopAndBottom") {
         (Ajuste::ArribaAbajo, Some(x))
-    } else if let Some(x) = e.hijo("wrapSquare").or_else(|| e.hijo("wrapTight")).or_else(|| e.hijo("wrapThrough")) {
+    } else if let Some(x) = e
+        .hijo("wrapSquare")
+        .or_else(|| e.hijo("wrapTight"))
+        .or_else(|| e.hijo("wrapThrough"))
+    {
         (Ajuste::Cuadrado, Some(x))
     } else {
         (Ajuste::Ninguno, None)
     };
     // Las distancias al texto: las del ajuste mandan sobre las del ancla.
     let d = |k: &str| {
-        let v = forma.and_then(|f| attr_num(f, k, 1.0)).or_else(|| attr_num(e, k, 1.0)).unwrap_or(0.0);
+        let v = forma
+            .and_then(|f| attr_num(f, k, 1.0))
+            .or_else(|| attr_num(e, k, 1.0))
+            .unwrap_or(0.0);
         emu(v).clamp(0.0, 1584.0)
     };
     let lado = match forma.map(|f| f.atributo("wrapText")).unwrap_or("") {
@@ -168,9 +203,17 @@ fn anclado(ctx: &mut Ctx, e: &Nodo) -> Option<Flotante> {
         _ => Lado::Ambos,
     };
     let estrecho = forma.is_some_and(|f| f.nombre == "wrapTight" || f.nombre == "wrapThrough");
-    let contorno = forma.filter(|_| estrecho).and_then(|f| f.hijo("wrapPolygon")).and_then(poligono);
+    let contorno = forma
+        .filter(|_| estrecho)
+        .and_then(|f| f.hijo("wrapPolygon"))
+        .and_then(poligono);
     Some(Flotante {
-        objeto: Objeto { ancho: w, alto: h, bajo: 0.0, elementos },
+        objeto: Objeto {
+            ancho: w,
+            alto: h,
+            bajo: 0.0,
+            elementos,
+        },
         h: hpos,
         v: vpos,
         detras: matches!(e.atributo("behindDoc"), "1" | "true"),
@@ -190,7 +233,12 @@ fn poligono(p: &Nodo) -> Option<Arc<[(f32, f32)]>> {
     let v: Vec<(f32, f32)> = p
         .elementos()
         .filter(|x| x.nombre == "start" || x.nombre == "lineTo")
-        .filter_map(|x| Some((attr_num(x, "x", 1.0)? / PARTES, attr_num(x, "y", 1.0)? / PARTES)))
+        .filter_map(|x| {
+            Some((
+                attr_num(x, "x", 1.0)? / PARTES,
+                attr_num(x, "y", 1.0)? / PARTES,
+            ))
+        })
         .filter(|(x, y)| x.is_finite() && y.is_finite())
         .map(|(x, y)| (x.clamp(-1.0, 2.0), y.clamp(-1.0, 2.0)))
         .take(1000)
@@ -205,8 +253,13 @@ fn grafico_de(ctx: &mut Ctx, padre: &Nodo, w: f32, h: f32) -> Vec<Elemento> {
     };
     // Un grafico: dibujado con los datos de su cache.
     let mapa = std::collections::HashMap::new();
-    let dctx = Contexto { tema: ctx.tema, mapa: &mapa };
-    if let Some(els) = crate::grafico::de_datos(ctx.paquete, ctx.rels, datos, dctx, ctx.medidor, w, h) {
+    let dctx = Contexto {
+        tema: ctx.tema,
+        mapa: &mapa,
+    };
+    if let Some(els) =
+        crate::grafico::de_datos(ctx.paquete, ctx.rels, datos, dctx, ctx.medidor, w, h)
+    {
         return els;
     }
     let mut v = Vec::new();
@@ -240,45 +293,85 @@ fn forma(ctx: &mut Ctx, n: &Nodo, caja: Rect, salida: &mut Vec<Elemento>) {
     match n.nombre.as_str() {
         "pic" => {
             let sppr = n.hijo("spPr");
-            let x = sppr.and_then(|s| s.hijo("xfrm")).map(dml::xfrm).unwrap_or_default();
+            let x = sppr
+                .and_then(|s| s.hijo("xfrm"))
+                .map(dml::xfrm)
+                .unwrap_or_default();
             let Some(bf) = n.hijo("blipFill") else { return };
-            let rid = bf.hijo("blip").map(|b| b.atributo_con_prefijo("r", "embed").to_string()).unwrap_or_default();
+            let rid = bf
+                .hijo("blip")
+                .map(|b| b.atributo_con_prefijo("r", "embed").to_string())
+                .unwrap_or_default();
             let Some(id) = imagen(ctx, &rid) else { return };
-            let el = Elemento::Imagen { id, rect: Rect::nuevo(0.0, 0.0, caja.ancho, caja.alto), recorte: dml::recorte(bf), opacidad: 1.0 };
+            let el = Elemento::Imagen {
+                id,
+                rect: Rect::nuevo(0.0, 0.0, caja.ancho, caja.alto),
+                recorte: dml::recorte(bf),
+                opacidad: 1.0,
+            };
             let mut els = vec![el];
-            if let Some(ln) = sppr.and_then(|s| s.hijo("ln")).and_then(|l| dml::linea(l, dctx, None)).flatten() {
-                els.push(Elemento::Rect { rect: Rect::nuevo(0.0, 0.0, caja.ancho, caja.alto), relleno: None, borde: Some(ln) });
+            if let Some(ln) = sppr
+                .and_then(|s| s.hijo("ln"))
+                .and_then(|l| dml::linea(l, dctx, None))
+                .flatten()
+            {
+                els.push(Elemento::Rect {
+                    rect: Rect::nuevo(0.0, 0.0, caja.ancho, caja.alto),
+                    relleno: None,
+                    borde: Some(ln),
+                });
             }
             // La sombra de las imagenes (muy comun en Word).
             let efectos = dml::efectos_forma(sppr, n.hijo("style"), &[], dctx, x.giro);
-            salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos));
+            salida.push(
+                dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos),
+            );
         }
         "wsp" => {
             let Some(sppr) = n.hijo("spPr") else { return };
             let x = sppr.hijo("xfrm").map(dml::xfrm).unwrap_or_default();
-            let estilo = n.hijo("style").map(|s| dml::estilo_forma(s, dctx)).unwrap_or_default();
+            let estilo = n
+                .hijo("style")
+                .map(|s| dml::estilo_forma(s, dctx))
+                .unwrap_or_default();
             let relleno = match dml::relleno(sppr, dctx, None) {
                 Some(r) => r,
                 None => estilo.relleno.clone(),
             };
-            let borde = match sppr.hijo("ln").and_then(|l| dml::linea(l, dctx, estilo.linea.map(|t| t.color))) {
+            let borde = match sppr
+                .hijo("ln")
+                .and_then(|l| dml::linea(l, dctx, estilo.linea.map(|t| t.color)))
+            {
                 Some(t) => t,
                 None => {
                     // Un `a:ln` con grosor pero sin color toma el del estilo.
                     let g = sppr.hijo("ln").and_then(|l| attr_num(l, "w", 1.0)).map(emu);
-                    estilo.linea.map(|t| Trazo { grosor: g.unwrap_or(t.grosor), ..t })
+                    estilo.linea.map(|t| Trazo {
+                        grosor: g.unwrap_or(t.grosor),
+                        ..t
+                    })
                 }
             };
             let (figuras, es_linea) = dml::figuras(sppr, caja.ancho, caja.alto);
             let mut els = Vec::new();
             if !figuras.is_empty() && (relleno.is_some() || borde.is_some()) {
-                els.push(Elemento::Trayecto { figuras, relleno: if es_linea { None } else { relleno }, borde });
+                els.push(Elemento::Trayecto {
+                    figuras,
+                    relleno: if es_linea { None } else { relleno },
+                    borde,
+                });
             }
             // El cuadro de texto.
             if let Some(txbx) = n.hijo("txbx").and_then(|t| t.hijo("txbxContent")) {
                 let bp = n.hijo("bodyPr");
-                let ins = |k: &str, d: f32| bp.and_then(|b| attr_num(b, k, 1.0)).map(emu).unwrap_or(d);
-                let (l, t, r, b) = (ins("lIns", 7.2), ins("tIns", 3.6), ins("rIns", 7.2), ins("bIns", 3.6));
+                let ins =
+                    |k: &str, d: f32| bp.and_then(|b| attr_num(b, k, 1.0)).map(emu).unwrap_or(d);
+                let (l, t, r, b) = (
+                    ins("lIns", 7.2),
+                    ins("tIns", 3.6),
+                    ins("rIns", 7.2),
+                    ins("bIns", 3.6),
+                );
                 let ancho = (caja.ancho - l - r).max(1.0);
                 let contenido = bloques::caja_con_flotantes(ctx, txbx.elementos(), ancho);
                 let anclaje = bp.map(|b| b.atributo("anchor")).unwrap_or("t");
@@ -294,23 +387,42 @@ fn forma(ctx: &mut Ctx, n: &Nodo, caja: Rect, salida: &mut Vec<Elemento>) {
                 }
             }
             let efectos = dml::efectos_forma(Some(sppr), n.hijo("style"), &[], dctx, x.giro);
-            salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos));
+            salida.push(
+                dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos),
+            );
         }
         "wgp" | "grpSp" | "wpc" => {
             let gx = n.hijo("grpSpPr").map(dml::xfrm).unwrap_or_default();
             // Las coordenadas de los hijos van en el sistema `chOff/chExt`
             // del grupo, que se estira a la caja.
-            let sx = if gx.hijo_ancho > 0.0 { caja.ancho / gx.hijo_ancho } else { 1.0 };
-            let sy = if gx.hijo_alto > 0.0 { caja.alto / gx.hijo_alto } else { 1.0 };
+            let sx = if gx.hijo_ancho > 0.0 {
+                caja.ancho / gx.hijo_ancho
+            } else {
+                1.0
+            };
+            let sy = if gx.hijo_alto > 0.0 {
+                caja.alto / gx.hijo_alto
+            } else {
+                1.0
+            };
             let mut hijos = Vec::new();
             for h in n.elementos() {
                 let sppr = h.hijo("spPr").or_else(|| h.hijo("grpSpPr"));
-                let Some(hx) = sppr.and_then(|s| s.hijo("xfrm")).map(dml::xfrm) else { continue };
-                let r = Rect::nuevo((hx.x - gx.hijo_x) * sx, (hx.y - gx.hijo_y) * sy, hx.ancho * sx, hx.alto * sy);
+                let Some(hx) = sppr.and_then(|s| s.hijo("xfrm")).map(dml::xfrm) else {
+                    continue;
+                };
+                let r = Rect::nuevo(
+                    (hx.x - gx.hijo_x) * sx,
+                    (hx.y - gx.hijo_y) * sy,
+                    hx.ancho * sx,
+                    hx.alto * sy,
+                );
                 forma(ctx, h, r, &mut hijos);
             }
             let efectos = dml::efectos_forma(n.hijo("grpSpPr"), None, &[], dctx, gx.giro);
-            salida.push(dml::colocar(hijos, caja, gx.giro, gx.voltear_h, gx.voltear_v).con_efectos(efectos));
+            salida.push(
+                dml::colocar(hijos, caja, gx.giro, gx.voltear_h, gx.voltear_v).con_efectos(efectos),
+            );
         }
         _ => {}
     }
@@ -319,7 +431,11 @@ fn forma(ctx: &mut Ctx, n: &Nodo, caja: Rect, salida: &mut Vec<Elemento>) {
 /// Una imagen VML (`w:pict` / `w:object` con `v:imagedata`): ancho y alto
 /// del `style` de la forma.
 pub fn vml(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
-    let forma = n.descendientes("shape").into_iter().next().or_else(|| n.descendientes("rect").into_iter().next())?;
+    let forma = n
+        .descendientes("shape")
+        .into_iter()
+        .next()
+        .or_else(|| n.descendientes("rect").into_iter().next())?;
     let estilo = forma.atributo("style");
     let prop = |k: &str| -> Option<&str> {
         estilo.split(';').find_map(|p| {
@@ -330,37 +446,69 @@ pub fn vml(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
     let medida = |k: &str| prop(k).and_then(|v| crate::paquete::numero(v, 1.0));
     if matches!(forma.atributo("hr"), "t" | "true") {
         let color = Color::hex(forma.atributo("fillcolor")).unwrap_or(Color::rgb(0xA0, 0xA0, 0xA0));
-        return Some(Dibujo::Regla { alto: medida("height").unwrap_or(1.5).max(0.75), color });
+        return Some(Dibujo::Regla {
+            alto: medida("height").unwrap_or(1.5).max(0.75),
+            color,
+        });
     }
     let w = medida("width")?;
     let h = medida("height")?;
     let mut elementos = Vec::new();
     if let Some(img) = forma.hijo("imagedata") {
         let rid = img.atributo_con_prefijo("r", "id");
-        let rid = if rid.is_empty() { img.atributo("id") } else { rid };
+        let rid = if rid.is_empty() {
+            img.atributo("id")
+        } else {
+            rid
+        };
         if let Some(id) = imagen(ctx, rid) {
-            elementos.push(Elemento::Imagen { id, rect: Rect::nuevo(0.0, 0.0, w, h), recorte: None, opacidad: 1.0 });
+            elementos.push(Elemento::Imagen {
+                id,
+                rect: Rect::nuevo(0.0, 0.0, w, h),
+                recorte: None,
+                opacidad: 1.0,
+            });
         }
     } else {
         // Los valores por defecto del VML: relleno blanco y trazo negro de
         // 0,75 pt, salvo que se apaguen.
         let no = |k: &str| matches!(forma.atributo(k), "f" | "false");
-        let relleno = if no("filled") { None } else { Some(Relleno::Solido(Color::hex(forma.atributo("fillcolor")).unwrap_or(Color::BLANCO))) };
+        let relleno = if no("filled") {
+            None
+        } else {
+            Some(Relleno::Solido(
+                Color::hex(forma.atributo("fillcolor")).unwrap_or(Color::BLANCO),
+            ))
+        };
         let borde = if no("stroked") {
             None
         } else {
-            let grosor = crate::paquete::numero(forma.atributo("strokeweight"), 1.0).unwrap_or(0.75);
-            Some(crate::pagina::Trazo::solido(Color::hex(forma.atributo("strokecolor")).unwrap_or(Color::NEGRO), grosor))
+            let grosor =
+                crate::paquete::numero(forma.atributo("strokeweight"), 1.0).unwrap_or(0.75);
+            Some(crate::pagina::Trazo::solido(
+                Color::hex(forma.atributo("strokecolor")).unwrap_or(Color::NEGRO),
+                grosor,
+            ))
         };
         let es_caja = forma.hijo("textbox").is_some();
-        if (relleno.is_some() || borde.is_some()) && (forma.nombre == "rect" || es_caja || forma.atributo("type").contains("t202")) {
-            elementos.push(Elemento::Rect { rect: Rect::nuevo(0.0, 0.0, w, h), relleno, borde });
+        if (relleno.is_some() || borde.is_some())
+            && (forma.nombre == "rect" || es_caja || forma.atributo("type").contains("t202"))
+        {
+            elementos.push(Elemento::Rect {
+                rect: Rect::nuevo(0.0, 0.0, w, h),
+                relleno,
+                borde,
+            });
         }
         // Un cuadro de texto VML.
         if let Some(tb) = forma.hijo("textbox")
             && let Some(contenido) = tb.hijo("txbxContent")
         {
-            let ins: Vec<f32> = tb.atributo("inset").split(',').map(|v| crate::paquete::numero(v, 1.0).unwrap_or(f32::NAN)).collect();
+            let ins: Vec<f32> = tb
+                .atributo("inset")
+                .split(',')
+                .map(|v| crate::paquete::numero(v, 1.0).unwrap_or(f32::NAN))
+                .collect();
             let m = |i: usize, d: f32| ins.get(i).copied().filter(|v| v.is_finite()).unwrap_or(d);
             let (l, t, r) = (m(0, 7.2), m(1, 3.6), m(2, 7.2));
             let caja = bloques::caja(ctx, contenido.elementos(), (w - l - r).max(1.0));
@@ -373,7 +521,12 @@ pub fn vml(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
     if elementos.is_empty() {
         return None;
     }
-    let objeto = Objeto { ancho: w, alto: h, bajo: 0.0, elementos };
+    let objeto = Objeto {
+        ancho: w,
+        alto: h,
+        bajo: 0.0,
+        elementos,
+    };
     if prop("position") != Some("absolute") {
         return Some(Dibujo::EnLinea(objeto));
     }
@@ -399,7 +552,9 @@ pub fn vml(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
             desplazamiento: medida("margin-top").unwrap_or(0.0),
             alineacion: alin("mso-position-vertical"),
         },
-        detras: prop("z-index").and_then(|z| z.parse::<i64>().ok()).is_some_and(|z| z < 0),
+        detras: prop("z-index")
+            .and_then(|z| z.parse::<i64>().ok())
+            .is_some_and(|z| z < 0),
         ajuste: Ajuste::Ninguno,
         margen: [0.0; 4],
         lado: Lado::Ambos,

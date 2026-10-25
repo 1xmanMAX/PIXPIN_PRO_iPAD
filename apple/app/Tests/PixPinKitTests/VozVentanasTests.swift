@@ -164,7 +164,7 @@ final class VozVentanasClaseIdiomasTests: XCTestCase {
         let fecha = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 10, day: 25, hour: 9, minute: 5)))
         XCTAssertEqual(GrabarClase.nombre(fecha, calendario: cal), "Clase 25 oct 9:05")
         XCTAssertEqual(GrabarClase.pie(ms: 754_000), "En el 12:34 de la clase")
-        XCTAssertTrue(GrabarClase.resumen(fotos: 1, conTexto: true).hasPrefix("Con 1 foto y la transcripción"))
+        XCTAssertTrue(GrabarClase.resumen(fotos: 1, conTexto: true).hasPrefix("Con 1 capturas y la transcripción"))
         XCTAssertTrue(GrabarClase.resumen(fotos: 3, conTexto: false).contains("«Pasar a texto»"))
     }
 

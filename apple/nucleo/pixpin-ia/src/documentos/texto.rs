@@ -19,23 +19,49 @@
 /// Las palabras que no dicen de que va un texto.
 const VACIAS: &[&str] = &[
     // espanol
-    "a", "al", "algo", "como", "con", "cual", "cuando", "de", "del", "desde", "donde", "el", "ella", "ellos", "en",
-    "entre", "era", "es", "esa", "ese", "eso", "esta", "este", "esto", "estos", "estas", "fue", "ha", "han", "hay",
-    "la", "las", "le", "les", "lo", "los", "mas", "me", "mi", "mis", "muy", "ni", "no", "nos", "o", "para", "pero",
-    "por", "que", "se", "sea", "ser", "si", "sin", "sobre", "son", "su", "sus", "tambien", "te", "tu", "tus", "un",
-    "una", "uno", "unos", "unas", "y", "ya", "yo",
-    // ingles
-    "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on", "or", "the", "this",
-    "to", "was", "with",
+    "a", "al", "algo", "como", "con", "cual", "cuando", "de", "del", "desde", "donde", "el", "ella",
+    "ellos", "en", "entre", "era", "es", "esa", "ese", "eso", "esta", "este", "esto", "estos",
+    "estas", "fue", "ha", "han", "hay", "la", "las", "le", "les", "lo", "los", "mas", "me", "mi",
+    "mis", "muy", "ni", "no", "nos", "o", "para", "pero", "por", "que", "se", "sea", "ser", "si",
+    "sin", "sobre", "son", "su", "sus", "tambien", "te", "tu", "tus", "un", "una", "uno", "unos",
+    "unas", "y", "ya", "yo", // ingles
+    "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on", "or",
+    "the", "this", "to", "was", "with",
 ];
 
 /// Lo que se busca en la pregunta y no en los documentos: «¿que dice la
 /// tesis sobre…?», «busca en mis notas…». Sin quitarlo, «dice» o «busca»
 /// puntuarian los documentos que lo llevan escrito.
 const DE_LA_PREGUNTA: &[&str] = &[
-    "busca", "buscar", "buscame", "encuentra", "dime", "dice", "decia", "dicen", "habla", "hablan", "menciona",
-    "mencionan", "mande", "mandaste", "envie", "enviaste", "guarde", "puse", "tengo", "tenia", "quiero", "saber",
-    "algun", "alguna", "documento", "documentos", "cosas", "archivo", "archivos",
+    "busca",
+    "buscar",
+    "buscame",
+    "encuentra",
+    "dime",
+    "dice",
+    "decia",
+    "dicen",
+    "habla",
+    "hablan",
+    "menciona",
+    "mencionan",
+    "mande",
+    "mandaste",
+    "envie",
+    "enviaste",
+    "guarde",
+    "puse",
+    "tengo",
+    "tenia",
+    "quiero",
+    "saber",
+    "algun",
+    "alguna",
+    "documento",
+    "documentos",
+    "cosas",
+    "archivo",
+    "archivos",
 ];
 
 /// Una letra sin tilde y en minuscula. `None` si no es letra ni numero.
@@ -82,8 +108,8 @@ pub fn raiz(p: &str) -> String {
     let p = quitar(
         p,
         &[
-            "aciones", "amientos", "imientos", "amiento", "imiento", "acion", "ciones", "mente", "idades", "idad",
-            "ables", "able", "ibles", "ible", "es", "s",
+            "aciones", "amientos", "imientos", "amiento", "imiento", "acion", "ciones", "mente",
+            "idades", "idad", "ables", "able", "ibles", "ible", "es", "s",
         ],
     );
     quitar(&p, &["a", "o", "e"])
@@ -160,19 +186,31 @@ mod pruebas {
         assert_eq!(palabras("DRENAJES"), palabras("drenaje"));
         assert_eq!(palabras("Diseño"), palabras("diseno"));
         assert_eq!(palabras("Pavimentación"), palabras("pavimentacion"));
-        assert_eq!(palabras("plano_cunetas-v2.pdf"), vec!["plan", "cunet", "v2", "pdf"]);
+        assert_eq!(
+            palabras("plano_cunetas-v2.pdf"),
+            vec!["plan", "cunet", "v2", "pdf"]
+        );
     }
 
     #[test]
     fn la_pregunta_pierde_lo_que_es_de_preguntar() {
-        assert_eq!(de_la_consulta("¿Qué dice la tesis sobre las cunetas?"), vec!["tesi", "cunet"]);
-        assert_eq!(de_la_consulta("busca en mis notas el presupuesto"), vec!["not", "presupuest"]);
+        assert_eq!(
+            de_la_consulta("¿Qué dice la tesis sobre las cunetas?"),
+            vec!["tesi", "cunet"]
+        );
+        assert_eq!(
+            de_la_consulta("busca en mis notas el presupuesto"),
+            vec!["not", "presupuest"]
+        );
         assert!(de_la_consulta("   ").is_empty());
         assert!(de_la_consulta("¿qué dice?").is_empty());
     }
 
     #[test]
     fn los_numeros_se_quedan() {
-        assert_eq!(palabras("capítulo 2, tabla 4.1"), vec!["capitul", "2", "tabl", "4", "1"]);
+        assert_eq!(
+            palabras("capítulo 2, tabla 4.1"),
+            vec!["capitul", "2", "tabl", "4", "1"]
+        );
     }
 }

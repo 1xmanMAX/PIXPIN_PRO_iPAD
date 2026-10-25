@@ -109,13 +109,25 @@ impl EstiloDeCelda {
     /// Si no lleva formato que se vea (lo que quita «Borrar formato»; la
     /// marca de editable `e` no es formato).
     pub fn sin_formato(&self) -> bool {
-        !self.n && self.a.is_none() && self.f.is_none() && !self.k && !self.s && !self.t && self.c.is_none() && !self.w && self.nf.is_none()
+        !self.n
+            && self.a.is_none()
+            && self.f.is_none()
+            && !self.k
+            && !self.s
+            && !self.t
+            && self.c.is_none()
+            && !self.w
+            && self.nf.is_none()
     }
 
     /// **Borrar formato**: quita todo lo que se ve y deja la marca de
     /// editable y lo que no se entiende (puede no ser formato).
     pub fn borrar_formato(&mut self) {
-        *self = EstiloDeCelda { e: self.e, resto: std::mem::take(&mut self.resto), ..Default::default() };
+        *self = EstiloDeCelda {
+            e: self.e,
+            resto: std::mem::take(&mut self.resto),
+            ..Default::default()
+        };
     }
 
     /// El formato de numero, si es uno de los que se conocen.
@@ -138,7 +150,12 @@ pub enum FormatoNumero {
 }
 
 impl FormatoNumero {
-    pub const TODOS: [FormatoNumero; 4] = [FormatoNumero::Numero, FormatoNumero::Moneda, FormatoNumero::Porcentaje, FormatoNumero::Fecha];
+    pub const TODOS: [FormatoNumero; 4] = [
+        FormatoNumero::Numero,
+        FormatoNumero::Moneda,
+        FormatoNumero::Porcentaje,
+        FormatoNumero::Fecha,
+    ];
 
     /// La palabra que se guarda.
     pub fn palabra(self) -> &'static str {
@@ -153,7 +170,9 @@ impl FormatoNumero {
     /// De la palabra guardada; una que no se conoce (de una version mas
     /// nueva) es `None`: se ve como «General».
     pub fn de(palabra: &str) -> Option<FormatoNumero> {
-        FormatoNumero::TODOS.into_iter().find(|f| f.palabra() == palabra)
+        FormatoNumero::TODOS
+            .into_iter()
+            .find(|f| f.palabra() == palabra)
     }
 }
 
@@ -291,11 +310,15 @@ impl Tabla {
         }
         // Un mapa de celda a algo: lo que `convertir` entiende entra; lo
         // demas se queda aparte, tal cual.
-        let mut mapa = |o: &mut Map<String, Value>, clave: &str, mut convertir: Box<dyn FnMut(String, &Value) -> bool + '_>| {
+        type Convertir<'a> = Box<dyn FnMut(String, &Value) -> bool + 'a>;
+        let mut mapa = |o: &mut Map<String, Value>, clave: &str, mut convertir: Convertir<'_>| {
             let Some(v) = o.remove(clave) else { return };
             match v {
                 Value::Object(m) => {
-                    let malas: Map<String, Value> = m.into_iter().filter(|(k, v)| !convertir(k.clone(), v)).collect();
+                    let malas: Map<String, Value> = m
+                        .into_iter()
+                        .filter(|(k, v)| !convertir(k.clone(), v))
+                        .collect();
                     if !malas.is_empty() {
                         viejos.insert(format!("viejo_{clave}"), Value::Object(malas));
                     }
@@ -355,7 +378,9 @@ impl Tabla {
         );
         if let Some(v) = o.remove("tocado") {
             let n = match &v {
-                Value::Number(n) => n.as_i64().or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f as i64)),
+                Value::Number(n) => n
+                    .as_i64()
+                    .or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f as i64)),
                 Value::String(s) => s.trim().parse().ok(),
                 _ => None,
             };
@@ -451,7 +476,11 @@ fn estilo_de(v: &serde_json::Value) -> Option<EstiloDeCelda> {
         Value::String(palabras) => {
             let mut e = EstiloDeCelda::default();
             let mut raras = false;
-            for p in palabras.split([' ', ',', ';', '+']).map(str::trim).filter(|p| !p.is_empty()) {
+            for p in palabras
+                .split([' ', ',', ';', '+'])
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+            {
                 match p.to_lowercase().as_str() {
                     "negrita" | "bold" | "b" => e.n = true,
                     "cursiva" | "italic" | "italica" => e.k = true,
@@ -578,10 +607,19 @@ mod pruebas {
 
     #[test]
     fn el_formato_nuevo_del_pc_viaja_y_lo_que_el_movil_no_conoce_no_estorba() {
-        let mut e = EstiloDeCelda { n: true, k: true, s: true, t: true, w: true, e: true, ..Default::default() };
+        let mut e = EstiloDeCelda {
+            n: true,
+            k: true,
+            s: true,
+            t: true,
+            w: true,
+            e: true,
+            ..Default::default()
+        };
         e.c = Some("#c00000".into());
         e.nf = Some(FormatoNumero::Moneda.palabra().into());
-        e.resto.insert("futuro".into(), serde_json::Value::Bool(true));
+        e.resto
+            .insert("futuro".into(), serde_json::Value::Bool(true));
         let mut t = Tabla::default();
         t.estilos.insert("A1".into(), e.clone());
         let texto = t.escribir().unwrap();
@@ -592,7 +630,11 @@ mod pruebas {
         }
         assert_eq!(a1["c"], "#c00000");
         assert_eq!(a1["nf"], "moneda");
-        assert_eq!(Tabla::leer(&texto).unwrap().estilos["A1"], e, "ida y vuelta sin perder nada");
+        assert_eq!(
+            Tabla::leer(&texto).unwrap().estilos["A1"],
+            e,
+            "ida y vuelta sin perder nada"
+        );
         assert_eq!(e.formato_numero(), Some(FormatoNumero::Moneda));
         // Una tabla del movil (sin los campos nuevos) se lee igual que antes.
         let movil = Tabla::leer(r##"{"estilos":{"B1":{"n":true,"f":"#fff3bf"}}}"##).unwrap();
@@ -606,9 +648,15 @@ mod pruebas {
         // Casos negativos: una palabra que no se conoce no es un formato, y
         // sin nada mas el estilo queda vacio.
         assert_eq!(FormatoNumero::de("rarisimo"), None);
-        let mut x = EstiloDeCelda { nf: Some("rarisimo".into()), ..Default::default() };
+        let mut x = EstiloDeCelda {
+            nf: Some("rarisimo".into()),
+            ..Default::default()
+        };
         assert_eq!(x.formato_numero(), None);
-        assert!(!x.vacio(), "se guarda tal cual: puede ser de una version nueva");
+        assert!(
+            !x.vacio(),
+            "se guarda tal cual: puede ser de una version nueva"
+        );
         x.borrar_formato();
         assert!(x.vacio());
     }
@@ -617,12 +665,25 @@ mod pruebas {
     /// y lo escrito por Android (compacto, sin lo de por defecto) tambien.
     #[test]
     fn el_formato_unico_va_y_vuelve_igual_desde_el_pc_y_desde_android() {
-        let mut t = Tabla { nombre: "Metrados".into(), tocado: 1_789_000_000_123, ..Default::default() };
+        let mut t = Tabla {
+            nombre: "Metrados".into(),
+            tocado: 1_789_000_000_123,
+            ..Default::default()
+        };
         t.poner(ref_de("A1").unwrap(), "Partida");
         t.poner(ref_de("B2").unwrap(), "=SUMA(B3:B9)");
         t.anchos.insert("A".into(), 180);
-        t.estilos.insert("A1".into(), EstiloDeCelda { n: true, f: Some("#fff2cc".into()), nf: Some("moneda".into()), ..Default::default() });
-        t.resto.insert("protegida".into(), serde_json::Value::Bool(true));
+        t.estilos.insert(
+            "A1".into(),
+            EstiloDeCelda {
+                n: true,
+                f: Some("#fff2cc".into()),
+                nf: Some("moneda".into()),
+                ..Default::default()
+            },
+        );
+        t.resto
+            .insert("protegida".into(), serde_json::Value::Bool(true));
         let texto = t.escribir().unwrap();
         assert_eq!(Tabla::leer(&texto).unwrap(), t);
         // Lo mismo escrito por el movil (`TablaDeCalculo.aJson`): sin
@@ -649,7 +710,11 @@ mod pruebas {
         let t = Tabla::leer(vieja).expect("un objeto JSON siempre se abre");
         assert_eq!(t.nombre, "Cuentas");
         assert_eq!(t.celda(ref_de("A1").unwrap()), "Total");
-        assert_eq!(t.celda(ref_de("B1").unwrap()), "12.5", "un numero pasa a texto y suma igual");
+        assert_eq!(
+            t.celda(ref_de("B1").unwrap()),
+            "12.5",
+            "un numero pasa a texto y suma igual"
+        );
         assert_eq!(t.celda(ref_de("C1").unwrap()), "VERDADERO");
         assert!(!t.celdas.contains_key("D1"), "null es una celda vacia");
         assert_eq!(t.anchos["A"], 120);
@@ -657,10 +722,16 @@ mod pruebas {
         assert!(t.estilos["A1"].n);
         assert_eq!(t.estilos["B1"].a.as_deref(), Some("d"));
         assert!(t.estilos["B1"].k);
-        assert_eq!(t.estilos["C1"].resto["viejo"], "brillante", "la palabra que no se conoce se queda");
+        assert_eq!(
+            t.estilos["C1"].resto["viejo"], "brillante",
+            "la palabra que no se conoce se queda"
+        );
         let d1 = &t.estilos["D1"];
         assert!(d1.n && d1.k);
-        assert_eq!(d1.resto["f"], 7, "el campo conocido que no se entiende se queda con su nombre");
+        assert_eq!(
+            d1.resto["f"], 7,
+            "el campo conocido que no se entiende se queda con su nombre"
+        );
         assert_eq!(t.tocado, 1_789_000_000_000);
         assert_eq!(t.resto["protegida"], true);
         assert_eq!(t.resto["viejo_celdas"]["E1"], serde_json::json!([1, 2]));
@@ -683,7 +754,15 @@ mod pruebas {
     /// nadie guarda encima), no una tabla vacia.
     #[test]
     fn lo_que_no_es_un_objeto_json_no_se_toma_por_una_tabla() {
-        for malo in ["", "no es json", "[1,2]", "\"tabla\"", "12", "null", "{\"nombre\": \"a\""] {
+        for malo in [
+            "",
+            "no es json",
+            "[1,2]",
+            "\"tabla\"",
+            "12",
+            "null",
+            "{\"nombre\": \"a\"",
+        ] {
             assert!(Tabla::leer(malo).is_err(), "{malo:?}");
         }
     }

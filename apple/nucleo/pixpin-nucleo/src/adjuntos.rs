@@ -170,6 +170,31 @@ impl Nucleo {
         nombre: Option<String>,
         retoque: impl FnOnce(&mut Mensaje),
     ) -> Result<MensajeChat, ErrorNucleo> {
+        self.adjuntar_de(chat, ruta_origen, nombre, false, retoque)
+    }
+
+    /// Lo de [`Nucleo::adjuntar_con`], pero **moviendo** el fichero en vez
+    /// de copiarlo (el video de una clase: una hora son cientos de megas, y
+    /// moverlo es un renombrado). Si no se puede mover, se copia y se borra
+    /// el de origen; si el mensaje no entra, el fichero vuelve a su sitio.
+    pub(crate) fn adjuntar_moviendo(
+        &self,
+        chat: String,
+        ruta_origen: String,
+        nombre: Option<String>,
+        retoque: impl FnOnce(&mut Mensaje),
+    ) -> Result<MensajeChat, ErrorNucleo> {
+        self.adjuntar_de(chat, ruta_origen, nombre, true, retoque)
+    }
+
+    fn adjuntar_de(
+        &self,
+        chat: String,
+        ruta_origen: String,
+        nombre: Option<String>,
+        mover: bool,
+        retoque: impl FnOnce(&mut Mensaje),
+    ) -> Result<MensajeChat, ErrorNucleo> {
         use unicode_normalization::UnicodeNormalization;
         validar_chat(&chat)?;
         let origen = Path::new(&ruta_origen);
@@ -206,11 +231,23 @@ impl Nucleo {
         // Reservar el nombre (cero bytes) y copiar encima, sin leerlo entero.
         let relativa = almacen::guardar_adjunto(raiz, &chat, &nombre, &[])?;
         let destino = carpeta.join(&relativa);
-        let bytes = match std::fs::copy(origen, &destino) {
-            Ok(b) => b,
-            Err(e) => {
-                let _ = std::fs::remove_file(&destino);
-                return Err(e.into());
+        let movido = mover && std::fs::rename(origen, &destino).is_ok();
+        let bytes = if movido {
+            std::fs::metadata(&destino).map(|m| m.len()).unwrap_or(0)
+        } else {
+            match std::fs::copy(origen, &destino) {
+                Ok(b) => {
+                    if mover {
+                        let _ = std::fs::remove_file(origen);
+                    }
+                    b
+                }
+                Err(e) => {
+                    // Una copia a medias (disco lleno) no puede quedar como
+                    // si fuera el fichero: el bueno sigue en `origen`.
+                    let _ = std::fs::remove_file(&destino);
+                    return Err(e.into());
+                }
             }
         };
 
@@ -236,8 +273,14 @@ impl Nucleo {
         );
         retoque(&mut m);
         if let Err(e) = cuaderno::anadir(&carpeta, &m) {
-            // Sin mensaje, el fichero copiado no lo veria nadie.
-            let _ = std::fs::remove_file(&destino);
+            // Sin mensaje, el fichero copiado no lo veria nadie; el movido
+            // vuelve a donde estaba (es el unico que hay).
+            let devuelto = mover
+                && (std::fs::rename(&destino, origen).is_ok()
+                    || std::fs::copy(&destino, origen).is_ok());
+            if !mover || devuelto {
+                let _ = std::fs::remove_file(&destino);
+            }
             return Err(e.into());
         }
         cache.quitar(&cuaderno_fichero);

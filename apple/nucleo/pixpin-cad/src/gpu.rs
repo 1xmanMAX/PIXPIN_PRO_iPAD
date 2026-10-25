@@ -15,7 +15,8 @@ use std::ffi::c_void;
 use windows::Win32::Foundation::{HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Direct3D::{
-    D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP, D3D_PRIMITIVE_TOPOLOGY_LINELIST, D3D_PRIMITIVE_TOPOLOGY_LINESTRIP,
+    D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP,
+    D3D_PRIMITIVE_TOPOLOGY_LINELIST, D3D_PRIMITIVE_TOPOLOGY_LINESTRIP,
     D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, D3D_SRV_DIMENSION_BUFFEREX, ID3DBlob,
 };
 use windows::Win32::Graphics::Direct3D11::*;
@@ -213,6 +214,10 @@ pub struct PlanoGpu {
     pub tramos_letras: Vec<Tramo>,
 }
 
+/// Lo que pinta encima del bufer de la ventana antes de ensenarlo (la tinta
+/// del lienzo, con Direct2D en el mismo dispositivo), si algo.
+pub(crate) type PintarEncima<'a> = Option<&'a mut dyn FnMut(&ID3D11Device, &ID3D11Texture2D)>;
+
 pub struct Gpu {
     pub dispositivo: ID3D11Device,
     pub(crate) contexto: ID3D11DeviceContext,
@@ -247,7 +252,11 @@ fn compilar(punto: PCSTR, perfil: PCSTR) -> windows::core::Result<Vec<u8>> {
     compilar_de(SOMBREADORES, punto, perfil)
 }
 
-pub(crate) fn compilar_de(fuente: &str, punto: PCSTR, perfil: PCSTR) -> windows::core::Result<Vec<u8>> {
+pub(crate) fn compilar_de(
+    fuente: &str,
+    punto: PCSTR,
+    perfil: PCSTR,
+) -> windows::core::Result<Vec<u8>> {
     let mut codigo: Option<ID3DBlob> = None;
     let mut errores: Option<ID3DBlob> = None;
     // SAFETY: el texto vive durante la llamada; las salidas son locales.
@@ -269,24 +278,38 @@ pub(crate) fn compilar_de(fuente: &str, punto: PCSTR, perfil: PCSTR) -> windows:
     if let Err(e) = r {
         if let Some(b) = errores {
             // SAFETY: el blob es valido y su puntero y tamano van juntos.
-            let t = unsafe { std::slice::from_raw_parts(b.GetBufferPointer() as *const u8, b.GetBufferSize()) };
+            let t = unsafe {
+                std::slice::from_raw_parts(b.GetBufferPointer() as *const u8, b.GetBufferSize())
+            };
             tracing::error!(errores = %String::from_utf8_lossy(t), "sombreador del CAD");
         }
         return Err(e);
     }
     let b = codigo.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
     // SAFETY: el blob es valido y su puntero y tamano van juntos.
-    Ok(unsafe { std::slice::from_raw_parts(b.GetBufferPointer() as *const u8, b.GetBufferSize()) }.to_vec())
+    Ok(
+        unsafe { std::slice::from_raw_parts(b.GetBufferPointer() as *const u8, b.GetBufferSize()) }
+            .to_vec(),
+    )
 }
 
-pub(crate) fn elemento(nombre: PCSTR, formato: DXGI_FORMAT, desplazamiento: u32, por_instancia: bool) -> D3D11_INPUT_ELEMENT_DESC {
+pub(crate) fn elemento(
+    nombre: PCSTR,
+    formato: DXGI_FORMAT,
+    desplazamiento: u32,
+    por_instancia: bool,
+) -> D3D11_INPUT_ELEMENT_DESC {
     D3D11_INPUT_ELEMENT_DESC {
         SemanticName: nombre,
         SemanticIndex: 0,
         Format: formato,
         InputSlot: 0,
         AlignedByteOffset: desplazamiento,
-        InputSlotClass: if por_instancia { D3D11_INPUT_PER_INSTANCE_DATA } else { D3D11_INPUT_PER_VERTEX_DATA },
+        InputSlotClass: if por_instancia {
+            D3D11_INPUT_PER_INSTANCE_DATA
+        } else {
+            D3D11_INPUT_PER_VERTEX_DATA
+        },
         InstanceDataStepRate: if por_instancia { 1 } else { 0 },
     }
 }
@@ -295,7 +318,9 @@ impl Gpu {
     pub fn nueva(hwnd: HWND, ancho: u32, alto: u32) -> windows::core::Result<Gpu> {
         let mut dispositivo = None;
         let mut contexto = None;
-        let mut ultimo = Err(windows::core::Error::from(windows::Win32::Foundation::E_FAIL));
+        let mut ultimo = Err(windows::core::Error::from(
+            windows::Win32::Foundation::E_FAIL,
+        ));
         for tipo in [D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP] {
             ultimo = crear_dispositivo(tipo, &mut dispositivo, &mut contexto);
             if ultimo.is_ok() {
@@ -304,7 +329,9 @@ impl Gpu {
         }
         ultimo?;
         let (Some(dispositivo), Some(contexto)) = (dispositivo, contexto) else {
-            return Err(windows::core::Error::from(windows::Win32::Foundation::E_FAIL));
+            return Err(windows::core::Error::from(
+                windows::Win32::Foundation::E_FAIL,
+            ));
         };
         // SAFETY: llamadas sobre el dispositivo recien creado; descripciones
         // locales que viven durante cada llamada.
@@ -314,7 +341,10 @@ impl Gpu {
                 Width: ancho.max(1),
                 Height: alto.max(1),
                 Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                SampleDesc: DXGI_SAMPLE_DESC {
+                    Count: 1,
+                    Quality: 0,
+                },
                 BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
                 BufferCount: 2,
                 SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
@@ -324,8 +354,9 @@ impl Gpu {
             let cadena = fabrica.CreateSwapChainForHwnd(&dispositivo, hwnd, &desc, None, None)?;
             let _ = fabrica.MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
             let muestras = {
-
-                let q = dispositivo.CheckMultisampleQualityLevels(DXGI_FORMAT_B8G8R8A8_UNORM, 4).unwrap_or(0);
+                let q = dispositivo
+                    .CheckMultisampleQualityLevels(DXGI_FORMAT_B8G8R8A8_UNORM, 4)
+                    .unwrap_or(0);
                 if q > 0 { 4 } else { 1 }
             };
 
@@ -368,7 +399,10 @@ impl Gpu {
 
             let mut il_simple = None;
             dispositivo.CreateInputLayout(
-                &[elemento(s!("POS"), DXGI_FORMAT_R32G32_FLOAT, 0, false), elemento(s!("COLOR"), DXGI_FORMAT_R32_UINT, 8, false)],
+                &[
+                    elemento(s!("POS"), DXGI_FORMAT_R32G32_FLOAT, 0, false),
+                    elemento(s!("COLOR"), DXGI_FORMAT_R32_UINT, 8, false),
+                ],
                 &vs_s,
                 Some(&mut il_simple),
             )?;
@@ -475,17 +509,23 @@ impl Gpu {
                 MipLevels: 1,
                 ArraySize: 1,
                 Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: self.muestras, Quality: 0 },
+                SampleDesc: DXGI_SAMPLE_DESC {
+                    Count: self.muestras,
+                    Quality: 0,
+                },
                 Usage: D3D11_USAGE_DEFAULT,
                 BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
                 ..Default::default()
             };
             let mut t = None;
             self.dispositivo.CreateTexture2D(&tex, None, Some(&mut t))?;
-            let t = t.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
+            let t =
+                t.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
             let mut rtv = None;
-            self.dispositivo.CreateRenderTargetView(&t, None, Some(&mut rtv))?;
-            let rtv = rtv.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
+            self.dispositivo
+                .CreateRenderTargetView(&t, None, Some(&mut rtv))?;
+            let rtv =
+                rtv.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))?;
             self.destino = Some((t, rtv));
         }
         Ok(())
@@ -505,7 +545,13 @@ impl Gpu {
         unsafe {
             self.contexto.OMSetRenderTargets(None, None);
             self.contexto.Flush();
-            self.cadena.ResizeBuffers(0, ancho, alto, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG(0))?;
+            self.cadena.ResizeBuffers(
+                0,
+                ancho,
+                alto,
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_SWAP_CHAIN_FLAG(0),
+            )?;
         }
         self.ancho = ancho;
         self.alto = alto;
@@ -525,7 +571,20 @@ impl Gpu {
         // SAFETY: una ventana de la clase de sistema STATIC, sin mostrar;
         // cadenas estaticas.
         let hwnd = unsafe {
-            CreateWindowExW(WINDOW_EX_STYLE(0), windows::core::w!("STATIC"), windows::core::w!("medir"), WS_POPUP, 0, 0, ancho as i32, alto as i32, None, None, None, None)?
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                windows::core::w!("STATIC"),
+                windows::core::w!("medir"),
+                WS_POPUP,
+                0,
+                0,
+                ancho as i32,
+                alto as i32,
+                None,
+                None,
+                None,
+                None,
+            )?
         };
         let mut g = Gpu::nueva(hwnd, ancho, alto)?;
         g.intervalo = 0;
@@ -539,19 +598,39 @@ impl Gpu {
         // `hecho` es local y del tamano que se pide.
         unsafe {
             let mut q: Option<ID3D11Query> = None;
-            if self.dispositivo.CreateQuery(&D3D11_QUERY_DESC { Query: D3D11_QUERY_EVENT, MiscFlags: 0 }, Some(&mut q)).is_err() {
+            if self
+                .dispositivo
+                .CreateQuery(
+                    &D3D11_QUERY_DESC {
+                        Query: D3D11_QUERY_EVENT,
+                        MiscFlags: 0,
+                    },
+                    Some(&mut q),
+                )
+                .is_err()
+            {
                 return;
             }
             let Some(q) = q else { return };
             self.contexto.End(&q);
             let mut hecho: i32 = 0;
-            while self.contexto.GetData(&q, Some(&mut hecho as *mut i32 as *mut c_void), 4, 0).is_err() || hecho == 0 {
+            while self
+                .contexto
+                .GetData(&q, Some(&mut hecho as *mut i32 as *mut c_void), 4, 0)
+                .is_err()
+                || hecho == 0
+            {
                 std::hint::spin_loop();
             }
         }
     }
 
-    pub(crate) fn buffer(&self, bytes: &[u8], bind: D3D11_BIND_FLAG, estructurado: u32) -> windows::core::Result<Option<ID3D11Buffer>> {
+    pub(crate) fn buffer(
+        &self,
+        bytes: &[u8],
+        bind: D3D11_BIND_FLAG,
+        estructurado: u32,
+    ) -> windows::core::Result<Option<ID3D11Buffer>> {
         if bytes.is_empty() {
             return Ok(None);
         }
@@ -559,7 +638,11 @@ impl Gpu {
             ByteWidth: bytes.len() as u32,
             Usage: D3D11_USAGE_IMMUTABLE,
             BindFlags: bind.0 as u32,
-            MiscFlags: if estructurado > 0 { D3D11_RESOURCE_MISC_BUFFER_STRUCTURED.0 as u32 } else { 0 },
+            MiscFlags: if estructurado > 0 {
+                D3D11_RESOURCE_MISC_BUFFER_STRUCTURED.0 as u32
+            } else {
+                0
+            },
             StructureByteStride: estructurado,
             ..Default::default()
         };
@@ -569,11 +652,18 @@ impl Gpu {
         };
         let mut b = None;
         // SAFETY: `bytes` vive durante la llamada; Direct3D copia los datos.
-        unsafe { self.dispositivo.CreateBuffer(&desc, Some(&datos), Some(&mut b))? };
+        unsafe {
+            self.dispositivo
+                .CreateBuffer(&desc, Some(&datos), Some(&mut b))?
+        };
         Ok(b)
     }
 
-    fn estructurado(&self, bytes: &[u8], paso: u32) -> windows::core::Result<Option<ID3D11ShaderResourceView>> {
+    fn estructurado(
+        &self,
+        bytes: &[u8],
+        paso: u32,
+    ) -> windows::core::Result<Option<ID3D11ShaderResourceView>> {
         let Some(b) = self.buffer(bytes, D3D11_BIND_SHADER_RESOURCE, paso)? else {
             return Ok(None);
         };
@@ -590,7 +680,10 @@ impl Gpu {
         };
         let mut v = None;
         // SAFETY: buffer de este dispositivo; descripcion local.
-        unsafe { self.dispositivo.CreateShaderResourceView(&b, Some(&desc), Some(&mut v))? };
+        unsafe {
+            self.dispositivo
+                .CreateShaderResourceView(&b, Some(&desc), Some(&mut v))?
+        };
         Ok(v)
     }
 
@@ -605,8 +698,16 @@ impl Gpu {
             vertices: self.buffer(bytes_de(&m.vertices), D3D11_BIND_VERTEX_BUFFER, 0)?,
             lineas: self.buffer(bytes_de(&m.lineas), D3D11_BIND_INDEX_BUFFER, 0)?,
             triangulos: self.buffer(bytes_de(&m.triangulos), D3D11_BIND_INDEX_BUFFER, 0)?,
-            vertices_trama: self.buffer(bytes_de(&m.vertices_trama), D3D11_BIND_VERTEX_BUFFER, 0)?,
-            triangulos_trama: self.buffer(bytes_de(&m.triangulos_trama), D3D11_BIND_INDEX_BUFFER, 0)?,
+            vertices_trama: self.buffer(
+                bytes_de(&m.vertices_trama),
+                D3D11_BIND_VERTEX_BUFFER,
+                0,
+            )?,
+            triangulos_trama: self.buffer(
+                bytes_de(&m.triangulos_trama),
+                D3D11_BIND_INDEX_BUFFER,
+                0,
+            )?,
             tramas: self.estructurado(bytes_de(&m.tramas), 36)?,
             familias: self.estructurado(bytes_de(&m.familias), 64)?,
             malla: self.estructurado(bytes_de(&m.malla_letras), 8)?,
@@ -622,7 +723,11 @@ impl Gpu {
     }
 
     /// Dibuja `planos` (el plano y, encima, la barra) con su vista cada uno.
-    pub fn dibujar(&mut self, fondo: [f32; 4], planos: &[(&PlanoGpu, Vista)]) -> windows::core::Result<()> {
+    pub fn dibujar(
+        &mut self,
+        fondo: [f32; 4],
+        planos: &[(&PlanoGpu, Vista)],
+    ) -> windows::core::Result<()> {
         let Some((tex, rtv)) = self.destino.clone() else {
             return Ok(());
         };
@@ -635,7 +740,12 @@ impl Gpu {
     }
 
     /// [`Gpu::dibujar`] y, encima, lo que pinte `encima` (ver [`Gpu::presentar_con`]).
-    pub fn dibujar_con(&mut self, fondo: [f32; 4], planos: &[(&PlanoGpu, Vista)], encima: &mut dyn FnMut(&ID3D11Device, &ID3D11Texture2D)) -> windows::core::Result<()> {
+    pub fn dibujar_con(
+        &mut self,
+        fondo: [f32; 4],
+        planos: &[(&PlanoGpu, Vista)],
+        encima: &mut dyn FnMut(&ID3D11Device, &ID3D11Texture2D),
+    ) -> windows::core::Result<()> {
         let Some((tex, rtv)) = self.destino.clone() else {
             return Ok(());
         };
@@ -672,7 +782,14 @@ impl Gpu {
             ctx.VSSetConstantBuffers(0, Some(&[Some(self.cb.clone())]));
             ctx.PSSetConstantBuffers(0, Some(&[Some(self.cb.clone())]));
             for (p, vista) in planos {
-                ctx.UpdateSubresource(&self.cb, 0, None, vista as *const Vista as *const c_void, 0, 0);
+                ctx.UpdateSubresource(
+                    &self.cb,
+                    0,
+                    None,
+                    vista as *const Vista as *const c_void,
+                    0,
+                    0,
+                );
                 let caja = caja_de_vista(vista, self.ancho, self.alto);
                 // 1. Rellenos.
                 if let (Some(vb), Some(ib)) = (&p.vertices, &p.triangulos) {
@@ -729,11 +846,24 @@ impl Gpu {
                     ctx.VSSetShader(&self.vs_letra, None);
                     ctx.PSSetShader(&self.ps_color, None);
                     ctx.VSSetShaderResources(2, Some(&[p.malla.clone(), p.glifos.clone()]));
-                    for t in p.tramos_letras.iter().filter(|t| t.tamano >= vista.px * 3.0 && corta(&t.caja, &caja)) {
+                    for t in p
+                        .tramos_letras
+                        .iter()
+                        .filter(|t| t.tamano >= vista.px * 3.0 && corta(&t.caja, &caja))
+                    {
                         // Las de una fuente SHX son rayas; las TrueType, triangulos.
                         let rayas = t.clase & crate::modelo::GLIFO_DE_RAYAS != 0;
-                        ctx.IASetPrimitiveTopology(if rayas { D3D_PRIMITIVE_TOPOLOGY_LINELIST } else { D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST });
-                        ctx.DrawInstanced(t.clase & !crate::modelo::GLIFO_DE_RAYAS, t.cuantos, 0, t.desde);
+                        ctx.IASetPrimitiveTopology(if rayas {
+                            D3D_PRIMITIVE_TOPOLOGY_LINELIST
+                        } else {
+                            D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST
+                        });
+                        ctx.DrawInstanced(
+                            t.clase & !crate::modelo::GLIFO_DE_RAYAS,
+                            t.cuantos,
+                            0,
+                            t.desde,
+                        );
                     }
                 }
             }
@@ -748,7 +878,11 @@ impl Gpu {
     /// Como [`Gpu::presentar`], dejando a `encima` pintar sobre el bufer de la
     /// ventana ya hecho, antes de ensenarlo (la tinta del motor del lienzo,
     /// con Direct2D en este mismo dispositivo).
-    pub(crate) fn presentar_con(&self, tex: &ID3D11Texture2D, encima: Option<&mut dyn FnMut(&ID3D11Device, &ID3D11Texture2D)>) -> windows::core::Result<()> {
+    pub(crate) fn presentar_con(
+        &self,
+        tex: &ID3D11Texture2D,
+        encima: PintarEncima<'_>,
+    ) -> windows::core::Result<()> {
         let ctx = &self.contexto;
         // SAFETY: recursos de este dispositivo y de este hilo.
         unsafe {
@@ -793,7 +927,12 @@ fn crear_dispositivo(
 /// Lo que ve la ventana, en coordenadas del plano.
 fn caja_de_vista(v: &Vista, ancho: u32, alto: u32) -> [f32; 4] {
     let (mx, my) = (ancho as f32 / 2.0 * v.px, alto as f32 / 2.0 * v.px);
-    [v.centro[0] - mx, v.centro[1] - my, v.centro[0] + mx, v.centro[1] + my]
+    [
+        v.centro[0] - mx,
+        v.centro[1] - my,
+        v.centro[0] + mx,
+        v.centro[1] + my,
+    ]
 }
 
 fn corta(a: &[f32; 4], b: &[f32; 4]) -> bool {
@@ -824,7 +963,13 @@ mod pruebas {
     use super::*;
 
     fn tramo(desde: u32, cuantos: u32, caja: [f32; 4], tamano: f32) -> Tramo {
-        Tramo { desde, cuantos, caja, tamano, clase: 0 }
+        Tramo {
+            desde,
+            cuantos,
+            caja,
+            tamano,
+            clase: 0,
+        }
     }
 
     #[test]
@@ -838,7 +983,10 @@ mod pruebas {
         // Ventana sobre el origen, un pixel = 1: los dos primeros seguidos.
         assert_eq!(visibles(&t, &[-5.0, -5.0, 50.0, 50.0], 1.0), vec![(0, 15)]);
         // De lejos (un pixel = 16): solo el grande.
-        assert_eq!(visibles(&t, &[-500.0, -500.0, 600.0, 600.0], 16.0), vec![(0, 10)]);
+        assert_eq!(
+            visibles(&t, &[-500.0, -500.0, 600.0, 600.0], 16.0),
+            vec![(0, 10)]
+        );
         // Caso negativo: fuera de todo, nada.
         assert!(visibles(&t, &[2000.0, 2000.0, 3000.0, 3000.0], 1.0).is_empty());
     }

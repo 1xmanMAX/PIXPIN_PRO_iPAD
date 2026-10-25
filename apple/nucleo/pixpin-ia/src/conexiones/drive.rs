@@ -26,7 +26,10 @@ pub const GOOGLE_DRIVE: Servicio = Servicio {
     revocar: "https://oauth2.googleapis.com/revoke",
     api: "https://www.googleapis.com/drive/v3",
     subida: "https://www.googleapis.com/upload/drive/v3",
-    alcances: &["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.file"],
+    alcances: &[
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file",
+    ],
     // `offline` + `consent`: que de token de refresco (si no, habria que
     // volver al navegador cada hora).
     extra_autorizar: &[("access_type", "offline"), ("prompt", "consent")],
@@ -69,7 +72,9 @@ pub fn tipo_leible(mime: &str) -> &'static str {
 /// Como se exporta un archivo de Google para LEERLO: (MIME pedido).
 fn exportar_para_leer(mime: &str) -> Option<&'static str> {
     match mime {
-        "application/vnd.google-apps.document" | "application/vnd.google-apps.presentation" => Some("text/plain"),
+        "application/vnd.google-apps.document" | "application/vnd.google-apps.presentation" => {
+            Some("text/plain")
+        }
         "application/vnd.google-apps.spreadsheet" => Some("text/csv"),
         _ => None,
     }
@@ -78,9 +83,18 @@ fn exportar_para_leer(mime: &str) -> Option<&'static str> {
 /// Como se exporta un archivo de Google para BAJARLO: (MIME, extension).
 fn exportar_para_bajar(mime: &str) -> Option<(&'static str, &'static str)> {
     match mime {
-        "application/vnd.google-apps.document" => Some(("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx")),
-        "application/vnd.google-apps.spreadsheet" => Some(("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx")),
-        "application/vnd.google-apps.presentation" => Some(("application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx")),
+        "application/vnd.google-apps.document" => Some((
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "docx",
+        )),
+        "application/vnd.google-apps.spreadsheet" => Some((
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "xlsx",
+        )),
+        "application/vnd.google-apps.presentation" => Some((
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "pptx",
+        )),
         "application/vnd.google-apps.drawing" => Some(("image/png", "png")),
         _ => None,
     }
@@ -88,12 +102,19 @@ fn exportar_para_bajar(mime: &str) -> Option<(&'static str, &'static str)> {
 
 /// Si lo bajado ya es texto (no hace falta el lector).
 fn es_texto(mime: &str) -> bool {
-    mime.starts_with("text/") || matches!(mime, "application/json" | "application/xml" | "application/x-yaml")
+    mime.starts_with("text/")
+        || matches!(
+            mime,
+            "application/json" | "application/xml" | "application/x-yaml"
+        )
 }
 
 /// El MIME por la extension, para subir.
 pub fn tipo_de_nombre(nombre: &str) -> &'static str {
-    let ext = nombre.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    let ext = nombre
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
     match ext.as_str() {
         "pdf" => "application/pdf",
         "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -134,9 +155,15 @@ pub fn consulta(texto: &str, tipo: &str) -> String {
         partes.push(format!("(name contains '{l}' or fullText contains '{l}')"));
     }
     let mime = match tipo {
-        "documento" => Some("mimeType = 'application/vnd.google-apps.document' or mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'"),
-        "hoja" => Some("mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'"),
-        "presentacion" => Some("mimeType = 'application/vnd.google-apps.presentation' or mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'"),
+        "documento" => Some(
+            "mimeType = 'application/vnd.google-apps.document' or mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'",
+        ),
+        "hoja" => Some(
+            "mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'",
+        ),
+        "presentacion" => Some(
+            "mimeType = 'application/vnd.google-apps.presentation' or mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'",
+        ),
         "pdf" => Some("mimeType = 'application/pdf'"),
         "imagen" => Some("mimeType contains 'image/'"),
         "carpeta" => Some("mimeType = 'application/vnd.google-apps.folder'"),
@@ -149,13 +176,22 @@ pub fn consulta(texto: &str, tipo: &str) -> String {
 }
 
 fn archivo_de(v: &Value) -> Archivo {
-    let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let s = |k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     let tipo = s("mimeType");
     Archivo {
         id: s("id"),
         nombre: s("name"),
         carpeta: tipo == CARPETA,
-        tamano: v.get("size").and_then(|x| x.as_str().and_then(|t| t.parse().ok()).or_else(|| x.as_u64())),
+        tamano: v.get("size").and_then(|x| {
+            x.as_str()
+                .and_then(|t| t.parse().ok())
+                .or_else(|| x.as_u64())
+        }),
         modificado: s("modifiedTime"),
         enlace: s("webViewLink"),
         tipo,
@@ -163,12 +199,17 @@ fn archivo_de(v: &Value) -> Archivo {
 }
 
 fn json_de(bytes: &[u8]) -> Result<Value, String> {
-    serde_json::from_slice(bytes).map_err(|_| "Google Drive contesto algo que no se entiende".to_string())
+    serde_json::from_slice(bytes)
+        .map_err(|_| "Google Drive contesto algo que no se entiende".to_string())
 }
 
 /// El nombre con la extension de su formato de Office (`Informe` → `Informe.docx`).
 fn con_extension(nombre: &str, ext: &str) -> String {
-    if nombre.to_ascii_lowercase().ends_with(&format!(".{ext}")) { nombre.to_string() } else { format!("{nombre}.{ext}") }
+    if nombre.to_ascii_lowercase().ends_with(&format!(".{ext}")) {
+        nombre.to_string()
+    } else {
+        format!("{nombre}.{ext}")
+    }
 }
 
 impl Drive<'_> {
@@ -195,12 +236,19 @@ impl Almacen for Drive<'_> {
             pares.push(("orderBy", "modifiedTime desc"));
         }
         let v = json_de(&self.get(&format!("/files?{}", formulario(&pares)), LIMITE_JSON)?)?;
-        Ok(v.get("files").and_then(Value::as_array).map(|l| l.iter().map(archivo_de).collect()).unwrap_or_default())
+        Ok(v.get("files")
+            .and_then(Value::as_array)
+            .map(|l| l.iter().map(archivo_de).collect())
+            .unwrap_or_default())
     }
 
     fn archivo(&self, id: &str) -> Result<Archivo, String> {
         let v = json_de(&self.get(
-            &format!("/files/{}?{}", escapar(id), formulario(&[("fields", CAMPOS), ("supportsAllDrives", "true")])),
+            &format!(
+                "/files/{}?{}",
+                escapar(id),
+                formulario(&[("fields", CAMPOS), ("supportsAllDrives", "true")])
+            ),
             LIMITE_JSON,
         )?)?;
         Ok(archivo_de(&v))
@@ -208,39 +256,83 @@ impl Almacen for Drive<'_> {
 
     fn leer(&self, a: &Archivo) -> Result<Contenido, String> {
         if a.carpeta {
-            return Err(format!("«{}» es una carpeta; busca dentro con su nombre", a.nombre));
+            return Err(format!(
+                "«{}» es una carpeta; busca dentro con su nombre",
+                a.nombre
+            ));
         }
         if let Some(m) = exportar_para_leer(&a.tipo) {
-            let b = self.get(&format!("/files/{}/export?{}", escapar(&a.id), formulario(&[("mimeType", m)])), LIMITE_EXPORTAR)?;
+            let b = self.get(
+                &format!(
+                    "/files/{}/export?{}",
+                    escapar(&a.id),
+                    formulario(&[("mimeType", m)])
+                ),
+                LIMITE_EXPORTAR,
+            )?;
             let t = String::from_utf8_lossy(&b);
-            return Ok(Contenido::Texto(t.trim_start_matches('\u{feff}').to_string()));
+            return Ok(Contenido::Texto(
+                t.trim_start_matches('\u{feff}').to_string(),
+            ));
         }
         if a.tipo.starts_with("application/vnd.google-apps.") {
-            return Err(format!("«{}» es un {} y no tiene texto que leer; puedes bajarlo al chat", a.nombre, tipo_leible(&a.tipo)));
+            return Err(format!(
+                "«{}» es un {} y no tiene texto que leer; puedes bajarlo al chat",
+                a.nombre,
+                tipo_leible(&a.tipo)
+            ));
         }
         let (_, bytes) = self.bajar(a)?;
         if es_texto(&a.tipo) {
-            return Ok(Contenido::Texto(String::from_utf8_lossy(&bytes).into_owned()));
+            return Ok(Contenido::Texto(
+                String::from_utf8_lossy(&bytes).into_owned(),
+            ));
         }
-        Ok(Contenido::Fichero { nombre: a.nombre.clone(), bytes })
+        Ok(Contenido::Fichero {
+            nombre: a.nombre.clone(),
+            bytes,
+        })
     }
 
     fn bajar(&self, a: &Archivo) -> Result<(String, Vec<u8>), String> {
         if a.carpeta {
-            return Err(format!("«{}» es una carpeta: baja los archivos de dentro de uno en uno", a.nombre));
+            return Err(format!(
+                "«{}» es una carpeta: baja los archivos de dentro de uno en uno",
+                a.nombre
+            ));
         }
         if let Some((m, ext)) = exportar_para_bajar(&a.tipo) {
-            let b = self.get(&format!("/files/{}/export?{}", escapar(&a.id), formulario(&[("mimeType", m)])), LIMITE_EXPORTAR)?;
+            let b = self.get(
+                &format!(
+                    "/files/{}/export?{}",
+                    escapar(&a.id),
+                    formulario(&[("mimeType", m)])
+                ),
+                LIMITE_EXPORTAR,
+            )?;
             return Ok((con_extension(&a.nombre, ext), b));
         }
         if a.tipo.starts_with("application/vnd.google-apps.") {
-            return Err(format!("«{}» ({}) no se puede bajar como archivo", a.nombre, tipo_leible(&a.tipo)));
+            return Err(format!(
+                "«{}» ({}) no se puede bajar como archivo",
+                a.nombre,
+                tipo_leible(&a.tipo)
+            ));
         }
         if a.tamano.is_some_and(|t| t as usize > LIMITE_ARCHIVO) {
-            return Err(format!("«{}» pesa mas de {} MB; abrelo en Drive: {}", a.nombre, LIMITE_ARCHIVO / (1024 * 1024), a.enlace));
+            return Err(format!(
+                "«{}» pesa mas de {} MB; abrelo en Drive: {}",
+                a.nombre,
+                LIMITE_ARCHIVO / (1024 * 1024),
+                a.enlace
+            ));
         }
         let b = self.get(
-            &format!("/files/{}?{}", escapar(&a.id), formulario(&[("alt", "media"), ("supportsAllDrives", "true")])),
+            &format!(
+                "/files/{}?{}",
+                escapar(&a.id),
+                formulario(&[("alt", "media"), ("supportsAllDrives", "true")])
+            ),
             LIMITE_ARCHIVO,
         )?;
         Ok((a.nombre.clone(), b))
@@ -248,7 +340,10 @@ impl Almacen for Drive<'_> {
 
     fn subir(&self, nombre: &str, bytes: &[u8], carpeta: Option<&str>) -> Result<Archivo, String> {
         if bytes.len() > LIMITE_ARCHIVO {
-            return Err(format!("«{nombre}» pesa mas de {} MB", LIMITE_ARCHIVO / (1024 * 1024)));
+            return Err(format!(
+                "«{nombre}» pesa mas de {} MB",
+                LIMITE_ARCHIVO / (1024 * 1024)
+            ));
         }
         let tipo = tipo_de_nombre(nombre);
         let mut meta = json!({"name": nombre});
@@ -258,7 +353,10 @@ impl Almacen for Drive<'_> {
         let consulta_comun = formulario(&[("fields", CAMPOS), ("supportsAllDrives", "true")]);
         let base = &self.cx.extremos.subida;
         let r = if bytes.len() <= MULTIPART_MAX {
-            let frontera = format!("pixpin{}", super::oauth::base64_url(&super::oauth::aleatorio(12)).replace(['-', '_'], "x"));
+            let frontera = format!(
+                "pixpin{}",
+                super::oauth::base64_url(&super::oauth::aleatorio(12)).replace(['-', '_'], "x")
+            );
             let mut cuerpo = Vec::with_capacity(bytes.len() + 512);
             cuerpo.extend_from_slice(
                 format!("--{frontera}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{meta}\r\n--{frontera}\r\nContent-Type: {tipo}\r\n\r\n").as_bytes(),
@@ -268,7 +366,10 @@ impl Almacen for Drive<'_> {
             self.cx.pedir(
                 "POST",
                 &format!("{base}/files?uploadType=multipart&{consulta_comun}"),
-                &[("Content-Type", format!("multipart/related; boundary={frontera}"))],
+                &[(
+                    "Content-Type",
+                    format!("multipart/related; boundary={frontera}"),
+                )],
                 &cuerpo,
                 LIMITE_JSON,
             )?
@@ -284,15 +385,27 @@ impl Almacen for Drive<'_> {
                 meta.to_string().as_bytes(),
                 LIMITE_JSON,
             )?;
-            let destino = inicio.ubicacion.filter(|u| !u.is_empty()).ok_or("Google Drive no dio donde subir")?;
-            self.cx.pedir("PUT", &destino, &[("Content-Type", tipo.into())], bytes, LIMITE_JSON)?
+            let destino = inicio
+                .ubicacion
+                .filter(|u| !u.is_empty())
+                .ok_or("Google Drive no dio donde subir")?;
+            self.cx.pedir(
+                "PUT",
+                &destino,
+                &[("Content-Type", tipo.into())],
+                bytes,
+                LIMITE_JSON,
+            )?
         };
         Ok(archivo_de(&json_de(&r.cuerpo)?))
     }
 
     fn cuenta(&self) -> Result<String, String> {
         let v = json_de(&self.get("/about?fields=user(emailAddress)", LIMITE_JSON)?)?;
-        Ok(v.pointer("/user/emailAddress").and_then(Value::as_str).unwrap_or_default().to_string())
+        Ok(v.pointer("/user/emailAddress")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string())
     }
 }
 
@@ -304,14 +417,25 @@ mod pruebas {
     fn la_consulta_escapa_las_comillas_y_filtra_el_tipo() {
         assert_eq!(consulta("", "cualquiera"), "trashed = false");
         let q = consulta("informe d'obra", "pdf");
-        assert_eq!(q, "trashed = false and (name contains 'informe d\\'obra' or fullText contains 'informe d\\'obra') and (mimeType = 'application/pdf')");
+        assert_eq!(
+            q,
+            "trashed = false and (name contains 'informe d\\'obra' or fullText contains 'informe d\\'obra') and (mimeType = 'application/pdf')"
+        );
         assert!(consulta("x", "carpeta").contains(CARPETA));
     }
 
     #[test]
     fn los_de_google_se_leen_y_bajan_en_su_formato() {
-        assert_eq!(exportar_para_leer("application/vnd.google-apps.spreadsheet"), Some("text/csv"));
-        assert_eq!(exportar_para_bajar("application/vnd.google-apps.document").unwrap().1, "docx");
+        assert_eq!(
+            exportar_para_leer("application/vnd.google-apps.spreadsheet"),
+            Some("text/csv")
+        );
+        assert_eq!(
+            exportar_para_bajar("application/vnd.google-apps.document")
+                .unwrap()
+                .1,
+            "docx"
+        );
         assert_eq!(exportar_para_leer("application/pdf"), None);
         assert_eq!(con_extension("Informe", "docx"), "Informe.docx");
         assert_eq!(con_extension("Informe.DOCX", "docx"), "Informe.DOCX");

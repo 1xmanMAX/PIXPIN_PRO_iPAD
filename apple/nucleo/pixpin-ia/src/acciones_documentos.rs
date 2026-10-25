@@ -28,7 +28,12 @@
 
 use crate::acciones::{Accion, Categoria, Param, Tipo};
 
-const fn p(nombre: &'static str, tipo: Tipo, obligatorio: bool, descripcion: &'static str) -> Param {
+const fn p(
+    nombre: &'static str,
+    tipo: Tipo,
+    obligatorio: bool,
+    descripcion: &'static str,
+) -> Param {
     Param {
         nombre,
         destino: "",
@@ -54,10 +59,14 @@ pub const ABRIR: &str = "abrir_por_nombre";
 pub const EXPORTAR: &str = "exportar_documento";
 
 /// Lo que se puede hacer al anotar.
-pub const TIPOS_DE_ANOTACION: &[&str] = &["resaltar", "subrayar", "tachar", "nota", "encerrar", "marco", "dibujar"];
+pub const TIPOS_DE_ANOTACION: &[&str] = &[
+    "resaltar", "subrayar", "tachar", "nota", "encerrar", "marco", "dibujar",
+];
 
 /// Los formatos de «Exportar» (los ids de `compartir`).
-pub const FORMATOS: &[&str] = &["pdf", "png", "jpg", "svg", "web", "dxf", "csv", "texto", "md", "original"];
+pub const FORMATOS: &[&str] = &[
+    "pdf", "png", "jpg", "svg", "web", "dxf", "csv", "texto", "md", "original",
+];
 
 /// **La tabla de los documentos.** Una fila por herramienta.
 pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
@@ -66,14 +75,40 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         accion: TABLA,
         descripcion: "Pasa la tabla de una foto o un PDF (escaneado o no) a una tabla del chat o a un Excel. Las celdas las lee PixPin; tu solo eliges destino, nombre y si la primera fila es cabecera.",
         categoria: Categoria::Notas,
-        claves: &["tabla", "excel", "xlsx", "hoja de calculo", "celdas", "columnas", "filas"],
+        claves: &[
+            "tabla",
+            "excel",
+            "xlsx",
+            "hoja de calculo",
+            "celdas",
+            "columnas",
+            "filas",
+        ],
         fijos: "{}",
         params: &[
-            d(r#""tabla""#, p("destino", Tipo::Opciones(&["tabla", "excel"]), false, "tabla del chat o fichero Excel")),
+            d(
+                r#""tabla""#,
+                p(
+                    "destino",
+                    Tipo::Opciones(&["tabla", "excel"]),
+                    false,
+                    "tabla del chat o fichero Excel",
+                ),
+            ),
             p("nombre", Tipo::Texto, false, "nombre de la tabla"),
-            p("cabecera", Tipo::SiNo, false, "si la primera fila son titulos; omitir si no se sabe"),
+            p(
+                "cabecera",
+                Tipo::SiNo,
+                false,
+                "si la primera fila son titulos; omitir si no se sabe",
+            ),
             p("archivo", Tipo::Texto, false, ARCHIVO),
-            p("pagina", Tipo::Entero, false, "pagina del PDF, desde 1; omitir: la primera con tabla"),
+            p(
+                "pagina",
+                Tipo::Entero,
+                false,
+                "pagina del PDF, desde 1; omitir: la primera con tabla",
+            ),
         ],
         confirmar: None,
         // Lo hace `documentos_acciones` de la app y su resultado es la respuesta.
@@ -85,20 +120,66 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         descripcion: "Anota un PDF, Word o plano del chat donde lo vera el usuario al abrirlo (y en el movil): resaltar, subrayar o tachar un texto; encerrar o marcar (marco) un texto o una zona; poner una nota; dibujar un trazo.",
         categoria: Categoria::Notas,
         claves: &[
-            "resalta", "subraya", "tacha", "anota", "anotale", "encierra", "rodea", "circula", "marca en", "marca el",
-            "marca la", "pon una nota", "ponle una nota", "nota en", "senala", "dibuja sobre", "dibuja en el plano",
-            "dibuja en el pdf", "en la pagina",
+            "resalta",
+            "subraya",
+            "tacha",
+            "anota",
+            "anotale",
+            "encierra",
+            "rodea",
+            "circula",
+            "marca en",
+            "marca el",
+            "marca la",
+            "pon una nota",
+            "ponle una nota",
+            "nota en",
+            "senala",
+            "dibuja sobre",
+            "dibuja en el plano",
+            "dibuja en el pdf",
+            "en la pagina",
         ],
         fijos: "{}",
         params: &[
-            p("tipo", Tipo::Opciones(TIPOS_DE_ANOTACION), true, "que se hace"),
-            p("texto", Tipo::Texto, false, "el texto del documento sobre el que va (se busca)"),
+            p(
+                "tipo",
+                Tipo::Opciones(TIPOS_DE_ANOTACION),
+                true,
+                "que se hace",
+            ),
+            p(
+                "texto",
+                Tipo::Texto,
+                false,
+                "el texto del documento sobre el que va (se busca)",
+            ),
             p("nota", Tipo::Texto, false, "lo que dice la nota"),
             p("archivo", Tipo::Texto, false, ARCHIVO),
-            p("pagina", Tipo::Entero, false, "pagina, desde 1; omitir: donde este el texto"),
-            p("zona", Tipo::Numeros, false, "[x, y, ancho, alto] en fracciones 0-1 de la pagina o del plano, si no hay texto"),
-            p("puntos", Tipo::Numeros, false, "dibujar: [x1, y1, x2, y2, ...] en fracciones 0-1"),
-            p("color", Tipo::Texto, false, "amarillo, rojo, verde, azul... omitir: el de siempre"),
+            p(
+                "pagina",
+                Tipo::Entero,
+                false,
+                "pagina, desde 1; omitir: donde este el texto",
+            ),
+            p(
+                "zona",
+                Tipo::Numeros,
+                false,
+                "[x, y, ancho, alto] en fracciones 0-1 de la pagina o del plano, si no hay texto",
+            ),
+            p(
+                "puntos",
+                Tipo::Numeros,
+                false,
+                "dibujar: [x1, y1, x2, y2, ...] en fracciones 0-1",
+            ),
+            p(
+                "color",
+                Tipo::Texto,
+                false,
+                "amarillo, rojo, verde, azul... omitir: el de siempre",
+            ),
         ],
         confirmar: None,
         // Lo hace `documentos_acciones` de la app y su resultado es la respuesta.
@@ -110,14 +191,32 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         descripcion: "Busca un texto dentro de un plano (DWG/DXF), PDF o Word y abre el visor ahi, ampliado y marcado. Usala para «¿donde dice...?» o «llevame a...».",
         categoria: Categoria::Abrir,
         claves: &[
-            "donde dice", "donde sale", "donde aparece", "donde pone", "busca en el plano",
-            "busca en el pdf", "busca en el documento", "llevame", "lleva a", "encuentra en", "ubica", "localiza",
+            "donde dice",
+            "donde sale",
+            "donde aparece",
+            "donde pone",
+            "busca en el plano",
+            "busca en el pdf",
+            "busca en el documento",
+            "llevame",
+            "lleva a",
+            "encuentra en",
+            "ubica",
+            "localiza",
         ],
         fijos: "{}",
         params: &[
             p("texto", Tipo::Texto, true, "lo que se busca, tal cual"),
             p("archivo", Tipo::Texto, false, ARCHIVO),
-            d("true", p("abrir", Tipo::SiNo, false, "abrir el visor en lo encontrado")),
+            d(
+                "true",
+                p(
+                    "abrir",
+                    Tipo::SiNo,
+                    false,
+                    "abrir el visor en lo encontrado",
+                ),
+            ),
         ],
         confirmar: None,
         // Lo hace `documentos_acciones` de la app y su resultado es la respuesta.
@@ -129,11 +228,29 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         descripcion: "Abre un documento, plano, Excel o imagen de los chats del usuario por su nombre o de que trata. Si hay varios parecidos te los dice para que preguntes cual.",
         categoria: Categoria::Abrir,
         claves: &[
-            "abre el", "abre la", "abre mi", "abreme", "abrir el", "abrir la", "muestrame el", "muestrame la",
-            "ensename el", "ensename la", "plano de", "pdf de", "documento de", "archivo de", "excel de",
+            "abre el",
+            "abre la",
+            "abre mi",
+            "abreme",
+            "abrir el",
+            "abrir la",
+            "muestrame el",
+            "muestrame la",
+            "ensename el",
+            "ensename la",
+            "plano de",
+            "pdf de",
+            "documento de",
+            "archivo de",
+            "excel de",
         ],
         fijos: "{}",
-        params: &[p("descripcion", Tipo::Texto, true, "el nombre o lo que trata, con las palabras del usuario")],
+        params: &[p(
+            "descripcion",
+            Tipo::Texto,
+            true,
+            "el nombre o lo que trata, con las palabras del usuario",
+        )],
         confirmar: None,
         // Lo hace `documentos_acciones` de la app y su resultado es la respuesta.
         hecho: "Hecho.",
@@ -143,7 +260,22 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         accion: EXPORTAR,
         descripcion: "Exporta un documento, plano, Excel o imagen (con lo anotado) en otro formato y lo deja en el chat.",
         categoria: Categoria::Abrir,
-        claves: &["exporta", "exportar", "exportalo", "guarda como", "guardalo como", "convierte a", "convertir a", "pasalo a", "en pdf", "a pdf", "a png", "a dxf", "como imagen", "en png"],
+        claves: &[
+            "exporta",
+            "exportar",
+            "exportalo",
+            "guarda como",
+            "guardalo como",
+            "convierte a",
+            "convertir a",
+            "pasalo a",
+            "en pdf",
+            "a pdf",
+            "a png",
+            "a dxf",
+            "como imagen",
+            "en png",
+        ],
         fijos: "{}",
         params: &[
             p("formato", Tipo::Opciones(FORMATOS), true, "el formato"),
@@ -172,19 +304,58 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         claves: &[],
         fijos: "{}",
         params: &[
-            p("pedido", Tipo::Texto, true, "lo que pidio el usuario, con sus palabras"),
+            p(
+                "pedido",
+                Tipo::Texto,
+                true,
+                "lo que pidio el usuario, con sus palabras",
+            ),
             p(
                 "modo",
-                Tipo::Opciones(&["importante", "pasos", "errores", "resumen", "glosario", "preguntas", "explicar", "mixto"]),
+                Tipo::Opciones(&[
+                    "importante",
+                    "pasos",
+                    "errores",
+                    "resumen",
+                    "glosario",
+                    "preguntas",
+                    "explicar",
+                    "mixto",
+                ]),
                 false,
                 "que anotar; omitir: lo decide el pedido",
             ),
-            p("foco", Tipo::Texto, false, "el trozo exacto a explicar (una formula, una frase), si el usuario lo dijo"),
+            p(
+                "foco",
+                Tipo::Texto,
+                false,
+                "el trozo exacto a explicar (una formula, una frase), si el usuario lo dijo",
+            ),
             p("archivo", Tipo::Texto, false, ARCHIVO),
-            p("pagina", Tipo::Entero, false, "pagina desde 1; omitir: la que el usuario tiene abierta (o la 1)"),
-            p("hasta", Tipo::Entero, false, "ultima pagina, para anotar varias seguidas (como mucho 5)"),
-            p("celdas", Tipo::Texto, false, "en un Excel, el rango a mirar (\"A1:F40\"); omitir: lo usado de la hoja"),
-            p("hoja", Tipo::Texto, false, "en un Excel, el nombre de la hoja; omitir: la primera"),
+            p(
+                "pagina",
+                Tipo::Entero,
+                false,
+                "pagina desde 1; omitir: la que el usuario tiene abierta (o la 1)",
+            ),
+            p(
+                "hasta",
+                Tipo::Entero,
+                false,
+                "ultima pagina, para anotar varias seguidas (como mucho 5)",
+            ),
+            p(
+                "celdas",
+                Tipo::Texto,
+                false,
+                "en un Excel, el rango a mirar (\"A1:F40\"); omitir: lo usado de la hoja",
+            ),
+            p(
+                "hoja",
+                Tipo::Texto,
+                false,
+                "en un Excel, el nombre de la hoja; omitir: la primera",
+            ),
         ],
         confirmar: None,
         hecho: "Hecho.",
@@ -196,13 +367,44 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
         accion: crate::hoja::NOMBRE,
         descripcion: "Pasa al lienzo una hoja (foto, escaneo o pagina de un PDF) interpretandola: parrafos y titulos como texto, tablas como tabla, formulas como ecuacion, fotos recortadas y rayas, en su sitio y en orden de lectura. Usala para «pasa esta hoja/foto/pagina al lienzo» o «digitaliza esto» (mejor que calcarla si tiene texto).",
         categoria: Categoria::Notas,
-        claves: &["digitaliza", "hoja al lienzo", "pagina al lienzo", "escaneo al lienzo", "hoja en el lienzo", "pasa la hoja", "pasa esta hoja"],
+        claves: &[
+            "digitaliza",
+            "hoja al lienzo",
+            "pagina al lienzo",
+            "escaneo al lienzo",
+            "hoja en el lienzo",
+            "pasa la hoja",
+            "pasa esta hoja",
+        ],
         fijos: "{}",
         params: &[
-            p("archivo", Tipo::Texto, false, "la foto o el PDF (nombre o descripcion); omitir: la imagen o el PDF mas reciente del chat"),
-            p("pagina", Tipo::Entero, false, "pagina del PDF, desde 1; omitir: la primera"),
-            p("ancho", Tipo::Entero, false, "ancho de la hoja en el lienzo en px; omitir: 1000"),
-            d(r#""editable""#, p("modo", Tipo::Opciones(&["editable", "fiel"]), false, "editable: texto corrido y tablas; fiel: cada renglon en su sitio exacto")),
+            p(
+                "archivo",
+                Tipo::Texto,
+                false,
+                "la foto o el PDF (nombre o descripcion); omitir: la imagen o el PDF mas reciente del chat",
+            ),
+            p(
+                "pagina",
+                Tipo::Entero,
+                false,
+                "pagina del PDF, desde 1; omitir: la primera",
+            ),
+            p(
+                "ancho",
+                Tipo::Entero,
+                false,
+                "ancho de la hoja en el lienzo en px; omitir: 1000",
+            ),
+            d(
+                r#""editable""#,
+                p(
+                    "modo",
+                    Tipo::Opciones(&["editable", "fiel"]),
+                    false,
+                    "editable: texto corrido y tablas; fiel: cada renglon en su sitio exacto",
+                ),
+            ),
         ],
         confirmar: None,
         hecho: "Hecho.",
@@ -212,7 +414,9 @@ pub const ACCIONES_DOCUMENTOS: &[Accion] = &[
 /// Si la herramienta es de esta tabla (la hace el ejecutor del chat, no se
 /// manda como pedido).
 pub fn es_de_documentos(herramienta: &str) -> bool {
-    ACCIONES_DOCUMENTOS.iter().any(|a| a.herramienta == herramienta)
+    ACCIONES_DOCUMENTOS
+        .iter()
+        .any(|a| a.herramienta == herramienta)
 }
 
 /// **Para una pregunta** («¿donde dice JR. ANTISUYO en el plano?»): las de
@@ -221,7 +425,9 @@ pub fn es_de_documentos(herramienta: &str) -> bool {
 pub fn para_una_pregunta(q: &str) -> Vec<&'static Accion> {
     ACCIONES_DOCUMENTOS
         .iter()
-        .filter(|a| a.herramienta == BUSCAR_EN && a.claves.iter().any(|c| c.contains(' ') && q.contains(c)))
+        .filter(|a| {
+            a.herramienta == BUSCAR_EN && a.claves.iter().any(|c| c.contains(' ') && q.contains(c))
+        })
         .collect()
 }
 
@@ -251,15 +457,26 @@ mod pruebas {
         }
         assert!(!es_de_documentos("abrir_fichero"));
         // Estan en el catalogo que se le da a la nube.
-        let cat: Vec<String> = crate::herramientas::catalogo().into_iter().map(|h| h.nombre).collect();
+        let cat: Vec<String> = crate::herramientas::catalogo()
+            .into_iter()
+            .map(|h| h.nombre)
+            .collect();
         for a in ACCIONES_DOCUMENTOS {
-            assert!(cat.contains(&a.herramienta.to_string()), "{}", a.herramienta);
+            assert!(
+                cat.contains(&a.herramienta.to_string()),
+                "{}",
+                a.herramienta
+            );
         }
     }
 
     #[test]
     fn la_validacion_es_la_comun() {
-        let t = validar(por_nombre(TABLA).unwrap(), &args(r#"{"destino":"Excel","nombre":"Costos"}"#)).unwrap();
+        let t = validar(
+            por_nombre(TABLA).unwrap(),
+            &args(r#"{"destino":"Excel","nombre":"Costos"}"#),
+        )
+        .unwrap();
         assert_eq!(t.pedido["destino"], "excel");
         let t = validar(por_nombre(TABLA).unwrap(), &Map::new()).unwrap();
         assert_eq!(t.pedido["destino"], "tabla");
@@ -270,23 +487,46 @@ mod pruebas {
         .unwrap();
         assert_eq!(a.pedido["zona"], json!([0.1, 0.2, 0.3, 0.4]));
         // Una zona escrita como texto tambien vale.
-        let a = validar(por_nombre(ANOTAR).unwrap(), &args(r#"{"tipo":"encerrar","zona":"[0.1, 0.2, 0.3, 0.4]"}"#)).unwrap();
+        let a = validar(
+            por_nombre(ANOTAR).unwrap(),
+            &args(r#"{"tipo":"encerrar","zona":"[0.1, 0.2, 0.3, 0.4]"}"#),
+        )
+        .unwrap();
         assert_eq!(a.pedido["zona"], json!([0.1, 0.2, 0.3, 0.4]));
-        let b = validar(por_nombre(BUSCAR_EN).unwrap(), &args(r#"{"texto":"JR. ANTISUYO"}"#)).unwrap();
+        let b = validar(
+            por_nombre(BUSCAR_EN).unwrap(),
+            &args(r#"{"texto":"JR. ANTISUYO"}"#),
+        )
+        .unwrap();
         assert_eq!(b.pedido["abrir"], true);
         assert!(b.confirmar.is_none());
         // Casos negativos: lo que falta o no se entiende no pasa.
         assert!(validar(por_nombre(ANOTAR).unwrap(), &args(r#"{"tipo":"pintar"}"#)).is_err());
-        assert!(validar(por_nombre(ANOTAR).unwrap(), &args(r#"{"tipo":"nota","zona":["a"]}"#)).is_err());
+        assert!(
+            validar(
+                por_nombre(ANOTAR).unwrap(),
+                &args(r#"{"tipo":"nota","zona":["a"]}"#)
+            )
+            .is_err()
+        );
         assert!(validar(por_nombre(BUSCAR_EN).unwrap(), &Map::new()).is_err());
-        assert!(validar(por_nombre(EXPORTAR).unwrap(), &args(r#"{"formato":"docx"}"#)).is_err());
+        assert!(
+            validar(
+                por_nombre(EXPORTAR).unwrap(),
+                &args(r#"{"formato":"docx"}"#)
+            )
+            .is_err()
+        );
         assert!(validar(por_nombre(ABRIR).unwrap(), &args(r#"{"descripcion":"  "}"#)).is_err());
     }
 
     #[test]
     fn una_pregunta_de_donde_dice_trae_la_busqueda() {
         let q = crate::acciones::normalizar("¿Dónde dice JR. ANTISUYO en el plano?");
-        let n: Vec<&str> = para_una_pregunta(&q).iter().map(|a| a.herramienta).collect();
+        let n: Vec<&str> = para_una_pregunta(&q)
+            .iter()
+            .map(|a| a.herramienta)
+            .collect();
         assert_eq!(n, vec![BUSCAR_EN]);
         assert!(para_una_pregunta("como hago una captura").is_empty());
     }

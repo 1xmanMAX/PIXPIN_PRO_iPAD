@@ -363,11 +363,16 @@ fn ordenes_de_relleno(e: &Elemento, elipse: bool) -> Vec<Orden> {
         Figura::Rombo if e.redondo => Some(formas::rombo_redondo(e.x, e.y, e.ancho, e.alto)),
         _ => None,
     };
+    // **La nube se rellena por sus festones**, no por su caja: el color no
+    // puede asomar entre los picos.
+    let nube = crate::nube_revision::contorno_de(e);
 
     if e.estilo_relleno == EstiloRelleno::Solido || degradado.is_some() {
         // La figura LISA, no la rugosa: rellenar la temblorosa deja huecos
         // por donde se escapa el fondo.
-        let puntos = if elipse {
+        let puntos = if let Some(contorno) = &nube {
+            contorno.clone()
+        } else if elipse {
             formas::elipse(e.x, e.y, e.ancho, e.alto, 0.0, &mut azar)
                 .into_iter()
                 .next()
@@ -402,7 +407,7 @@ fn ordenes_de_relleno(e: &Elemento, elipse: bool) -> Vec<Orden> {
     let mut rough_rayas = rough_relleno.map(|o| crate::rough::Rough::con_azar(o, azar.clone()));
     crate::relleno::lineas_de_rayado(
         (e.x, e.y, e.ancho, e.alto),
-        elipse,
+        elipse && nube.is_none(),
         e.estilo_relleno,
         e.grosor,
         0.0,
@@ -412,10 +417,15 @@ fn ordenes_de_relleno(e: &Elemento, elipse: bool) -> Vec<Orden> {
     // El rayado se genera para la caja; el rombo ocupa la mitad de ella, asi
     // que cada raya se recorta a sus cuatro lados. Sin esto el sombreado se
     // saldria por las cuatro esquinas y el rombo se leeria como un cuadrado.
-    .filter_map(|(a, b)| {
+    .flat_map(|(a, b)| {
+        // La nube no es convexa: cada raya sale a trozos, uno por cada vez
+        // que entra en ella.
+        if let Some(contorno) = &nube {
+            return crate::nube_revision::recortar_a_poligono(a, b, contorno);
+        }
         // Las dos rutas redondeadas son convexas, asi que el mismo recorte
         // del rombo en pico vale para ellas.
-        if let Some(contorno) = &redondeo {
+        let recorte = if let Some(contorno) = &redondeo {
             crate::relleno::recortar_a_convexo(a, b, contorno)
         } else if rombo {
             crate::relleno::recortar_a_convexo(
@@ -425,7 +435,8 @@ fn ordenes_de_relleno(e: &Elemento, elipse: bool) -> Vec<Orden> {
             )
         } else {
             Some((a, b))
-        }
+        };
+        recorte.into_iter().collect()
     })
     .flat_map(|(a, b)| match rough_rayas.as_mut() {
         Some(r) => {
@@ -504,7 +515,12 @@ fn anillo_con_huecos(contorno: &[Punto2], huecos: &[Vec<Punto2>]) -> Vec<Punto2>
 /// tramos: dos verdades sobre por donde pasa un arco significan que se pica
 /// donde no se ve, porque `impacto.rs` usa esta y el reajuste usa la otra.
 pub(crate) fn arco_muestreado(e: &Elemento, inicio: f32, barrido: Option<f32>) -> Vec<Punto2> {
-    crate::arco::puntos_del_arco((e.x, e.y, e.ancho, e.alto), inicio, barrido, pasos_del_arco(e.ancho.max(e.alto) / 2.0))
+    crate::arco::puntos_del_arco(
+        (e.x, e.y, e.ancho, e.alto),
+        inicio,
+        barrido,
+        pasos_del_arco(e.ancho.max(e.alto) / 2.0),
+    )
 }
 
 /// **Cuantos tramos por vuelta** para un arco de radio `r`: los 72 del movil
@@ -517,11 +533,6 @@ pub(crate) fn pasos_del_arco(r: f32) -> usize {
 }
 
 /// Las ordenes de dibujo de un elemento, en orden de pintado.
-/// El rotulo del marco: su tamano y cuanto sube por encima de la caja. Va
-/// fuera de ella a proposito, como en Excalidraw: dentro taparia contenido.
-const TAM_NOMBRE_MARCO: f32 = 12.0;
-const ALTO_NOMBRE_MARCO: f32 = 16.0;
-
 pub fn ordenes(e: &Elemento) -> Vec<Orden> {
     if e.borrado {
         return Vec::new();
@@ -538,6 +549,23 @@ pub fn ordenes(e: &Elemento) -> Vec<Orden> {
     // tres se ven iguales que la lisa. Ver `tinta::material`.
     let color = con_opacidad(e.trazo, e.opacidad * e.material.cuerpo());
     let mut salida = Vec::new();
+
+    // **La linea cerrada con relleno se rellena**, como en Excalidraw (un
+    // poligono: el ultimo punto vuelve al primero y lleva color de fondo).
+    // Las figuras de serie dibujan asi siluetas, copas y muebles; sin esto
+    // salian huecas y lo de detras asomaba por dentro.
+    if let Figura::Linea { puntos } = &e.figura
+        && puntos.len() >= 4
+        && puntos[0].distancia(puntos[puntos.len() - 1]) < 0.5
+        && e.relleno.is_some_and(|c| c.a > 0.0)
+        && e.estilo_relleno == EstiloRelleno::Solido
+        && let Some(r) = e.relleno
+    {
+        salida.push(Orden::Relleno {
+            puntos: puntos.clone(),
+            color: con_opacidad(r, e.opacidad),
+        });
+    }
 
     match &e.figura {
         Figura::Lapiz {
@@ -780,6 +808,29 @@ pub fn ordenes(e: &Elemento) -> Vec<Orden> {
             }
         }
 
+        // **La nube de revision** (`nube_revision`): el rectangulo o la elipse
+        // con el borde en festones del mismo tamano sea cual sea la caja.
+        Figura::Rectangulo | Figura::Elipse if crate::nube_revision::base_de(e).is_some() => {
+            salida.extend(ordenes_de_relleno(e, matches!(e.figura, Figura::Elipse)));
+            let festones = crate::nube_revision::festones(
+                crate::nube_revision::base_de(e).unwrap_or(crate::nube_revision::Base::Rectangulo),
+                (e.x, e.y, e.ancho, e.alto),
+                e.extras
+                    .nube
+                    .unwrap_or(crate::nube_revision::RADIO_DE_FABRICA),
+            );
+            for pasada in
+                crate::nube_revision::pasadas_a_mano(&festones, opciones_rough(e), &mut azar)
+            {
+                salida.push(Orden::Polilinea {
+                    puntos: pasada,
+                    color,
+                    grosor: e.grosor,
+                    estilo: e.estilo,
+                });
+            }
+        }
+
         Figura::Rectangulo => {
             // El relleno va PRIMERO: si fuera despues taparia el trazo.
             salida.extend(ordenes_de_relleno(e, false));
@@ -895,7 +946,13 @@ pub fn ordenes(e: &Elemento) -> Vec<Orden> {
                 .extras
                 .alineacion
                 .map_or(0.0, |a| ((e.ancho - m.ancho) * a.fraccion()).max(0.0));
-            salida.extend(crate::texto_rico::ordenes(&m, e.x + dx, e.y, familia, color));
+            salida.extend(crate::texto_rico::ordenes(
+                &m,
+                e.x + dx,
+                e.y,
+                familia,
+                color,
+            ));
         }
 
         Figura::Texto {
@@ -1014,41 +1071,13 @@ pub fn ordenes(e: &Elemento) -> Vec<Orden> {
             cursiva: false,
         }),
 
-        Figura::Marco { nombre } => {
-            // Liso y gris, no a mano alzada: el marco es andamiaje para
-            // ordenar laminas, no parte del dibujo. Si temblara como una
-            // figura, se leeria como una mas.
-            let gris = crate::ColorRgba::opaco(0.53, 0.55, 0.60);
-            let (x0, y0) = (e.x, e.y);
-            let (x1, y1) = (e.x + e.ancho, e.y + e.alto);
-            salida.push(Orden::Polilinea {
-                puntos: vec![
-                    Punto2::nuevo(x0, y0),
-                    Punto2::nuevo(x1, y0),
-                    Punto2::nuevo(x1, y1),
-                    Punto2::nuevo(x0, y1),
-                    Punto2::nuevo(x0, y0),
-                ],
-                color: gris,
-                grosor: 1.5,
-                estilo: EstiloTrazo::Solido,
-            });
-            // El nombre va ENCIMA del marco, fuera de su caja: dentro se
-            // confundiria con el contenido y ademas lo taparia.
-            if !nombre.is_empty() {
-                salida.push(Orden::Texto {
-                    texto: nombre.clone(),
-                    x: x0,
-                    y: y0 - ALTO_NOMBRE_MARCO,
-                    tam: TAM_NOMBRE_MARCO,
-                    familia: "Segoe UI".to_string(),
-                    color: gris,
-                    ancho_max: e.ancho.max(1.0),
-                    negrita: false,
-                    cursiva: false,
-                });
-            }
-        }
+        // **El marco no es dibujo** (22-oct): es andamiaje para ordenar e
+        // imprimir laminas, y lo impreso va sin su raya, como los marcos de
+        // los visores (`marcos_doc`). En el editor lo pinta el (raya azul a
+        // trazos de grosor fijo y su numero en la esquina, con la escena):
+        // con el mundo, la raya engordaba al acercarse y el numero, que iba
+        // en la interfaz, llegaba tarde al mover el lienzo.
+        Figura::Marco { .. } => {}
 
         Figura::Imagen { id_objeto } => salida.push(Orden::Imagen {
             id_objeto: *id_objeto,
@@ -1231,12 +1260,7 @@ pub fn ordenes(e: &Elemento) -> Vec<Orden> {
         // pintado para los tres (`instrumento::ordenes`), y por tanto el
         // mismo en pantalla, PNG, SVG, PDF y la pagina web.
         Figura::Instrumento(i) => {
-            salida.extend(crate::instrumento::ordenes(
-                e,
-                i,
-                color,
-                letra_de_rotulo(e),
-            ));
+            salida.extend(crate::instrumento::ordenes(e, i, color, letra_de_rotulo(e)));
         }
     }
 

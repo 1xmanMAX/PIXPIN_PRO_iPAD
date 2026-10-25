@@ -350,7 +350,7 @@ fn resolver_de_verdad(
 
 /// Lo que esta escrito en un rango, puesto en una cuadricula de `filas` x
 /// `cols` (por filas); lo que no esta escrito es vacio.
-fn cuadricula<'a>(leido: &'a [(Ref, Valor)], rg: Rg, filas: u64, cols: u64) -> Vec<&'a Valor> {
+fn cuadricula(leido: &[(Ref, Valor)], rg: Rg, filas: u64, cols: u64) -> Vec<&Valor> {
     static VACIO: Valor = Valor::Texto(String::new());
     let mut cuadricula = vec![&VACIO; (filas * cols) as usize];
     for (r, v) in leido {

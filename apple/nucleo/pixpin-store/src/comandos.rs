@@ -89,6 +89,10 @@ pub enum Comando {
     /// Buscar en PixPin (rediseno v2): archivos, tareas, lecciones y
     /// capturas, con lo mismo que el plugin de Flow. Nace sin atajo.
     Buscar,
+    /// Grabar una clase o una reunion (24-oct-2026): el microfono y el
+    /// sonido del equipo, con capturas de una zona en su minuto, y despues
+    /// la transcripcion. Nace sin atajo.
+    GrabarClase,
 }
 
 /// La ficha de un comando en el catalogo.
@@ -326,6 +330,14 @@ pub const CATALOGO: &[Descriptor] = &[
         atajo_por_defecto: None,
         en_bandeja: true,
     },
+    // Al final, como Buscar: meterlo en medio correria los numeros.
+    Descriptor {
+        comando: Comando::GrabarClase,
+        nombre: "grabar-clase",
+        clave_titulo: "comando-grabar-clase",
+        atajo_por_defecto: None,
+        en_bandeja: true,
+    },
 ];
 
 impl Comando {
@@ -514,6 +526,7 @@ mod pruebas {
         Comando::Salir,
         Comando::Sincronizar,
         Comando::Buscar,
+        Comando::GrabarClase,
     ];
 
     #[test]

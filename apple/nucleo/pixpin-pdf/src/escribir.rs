@@ -1387,7 +1387,10 @@ mod pruebas {
         let mut r = Recursos::default();
         let s = j.renglon("a\u{2654}a", 12.0, &mut r);
         assert_eq!(s.matches(" Tf ").count(), 3, "{s}");
-        assert!(s.starts_with("/F2 12 Tf <") && s.contains("/F3 12 Tf <"), "{s}");
+        assert!(
+            s.starts_with("/F2 12 Tf <") && s.contains("/F3 12 Tf <"),
+            "{s}"
+        );
         assert_eq!(r.glifos.len(), 2);
 
         // Sin letra propia, Helvetica para lo latino y la reserva para lo
@@ -1451,11 +1454,12 @@ mod pruebas {
         assert_eq!(crate::union::contar_paginas(&bytes), Some(2));
         #[cfg(windows)]
         {
-        let ruta = std::env::temp_dir().join(format!("pixpin-indice-{}.pdf", std::process::id()));
-        std::fs::write(&ruta, &bytes).unwrap();
-        let doc = crate::Documento::abrir(&ruta).expect("abre");
-        assert_eq!(doc.paginas(), 2);
-        let _ = std::fs::remove_file(&ruta);
+            let ruta =
+                std::env::temp_dir().join(format!("pixpin-indice-{}.pdf", std::process::id()));
+            std::fs::write(&ruta, &bytes).unwrap();
+            let doc = crate::Documento::abrir(&ruta).expect("abre");
+            assert_eq!(doc.paginas(), 2);
+            let _ = std::fs::remove_file(&ruta);
         }
         // Sin marcadores, ni indice ni panel.
         let sin = de_hojas(&hojas, None, &|_| None).unwrap();

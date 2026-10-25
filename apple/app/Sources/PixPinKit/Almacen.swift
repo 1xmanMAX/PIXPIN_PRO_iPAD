@@ -81,16 +81,22 @@ public final class Almacen: ObservableObject {
 
     /// **El chat «Asistente» existe siempre**, como «Mensajes guardados»
     /// (Windows lo crea al abrir la ventana de los chats). Una vez.
+    ///
+    /// **Uno solo en todos los aparatos** (Windows, 22-oct): `chatAsistente`
+    /// junta antes los que hayan llegado de otros aparatos en el mas antiguo
+    /// y le pone la marca que viaja; tras cada vuelta de sincronizar lo hace
+    /// el nucleo solo.
     public func asegurarAsistente() async {
         guard !asistenteAsegurado else { return }
         asistenteAsegurado = true
         let nucleo = self.nucleo
-        let nuevo = await Task.detached(priority: .utility) { () -> Bool in
-            let antes = (try? nucleo.chats().contains { $0.esAsistente }) ?? true
+        let cambio = await Task.detached(priority: .utility) { () -> Bool in
+            let antes = (try? nucleo.chats().filter { $0.esAsistente || $0.nombre == "Asistente" }.count) ?? 0
             _ = try? nucleo.chatAsistente()
-            return !antes
+            // Nacio, o se juntaron varios: la lista cambio.
+            return antes != 1
         }.value
-        if nuevo { await cargarChats() }
+        if cambio { await cargarChats() }
     }
 
     /// Relee la lista de chats.

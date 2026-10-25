@@ -235,13 +235,27 @@ fn a_elemento(p: Pieza, estilo: &Estilo) -> Elemento {
             negrita,
             color,
         } => {
-            let mut e = elemento_texto(&texto, x, y, (ancho, alto), tam, cursiva, &estilo.con_color(color.unwrap_or(estilo.color)));
+            let mut e = elemento_texto(
+                &texto,
+                x,
+                y,
+                (ancho, alto),
+                tam,
+                cursiva,
+                &estilo.con_color(color.unwrap_or(estilo.color)),
+            );
             e.extras.negrita = negrita;
             e
         }
-        Pieza::Raya { puntos, grosor, color } => {
-            elemento_linea(puntos, grosor, &estilo.con_color(color.unwrap_or(estilo.color)))
-        }
+        Pieza::Raya {
+            puntos,
+            grosor,
+            color,
+        } => elemento_linea(
+            puntos,
+            grosor,
+            &estilo.con_color(color.unwrap_or(estilo.color)),
+        ),
     }
 }
 
@@ -643,7 +657,10 @@ pub fn entre_parentesis(dentro: Caja, t: f32, medir: Medir<'_>) -> Caja {
         (0..=10)
             .map(|k| {
                 let s = k as f64 / 10.0;
-                ((x0 + hacia * (std::f64::consts::PI * s).sin()) as f32, (h as f64 * s) as f32)
+                (
+                    (x0 + hacia * (std::f64::consts::PI * s).sin()) as f32,
+                    (h as f64 * s) as f32,
+                )
             })
             .collect()
     };
@@ -683,7 +700,10 @@ pub fn entre_corchetes(dentro: Caja, t: f32) -> Caja {
     let xd = ancho - m;
     let mut piezas = vec![raya(&[(m + pata, 0.0), (m, 0.0), (m, h), (m + pata, h)], t)];
     piezas.extend(dentro.piezas_en(m * 2.0 + pata, 0.0));
-    piezas.push(raya(&[(xd - pata, 0.0), (xd, 0.0), (xd, h), (xd - pata, h)], t));
+    piezas.push(raya(
+        &[(xd - pata, 0.0), (xd, 0.0), (xd, h), (xd - pata, h)],
+        t,
+    ));
     Caja {
         ancho,
         alto: h,
@@ -716,7 +736,11 @@ pub fn matriz(filas: Vec<Vec<Caja>>, t: f32, a_la_izquierda: bool) -> Caja {
         let abajo = f.iter().map(|c| c.alto - c.eje).fold(0.0f32, f32::max);
         let mut x = 0.0f32;
         for (j, c) in f.iter().enumerate() {
-            let dx = if a_la_izquierda { 0.0 } else { (anchos[j] - c.ancho) / 2.0 };
+            let dx = if a_la_izquierda {
+                0.0
+            } else {
+                (anchos[j] - c.ancho) / 2.0
+            };
             piezas.extend(c.piezas_en(x + dx, y + arriba - c.eje));
             x += anchos[j] + entre_columnas;
         }
@@ -781,7 +805,11 @@ fn tinta_vertical(c: &Caja) -> (f32, f32) {
             }
         }
     }
-    if arriba > abajo { (0.0, c.alto) } else { (arriba, abajo) }
+    if arriba > abajo {
+        (0.0, c.alto)
+    } else {
+        (arriba, abajo)
+    }
 }
 
 /// **Una marca encima (o debajo) del ancho de lo que cubre**: la raya de
@@ -826,14 +854,24 @@ pub fn adornada(dentro: Caja, adorno: crate::formulas::Adorno, t: f32) -> Caja {
         piezas.push(raya(&lado(x0, xm), t));
         piezas.push(raya(&lado(x1, xm), t));
         let alto = dentro.alto.max(y1 + trazo(t));
-        return Caja { ancho: w, alto, eje: dentro.eje, piezas };
+        return Caja {
+            ancho: w,
+            alto,
+            eje: dentro.eje,
+            piezas,
+        };
     }
     if adorno == Adorno::RayaDebajo {
         let y = abajo + t * 0.12;
         let alto = dentro.alto.max(y + trazo(t));
         let mut piezas = dentro.piezas.clone();
         piezas.push(raya(&[(x0, y), (x1, y)], t));
-        return Caja { ancho: w, alto, eje: dentro.eje, piezas };
+        return Caja {
+            ancho: w,
+            alto,
+            eje: dentro.eje,
+            piezas,
+        };
     }
     // La marca acaba `separa` por encima de la tinta; si se sale de la
     // caja, todo baja lo que falte.
@@ -850,25 +888,43 @@ pub fn adornada(dentro: Caja, adorno: crate::formulas::Adorno, t: f32) -> Caja {
                 // Un trozo de circulo achatado: sube rapido y se aplana arriba.
                 // `max(0)`: el seno de pi en f32 sale un pelo negativo, y su
                 // potencia es NaN (la raya entera desaparecia).
-                (x0 + (x1 - x0) * s, fondo - h * (std::f32::consts::PI * s).sin().max(0.0).powf(0.8))
+                (
+                    x0 + (x1 - x0) * s,
+                    fondo - h * (std::f32::consts::PI * s).sin().max(0.0).powf(0.8),
+                )
             })
             .collect(),
         Adorno::Gorro => vec![(x0, fondo), ((x0 + x1) / 2.0, tope), (x1, fondo)],
         Adorno::Tilde => (0..=16)
             .map(|k| {
                 let s = k as f32 / 16.0;
-                (x0 + (x1 - x0) * s, tope + h / 2.0 - h / 2.0 * (2.0 * std::f32::consts::PI * s).sin())
+                (
+                    x0 + (x1 - x0) * s,
+                    tope + h / 2.0 - h / 2.0 * (2.0 * std::f32::consts::PI * s).sin(),
+                )
             })
             .collect(),
         Adorno::Flecha => {
             let y = fondo - h / 2.0;
-            piezas.push(raya(&[(x1 - t * 0.18, y - t * 0.1), (x1, y), (x1 - t * 0.18, y + t * 0.1)], t));
+            piezas.push(raya(
+                &[
+                    (x1 - t * 0.18, y - t * 0.1),
+                    (x1, y),
+                    (x1 - t * 0.18, y + t * 0.1),
+                ],
+                t,
+            ));
             vec![(x0, y), (x1, y)]
         }
         Adorno::RayaDebajo | Adorno::LlaveDebajo => Vec::new(),
     };
     piezas.push(raya(&marca, t));
-    Caja { ancho: w, alto: dentro.alto + baja, eje: dentro.eje + baja, piezas }
+    Caja {
+        ancho: w,
+        alto: dentro.alto + baja,
+        eje: dentro.eje + baja,
+        piezas,
+    }
 }
 
 /// **Dentro de un recuadro** (`\boxed`): un margen alrededor de la tinta y
@@ -880,18 +936,33 @@ pub fn recuadro(dentro: Caja, t: f32) -> Caja {
     let ancho = dentro.ancho + m * 2.0;
     let (y0, y1) = (arriba + dy - m, abajo + dy + m);
     let mut piezas: Vec<Pieza> = dentro.piezas_en(m, dy).collect();
-    piezas.push(raya(&[(0.0, y0), (ancho, y0), (ancho, y1), (0.0, y1), (0.0, y0)], t));
-    Caja { ancho, alto: (dentro.alto + dy).max(y1 + trazo(t)), eje: dentro.eje + dy, piezas }
+    piezas.push(raya(
+        &[(0.0, y0), (ancho, y0), (ancho, y1), (0.0, y1), (0.0, y0)],
+        t,
+    ));
+    Caja {
+        ancho,
+        alto: (dentro.alto + dy).max(y1 + trazo(t)),
+        eje: dentro.eje + dy,
+        piezas,
+    }
 }
 
 /// Lo pequeno centrado encima de la base (`\overset{?}{=}`).
 pub fn encima(base: Caja, arriba: Caja, t: f32) -> Caja {
     let ancho = base.ancho.max(arriba.ancho);
     let hueco = t * 0.02;
-    let mut piezas: Vec<Pieza> = arriba.piezas_en((ancho - arriba.ancho) / 2.0, 0.0).collect();
+    let mut piezas: Vec<Pieza> = arriba
+        .piezas_en((ancho - arriba.ancho) / 2.0, 0.0)
+        .collect();
     let dy = arriba.alto * 0.7 + hueco;
     piezas.extend(base.piezas_en((ancho - base.ancho) / 2.0, dy));
-    Caja { ancho, alto: base.alto + dy, eje: base.eje + dy, piezas }
+    Caja {
+        ancho,
+        alto: base.alto + dy,
+        eje: base.eje + dy,
+        piezas,
+    }
 }
 
 /// Los signos de angulo que se dibujan con rayas en vez de con la letra.
@@ -939,7 +1010,12 @@ pub fn angulo(signo: char, t: f32, medir: Medir<'_>) -> Caja {
             }
         }
     }
-    Caja { ancho: w, alto, eje, piezas }
+    Caja {
+        ancho: w,
+        alto,
+        eje,
+        piezas,
+    }
 }
 
 /// **De un arbol de formula de las notas** (`formulas::leer`, el LaTeX de
@@ -982,11 +1058,19 @@ pub fn de_formula(p: &crate::formulas::Pieza, t: f32, medir: Medir<'_>, en_linea
         F::Fraccion(a, b) => {
             // Una fraccion dentro de otra, mas pequena (como en un libro);
             // en un renglon de texto, ya de entrada mas pequena.
-            let menor_ = if en_linea { (t * 0.78).max(MINIMO) } else { menor(t).max(t * 0.85) };
+            let menor_ = if en_linea {
+                (t * 0.78).max(MINIMO)
+            } else {
+                menor(t).max(t * 0.85)
+            };
             fraccion(sigue(a, menor_), sigue(b, menor_), t)
         }
         F::Grande(d) => de_formula(d, t, medir, false),
-        F::ConIndices { base, arriba, abajo } => {
+        F::ConIndices {
+            base,
+            arriba,
+            abajo,
+        } => {
             let mut c = sigue(base, t);
             if let Some(b) = abajo {
                 c = subindice(c, sigue(b, menor(t)), t);
@@ -1001,18 +1085,34 @@ pub fn de_formula(p: &crate::formulas::Pieza, t: f32, medir: Medir<'_>, en_linea
             indice.as_ref().map(|i| sigue(i, menor(menor(t)))),
             t,
         ),
-        F::Agrupado { dentro, abre, cierra } => {
+        F::Agrupado {
+            dentro,
+            abre,
+            cierra,
+        } => {
             let d = sigue(dentro, t);
             match abre.as_str() {
                 "(" => entre_parentesis(d, t, medir),
                 "|" => entre_barras(d, t),
-                _ => fila(vec![letra(abre, t, false, medir), d, letra(cierra, t, false, medir)]),
+                _ => fila(vec![
+                    letra(abre, t, false, medir),
+                    d,
+                    letra(cierra, t, false, medir),
+                ]),
             }
         }
         // Matrices y sistemas: la rejilla de celdas y su delimitador
         // dibujado del alto de la rejilla.
-        F::Tabla { filas, abre, cierra, izquierda } => {
-            let celdas = filas.iter().map(|f| f.iter().map(|p| sigue(p, t)).collect()).collect();
+        F::Tabla {
+            filas,
+            abre,
+            cierra,
+            izquierda,
+        } => {
+            let celdas = filas
+                .iter()
+                .map(|f| f.iter().map(|p| sigue(p, t)).collect())
+                .collect();
             let m = matriz(celdas, t, *izquierda);
             match (abre.as_str(), cierra.as_str()) {
                 ("[", _) => entre_corchetes(m, t),
@@ -1039,6 +1139,20 @@ pub fn de_formula(p: &crate::formulas::Pieza, t: f32, medir: Medir<'_>, en_linea
         F::Recuadro(d) => recuadro(sigue(d, t), t),
         F::Encima { base, arriba } => encima(sigue(base, t), sigue(arriba, menor(t)), t),
         F::Debajo { base, abajo } => debajo(sigue(base, t), sigue(abajo, menor(t)), t),
+    }
+}
+
+/// Lo pequeno centrado debajo de la base (el rotulo de `\underbrace`).
+pub fn debajo(base: Caja, abajo: Caja, t: f32) -> Caja {
+    let ancho = base.ancho.max(abajo.ancho);
+    let mut piezas: Vec<Pieza> = base.piezas_en((ancho - base.ancho) / 2.0, 0.0).collect();
+    let dy = base.alto + t * 0.02;
+    piezas.extend(abajo.piezas_en((ancho - abajo.ancho) / 2.0, dy));
+    Caja {
+        ancho,
+        alto: dy + abajo.alto,
+        eje: base.eje,
+        piezas,
     }
 }
 
@@ -1160,13 +1274,4 @@ mod pruebas {
         assert!(v.iter().all(|e| e.rugosidad == 0.0));
         assert!(rayas(&v) >= 3);
     }
-}
-
-/// Lo pequeno centrado debajo de la base (el rotulo de `\underbrace`).
-pub fn debajo(base: Caja, abajo: Caja, t: f32) -> Caja {
-    let ancho = base.ancho.max(abajo.ancho);
-    let mut piezas: Vec<Pieza> = base.piezas_en((ancho - base.ancho) / 2.0, 0.0).collect();
-    let dy = base.alto + t * 0.02;
-    piezas.extend(abajo.piezas_en((ancho - abajo.ancho) / 2.0, dy));
-    Caja { ancho, alto: dy + abajo.alto, eje: base.eje, piezas }
 }

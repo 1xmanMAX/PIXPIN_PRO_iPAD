@@ -18,10 +18,16 @@ fn main() {
     let t = Instant::now();
     let libro = Libro::abrir(ruta.as_ref(), Regional::es_pe()).expect("abrir");
     let t_abrir = t.elapsed().as_secs_f64() * 1000.0;
-    let i = a.get(1).and_then(|s| s.parse().ok()).unwrap_or(libro.hoja_activa);
+    let i = a
+        .get(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(libro.hoja_activa);
     let filas: u32 = a.get(2).and_then(|s| s.parse().ok()).unwrap_or(30);
     for (k, h) in libro.hojas.iter().enumerate() {
-        println!("hoja {k}: {} ({:?}, {:?}) {}", h.nombre, h.visibilidad, h.tipo, h.ruta);
+        println!(
+            "hoja {k}: {} ({:?}, {:?}) {}",
+            h.nombre, h.visibilidad, h.tipo, h.ruta
+        );
     }
     let t = Instant::now();
     let mut hoja = libro.abrir_hoja(i);
@@ -57,7 +63,12 @@ fn main() {
     hoja.cargar_todo();
     let t_todo = t.elapsed().as_secs_f64() * 1000.0;
     println!("vista: {:?}", hoja.vista());
-    println!("combinadas: {}, hipervinculos: {}, dibujos: {}", hoja.cola.combinadas.len(), hoja.cola.hipervinculos.len(), hoja.cola.dibujos.len());
+    println!(
+        "combinadas: {}, hipervinculos: {}, dibujos: {}",
+        hoja.cola.combinadas.len(),
+        hoja.cola.hipervinculos.len(),
+        hoja.cola.dibujos.len()
+    );
     println!(
         "abrir {t_abrir:.1} ms, primeras {filas} filas {t_primera:.1} ms, resto {t_todo:.1} ms; {} filas, {} celdas",
         hoja.filas.len(),

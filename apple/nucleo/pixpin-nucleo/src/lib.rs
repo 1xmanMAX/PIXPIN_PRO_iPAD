@@ -53,6 +53,7 @@ pub mod ajustes;
 // Ajustes → Tareas, Lienzo y Pinear del iPad (25-oct), aparte de `AjustesMac`.
 pub mod ajustes_organizar;
 pub mod aligerar;
+/// «Enviar a Anki» del menu de un mensaje (Windows 2561be0).
 pub mod anki;
 pub mod anotador_al_chat;
 pub mod aparatos;
@@ -60,9 +61,10 @@ pub mod grafito_plano;
 pub mod asistente;
 pub mod automatizaciones;
 pub mod burbujas;
-pub mod carpetas;
 pub mod buscar;
 pub mod chats;
+/// Grabar una clase o una reunion: lo que se guarda en el chat (Windows edd0ffa).
+pub mod clase;
 pub mod compartir;
 pub mod compartidos;
 pub mod copias;
@@ -73,15 +75,18 @@ pub mod editor_construir;
 pub mod editor_estilo;
 pub mod editor_exportar;
 pub mod editor_figuras;
+pub mod galeria_figuras;
 pub mod editor_herramientas;
 pub mod editor_imagenes;
+pub mod editor_marcos;
 pub mod editor_tapado;
 // Editar una tabla dibujada con su cajetin (iPad, 25-oct).
 pub mod editor_tabla;
 pub mod editor_ventana;
 pub mod envio;
+// La isla de la ficha del chat (Windows 71bd8b5).
+pub mod ficha_del_chat;
 pub mod galeria;
-pub mod galeria_figuras;
 pub mod galeria_sincro;
 pub mod hojas;
 pub mod lecciones;
@@ -91,14 +96,14 @@ pub mod lienzo_suelto;
 pub mod letras_lienzo;
 // Las palabras magicas de Pinear (iPad, 25-oct; `pixpin_pin::magia`).
 pub mod magia;
-// Los marcadores del lienzo y su riel (iPad, 25-oct).
-pub mod marcas_lienzo;
 // Fusionar paginas del PDF del proyecto en un lienzo (iPad, 25-oct).
 pub mod fusionar_paginas;
 // La zona al chat como sublienzo y el salto por su enlace (iPad, 25-oct).
 pub mod zona_al_chat;
+pub mod marcas_lienzo;
 // El horario de clases que llama (Windows, 17-oct).
 // Google Calendar, solo para ver (Windows, 18-oct).
+pub mod carpetas;
 pub mod calendario_google;
 pub mod horario;
 // Clip → «Página de un proyecto» (Windows, `ventana_chat/paginas.rs`).
@@ -109,8 +114,12 @@ pub mod mini_tiempos;
 pub mod miniapps;
 pub mod modelos3d;
 pub mod notas;
+/// La nota rica del chat: su Markdown con formato y sus fotos en album
+/// dentro de la burbuja (Windows 974d5ba).
+pub mod nota_rica;
 pub mod office;
 pub mod planos;
+// Renombrar y archivar proyectos (iPad, 25-oct).
 pub mod proyectos;
 pub mod recepcion;
 pub mod recordatorios;
@@ -138,6 +147,7 @@ pub use compartidos::{
 };
 pub use documentos::{DondeAnota, LecturaDocumento, MarcaDocumento};
 pub use editor::{EditorLienzo, FasePuntero, PeticionLienzo};
+pub use marcas_lienzo::{CamaraDelLienzo, MarcaDelLienzo, MarcasDelLienzo};
 pub use editor_estilo::{
     CambioDeEstilo, ColorEstilo, EstiloLienzo, GrosorEstilo, LineaEstilo, RellenoEstilo,
 };
@@ -168,6 +178,8 @@ pub use tareas::{ListaTareas, MarcasTarea, Tarea, marcas_de_tarea, tarea_con_not
 pub use timeline::{DiaTimeline, MomentoTimeline, PaginaDias, PaginaMomentos};
 pub use turnos::{CambioDeTurno, TurnoVoz};
 pub use voz::{GrabacionVoz, SegmentoVoz};
+pub use anki::EnvioAnki;
+pub use clase::{CapturaClase, CapturaDeLaClase, ClaseGuardada, VideoDeLaClase};
 
 /// Lo que puede salir mal, tal como lo ve Swift (un `enum` que `throws`).
 ///

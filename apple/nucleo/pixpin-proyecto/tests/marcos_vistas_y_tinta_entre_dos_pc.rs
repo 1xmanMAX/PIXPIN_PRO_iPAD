@@ -55,7 +55,15 @@ fn montar(etiqueta: &str) -> Dos {
 /// Una vuelta entera desde `de` hacia `a`.
 fn vuelta(d: &Dos, de: &DiscoPc, a: &DiscoPc) {
     conectado(de, a, false, None, &d.reloj, |s| {
-        pixpin_sincro::vuelta::una(s, None, &mut Hecho::default(), "", &|| d.reloj.ahora(), &mut |_| {}).unwrap()
+        pixpin_sincro::vuelta::una(
+            s,
+            None,
+            &mut Hecho::default(),
+            "",
+            &|| d.reloj.ahora(),
+            &mut |_| {},
+        )
+        .unwrap()
     })
     .unwrap();
 }
@@ -71,24 +79,47 @@ fn adjunto_pc(d: &Dos, nombre: &str, bytes: &[u8]) -> (Ficha, PathBuf, String) {
     let g = almacen::asegurar_guardados(&raiz, 1, &aparato()).unwrap();
     let ruta = almacen::guardar_adjunto(&raiz, &g.id, nombre, bytes).unwrap();
     let carpeta = almacen::carpeta(&raiz, &g.id);
-    let numero = Cuaderno::leer_de(&carpeta).map(|c| c.mensajes.len() as i64).unwrap_or(0) + 1;
-    let sello = Sello { cuando: d.reloj.tic(), numero, aparato: aparato(), proyecto: g.id.clone() };
-    cuaderno::anadir(&carpeta, &Mensaje::adjunto(Clase::Archivo, nombre, &ruta, bytes.len() as i64, &sello)).unwrap();
+    let numero = Cuaderno::leer_de(&carpeta)
+        .map(|c| c.mensajes.len() as i64)
+        .unwrap_or(0)
+        + 1;
+    let sello = Sello {
+        cuando: d.reloj.tic(),
+        numero,
+        aparato: aparato(),
+        proyecto: g.id.clone(),
+    };
+    cuaderno::anadir(
+        &carpeta,
+        &Mensaje::adjunto(Clase::Archivo, nombre, &ruta, bytes.len() as i64, &sello),
+    )
+    .unwrap();
     let doc = carpeta.join(&ruta);
-    let uid = anotado::adjunto_de(&raiz, &doc).expect("es un adjunto del chat").uid;
+    let uid = anotado::adjunto_de(&raiz, &doc)
+        .expect("es un adjunto del chat")
+        .uid;
     (g, doc, uid)
 }
 
 /// La base `anot-<uid>…` de «Mensajes guardados» en un PC.
 fn base(raiz: &Path, base: String) -> Base {
-    Base { raiz: raiz.to_path_buf(), chat: GENERAL.to_string(), base }
+    Base {
+        raiz: raiz.to_path_buf(),
+        chat: GENERAL.to_string(),
+        base,
+    }
 }
 
 /// Deja la fecha de un fichero un minuto por delante: dos escrituras del
 /// mismo largo en el mismo milisegundo se tomarian por la misma.
 fn adelantar(f: &Path) {
     let t = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
-    std::fs::OpenOptions::new().write(true).open(f).unwrap().set_modified(t).unwrap();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(f)
+        .unwrap()
+        .set_modified(t)
+        .unwrap();
 }
 
 const MARCOS: &str = "[\n  {\n    \"caja\": [\n      10.0,\n      20.0,\n      300.0,\n      200.0\n    ],\n    \"parte\": 1\n  }\n]";
@@ -97,7 +128,13 @@ const TINTA: &str = r##"{"type":"excalidraw","version":2,"source":"pixpin","elem
 
 fn ids(texto: &str) -> Vec<String> {
     let v: serde_json::Value = serde_json::from_str(texto).unwrap();
-    v["elements"].as_array().unwrap().iter().filter(|e| e["isDeleted"] != true).map(|e| e["id"].as_str().unwrap().to_string()).collect()
+    v["elements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["isDeleted"] != true)
+        .map(|e| e["id"].as_str().unwrap().to_string())
+        .collect()
 }
 
 #[test]
@@ -114,11 +151,26 @@ fn los_marcos_las_vistas_y_la_tinta_de_un_excel_del_chat_viajan_y_vaciados_no_vu
     // Donde caen en el PC: lo de texto en `android/pins/draw/`, la tinta en
     // `lienzos/` (lo de cualquier dibujo del chat).
     let f = aqui.fichero(a::MARCOS);
-    assert!(f.to_string_lossy().replace('\\', "/").ends_with(&format!("android/pins/draw/anot-{uid}.marcos.json")), "{}", f.display());
-    assert!(hoja.tinta().to_string_lossy().replace('\\', "/").ends_with(&format!("lienzos/anot-{uid}-h1.excalidraw")));
+    assert!(
+        f.to_string_lossy()
+            .replace('\\', "/")
+            .ends_with(&format!("android/pins/draw/anot-{uid}.marcos.json")),
+        "{}",
+        f.display()
+    );
+    assert!(
+        hoja.tinta()
+            .to_string_lossy()
+            .replace('\\', "/")
+            .ends_with(&format!("lienzos/anot-{uid}-h1.excalidraw"))
+    );
     // Son del mensaje para la sincronizacion.
     let rels = d.pc.anotado(GENERAL);
-    for t in [format!("pins/draw/anot-{uid}.marcos.json"), format!("pins/draw/anot-{uid}.vistas.json"), format!("pins/draw/anot-{uid}-h1.excalidraw.gz")] {
+    for t in [
+        format!("pins/draw/anot-{uid}.marcos.json"),
+        format!("pins/draw/anot-{uid}.vistas.json"),
+        format!("pins/draw/anot-{uid}-h1.excalidraw.gz"),
+    ] {
         assert!(rels.contains(&t), "{t} en {rels:?}");
     }
 
@@ -126,8 +178,16 @@ fn los_marcos_las_vistas_y_la_tinta_de_un_excel_del_chat_viajan_y_vaciados_no_vu
 
     let alli = base(&r2, a::del_pdf(&uid));
     let hoja_alli = base(&r2, format!("{}-h1", a::del_pdf(&uid)));
-    assert_eq!(anotado::leer(&alli.fichero(a::MARCOS)).as_deref(), Some(MARCOS), "los marcos, tal cual");
-    assert_eq!(anotado::leer(&alli.fichero(a::VISTAS)).as_deref(), Some(VISTAS), "las vistas, tal cual");
+    assert_eq!(
+        anotado::leer(&alli.fichero(a::MARCOS)).as_deref(),
+        Some(MARCOS),
+        "los marcos, tal cual"
+    );
+    assert_eq!(
+        anotado::leer(&alli.fichero(a::VISTAS)).as_deref(),
+        Some(VISTAS),
+        "las vistas, tal cual"
+    );
     let tinta_alli = std::fs::read_to_string(hoja_alli.tinta()).expect("la tinta de la hoja llega");
     assert_eq!(ids(&tinta_alli), vec!["trazo-hoja".to_string()]);
 
@@ -138,13 +198,24 @@ fn los_marcos_las_vistas_y_la_tinta_de_un_excel_del_chat_viajan_y_vaciados_no_vu
     anotado::escribir(&aqui.fichero(a::VISTAS), "{}").unwrap();
     adelantar(&aqui.fichero(a::VISTAS));
     vuelta(&d, &d.pc, &d.otro);
-    assert_eq!(anotado::leer(&alli.fichero(a::MARCOS)).as_deref(), Some("[]"));
-    assert_eq!(anotado::leer(&alli.fichero(a::VISTAS)).as_deref(), Some("{}"));
+    assert_eq!(
+        anotado::leer(&alli.fichero(a::MARCOS)).as_deref(),
+        Some("[]")
+    );
+    assert_eq!(
+        anotado::leer(&alli.fichero(a::VISTAS)).as_deref(),
+        Some("{}")
+    );
     // Y lo de antes no vuelve, dirija quien dirija.
     vuelta(&d, &d.otro, &d.pc);
     vuelta(&d, &d.pc, &d.otro);
     for r in [&aqui, &alli] {
-        assert_eq!(anotado::leer(&r.fichero(a::MARCOS)).as_deref(), Some("[]"), "{}", r.raiz.display());
+        assert_eq!(
+            anotado::leer(&r.fichero(a::MARCOS)).as_deref(),
+            Some("[]"),
+            "{}",
+            r.raiz.display()
+        );
         assert_eq!(anotado::leer(&r.fichero(a::VISTAS)).as_deref(), Some("{}"));
     }
 }
@@ -160,7 +231,11 @@ fn borrar_el_fichero_no_es_vaciarlo_vuelve_del_otro_pc() {
     vuelta(&d, &d.pc, &d.otro);
     std::fs::remove_file(aqui.fichero(a::MARCOS)).unwrap();
     vuelta(&d, &d.pc, &d.otro);
-    assert_eq!(anotado::leer(&aqui.fichero(a::MARCOS)).as_deref(), Some(MARCOS), "lo borrado vuelve");
+    assert_eq!(
+        anotado::leer(&aqui.fichero(a::MARCOS)).as_deref(),
+        Some(MARCOS),
+        "lo borrado vuelve"
+    );
 }
 
 #[test]
@@ -169,7 +244,15 @@ fn los_marcos_de_una_nota_viajan_con_el_codigo_de_la_nota() {
     let raiz = d.pc.raiz();
     let g = almacen::asegurar_guardados(&raiz, 1, &aparato()).unwrap();
     let carpeta = almacen::carpeta(&raiz, &g.id);
-    let m = Mensaje::nota("# Obra", &Sello { cuando: d.reloj.tic(), numero: 1, aparato: aparato(), proyecto: g.id.clone() });
+    let m = Mensaje::nota(
+        "# Obra",
+        &Sello {
+            cuando: d.reloj.tic(),
+            numero: 1,
+            aparato: aparato(),
+            proyecto: g.id.clone(),
+        },
+    );
     cuaderno::anadir(&carpeta, &m).unwrap();
     let codigo = m.codigo_unico();
     let aqui = base(&raiz, format!("{}{codigo}", a::PREFIJO));
@@ -177,8 +260,18 @@ fn los_marcos_de_una_nota_viajan_con_el_codigo_de_la_nota() {
     anotado::escribir(&aqui.fichero(".marcas"), "7:0.25:⭐").unwrap();
     vuelta(&d, &d.pc, &d.otro);
     let alli = base(&d.otro.raiz(), format!("{}{codigo}", a::PREFIJO));
-    assert_eq!(anotado::leer(&alli.fichero(a::MARCOS)).as_deref(), Some(MARCOS));
-    assert_eq!(anotado::leer(&alli.fichero(".marcas")).as_deref(), Some("7:0.25:⭐"));
+    assert_eq!(
+        anotado::leer(&alli.fichero(a::MARCOS)).as_deref(),
+        Some(MARCOS)
+    );
+    assert_eq!(
+        anotado::leer(&alli.fichero(".marcas")).as_deref(),
+        Some("7:0.25:⭐")
+    );
     // Caso negativo: lo de otro codigo no aparece.
-    assert!(!base(&d.otro.raiz(), "anot-ZZZZZ22222".into()).fichero(a::MARCOS).exists());
+    assert!(
+        !base(&d.otro.raiz(), "anot-ZZZZZ22222".into())
+            .fichero(a::MARCOS)
+            .exists()
+    );
 }

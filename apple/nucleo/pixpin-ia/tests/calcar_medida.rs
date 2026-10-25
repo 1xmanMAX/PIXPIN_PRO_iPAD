@@ -39,7 +39,11 @@ mod sin_pintor {
             Err(())
         }
 
-        pub fn renderizar(&self, _indice: u32, _ancho: u32) -> Result<pixpin_codec::ImagenRgba, ()> {
+        pub fn renderizar(
+            &self,
+            _indice: u32,
+            _ancho: u32,
+        ) -> Result<pixpin_codec::ImagenRgba, ()> {
             Err(())
         }
 
@@ -88,12 +92,18 @@ struct Figura {
 fn dist_seg(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let l2 = dx * dx + dy * dy;
-    let t = if l2 > 0.0 { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l2 > 0.0 {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     ((p.0 - a.0 - t * dx).powi(2) + (p.1 - a.1 - t * dy).powi(2)).sqrt()
 }
 
 fn dist_polilinea(p: (f64, f64), pl: &[(f64, f64)]) -> f64 {
-    pl.windows(2).map(|s| dist_seg(p, s[0], s[1])).fold(f64::MAX, f64::min)
+    pl.windows(2)
+        .map(|s| dist_seg(p, s[0], s[1]))
+        .fold(f64::MAX, f64::min)
 }
 
 fn figuras() -> Vec<Figura> {
@@ -119,7 +129,10 @@ fn figuras() -> Vec<Figura> {
         .map(|i| {
             let t = i as f64 / 4000.0 * std::f64::consts::TAU;
             let (u, w) = (a * t.cos(), b * t.sin());
-            (cx + u * g.cos() - w * g.sin(), cy + u * g.sin() + w * g.cos())
+            (
+                cx + u * g.cos() - w * g.sin(),
+                cy + u * g.sin() + w * g.cos(),
+            )
         })
         .collect();
     v.push(Figura {
@@ -164,7 +177,9 @@ fn figuras() -> Vec<Figura> {
                 (c.0 + rr * t.cos(), c.1 - rr * t.sin())
             };
             let (a, b) = (e(desde), e(hasta));
-            ((p.0 - a.0).powi(2) + (p.1 - a.1).powi(2)).sqrt().min(((p.0 - b.0).powi(2) + (p.1 - b.1).powi(2)).sqrt())
+            ((p.0 - a.0).powi(2) + (p.1 - a.1).powi(2))
+                .sqrt()
+                .min(((p.0 - b.0).powi(2) + (p.1 - b.1).powi(2)).sqrt())
         }
     };
     let d_s = move |p: (f64, f64)| arco(p, c1, 20.0, 270.0).min(arco(p, c2, -160.0, 90.0));
@@ -179,10 +194,12 @@ fn figuras() -> Vec<Figura> {
     // Onda: lo de debajo de una senoide, en un rectangulo (4 esquinas).
     let (x0, x1, y1) = (64.0, 704.0, 480.0);
     let f = move |x: f64| cy - 40.0 + 80.0 * (std::f64::consts::TAU * (x - x0) / 256.0).sin();
-    let mut borde: Vec<(f64, f64)> = (0..=6400).map(|i| {
-        let x = x0 + (x1 - x0) * i as f64 / 6400.0;
-        (x, f(x))
-    }).collect();
+    let mut borde: Vec<(f64, f64)> = (0..=6400)
+        .map(|i| {
+            let x = x0 + (x1 - x0) * i as f64 / 6400.0;
+            (x, f(x))
+        })
+        .collect();
     borde.push((x1, y1));
     borde.push((x0, y1));
     borde.push(borde[0]);
@@ -208,7 +225,10 @@ fn rasterizar(f: &Figura) -> Vec<u8> {
             let mut n = 0;
             for sy in 0..4 {
                 for sx in 0..4 {
-                    if (f.dentro)(x as f64 + (sx as f64 + 0.5) / 4.0, y as f64 + (sy as f64 + 0.5) / 4.0) {
+                    if (f.dentro)(
+                        x as f64 + (sx as f64 + 0.5) / 4.0,
+                        y as f64 + (sy as f64 + 0.5) / 4.0,
+                    ) {
                         n += 1;
                     }
                 }
@@ -231,10 +251,22 @@ fn polilineas(els: &[Value]) -> Vec<(Vec<(f64, f64)>, bool)> {
     let mut v = Vec::new();
     for e in els {
         let tipo = e["type"].as_str().unwrap_or("");
-        let (x, y) = (e["x"].as_f64().unwrap_or(0.0), e["y"].as_f64().unwrap_or(0.0));
+        let (x, y) = (
+            e["x"].as_f64().unwrap_or(0.0),
+            e["y"].as_f64().unwrap_or(0.0),
+        );
         let pts = |a: &Value| -> Vec<(f64, f64)> {
             a.as_array()
-                .map(|l| l.iter().map(|p| (x + p[0].as_f64().unwrap_or(0.0), y + p[1].as_f64().unwrap_or(0.0))).collect())
+                .map(|l| {
+                    l.iter()
+                        .map(|p| {
+                            (
+                                x + p[0].as_f64().unwrap_or(0.0),
+                                y + p[1].as_f64().unwrap_or(0.0),
+                            )
+                        })
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         match tipo {
@@ -248,8 +280,14 @@ fn polilineas(els: &[Value]) -> Vec<(Vec<(f64, f64)>, bool)> {
                 let p = pts(&e["points"]);
                 let curva = !e["roundness"].is_null();
                 let p = if curva && p.len() >= 2 {
-                    let q: Vec<_> = p.iter().map(|&(a, b)| pixpin_motor2d::vector::Punto2::nuevo(a as f32, b as f32)).collect();
-                    pixpin_motor2d::curva::muestrear(&q).into_iter().map(|q| (q.x as f64, q.y as f64)).collect()
+                    let q: Vec<_> = p
+                        .iter()
+                        .map(|&(a, b)| pixpin_motor2d::vector::Punto2::nuevo(a as f32, b as f32))
+                        .collect();
+                    pixpin_motor2d::curva::muestrear(&q)
+                        .into_iter()
+                        .map(|q| (q.x as f64, q.y as f64))
+                        .collect()
                 } else {
                     p
                 };
@@ -257,7 +295,11 @@ fn polilineas(els: &[Value]) -> Vec<(Vec<(f64, f64)>, bool)> {
                     let (a, b) = (p[0], p[p.len() - 1]);
                     (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6
                 };
-                let p = if cerrada { p[..p.len() - 1].to_vec() } else { p };
+                let p = if cerrada {
+                    p[..p.len() - 1].to_vec()
+                } else {
+                    p
+                };
                 v.push((p, cerrada));
             }
             _ => {}
@@ -276,7 +318,11 @@ fn giros(p: &[(f64, f64)], cerrada: bool) -> Vec<((f64, f64), f64)> {
     if n < 3 {
         return Vec::new();
     }
-    let rango: Vec<usize> = if cerrada { (0..n).collect() } else { (1..n - 1).collect() };
+    let rango: Vec<usize> = if cerrada {
+        (0..n).collect()
+    } else {
+        (1..n - 1).collect()
+    };
     let mut v = Vec::new();
     for i in rango {
         let (a, b, c) = (p[(i + n - 1) % n], p[i], p[(i + 1) % n]);
@@ -307,11 +353,21 @@ fn medir(f: &Figura, px: &[u8], p: &Parametros) -> (Medida, Vec<Value>, calcar::
     let c = calcar::calcar(px, W, H, p);
     let ms = t0.elapsed().as_secs_f64() * 1000.0;
     let els = pixpin_ia::lienzo::elementos_de_calcado(&c, (0.0, 0.0), 1);
-    let a_img = |(x, y): (f64, f64)| ((x - c.desplazamiento.0) / c.escala, (y - c.desplazamiento.1) / c.escala);
+    let a_img = |(x, y): (f64, f64)| {
+        (
+            (x - c.desplazamiento.0) / c.escala,
+            (y - c.desplazamiento.1) / c.escala,
+        )
+    };
     let pls = polilineas(&els);
     let puntos = els
         .iter()
-        .map(|e| e["points"].as_array().map_or(0, |a| a.len()) + e["huecos"].as_array().map_or(0, |h| h.iter().map(|x| x.as_array().map_or(0, |a| a.len())).sum()))
+        .map(|e| {
+            e["points"].as_array().map_or(0, |a| a.len())
+                + e["huecos"].as_array().map_or(0, |h| {
+                    h.iter().map(|x| x.as_array().map_or(0, |a| a.len())).sum()
+                })
+        })
         .sum();
     let (mut suma, mut n, mut max) = (0.0, 0usize, 0.0f64);
     let mut giro = 0.0;
@@ -334,7 +390,10 @@ fn medir(f: &Figura, px: &[u8], p: &Parametros) -> (Medida, Vec<Value>, calcar::
         }
         for (q, g) in giros(&img, *cerrada) {
             giro += g.abs();
-            let esquina = f.esquinas.iter().any(|e| ((e.0 - q.0).powi(2) + (e.1 - q.1).powi(2)).sqrt() < 6.0);
+            let esquina = f
+                .esquinas
+                .iter()
+                .any(|e| ((e.0 - q.0).powi(2) + (e.1 - q.1).powi(2)).sqrt() < 6.0);
             if g.abs() > 45f64.to_radians() && !esquina {
                 dientes += 1;
             }
@@ -358,21 +417,46 @@ fn medir(f: &Figura, px: &[u8], p: &Parametros) -> (Medida, Vec<Value>, calcar::
 
 /// Pinta los elementos sobre un papel de 800x600 (entero, y un trozo
 /// ampliado si se pide: en fracciones del papel).
-fn pintar(els: &[Value], ruta: &Path, lupa: Option<(f64, f64, f64)>) -> Option<pixpin_codec::imagen::ImagenRgba> {
+fn pintar(
+    els: &[Value],
+    ruta: &Path,
+    lupa: Option<(f64, f64, f64)>,
+) -> Option<pixpin_codec::imagen::ImagenRgba> {
     let doc = pixpin_ia::lienzo::documento(els.to_vec());
-    let Ok(lienzo) = pixpin_motor2d::excalidraw::leer(&doc) else { return None };
+    let Ok(lienzo) = pixpin_motor2d::excalidraw::leer(&doc) else {
+        return None;
+    };
     let escena = pixpin_motor2d::excalidraw::a_escena(&lienzo);
-    let hojas = pixpin_motor2d::exportar::hojas(&escena, pixpin_motor2d::exportar::Alcance::Todo, &[], Some((800.0, 600.0)));
+    let hojas = pixpin_motor2d::exportar::hojas(
+        &escena,
+        pixpin_motor2d::exportar::Alcance::Todo,
+        &[],
+        Some((800.0, 600.0)),
+    );
     let blanco = pixpin_motor2d::ColorRgba::opaco(1.0, 1.0, 1.0);
-    let Some(pdf) = pixpin_pdf::escribir::de_hojas(&hojas, Some(blanco), &|_| None) else { return None };
+    let pdf = pixpin_pdf::escribir::de_hojas(&hojas, Some(blanco), &|_| None)?;
     let tmp = ruta.with_extension("pdf");
     if std::fs::write(&tmp, pdf).is_err() {
         return None;
     }
-    let img = crate::sin_pintor::Documento::abrir(&tmp).ok().and_then(|d| match lupa {
-        None => d.renderizar(0, 1000).ok(),
-        Some((x, y, l)) => d.renderizar_trozo(0, ((x / 800.0) as f32, (y / 600.0) as f32, (l / 800.0) as f32, (l / 600.0) as f32), 800, 800).ok(),
-    });
+    let img = crate::sin_pintor::Documento::abrir(&tmp)
+        .ok()
+        .and_then(|d| match lupa {
+            None => d.renderizar(0, 1000).ok(),
+            Some((x, y, l)) => d
+                .renderizar_trozo(
+                    0,
+                    (
+                        (x / 800.0) as f32,
+                        (y / 600.0) as f32,
+                        (l / 800.0) as f32,
+                        (l / 600.0) as f32,
+                    ),
+                    800,
+                    800,
+                )
+                .ok(),
+        });
     let _ = std::fs::remove_file(&tmp);
     let img = img?;
     if let Ok(png) = pixpin_codec::imagen::codificar_png(&img) {
@@ -385,13 +469,23 @@ fn pintar(els: &[Value], ruta: &Path, lupa: Option<(f64, f64, f64)>) -> Option<p
 /// bien dentro de la figura de verdad (a mas de 3 pixeles pintados de su
 /// borde), los que salen blancos, por mil. Entre dos manchas vecinas
 /// calcadas por separado puede quedar una rendija por la que asoma el papel.
-fn rendijas(img: &pixpin_codec::imagen::ImagenRgba, c: &calcar::Calcado, els: &[Value], lleno: &dyn Fn(f64, f64) -> bool) -> f64 {
+fn rendijas(
+    img: &pixpin_codec::imagen::ImagenRgba,
+    c: &calcar::Calcado,
+    els: &[Value],
+    lleno: &dyn Fn(f64, f64) -> bool,
+) -> f64 {
     // Del pixel pintado al lienzo: la caja de lo pintado frente a la de los
     // elementos (con su borde de 2: 1 por fuera).
     let mut caja = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
     for (pl, _) in polilineas(els) {
         for q in pl {
-            caja = [caja[0].min(q.0 - 1.0), caja[1].min(q.1 - 1.0), caja[2].max(q.0 + 1.0), caja[3].max(q.1 + 1.0)];
+            caja = [
+                caja[0].min(q.0 - 1.0),
+                caja[1].min(q.1 - 1.0),
+                caja[2].max(q.0 + 1.0),
+                caja[3].max(q.1 + 1.0),
+            ];
         }
     }
     let mut pintada = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
@@ -399,7 +493,12 @@ fn rendijas(img: &pixpin_codec::imagen::ImagenRgba, c: &calcar::Calcado, els: &[
         for u in 0..img.ancho {
             let i = ((v * img.ancho + u) * 4) as usize;
             if img.pixeles[i..i + 3].iter().any(|&k| k < 200) {
-                pintada = [pintada[0].min(u as f64), pintada[1].min(v as f64), pintada[2].max(u as f64 + 1.0), pintada[3].max(v as f64 + 1.0)];
+                pintada = [
+                    pintada[0].min(u as f64),
+                    pintada[1].min(v as f64),
+                    pintada[2].max(u as f64 + 1.0),
+                    pintada[3].max(v as f64 + 1.0),
+                ];
             }
         }
     }
@@ -409,20 +508,36 @@ fn rendijas(img: &pixpin_codec::imagen::ImagenRgba, c: &calcar::Calcado, els: &[
     let sx = (caja[2] - caja[0]) / (pintada[2] - pintada[0]);
     let sy = (caja[3] - caja[1]) / (pintada[3] - pintada[1]);
     let a_img = |u: f64, v: f64| {
-        let (x, y) = (caja[0] + (u - pintada[0]) * sx, caja[1] + (v - pintada[1]) * sy);
-        ((x - c.desplazamiento.0) / c.escala, (y - c.desplazamiento.1) / c.escala)
+        let (x, y) = (
+            caja[0] + (u - pintada[0]) * sx,
+            caja[1] + (v - pintada[1]) * sy,
+        );
+        (
+            (x - c.desplazamiento.0) / c.escala,
+            (y - c.desplazamiento.1) / c.escala,
+        )
     };
     let r = 3.0;
     let (mut dentro, mut blancos) = (0usize, 0usize);
     for v in 0..img.alto {
         for u in 0..img.ancho {
             let (fu, fv) = (u as f64 + 0.5, v as f64 + 0.5);
-            let todo_dentro = [(0.0, 0.0), (r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r), (r, r), (-r, -r), (r, -r), (-r, r)]
-                .iter()
-                .all(|(du, dv)| {
-                    let (x, y) = a_img(fu + du, fv + dv);
-                    lleno(x, y)
-                });
+            let todo_dentro = [
+                (0.0, 0.0),
+                (r, 0.0),
+                (-r, 0.0),
+                (0.0, r),
+                (0.0, -r),
+                (r, r),
+                (-r, -r),
+                (r, -r),
+                (-r, r),
+            ]
+            .iter()
+            .all(|(du, dv)| {
+                let (x, y) = a_img(fu + du, fv + dv);
+                lleno(x, y)
+            });
             if !todo_dentro {
                 continue;
             }
@@ -453,7 +568,13 @@ fn medir_calcado() {
     ];
     let modos = [
         ("manchas", Parametros::default()),
-        ("contornos", Parametros { solo_contornos: true, ..Default::default() }),
+        (
+            "contornos",
+            Parametros {
+                solo_contornos: true,
+                ..Default::default()
+            },
+        ),
     ];
     for f in figuras() {
         let px = rasterizar(&f);
@@ -466,8 +587,15 @@ fn medir_calcado() {
             tabla.push(linea(f.nombre, modo, &m));
 
             let (lx, ly, ll) = f.lupa;
-            let (x, y) = (lx * c.escala + c.desplazamiento.0, ly * c.escala + c.desplazamiento.1);
-            pintar(&els, &dir.join(format!("{}-{modo}-lupa.png", f.nombre)), Some((x, y, ll * c.escala)));
+            let (x, y) = (
+                lx * c.escala + c.desplazamiento.0,
+                ly * c.escala + c.desplazamiento.1,
+            );
+            pintar(
+                &els,
+                &dir.join(format!("{}-{modo}-lupa.png", f.nombre)),
+                Some((x, y, ll * c.escala)),
+            );
         }
     }
     // El perrito, a 768 px (lo que tarda) y como es.
@@ -475,7 +603,12 @@ fn medir_calcado() {
         r"C:\Users\MaxBook\AppData\Local\Temp\claude\F--THE-FORGE-PIXPIN-PC-VERSION-MAX\afe461c5-d9fa-4287-b8b5-3ab7961f6cb3\scratchpad\perrito\perrito.png",
     );
     if let Ok(img) = image::open(&ruta) {
-        let img = image::imageops::resize(&img.to_rgba8(), 768, 768, image::imageops::FilterType::CatmullRom);
+        let img = image::imageops::resize(
+            &img.to_rgba8(),
+            768,
+            768,
+            image::imageops::FilterType::CatmullRom,
+        );
         let nada = Figura {
             nombre: "perrito",
             dentro: Box::new(|_, _| false),
@@ -484,7 +617,16 @@ fn medir_calcado() {
             esquinas: vec![],
             lupa: (0.0, 0.0, 0.0),
         };
-        for (modo, p) in modos.iter().chain([("manchas-alto", Parametros { detalle: calcar::Detalle::Alto, ..Default::default() })].iter()) {
+        for (modo, p) in modos.iter().chain(
+            [(
+                "manchas-alto",
+                Parametros {
+                    detalle: calcar::Detalle::Alto,
+                    ..Default::default()
+                },
+            )]
+            .iter(),
+        ) {
             let t0 = Instant::now();
             let c = calcar::calcar(img.as_raw(), 768, 768, p);
             let ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -493,14 +635,31 @@ fn medir_calcado() {
             let mut dientes = 0;
             let mut giro = 0.0;
             for (pl, cerrada) in &pls {
-                let img: Vec<(f64, f64)> = pl.iter().map(|q| ((q.0 - c.desplazamiento.0) / c.escala, (q.1 - c.desplazamiento.1) / c.escala)).collect();
+                let img: Vec<(f64, f64)> = pl
+                    .iter()
+                    .map(|q| {
+                        (
+                            (q.0 - c.desplazamiento.0) / c.escala,
+                            (q.1 - c.desplazamiento.1) / c.escala,
+                        )
+                    })
+                    .collect();
                 for (_, g) in giros(&img, *cerrada) {
                     giro += g.abs();
                     dientes += usize::from(g.abs() > 45f64.to_radians());
                 }
             }
             let puntos: usize = pls.iter().map(|p| p.0.len()).sum();
-            let mut m = Medida { elementos: els.len(), puntos, err_medio: 0.0, err_max: 0.0, giro: giro / std::f64::consts::TAU / pls.len().max(1) as f64, dientes, ms, rendijas: 0.0 };
+            let mut m = Medida {
+                elementos: els.len(),
+                puntos,
+                err_medio: 0.0,
+                err_max: 0.0,
+                giro: giro / std::f64::consts::TAU / pls.len().max(1) as f64,
+                dientes,
+                ms,
+                rendijas: 0.0,
+            };
 
             let pintado = pintar(&els, &dir.join(format!("perrito-{modo}.png")), None);
             if !p.solo_contornos {
@@ -515,9 +674,21 @@ fn medir_calcado() {
             }
             tabla.push(linea(nada.nombre, modo, &m));
             // La oreja izquierda y el hocico, ampliados.
-            pintar(&els, &dir.join(format!("perrito-{modo}-lupa-oreja.png")), Some((215.0, 140.0, 90.0)));
-            pintar(&els, &dir.join(format!("perrito-{modo}-lupa-boca.png")), Some((350.0, 350.0, 100.0)));
-            pintar(&els, &dir.join(format!("perrito-{modo}-lupa-frente.png")), Some((430.0, 250.0, 130.0)));
+            pintar(
+                &els,
+                &dir.join(format!("perrito-{modo}-lupa-oreja.png")),
+                Some((215.0, 140.0, 90.0)),
+            );
+            pintar(
+                &els,
+                &dir.join(format!("perrito-{modo}-lupa-boca.png")),
+                Some((350.0, 350.0, 100.0)),
+            );
+            pintar(
+                &els,
+                &dir.join(format!("perrito-{modo}-lupa-frente.png")),
+                Some((430.0, 250.0, 130.0)),
+            );
         }
     }
     let texto = tabla.join("\n");
@@ -535,11 +706,28 @@ fn tiempo_del_perrito() {
         r"C:\Users\MaxBook\AppData\Local\Temp\claude\F--THE-FORGE-PIXPIN-PC-VERSION-MAX\afe461c5-d9fa-4287-b8b5-3ab7961f6cb3\scratchpad\perrito\perrito.png",
     );
     let Ok(img) = image::open(&ruta) else { return };
-    let img = image::imageops::resize(&img.to_rgba8(), 768, 768, image::imageops::FilterType::CatmullRom);
+    let img = image::imageops::resize(
+        &img.to_rgba8(),
+        768,
+        768,
+        image::imageops::FilterType::CatmullRom,
+    );
     for (modo, p) in [
         ("manchas", Parametros::default()),
-        ("contornos", Parametros { solo_contornos: true, ..Default::default() }),
-        ("manchas-alto", Parametros { detalle: calcar::Detalle::Alto, ..Default::default() }),
+        (
+            "contornos",
+            Parametros {
+                solo_contornos: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "manchas-alto",
+            Parametros {
+                detalle: calcar::Detalle::Alto,
+                ..Default::default()
+            },
+        ),
     ] {
         let mut t: Vec<f64> = (0..5)
             .map(|_| {

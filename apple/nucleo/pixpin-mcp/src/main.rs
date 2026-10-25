@@ -33,15 +33,25 @@ fn main() {
         match protocolo::atender(&linea) {
             Salida::Responder(v) => escribir(&salida, &v),
             Salida::Nada => {}
-            Salida::Herramienta { id, nombre, argumentos } => {
+            Salida::Herramienta {
+                id,
+                nombre,
+                argumentos,
+            } => {
                 let salida = salida.clone();
-                let h = std::thread::Builder::new().name(format!("herramienta {nombre}")).spawn(move || {
-                    let r = match pixpin_mcp::herramientas::llamar(&nombre, &argumentos) {
-                        Some(r) => protocolo::respuesta(id, r),
-                        None => protocolo::error(id, protocolo::codigo::PARAMETROS, format!("Herramienta desconocida: {nombre}")),
-                    };
-                    escribir(&salida, &r);
-                });
+                let h = std::thread::Builder::new()
+                    .name(format!("herramienta {nombre}"))
+                    .spawn(move || {
+                        let r = match pixpin_mcp::herramientas::llamar(&nombre, &argumentos) {
+                            Some(r) => protocolo::respuesta(id, r),
+                            None => protocolo::error(
+                                id,
+                                protocolo::codigo::PARAMETROS,
+                                format!("Herramienta desconocida: {nombre}"),
+                            ),
+                        };
+                        escribir(&salida, &r);
+                    });
                 match h {
                     Ok(h) => hilos.push(h),
                     Err(e) => eprintln!("pixpin-mcp: no se pudo lanzar un hilo: {e}"),

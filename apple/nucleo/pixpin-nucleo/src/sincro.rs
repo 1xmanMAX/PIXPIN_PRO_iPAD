@@ -612,6 +612,8 @@ impl Nucleo {
         drop(s);
         // Lo que llego cambia los cuadernos: los indices de la cache, fuera.
         self.vaciar_caches();
+        // Si llego el chat del asistente de otro aparato, uno solo (22-oct).
+        let juntados = self.unificar_asistentes();
         let v = r?;
         let segundos = inicio.elapsed().as_secs_f64();
         let mut avisos = vuelta::avisos_de_lo_hecho(&hecho);
@@ -637,6 +639,7 @@ impl Nucleo {
             // Preguntando se pudo borrar o levantar un proyecto entero: la
             // lista se relee siempre.
             trajo: hecho_trajo(&hecho)
+                || juntados > 0
                 || (matches!(alcance, Alcance::Preguntar(_)) && !v.cancelada),
             cancelada: v.cancelada,
         })
@@ -731,6 +734,8 @@ impl Escucha {
         ) {
             // Lo que llego cambia los cuadernos y la galeria.
             self.nucleo.vaciar_caches();
+            // Y si era el chat del asistente de otro aparato, uno solo.
+            self.nucleo.unificar_asistentes();
         }
         r
     }

@@ -17,8 +17,8 @@ use std::sync::Mutex;
 
 use crate::base::{Base, Mapa};
 use crate::canal::{Canal, ErrorCanal, MAGIA_DE_INVITACION, TOPE_DE_TRAMO, Tipo};
-use crate::compartidos::{self, AccesoDePersona, ChatCompartido, CompartidosEnDisco};
 use crate::canonico::{self, Json};
+use crate::compartidos::{self, AccesoDePersona, ChatCompartido, CompartidosEnDisco};
 use crate::diferencia::{self, Apunte, Paso};
 use crate::disco::{self, Disco, Identidad, es_texto, permitida};
 use crate::fusion::{self, Criterio, Cuenta};
@@ -989,8 +989,8 @@ impl<D: Disco + ?Sized> Respondedor<'_, D> {
                 let rel = ruta()?;
                 let c = chat()?;
                 // De una persona, ademas, nada que sea tambien de otro chat.
-                let es_suyo = suyo(d, alcance, &c, &rel)?
-                    && acceso.is_none_or(|a| !a.vedado(&c, &rel));
+                let es_suyo =
+                    suyo(d, alcance, &c, &rel)? && acceso.is_none_or(|a| !a.vedado(&c, &rel));
                 if !(permitida(&rel) && es_texto(&rel) && es_suyo) {
                     return Err(fallo(format!("No es de este chat: {rel}")));
                 }
@@ -1012,8 +1012,8 @@ impl<D: Disco + ?Sized> Respondedor<'_, D> {
                 let rel = ruta()?;
                 let c = chat()?;
                 // De una persona, ademas, nada que sea tambien de otro chat.
-                let es_suyo = suyo(d, alcance, &c, &rel)?
-                    && acceso.is_none_or(|a| !a.vedado(&c, &rel));
+                let es_suyo =
+                    suyo(d, alcance, &c, &rel)? && acceso.is_none_or(|a| !a.vedado(&c, &rel));
                 if !(permitida(&rel) && es_suyo) {
                     return Err(fallo(format!("No es de este chat: {rel}")));
                 }
@@ -1049,8 +1049,8 @@ impl<D: Disco + ?Sized> Respondedor<'_, D> {
             "compartidos" if acceso.is_none() => {
                 let cd = CompartidosEnDisco::nuevo(&d.raiz());
                 let yo = cd.yo_de(d)?;
-                let su_ficha = compartidos::ficha_de_texto(p.persona.as_deref())
-                    .filter(|f| f.id == otro.id);
+                let su_ficha =
+                    compartidos::ficha_de_texto(p.persona.as_deref()).filter(|f| f.id == otro.id);
                 let suyos = compartidos::de_texto(p.compartidos.as_deref());
                 let juntos = cd.cambiar(|mios| -> io::Result<_> {
                     Ok(compartidos::juntar_del_grupo(
@@ -1674,8 +1674,8 @@ impl<'a, D: Disco + ?Sized, F: Read + Write> Sesion<'a, D, F> {
             if r.error.is_some() {
                 return Ok(false);
             }
-            let su_ficha = compartidos::ficha_de_texto(r.persona.as_deref())
-                .filter(|f| f.id == self.otro.id);
+            let su_ficha =
+                compartidos::ficha_de_texto(r.persona.as_deref()).filter(|f| f.id == self.otro.id);
             let suyos = compartidos::de_texto(r.compartidos.as_deref());
             cd.cambiar(|mios| -> io::Result<_> {
                 Ok(compartidos::juntar_del_grupo(

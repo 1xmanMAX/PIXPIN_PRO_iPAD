@@ -176,7 +176,14 @@ fn como_tabla(texto: &str) -> Option<Objeto> {
 /// Dos textos-tabla juntos celda a celda, en JSON compacto
 /// (`Fusion.tablaJunta`). `None` si alguno no es una tabla: entonces va por
 /// parrafos, como cualquier texto.
-fn tabla_junta(b: Option<&Json>, mio: &str, suyo: &str, gana_mio: bool, c: &Criterio, cuenta: &mut Cuenta) -> Option<String> {
+fn tabla_junta(
+    b: Option<&Json>,
+    mio: &str,
+    suyo: &str,
+    gana_mio: bool,
+    c: &Criterio,
+    cuenta: &mut Cuenta,
+) -> Option<String> {
     let m = como_tabla(mio)?;
     let s = como_tabla(suyo)?;
     let base = b.and_then(Json::como_cadena).and_then(como_tabla);
@@ -982,24 +989,67 @@ mod pruebas {
     /// por el PC (una celda por linea) o por el movil (en una linea).
     #[test]
     fn la_tabla_del_texto_de_un_mensaje_se_junta_celda_a_celda() {
-        let msj = |texto: &str| Json::Objeto(Objeto::de(vec![("id".into(), Json::cadena("1")), ("texto".into(), Json::cadena(texto))]));
+        let msj = |texto: &str| {
+            Json::Objeto(Objeto::de(vec![
+                ("id".into(), Json::cadena("1")),
+                ("texto".into(), Json::cadena(texto)),
+            ]))
+        };
         let base = "{\n  \"nombre\": \"T\",\n  \"celdas\": {\n    \"A1\": \"1\",\n    \"B1\": \"2\"\n  },\n  \"tocado\": 10,\n  \"protegida\": true\n}";
         // El PC cambia A1 y anade A2 (en su JSON con sangria); el movil anade
         // C1 (compacto). Por parrafos esto era un choque o un JSON roto.
         let pc = "{\n  \"nombre\": \"T\",\n  \"celdas\": {\n    \"A1\": \"uno\",\n    \"A2\": \"x\",\n    \"B1\": \"2\"\n  },\n  \"tocado\": 20,\n  \"protegida\": true\n}";
         let movil = r#"{"nombre":"T","celdas":{"A1":"1","B1":"2","C1":"=A1+B1"},"tocado":30,"protegida":true}"#;
         let mut cuenta = Cuenta::default();
-        let r = json(Some(&msj(base)), Some(&msj(pc)), Some(&msj(movil)), &Criterio::default(), &mut cuenta).unwrap();
-        let texto = r.como_objeto().unwrap().obtener("texto").unwrap().como_cadena().unwrap().to_string();
+        let r = json(
+            Some(&msj(base)),
+            Some(&msj(pc)),
+            Some(&msj(movil)),
+            &Criterio::default(),
+            &mut cuenta,
+        )
+        .unwrap();
+        let texto = r
+            .como_objeto()
+            .unwrap()
+            .obtener("texto")
+            .unwrap()
+            .como_cadena()
+            .unwrap()
+            .to_string();
         let t = j(&texto);
-        let celdas = t.como_objeto().unwrap().obtener("celdas").unwrap().como_objeto().unwrap();
+        let celdas = t
+            .como_objeto()
+            .unwrap()
+            .obtener("celdas")
+            .unwrap()
+            .como_objeto()
+            .unwrap();
         assert_eq!(campo(celdas, "A1"), "uno");
         assert_eq!(campo(celdas, "A2"), "x");
         assert_eq!(campo(celdas, "C1"), "=A1+B1");
-        assert_eq!(t.como_objeto().unwrap().obtener("protegida"), Some(&Json::Literal("true".into())), "lo que el PC no conoce sigue");
+        assert_eq!(
+            t.como_objeto().unwrap().obtener("protegida"),
+            Some(&Json::Literal("true".into())),
+            "lo que el PC no conoce sigue"
+        );
         // Caso negativo: un texto que no es una tabla sigue por parrafos.
-        let nota = json(Some(&msj("a\n\nb")), Some(&msj("a2\n\nb")), Some(&msj("a\n\nb2")), &Criterio::default(), &mut Cuenta::default()).unwrap();
-        assert_eq!(nota.como_objeto().unwrap().obtener("texto").unwrap().como_cadena(), Some("a2\n\nb2"));
+        let nota = json(
+            Some(&msj("a\n\nb")),
+            Some(&msj("a2\n\nb")),
+            Some(&msj("a\n\nb2")),
+            &Criterio::default(),
+            &mut Cuenta::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            nota.como_objeto()
+                .unwrap()
+                .obtener("texto")
+                .unwrap()
+                .como_cadena(),
+            Some("a2\n\nb2")
+        );
         // Ni una tabla rota se toma por tabla.
         assert!(como_tabla("{\"celdas\": {").is_none());
         assert!(como_tabla("{\"celdas\": [1]}").is_none());

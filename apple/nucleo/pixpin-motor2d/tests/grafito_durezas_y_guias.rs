@@ -72,7 +72,10 @@ fn trazo(d: Option<Dureza>, dx: f32) -> Elemento {
     let puntos: Vec<Punto2> = (0..=24)
         .map(|i| {
             let t = i as f32 / 24.0;
-            Punto2::nuevo(dx + 20.0 + 160.0 * t, 60.0 - 40.0 * (t * std::f32::consts::PI).sin())
+            Punto2::nuevo(
+                dx + 20.0 + 160.0 * t,
+                60.0 - 40.0 * (t * std::f32::consts::PI).sin(),
+            )
         })
         .collect();
     let mut e = Elemento {
@@ -104,7 +107,13 @@ fn carga(c: &grafito::Cocido) -> (u64, usize) {
 
 #[test]
 fn la_curva_pasa_por_todas_las_muestras_sin_mover_ninguna() {
-    let muestras = [[0.0, 0.0], [10.0, 3.0], [18.0, 15.0], [20.0, 30.0], [12.0, 41.0]];
+    let muestras = [
+        [0.0, 0.0],
+        [10.0, 3.0],
+        [18.0, 15.0],
+        [20.0, 30.0],
+        [12.0, 41.0],
+    ];
     let (curva, _, indices) = curva_del_trazo(&muestras, None, 1.0);
     for (k, m) in muestras.iter().enumerate() {
         assert_eq!(curva[indices[k]], *m, "la muestra {k} se movio");
@@ -132,7 +141,8 @@ fn una_circunferencia_con_pocas_muestras_sale_redonda_y_no_un_poligono() {
             if a < 0.0 {
                 a += 2.0 * std::f64::consts::PI;
             }
-            a > std::f64::consts::PI / 6.0 && a < 2.0 * std::f64::consts::PI - std::f64::consts::PI / 6.0
+            a > std::f64::consts::PI / 6.0
+                && a < 2.0 * std::f64::consts::PI - std::f64::consts::PI / 6.0
         })
         .collect();
     let peor = dentro.iter().map(|p| aparta(p)).fold(0.0, f64::max);
@@ -213,7 +223,10 @@ fn hb_escrita_y_sin_escribir_pintan_lo_mismo_bit_a_bit() {
     let sin = grafito::cocer_sin_horno(&trazo(None, 0.0)).unwrap();
     let con = grafito::cocer_sin_horno(&trazo(Some(Dureza::Hb), 0.0)).unwrap();
     assert_eq!(sin.rgba, con.rgba);
-    assert_eq!((sin.ancho, sin.alto, sin.x0, sin.y0), (con.ancho, con.alto, con.x0, con.y0));
+    assert_eq!(
+        (sin.ancho, sin.alto, sin.x0, sin.y0),
+        (con.ancho, con.alto, con.x0, con.y0)
+    );
 }
 
 #[test]
@@ -253,15 +266,18 @@ fn una_figura_de_grafito_tambien_lleva_su_dureza() {
 fn el_grafito_nace_con_la_dureza_elegida_y_hb_no_se_apunta() {
     let mut escena = Escena::nueva();
     let mut g = con(Herramienta::Grafito);
-    g.estilo.aplicar(pixpin_motor2d::estilo::CambioEstilo::Dureza(Dureza::B4));
+    g.estilo
+        .aplicar(pixpin_motor2d::estilo::CambioEstilo::Dureza(Dureza::B4));
     let e = arrastrar(&mut g, &mut escena, (0.0, 0.0), (30.0, 30.0));
     assert_eq!(e.extras.dureza, Some(Dureza::B4));
-    g.estilo.aplicar(pixpin_motor2d::estilo::CambioEstilo::Dureza(Dureza::Hb));
+    g.estilo
+        .aplicar(pixpin_motor2d::estilo::CambioEstilo::Dureza(Dureza::Hb));
     let e = arrastrar(&mut g, &mut escena, (0.0, 50.0), (30.0, 80.0));
     assert_eq!(e.extras.dureza, None, "HB es la de fabrica: no se escribe");
     // Caso negativo: el lapiz de tinta no tiene dureza aunque este elegida.
     let mut g = con(Herramienta::Lapiz);
-    g.estilo.aplicar(pixpin_motor2d::estilo::CambioEstilo::Dureza(Dureza::B8));
+    g.estilo
+        .aplicar(pixpin_motor2d::estilo::CambioEstilo::Dureza(Dureza::B8));
     let e = arrastrar(&mut g, &mut escena, (0.0, 100.0), (30.0, 130.0));
     assert_eq!(e.extras.dureza, None);
 }
@@ -336,7 +352,10 @@ fn una_dureza_desconocida_sobrevive_a_mover_el_trazo() {
     escena.elementos[2].tocar();
     let v: serde_json::Value =
         serde_json::from_str(&excalidraw::escribir(&excalidraw::con_escena(&l, &escena))).unwrap();
-    assert_eq!(v["elements"][2]["dureza"], "10B", "se perdio la de una version futura");
+    assert_eq!(
+        v["elements"][2]["dureza"], "10B",
+        "se perdio la de una version futura"
+    );
 }
 
 #[test]
@@ -418,7 +437,10 @@ fn escribiendo_con_grafito_pararse_no_convierte_la_letra() {
     assert_eq!(e.material, MaterialTinta::Cuadritos);
     // Y la misma letra a 5 aumentos (200 px en pantalla) ya es grande.
     assert!(pixpin_motor2d::forma_rapida::trazo_de_figura_del_grafito(
-        &muestras.iter().map(|p| Punto2::nuevo(p.0, p.1)).collect::<Vec<_>>(),
+        &muestras
+            .iter()
+            .map(|p| Punto2::nuevo(p.0, p.1))
+            .collect::<Vec<_>>(),
         5.0
     ));
 }
@@ -429,9 +451,16 @@ fn con_grafito_una_raya_larga_quieta_sale_recta_de_grafito() {
     let mut g = con(Herramienta::Grafito);
     ev(&mut g, &mut escena, pulsar(0.0, 0.0));
     for i in 1..=20 {
-        ev(&mut g, &mut escena, mover(i as f32 * 15.0, if i % 2 == 0 { 2.0 } else { -2.0 }));
+        ev(
+            &mut g,
+            &mut escena,
+            mover(i as f32 * 15.0, if i % 2 == 0 { 2.0 } else { -2.0 }),
+        );
     }
-    assert!(g.convertir_en_forma(&mut escena, Punto2::nuevo(300.0, 0.0), 1.0).is_some());
+    assert!(
+        g.convertir_en_forma(&mut escena, Punto2::nuevo(300.0, 0.0), 1.0)
+            .is_some()
+    );
     let e = escena.elementos.last().unwrap();
     assert!(matches!(e.figura, Figura::Linea { .. }), "{:?}", e.figura);
     assert_eq!(e.material, MaterialTinta::Cuadritos);
@@ -443,8 +472,14 @@ fn con_grafito_clavar_la_punta_abre_el_compas() {
     let mut g = con(Herramienta::Grafito);
     ev(&mut g, &mut escena, pulsar(100.0, 100.0));
     ev(&mut g, &mut escena, mover(101.0, 100.0));
-    assert!(g.convertir_en_forma(&mut escena, Punto2::nuevo(140.0, 100.0), 1.0).is_some());
-    assert!(matches!(escena.elementos.last().unwrap().figura, Figura::Elipse));
+    assert!(
+        g.convertir_en_forma(&mut escena, Punto2::nuevo(140.0, 100.0), 1.0)
+            .is_some()
+    );
+    assert!(matches!(
+        escena.elementos.last().unwrap().figura,
+        Figura::Elipse
+    ));
 }
 
 #[test]
@@ -463,7 +498,10 @@ fn el_lapiz_de_tinta_sigue_convirtiendo_una_raya_corta() {
     for i in 1..=10 {
         ev(&mut g, &mut escena, mover(i as f32 * 8.0, 0.0));
     }
-    assert!(g.convertir_en_forma(&mut escena, Punto2::nuevo(80.0, 0.0), 1.0).is_some());
+    assert!(
+        g.convertir_en_forma(&mut escena, Punto2::nuevo(80.0, 0.0), 1.0)
+            .is_some()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -495,7 +533,10 @@ fn fuera_del_modo_guia_una_guia_no_se_elige_y_dentro_solo_las_guias() {
     assert_eq!(clic(&mut g, &mut escena, 100.0, 25.0), Vec::<u64>::new());
     assert_eq!(clic(&mut g, &mut escena, 0.0, 25.0), vec![dibujo]);
     assert!(g.poner_modo_guia(true));
-    assert!(g.seleccion.ids().is_empty(), "cambiar de mundo suelta lo elegido");
+    assert!(
+        g.seleccion.ids().is_empty(),
+        "cambiar de mundo suelta lo elegido"
+    );
     assert_eq!(clic(&mut g, &mut escena, 0.0, 25.0), Vec::<u64>::new());
     assert_eq!(clic(&mut g, &mut escena, 100.0, 25.0), vec![guia]);
 }
@@ -542,7 +583,10 @@ fn esconder_las_guias_no_las_borra_no_se_ven_y_no_se_tocan_ni_en_el_modo() {
     assert!(escena.hay_referencias());
     g.alternar_referencias(&mut escena);
     assert!(!escena.referencias_visibles);
-    assert!(g.seleccion.ids().is_empty(), "lo escondido no queda elegido");
+    assert!(
+        g.seleccion.ids().is_empty(),
+        "lo escondido no queda elegido"
+    );
     let vistos: Vec<u64> = escena.a_la_vista().map(|e| e.id).collect();
     assert_eq!(vistos, vec![dibujo]);
     assert_eq!(escena.visibles().count(), 2, "escondida no es borrada");
@@ -623,9 +667,8 @@ fn muestra_de_las_siete_durezas() {
         sucio: None,
     };
     let png = grafito::png_del_trozo(&todo, (0, 0, ancho, alto));
-    let carpeta = std::env::var("PIXPIN_MUESTRAS").unwrap_or_else(|_| {
-        std::env::temp_dir().to_string_lossy().into_owned()
-    });
+    let carpeta = std::env::var("PIXPIN_MUESTRAS")
+        .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned());
     let ruta = std::path::Path::new(&carpeta).join("grafito-siete-durezas.png");
     std::fs::write(&ruta, png).unwrap();
     println!("muestra en {}", ruta.display());

@@ -105,12 +105,18 @@ const MARCA_PRUEBA: &[u8] = b"PXPRUEBA";
 
 #[cfg(all(not(windows), test))]
 pub fn cifrar(claro: &[u8]) -> Result<Vec<u8>, String> {
-    Ok(MARCA_PRUEBA.iter().copied().chain(claro.iter().map(|b| b ^ 0xA5)).collect())
+    Ok(MARCA_PRUEBA
+        .iter()
+        .copied()
+        .chain(claro.iter().map(|b| b ^ 0xA5))
+        .collect())
 }
 
 #[cfg(all(not(windows), test))]
 pub fn descifrar(cifrado: &[u8]) -> Result<Vec<u8>, String> {
-    let resto = cifrado.strip_prefix(MARCA_PRUEBA).ok_or("no esta cifrado")?;
+    let resto = cifrado
+        .strip_prefix(MARCA_PRUEBA)
+        .ok_or("no esta cifrado")?;
     Ok(resto.iter().map(|b| b ^ 0xA5).collect())
 }
 
@@ -119,7 +125,9 @@ static LLAVERO: OnceLock<Box<dyn Llavero>> = OnceLock::new();
 /// **Instala el llavero de la app** (una vez, al arrancar). `Err` si ya
 /// habia uno.
 pub fn instalar_llavero(l: Box<dyn Llavero>) -> Result<(), String> {
-    LLAVERO.set(l).map_err(|_| "ya habia un llavero instalado".to_string())
+    LLAVERO
+        .set(l)
+        .map_err(|_| "ya habia un llavero instalado".to_string())
 }
 
 /// El llavero en uso: el instalado o, en Windows, DPAPI.
@@ -140,7 +148,11 @@ fn llavero() -> Option<&'static dyn Llavero> {
 /// Guardar con un llavero dado: recorta, y una clave vacia la borra.
 pub fn guardar_con(l: &dyn Llavero, p: Proveedor, clave: &str) -> Result<(), String> {
     let clave = clave.trim();
-    if clave.is_empty() { l.borrar(p) } else { l.guardar(p, clave) }
+    if clave.is_empty() {
+        l.borrar(p)
+    } else {
+        l.guardar(p, clave)
+    }
 }
 
 /// Leer con un llavero dado: una clave en blanco cuenta como ninguna.
@@ -197,7 +209,10 @@ pub fn enmascarar(clave: &str) -> String {
     let fin: String = clave.chars().skip(n - 4).collect();
     let prefijo: String = clave.chars().take_while(|c| *c != '-').take(6).collect();
     if clave.starts_with("sk-") {
-        let cabeza: String = clave.chars().take(if clave.starts_with("sk-ant-") { 7 } else { 3 }).collect();
+        let cabeza: String = clave
+            .chars()
+            .take(if clave.starts_with("sk-ant-") { 7 } else { 3 })
+            .collect();
         format!("{cabeza}…{fin}")
     } else {
         format!("{prefijo}…{fin}")
@@ -291,7 +306,8 @@ pub fn guardar_en(carpeta: &Path, p: Proveedor, clave: &str) -> Result<(), Strin
         return borrar_en(carpeta, p);
     }
     let cifrado = cifrar(clave.as_bytes())?;
-    std::fs::create_dir_all(carpeta).map_err(|e| format!("no se pudo crear la carpeta de claves: {e}"))?;
+    std::fs::create_dir_all(carpeta)
+        .map_err(|e| format!("no se pudo crear la carpeta de claves: {e}"))?;
     // Primero a un fichero aparte y luego se cambia de nombre: un corte a
     // medias no deja una clave rota en lugar de la buena.
     let tmp = ruta.with_extension("clave.parte");
@@ -308,7 +324,9 @@ pub fn guardar_en(carpeta: &Path, p: Proveedor, clave: &str) -> Result<(), Strin
 pub fn leer_de(carpeta: &Path, p: Proveedor) -> Option<String> {
     let cifrado = std::fs::read(fichero(carpeta, p)).ok()?;
     let claro = descifrar(&cifrado).ok()?;
-    String::from_utf8(claro).ok().filter(|c| !c.trim().is_empty())
+    String::from_utf8(claro)
+        .ok()
+        .filter(|c| !c.trim().is_empty())
 }
 
 #[cfg(windows)]
@@ -321,7 +339,8 @@ pub fn borrar_en(carpeta: &Path, p: Proveedor) -> Result<(), String> {
 }
 
 /// Lo que dice [`guardar`] si la app no instalo su llavero.
-pub const SIN_LLAVERO: &str = "no hay donde guardar la clave cifrada en este sistema (la app tiene que instalar su llavero)";
+pub const SIN_LLAVERO: &str =
+    "no hay donde guardar la clave cifrada en este sistema (la app tiene que instalar su llavero)";
 
 /// **Guarda** la clave en el llavero en uso (vacia: la borra).
 pub fn guardar(p: Proveedor, clave: &str) -> Result<(), String> {
@@ -365,7 +384,10 @@ mod pruebas {
     fn un_llavero_de_la_app_guarda_recortado_y_vacia_borra() {
         let l = EnMemoria::default();
         guardar_con(&l, Proveedor::Claude, "  sk-ant-api03-abc0123456789  ").unwrap();
-        assert_eq!(leer_con(&l, Proveedor::Claude).as_deref(), Some("sk-ant-api03-abc0123456789"));
+        assert_eq!(
+            leer_con(&l, Proveedor::Claude).as_deref(),
+            Some("sk-ant-api03-abc0123456789")
+        );
         assert!(l.hay(Proveedor::Claude));
         assert!(leer_con(&l, Proveedor::DeepSeek).is_none());
         guardar_con(&l, Proveedor::Claude, "   ").unwrap();
@@ -376,7 +398,10 @@ mod pruebas {
     #[test]
     fn sin_llavero_no_se_guarda_nada_en_claro() {
         // Nadie instalo llavero en las pruebas: ni se guarda ni se inventa.
-        assert_eq!(guardar(Proveedor::DeepSeek, "clave-de-prueba-0123456789").unwrap_err(), SIN_LLAVERO);
+        assert_eq!(
+            guardar(Proveedor::DeepSeek, "clave-de-prueba-0123456789").unwrap_err(),
+            SIN_LLAVERO
+        );
         assert!(leer(Proveedor::DeepSeek).is_none());
         assert!(!hay(Proveedor::DeepSeek));
     }
@@ -406,16 +431,27 @@ mod pruebas {
     fn la_clave_no_aparece_en_claro_en_ningun_fichero() {
         let c = carpeta_de_prueba("claro");
         guardar_en(&c, Proveedor::Claude, CLAVE).unwrap();
-        guardar_en(&c, Proveedor::DeepSeek, "clave-de-prueba-deepseek-0123456789abcdef").unwrap();
+        guardar_en(
+            &c,
+            Proveedor::DeepSeek,
+            "clave-de-prueba-deepseek-0123456789abcdef",
+        )
+        .unwrap();
         let mut ficheros = 0;
         for e in std::fs::read_dir(&c).unwrap() {
             let bytes = std::fs::read(e.unwrap().path()).unwrap();
             ficheros += 1;
             for buscada in [CLAVE.as_bytes(), b"PRUEBAxyzzy", b"0123456789abcdef"] {
-                assert!(!bytes.windows(buscada.len()).any(|w| w == buscada), "clave en claro en el disco");
+                assert!(
+                    !bytes.windows(buscada.len()).any(|w| w == buscada),
+                    "clave en claro en el disco"
+                );
             }
             // Ni en UTF-16.
-            let ancha: Vec<u8> = "PRUEBAxyzzy".encode_utf16().flat_map(u16::to_le_bytes).collect();
+            let ancha: Vec<u8> = "PRUEBAxyzzy"
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect();
             assert!(!bytes.windows(ancha.len()).any(|w| w == ancha.as_slice()));
         }
         assert_eq!(ficheros, 2, "sin ficheros temporales olvidados");
@@ -444,7 +480,15 @@ mod pruebas {
         let mut salida = CRYPT_INTEGER_BLOB::default();
         // SAFETY: igual que en `descifrar`, pero sin entropia.
         let r = unsafe {
-            CryptUnprotectData(&entrada, None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut salida)
+            CryptUnprotectData(
+                &entrada,
+                None,
+                None,
+                None,
+                None,
+                CRYPTPROTECT_UI_FORBIDDEN,
+                &mut salida,
+            )
         };
         assert!(r.is_err());
         assert_eq!(descifrar(&cifrado).unwrap(), b"secreto");

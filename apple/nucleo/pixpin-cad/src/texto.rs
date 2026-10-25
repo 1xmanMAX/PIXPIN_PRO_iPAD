@@ -15,7 +15,9 @@ use std::sync::Arc;
 
 use lyon_tessellation::geom::point;
 use lyon_tessellation::path::Path;
-use lyon_tessellation::{BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers};
+use lyon_tessellation::{
+    BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, VertexBuffers,
+};
 
 use crate::convertir::Afin;
 use crate::modelo::Constructor;
@@ -47,7 +49,11 @@ struct Fuente {
 fn carpetas_shx() -> Vec<std::path::PathBuf> {
     static C: std::sync::OnceLock<Vec<std::path::PathBuf>> = std::sync::OnceLock::new();
     let mut v = crate::letras::carpetas_del_usuario();
-    v.extend(C.get_or_init(crate::shx::carpetas_del_sistema).iter().cloned());
+    v.extend(
+        C.get_or_init(crate::shx::carpetas_del_sistema)
+            .iter()
+            .cloned(),
+    );
     v
 }
 
@@ -74,14 +80,25 @@ const CARPETA_FUENTES: &str = "/usr/share/fonts/truetype/msttcorefonts";
 pub fn fuentes_instaladas() -> &'static HashMap<String, std::path::PathBuf> {
     static F: std::sync::OnceLock<HashMap<String, std::path::PathBuf>> = std::sync::OnceLock::new();
     F.get_or_init(|| {
-        use windows::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, RegCloseKey, RegEnumValueW, RegOpenKeyExW};
+        use windows::Win32::System::Registry::{
+            HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, RegCloseKey, RegEnumValueW,
+            RegOpenKeyExW,
+        };
         let mut mapa = HashMap::new();
         for raiz in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
             let mut k = HKEY::default();
             // SAFETY: clave de solo lectura que se cierra al acabar; los
             // bufferes son locales y van con su largo.
             unsafe {
-                if RegOpenKeyExW(raiz, windows::core::w!("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"), Some(0), KEY_READ, &mut k).is_err() {
+                if RegOpenKeyExW(
+                    raiz,
+                    windows::core::w!("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts"),
+                    Some(0),
+                    KEY_READ,
+                    &mut k,
+                )
+                .is_err()
+                {
                     continue;
                 }
                 for i in 0..4096u32 {
@@ -89,20 +106,39 @@ pub fn fuentes_instaladas() -> &'static HashMap<String, std::path::PathBuf> {
                     let mut largo_n = nombre.len() as u32;
                     let mut datos = [0u8; 1024];
                     let mut largo_d = datos.len() as u32;
-                    let r = RegEnumValueW(k, i, Some(windows::core::PWSTR(nombre.as_mut_ptr())), &mut largo_n, None, None, Some(datos.as_mut_ptr()), Some(&mut largo_d));
+                    let r = RegEnumValueW(
+                        k,
+                        i,
+                        Some(windows::core::PWSTR(nombre.as_mut_ptr())),
+                        &mut largo_n,
+                        None,
+                        None,
+                        Some(datos.as_mut_ptr()),
+                        Some(&mut largo_d),
+                    );
                     if r.is_err() {
                         break;
                     }
-                    let nombre = String::from_utf16_lossy(&nombre[..largo_n as usize]).to_lowercase();
-                    let u16s: Vec<u16> = datos[..largo_d as usize].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect();
+                    let nombre =
+                        String::from_utf16_lossy(&nombre[..largo_n as usize]).to_lowercase();
+                    let u16s: Vec<u16> = datos[..largo_d as usize]
+                        .chunks_exact(2)
+                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                        .take_while(|&c| c != 0)
+                        .collect();
                     let fichero = String::from_utf16_lossy(&u16s);
                     if fichero.is_empty() {
                         continue;
                     }
-                    let ruta = if fichero.contains(':') { std::path::PathBuf::from(&fichero) } else { std::path::Path::new(CARPETA_FUENTES).join(&fichero) };
+                    let ruta = if fichero.contains(':') {
+                        std::path::PathBuf::from(&fichero)
+                    } else {
+                        std::path::Path::new(CARPETA_FUENTES).join(&fichero)
+                    };
                     let limpio = nombre.replace(" (truetype)", "").replace(" (opentype)", "");
                     for n in limpio.split(" & ") {
-                        mapa.entry(n.trim().to_string()).or_insert_with(|| ruta.clone());
+                        mapa.entry(n.trim().to_string())
+                            .or_insert_with(|| ruta.clone());
                     }
                 }
                 let _ = RegCloseKey(k);
@@ -136,10 +172,19 @@ pub fn clave_de_familia(familia: &str, negrita: bool) -> Option<String> {
     // El registro nombra la negrita en el idioma de Windows.
     let negritas = ["bold", "negrita", "gras", "fett", "grassetto", "negrito"];
     let buscar = |m: &HashMap<String, std::path::PathBuf>| -> Option<std::path::PathBuf> {
-        let r = if negrita { negritas.iter().find_map(|n| m.get(&format!("{f} {n}"))).or_else(|| m.get(&f)) } else { m.get(&f).or_else(|| m.get(&format!("{f} regular"))) };
+        let r = if negrita {
+            negritas
+                .iter()
+                .find_map(|n| m.get(&format!("{f} {n}")))
+                .or_else(|| m.get(&f))
+        } else {
+            m.get(&f).or_else(|| m.get(&format!("{f} regular")))
+        };
         r.cloned()
     };
-    let r = buscar(&mias).or_else(|| buscar(m)).map(|p| format!("ttf:{}", p.display()));
+    let r = buscar(&mias)
+        .or_else(|| buscar(m))
+        .map(|p| format!("ttf:{}", p.display()));
     if r.is_none() {
         // Se dice en el visor: «este plano pide letras que no estan».
         crate::letras::falta(familia.trim().trim_matches('"'));
@@ -154,19 +199,26 @@ pub fn fichero_para(estilo: &str) -> Vec<String> {
     if let Some(ruta) = e.strip_prefix("ttf:") {
         v.push(ruta.to_string());
     }
-    if !e.starts_with("ttf:") && (e.ends_with(".ttf") || e.ends_with(".otf") || e.ends_with(".ttc")) {
+    if !e.starts_with("ttf:") && (e.ends_with(".ttf") || e.ends_with(".otf") || e.ends_with(".ttc"))
+    {
         v.push(e.rsplit(['\\', '/']).next().unwrap_or(&e).to_string());
     }
     if e.contains("arial") || e.is_empty() {
         v.push("arial.ttf".into());
     }
-    v.extend(["arialn.ttf".to_string(), "arial.ttf".to_string(), "segoeui.ttf".to_string()]);
+    v.extend([
+        "arialn.ttf".to_string(),
+        "arial.ttf".to_string(),
+        "segoeui.ttf".to_string(),
+    ]);
     v
 }
 
 impl Textos {
     pub fn nuevo() -> Self {
-        Self { fuentes: HashMap::new() }
+        Self {
+            fuentes: HashMap::new(),
+        }
     }
 
     /// Lo que mide `texto` en pixeles con letra de `tam` (la barra).
@@ -178,7 +230,16 @@ impl Textos {
     /// `x` sobre la base `y`; si no cabe antes de `x_max`, lo corta con «…».
     /// Devuelve lo que ocupa.
     #[allow(clippy::too_many_arguments)]
-    pub fn en_pantalla(&mut self, c: &mut Constructor, texto: &str, x: f64, y: f64, tam: f64, color: u32, x_max: f64) -> f64 {
+    pub fn en_pantalla(
+        &mut self,
+        c: &mut Constructor,
+        texto: &str,
+        x: f64,
+        y: f64,
+        tam: f64,
+        color: u32,
+        x_max: f64,
+    ) -> f64 {
         let mut t: String = texto.to_string();
         if x + self.medir_pantalla(&t, tam) > x_max {
             while !t.is_empty() && x + self.medir_pantalla(&format!("{t}…"), tam) > x_max {
@@ -210,7 +271,8 @@ impl Textos {
             };
             crate::letras::revisar_ttf(&clave, std::path::Path::new(CARPETA_FUENTES));
             for nombre in fichero_para(&clave) {
-                let ruta = crate::letras::ruta_de_fuente(std::path::Path::new(CARPETA_FUENTES), &nombre);
+                let ruta =
+                    crate::letras::ruta_de_fuente(std::path::Path::new(CARPETA_FUENTES), &nombre);
                 if let Ok(datos) = std::fs::read(&ruta)
                     && let Ok(cara) = ttf_parser::Face::parse(&datos, 0)
                 {
@@ -222,7 +284,12 @@ impl Textos {
                         .capital_height()
                         .map(|h| h as f32 / em)
                         .filter(|h| *h > 0.2)
-                        .or_else(|| cara.glyph_index('H').and_then(|g| cara.glyph_bounding_box(g)).map(|b| b.y_max as f32 / em).filter(|h| *h > 0.2 && *h < 1.2))
+                        .or_else(|| {
+                            cara.glyph_index('H')
+                                .and_then(|g| cara.glyph_bounding_box(g))
+                                .map(|b| b.y_max as f32 / em)
+                                .filter(|h| *h > 0.2 && *h < 1.2)
+                        })
                         .unwrap_or(0.716);
                     let con_shx = shx.is_some();
                     f = Some(Fuente {
@@ -257,13 +324,26 @@ impl Textos {
 
     /// Lo que mide `texto` en em.
     fn ancho(&mut self, estilo: &str, texto: &str) -> f32 {
-        let Some(f) = self.fuente(estilo) else { return 0.0 };
-        texto.chars().map(|c| f.letra(c).map_or(0.5, |l| l.avance)).sum()
+        let Some(f) = self.fuente(estilo) else {
+            return 0.0;
+        };
+        texto
+            .chars()
+            .map(|c| f.letra(c).map_or(0.5, |l| l.avance))
+            .sum()
     }
 
     /// Escribe una linea en coordenadas locales (x hacia la derecha, base
     /// en y = 0, unidades de em) llevadas al plano con `m`.
-    fn escribir(&mut self, c: &mut Constructor, estilo: &str, texto: &str, m: &Afin, alto_mundo: f64, color: u32) {
+    fn escribir(
+        &mut self,
+        c: &mut Constructor,
+        estilo: &str,
+        texto: &str,
+        m: &Afin,
+        alto_mundo: f64,
+        color: u32,
+    ) {
         let Some(f) = self.fuente(estilo) else { return };
         let id = f.id;
         // De em al plano: las columnas de la matriz.
@@ -307,7 +387,11 @@ impl Textos {
             return;
         }
         let mayus = self.fuente(estilo).map_or(0.716, |f| f.alto_mayuscula) as f64;
-        let ancho = if ancho > 0.0 && ancho.is_finite() { ancho } else { 1.0 };
+        let ancho = if ancho > 0.0 && ancho.is_finite() {
+            ancho
+        } else {
+            1.0
+        };
         let mut escala_y = alto / mayus;
         let mut escala_x = escala_y * ancho;
         let largo_em = self.ancho(estilo, texto) as f64;
@@ -319,7 +403,9 @@ impl Textos {
             _ => ins,
         };
         let (mut dx, mut dy) = (0.0, 0.0);
-        if (h == 3 || h == 5) && let Some(a) = alineado {
+        if (h == 3 || h == 5)
+            && let Some(a) = alineado
+        {
             // Alineado / Ajustado: entre los dos puntos.
             let (vx, vy) = (a[0] - ins[0], a[1] - ins[1]);
             let largo = (vx * vx + vy * vy).sqrt();
@@ -407,7 +493,8 @@ impl Textos {
                         _ => alto,
                     };
                     let mayus = self.fuente(&fuente).map_or(0.716, |f| f.alto_mayuscula) as f64;
-                    total += self.ancho(&fuente, tr.texto.trim_end()) as f64 * alto_t / mayus * tr.ancho.filter(|w| *w > 0.0).unwrap_or(1.0);
+                    total += self.ancho(&fuente, tr.texto.trim_end()) as f64 * alto_t / mayus
+                        * tr.ancho.filter(|w| *w > 0.0).unwrap_or(1.0);
                 }
                 if total > caja && total <= caja * 1.08 {
                     estrechar = caja / total;
@@ -430,7 +517,11 @@ impl Textos {
                     let ancho_sin = self.ancho(&fuente, palabra.trim_end()) as f64 * escala * wf;
                     // Se corta solo si se pasa de verdad: las letras de aqui
                     // y las del autor no miden exactamente igual.
-                    if caja > 0.0 && caja.is_finite() && !renglon.is_empty() && ancho_renglon + ancho_sin > caja * 1.01 {
+                    if caja > 0.0
+                        && caja.is_finite()
+                        && !renglon.is_empty()
+                        && ancho_renglon + ancho_sin > caja * 1.01
+                    {
                         renglones.push(std::mem::take(&mut renglon));
                         ancho_renglon = 0.0;
                     }
@@ -448,8 +539,12 @@ impl Textos {
             }
             renglones.push(renglon);
         }
-        let altos: Vec<f64> = renglones.iter().map(|r| r.iter().map(|p| p.alto).fold(alto, f64::max)).collect();
-        let total: f64 = altos.first().copied().unwrap_or(alto) + altos.iter().skip(1).map(|a| a * 5.0 / 3.0).sum::<f64>();
+        let altos: Vec<f64> = renglones
+            .iter()
+            .map(|r| r.iter().map(|p| p.alto).fold(alto, f64::max))
+            .collect();
+        let total: f64 = altos.first().copied().unwrap_or(alto)
+            + altos.iter().skip(1).map(|a| a * 5.0 / 3.0).sum::<f64>();
         let col = (enganche.clamp(1, 9) - 1) % 3;
         let fila = (enganche.clamp(1, 9) - 1) / 3;
         let primero = altos.first().copied().unwrap_or(alto);
@@ -462,7 +557,8 @@ impl Textos {
             if i > 0 {
                 y -= altos[i] * 5.0 / 3.0;
             }
-            let ancho: f64 = r.iter().map(|p| p.ancho).sum::<f64>() - r.last().map_or(0.0, |p| p.ancho - p.ancho_sin_espacio);
+            let ancho: f64 = r.iter().map(|p| p.ancho).sum::<f64>()
+                - r.last().map_or(0.0, |p| p.ancho - p.ancho_sin_espacio);
             let mut x = match col {
                 0 => 0.0,
                 1 => -ancho / 2.0,
@@ -470,7 +566,8 @@ impl Textos {
             };
             for p in r {
                 if !p.texto.trim().is_empty() {
-                    let escala_y = p.alto / self.fuente(&p.fuente).map_or(0.716, |f| f.alto_mayuscula) as f64;
+                    let escala_y =
+                        p.alto / self.fuente(&p.fuente).map_or(0.716, |f| f.alto_mayuscula) as f64;
                     let m = t
                         .por(&Afin::traslacion(ins[0], ins[1], ins[2]))
                         .por(&Afin::giro_z(giro))
@@ -508,18 +605,29 @@ pub fn parrafos_de_mtext(valor: &str) -> Vec<Vec<Trozo>> {
                 .map(|s| {
                     let pr = &s.properties;
                     let texto = match &s.stacking {
-                        Some(st) if !st.numerator.is_empty() || !st.denominator.is_empty() => format!("{}{}/{}", s.text, st.numerator, st.denominator),
+                        Some(st) if !st.numerator.is_empty() || !st.denominator.is_empty() => {
+                            format!("{}{}/{}", s.text, st.numerator, st.denominator)
+                        }
                         _ => s.text.clone(),
                     };
                     let color = match (pr.color_rgb, pr.color) {
                         (Some((r, g, b)), _) => Some(crate::convertir::rgba(r, g, b)),
-                        (None, Some(MTextColor::TrueColor(c))) => Some(crate::convertir::rgba((c >> 16) as u8, (c >> 8) as u8, c as u8)),
-                        (None, Some(MTextColor::Index(i))) if i > 0 && i < 256 => crate::convertir::de_color(&opencadcodec::types::Color::Index(i as u8)),
+                        (None, Some(MTextColor::TrueColor(c))) => Some(crate::convertir::rgba(
+                            (c >> 16) as u8,
+                            (c >> 8) as u8,
+                            c as u8,
+                        )),
+                        (None, Some(MTextColor::Index(i))) if i > 0 && i < 256 => {
+                            crate::convertir::de_color(&opencadcodec::types::Color::Index(i as u8))
+                        }
                         _ => None,
                     };
                     Trozo {
                         texto,
-                        fuente: pr.font.as_ref().and_then(|f| clave_de_familia(&f.name, f.bold)),
+                        fuente: pr
+                            .font
+                            .as_ref()
+                            .and_then(|f| clave_de_familia(&f.name, f.bold)),
                         color,
                         alto: pr.height.map(|h| match h {
                             MTextScalar::Factor(f) => (true, f),
@@ -548,7 +656,11 @@ fn oblicua(angulo: f64) -> Afin {
 impl Fuente {
     fn letra(&mut self, ch: char) -> Option<&Letra> {
         if !self.letras.contains_key(&ch) {
-            let de_shx = self.shx.as_ref().and_then(|f| f.letra(ch)).filter(|l| !l.trazos.is_empty() || ch == ' ');
+            let de_shx = self
+                .shx
+                .as_ref()
+                .and_then(|f| f.letra(ch))
+                .filter(|l| !l.trazos.is_empty() || ch == ' ');
             let l = match de_shx {
                 Some(l) => {
                     // Cada trazo, en pares de puntos (LINELIST).
@@ -601,10 +713,17 @@ impl ttf_parser::OutlineBuilder for Trazador {
         self.b.line_to(point(x / self.em, y / self.em));
     }
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        self.b.quadratic_bezier_to(point(x1 / self.em, y1 / self.em), point(x / self.em, y / self.em));
+        self.b.quadratic_bezier_to(
+            point(x1 / self.em, y1 / self.em),
+            point(x / self.em, y / self.em),
+        );
     }
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.b.cubic_bezier_to(point(x1 / self.em, y1 / self.em), point(x2 / self.em, y2 / self.em), point(x / self.em, y / self.em));
+        self.b.cubic_bezier_to(
+            point(x1 / self.em, y1 / self.em),
+            point(x2 / self.em, y2 / self.em),
+            point(x / self.em, y / self.em),
+        );
     }
     fn close(&mut self) {
         if self.abierto {
@@ -639,7 +758,11 @@ fn rellenar_letra(datos: &[u8], ch: char) -> Option<Letra> {
             &mut BuffersBuilder::new(&mut bufs, |v: FillVertex| v.position().to_array()),
         );
         if ok.is_ok() {
-            triangulos = bufs.indices.iter().map(|&i| bufs.vertices[i as usize]).collect();
+            triangulos = bufs
+                .indices
+                .iter()
+                .map(|&i| bufs.vertices[i as usize])
+                .collect();
         }
     }
     Some(Letra {
@@ -698,7 +821,9 @@ mod pruebas {
             let a = r.letra('A').unwrap();
             assert!(!a.triangulos.is_empty() && a.triangulos.len() % 2 == 0 || !a.rayas);
         }
-        let Some(f) = t.fuente("arial.ttf") else { return };
+        let Some(f) = t.fuente("arial.ttf") else {
+            return;
+        };
         // Un espacio no tiene contorno pero si avance.
         let e = f.letra(' ').unwrap();
         assert!(e.triangulos.is_empty() && e.avance > 0.1);
@@ -711,7 +836,10 @@ mod pruebas_letras_del_usuario {
     use crate::letras;
 
     fn carpeta(nombre: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("pixpin-texto-letras-{nombre}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "pixpin-texto-letras-{nombre}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -721,15 +849,27 @@ mod pruebas_letras_del_usuario {
     /// Hershey); puesta en la carpeta del usuario, se usa y ya no falta.
     #[test]
     fn la_shx_que_falta_se_dice_y_la_del_usuario_manda() {
-        let _g = letras::UNA_A_LA_VEZ.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = letras::UNA_A_LA_VEZ
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         letras::poner_carpeta(None);
         letras::sacar_lo_que_falta();
         let mut t = Textos::nuevo();
-        assert!(t.fuente("pixpin-prueba-rara.shx").is_some(), "la de reserva escribe igual");
-        assert_eq!(letras::sacar_lo_que_falta(), vec!["pixpin-prueba-rara.shx".to_string()]);
+        assert!(
+            t.fuente("pixpin-prueba-rara.shx").is_some(),
+            "la de reserva escribe igual"
+        );
+        assert_eq!(
+            letras::sacar_lo_que_falta(),
+            vec!["pixpin-prueba-rara.shx".to_string()]
+        );
         // Ahora el usuario la pone (aqui, las rayas de romans con ese nombre).
         let d = carpeta("shx");
-        std::fs::write(d.join("PIXPIN-PRUEBA-RARA.SHX"), include_bytes!("../fuentes-shx/romans.shx")).unwrap();
+        std::fs::write(
+            d.join("PIXPIN-PRUEBA-RARA.SHX"),
+            include_bytes!("../fuentes-shx/romans.shx"),
+        )
+        .unwrap();
         letras::poner_carpeta(Some(d.clone()));
         let mut t = Textos::nuevo();
         let f = t.fuente("pixpin-prueba-rara.shx").expect("la del usuario");
@@ -743,11 +883,16 @@ mod pruebas_letras_del_usuario {
     /// nombre de verdad, no el del fichero) manda sobre la de Windows.
     #[test]
     fn la_familia_que_falta_se_dice_y_la_del_usuario_manda() {
-        let _g = letras::UNA_A_LA_VEZ.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = letras::UNA_A_LA_VEZ
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         letras::poner_carpeta(None);
         letras::sacar_lo_que_falta();
         assert_eq!(clave_de_familia("Familia Que No Existe", false), None);
-        assert_eq!(letras::sacar_lo_que_falta(), vec!["Familia Que No Existe".to_string()]);
+        assert_eq!(
+            letras::sacar_lo_que_falta(),
+            vec!["Familia Que No Existe".to_string()]
+        );
         let arial = std::path::Path::new(CARPETA_FUENTES).join("arial.ttf");
         if !arial.is_file() {
             return;
@@ -758,7 +903,10 @@ mod pruebas_letras_del_usuario {
         let k = clave_de_familia("Arial", false).unwrap();
         assert!(k.to_lowercase().ends_with("copia-de-arial.ttf"), "{k}");
         // Un fichero pedido por su nombre tambien sale de la carpeta del usuario.
-        assert_eq!(letras::ruta_de_fuente(std::path::Path::new(CARPETA_FUENTES), "COPIA-DE-ARIAL.TTF"), d.join("copia-de-arial.ttf"));
+        assert_eq!(
+            letras::ruta_de_fuente(std::path::Path::new(CARPETA_FUENTES), "COPIA-DE-ARIAL.TTF"),
+            d.join("copia-de-arial.ttf")
+        );
         assert!(letras::sacar_lo_que_falta().is_empty());
         letras::poner_carpeta(None);
         let _ = std::fs::remove_dir_all(&d);
@@ -770,12 +918,27 @@ mod medir_mayusculas {
     #[test]
     #[ignore = "mide fuentes del sistema"]
     fn mayusculas() {
-        for f in ["AGENCYR.TTF", "AGENCYB.TTF", "FREESCPT.TTF", "STENCIL.TTF", "arial.ttf", "ARIALN.TTF"] {
+        for f in [
+            "AGENCYR.TTF",
+            "AGENCYB.TTF",
+            "FREESCPT.TTF",
+            "STENCIL.TTF",
+            "arial.ttf",
+            "ARIALN.TTF",
+        ] {
             let d = std::fs::read(format!("C:/Windows/Fonts/{f}")).unwrap();
             let c = ttf_parser::Face::parse(&d, 0).unwrap();
             let em = c.units_per_em() as f32;
-            let h = c.glyph_index('H').and_then(|g| c.glyph_bounding_box(g)).map(|b| b.y_max as f32 / em);
-            println!("{f}: capHeight={:?} H={:?} asc={}", c.capital_height().map(|v| v as f32 / em), h, c.ascender() as f32 / em);
+            let h = c
+                .glyph_index('H')
+                .and_then(|g| c.glyph_bounding_box(g))
+                .map(|b| b.y_max as f32 / em);
+            println!(
+                "{f}: capHeight={:?} H={:?} asc={}",
+                c.capital_height().map(|v| v as f32 / em),
+                h,
+                c.ascender() as f32 / em
+            );
         }
     }
 }

@@ -14,8 +14,8 @@
 
 use crate::acciones::normalizar;
 use crate::herramientas::{
-    AYUDA, CALCAR, CRONOGRAMA, DIBUJAR, ECUACION, FIGURAS, FISICA, FUNCION, GRAFICA, Herramienta, OCR, PROBLEMA, SVG,
-    catalogo_base,
+    AYUDA, CALCAR, CRONOGRAMA, DIBUJAR, ECUACION, FIGURAS, FISICA, FUNCION, GRAFICA, Herramienta,
+    OCR, PROBLEMA, SVG, catalogo_base,
 };
 
 /// Cuantas herramientas como mucho por turno.
@@ -25,51 +25,238 @@ pub const MAXIMO: usize = 6;
 fn claves_base(nombre: &str) -> &'static [&'static str] {
     match nombre {
         DIBUJAR => &[
-            "dibuj", "pinta", "traza", "figura", "circulo", "cuadrado", "rectangulo", "triangulo", "estrella",
-            "flecha", "linea", "diagrama", "flujo", "esquema", "casa", "muneco", "curva", "onda", "poligono",
-            "titulo", "lienzo", "forma", "rombo", "elipse", "organigrama", "mapa", "croquis",
+            "dibuj",
+            "pinta",
+            "traza",
+            "figura",
+            "circulo",
+            "cuadrado",
+            "rectangulo",
+            "triangulo",
+            "estrella",
+            "flecha",
+            "linea",
+            "diagrama",
+            "flujo",
+            "esquema",
+            "casa",
+            "muneco",
+            "curva",
+            "onda",
+            "poligono",
+            "titulo",
+            "lienzo",
+            "forma",
+            "rombo",
+            "elipse",
+            "organigrama",
+            "mapa",
+            "croquis",
         ],
-        GRAFICA => &["grafic", "barras", "pastel", "torta", "estadistic", "porcentaje", "chart", "encuesta", "datos"],
-        OCR => &["ocr", "escanead", "texto de", "lee el", "leer el", "extrae", "reconoce"],
-        CALCAR => &["calca", "copia", "imagen", "foto", "contorno", "pasa este", "pasa esta", "replica"],
-        AYUDA => &["ayuda", "explica", "funciona", "sirve", "donde", "atajo", "menu"],
+        GRAFICA => &[
+            "grafic",
+            "barras",
+            "pastel",
+            "torta",
+            "estadistic",
+            "porcentaje",
+            "chart",
+            "encuesta",
+            "datos",
+        ],
+        OCR => &[
+            "ocr", "escanead", "texto de", "lee el", "leer el", "extrae", "reconoce",
+        ],
+        CALCAR => &[
+            "calca",
+            "copia",
+            "imagen",
+            "foto",
+            "contorno",
+            "pasa este",
+            "pasa esta",
+            "replica",
+        ],
+        AYUDA => &[
+            "ayuda", "explica", "funciona", "sirve", "donde", "atajo", "menu",
+        ],
         SVG => &[
-            "ilustra", "svg", "detall", "isometric", "realist", "persona", "animal", "perro", "gato", "arbol", "paisaje",
-            "retrato", "a lapiz", "grafito", "boceto", "logo", "icono", "pajaro", "flor", "coche", "edificio",
+            "ilustra",
+            "svg",
+            "detall",
+            "isometric",
+            "realist",
+            "persona",
+            "animal",
+            "perro",
+            "gato",
+            "arbol",
+            "paisaje",
+            "retrato",
+            "a lapiz",
+            "grafito",
+            "boceto",
+            "logo",
+            "icono",
+            "pajaro",
+            "flor",
+            "coche",
+            "edificio",
         ],
         FUNCION => &[
-            "funcion", "funciones", "f(x)", "y=", "y =", "parabola", "seno", "coseno", "plano cartesiano", "dominio",
-            "x^", "x²", "sin(", "cos(", "recta y",
+            "funcion",
+            "funciones",
+            "f(x)",
+            "y=",
+            "y =",
+            "parabola",
+            "seno",
+            "coseno",
+            "plano cartesiano",
+            "dominio",
+            "x^",
+            "x²",
+            "sin(",
+            "cos(",
+            "recta y",
             // Estudiantes (14-oct): polares, parametricas y lo que se marca.
-            "polar", "parametric", "cardioide", "elipse", "raices", "tangente", "asintota", "theta", "θ",
-            "r =", "area entre", "extremos", "maximos", "minimos", "interseccion",
+            "polar",
+            "parametric",
+            "cardioide",
+            "elipse",
+            "raices",
+            "tangente",
+            "asintota",
+            "theta",
+            "θ",
+            "r =",
+            "area entre",
+            "extremos",
+            "maximos",
+            "minimos",
+            "interseccion",
         ],
         ECUACION => &[
-            "ecuacion", "ecuaciones", "formula", "latex", "fraccion", "raiz cuadrada", "integral", "teorema", "pitagoras",
-            "cuadratica", "derivada",
+            "ecuacion",
+            "ecuaciones",
+            "formula",
+            "latex",
+            "fraccion",
+            "raiz cuadrada",
+            "integral",
+            "teorema",
+            "pitagoras",
+            "cuadratica",
+            "derivada",
         ],
         CRONOGRAMA => &[
-            "cronograma", "gantt", "planificacion", "programacion de obra", "hitos", "plazos", "calendario de",
-            "semanas", "fases",
+            "cronograma",
+            "gantt",
+            "planificacion",
+            "programacion de obra",
+            "hitos",
+            "plazos",
+            "calendario de",
+            "semanas",
+            "fases",
         ],
         FISICA => &[
-            "fisica", "fuerza", "cuerpo libre", "plano inclinado", "inclinado", "tiro", "parabolic", "proyectil", "lanzad",
-            "circuito", "resistencia", "paralelo", "vector", "pendulo", "atwood", "polea", "mru", "mruv", "mrua",
-            "velocidad", "aceleracion", "rozamiento", "friccion", "voltaje", "voltio", "ohm", "newton", "bloque",
+            "fisica",
+            "fuerza",
+            "cuerpo libre",
+            "plano inclinado",
+            "inclinado",
+            "tiro",
+            "parabolic",
+            "proyectil",
+            "lanzad",
+            "circuito",
+            "resistencia",
+            "paralelo",
+            "vector",
+            "pendulo",
+            "atwood",
+            "polea",
+            "mru",
+            "mruv",
+            "mrua",
+            "velocidad",
+            "aceleracion",
+            "rozamiento",
+            "friccion",
+            "voltaje",
+            "voltio",
+            "ohm",
+            "newton",
+            "bloque",
         ],
         PROBLEMA => &[
-            "problema", "ejercicio", "enunciado", "en limpio", "a limpio", "reescrib", "transcrib", "resuelv", "resolver",
+            "problema",
+            "ejercicio",
+            "enunciado",
+            "en limpio",
+            "a limpio",
+            "reescrib",
+            "transcrib",
+            "resuelv",
+            "resolver",
             "examen",
         ],
         FIGURAS => &[
-            "guarda esto", "guardalo", "guardala", "como figura", "biblioteca", "figura guardada", "figuras guardadas",
-            "mis figuras", "pon el", "pon la", "inserta el", "inserta la", "estampa", "guarda el", "guarda la",
+            "guarda esto",
+            "guardalo",
+            "guardala",
+            "como figura",
+            "biblioteca",
+            "figura guardada",
+            "figuras guardadas",
+            "mis figuras",
+            "pon el",
+            "pon la",
+            "inserta el",
+            "inserta la",
+            "estampa",
+            "guarda el",
+            "guarda la",
+            "plantilla",
+            "intervalo",
+            "alarga",
+            "del 1 al",
+            "de 10 en 10",
+            "de 5 en 5",
+            "en hojas",
+            "hojas de",
         ],
         crate::documentos::BUSCAR => &[
-            "busca en mis", "buscame", "mis notas", "mis documentos", "mis archivos", "mis cosas", "mis chats",
-            "mis mensajes", "que dice", "dice la", "dice el", "segun mi", "segun la", "segun el", "tesis", "mande",
-            "envie", "guarde", "apunte", "anote", "documento", "informe", "presupuesto", "plano", "memoria",
-            "expediente", "contrato", "acta", "notas",
+            "busca en mis",
+            "buscame",
+            "mis notas",
+            "mis documentos",
+            "mis archivos",
+            "mis cosas",
+            "mis chats",
+            "mis mensajes",
+            "que dice",
+            "dice la",
+            "dice el",
+            "segun mi",
+            "segun la",
+            "segun el",
+            "tesis",
+            "mande",
+            "envie",
+            "guarde",
+            "apunte",
+            "anote",
+            "documento",
+            "informe",
+            "presupuesto",
+            "plano",
+            "memoria",
+            "expediente",
+            "contrato",
+            "acta",
+            "notas",
         ],
         _ => &[],
     }
@@ -79,7 +266,10 @@ fn claves_base(nombre: &str) -> &'static [&'static str] {
 /// tesis…?», «¿donde mande…?»): entonces un «¿donde…?» no es una pregunta
 /// sobre la app y no se queda solo con la ayuda.
 pub fn es_sobre_sus_documentos(q: &str) -> bool {
-    let palabras: Vec<&str> = q.split(|c: char| !c.is_alphanumeric()).filter(|p| !p.is_empty()).collect();
+    let palabras: Vec<&str> = q
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p| !p.is_empty())
+        .collect();
     puntuar(claves_base(crate::documentos::BUSCAR), q, &palabras) >= 2
 }
 
@@ -99,20 +289,127 @@ fn puntuar(claves: &[&str], q: &str, palabras: &[&str]) -> u32 {
         .sum()
 }
 
+/// **Si el pedido es cambiar lo que ya existe** (agrandarlo o reorganizarlo):
+/// entonces las herramientas de dibujar desde cero sobran, tambien con la
+/// nube, que recibe el catalogo entero (25-oct-2026: con ellas a mano dibujo
+/// otros dos cronogramas al lado del que habia que agrandar).
+pub fn es_cambiar_lo_que_hay(pedido: &str) -> bool {
+    let q = normalizar(pedido);
+    let palabras: Vec<&str> = q
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p| !p.is_empty())
+        .collect();
+    pide_agrandar(&q, &palabras) || pide_reorganizar(&q, &palabras)
+}
+
+/// Las que dibujan desde cero, que sobran al cambiar lo que ya hay.
+pub const DE_DIBUJAR_DESDE_CERO: [&str; 3] = [DIBUJAR, CRONOGRAMA, SVG];
+
+/// **Si piden reorganizar lo que ya hay**: cambiar de sitio un recuadro o
+/// una seccion, reordenar, intercambiar, poner algo arriba o abajo.
+pub fn pide_reorganizar(q: &str, palabras: &[&str]) -> bool {
+    let verbo = [
+        "reorganiz",
+        "reorden",
+        "reacomod",
+        "intercambi",
+        "muev",
+        "mover",
+        "pon",
+        "coloca",
+        "pasa",
+    ]
+    .iter()
+    .any(|v| palabras.iter().any(|p| p.starts_with(v)));
+    let que = [
+        "recuadro",
+        "seccion",
+        "bloque",
+        "apartado",
+        "cuadro",
+        "caja",
+        "pagina",
+        "hoja",
+        "plantilla",
+    ]
+    .iter()
+    .any(|c| palabras.iter().any(|p| p.starts_with(c)));
+    let sitio = q.contains("arriba")
+        || q.contains("abajo")
+        || q.contains("debajo")
+        || q.contains("encima")
+        || q.contains("de sitio")
+        || q.contains("de lugar")
+        || q.contains("al final")
+        || q.contains("al principio");
+    let fuerte = ["reorganiz", "reorden", "reacomod", "intercambi"]
+        .iter()
+        .any(|v| palabras.iter().any(|p| p.starts_with(v)));
+    (fuerte && que) || (verbo && que && sitio)
+}
+
+/// **Si piden agrandar algo que ya esta** (una plantilla: el cronograma,
+/// una lista, un planificador): un verbo de agrandar y de que (semanas,
+/// filas, actividades, la plantilla o «esto»).
+pub fn pide_agrandar(q: &str, palabras: &[&str]) -> bool {
+    let verbo = [
+        "amplia", "ampli", "agrand", "extiend", "extend", "expand", "alarg", "aument",
+        // Y reducir (25-oct): es el mismo cambio de tamaño, con su diseño.
+        "reduc", "acort", "achic", "disminu",
+    ]
+    .iter()
+    .any(|v| palabras.iter().any(|p| p.starts_with(v)))
+        || q.contains("mas grande")
+        || q.contains("que sean ")
+        || q.contains("hasta la semana");
+    let de_que = [
+        "semana",
+        "fila",
+        "actividad",
+        "tarea",
+        "plantilla",
+        "cronograma",
+        "gantt",
+        "hora",
+        "dia",
+        "esto",
+        "esta",
+        "este",
+        "figura",
+        "hoja",
+    ]
+    .iter()
+    .any(|c| palabras.iter().any(|p| p.starts_with(c)));
+    verbo && de_que
+}
+
 /// Si el pedido es una pregunta sobre como o donde (no un encargo).
 pub fn es_pregunta_de_ayuda(q: &str) -> bool {
     let q = q.trim_start_matches(|c: char| !c.is_alphanumeric());
-    ["como ", "donde ", "que es ", "para que ", "cual ", "en que ", "por que ", "que hace", "se puede"]
-        .iter()
-        .any(|p| q.starts_with(p))
+    [
+        "como ",
+        "donde ",
+        "que es ",
+        "para que ",
+        "cual ",
+        "en que ",
+        "por que ",
+        "que hace",
+        "se puede",
+    ]
+    .iter()
+    .any(|p| q.starts_with(p))
 }
 
 /// Un saludo o un «gracias»: sin herramientas.
 fn es_charla(q: &str, palabras: &[&str]) -> bool {
     palabras.len() <= 4
-        && palabras
-            .iter()
-            .any(|p| ["hola", "gracias", "buenas", "adios", "chao", "ok", "vale", "genial", "perfecto"].contains(p))
+        && palabras.iter().any(|p| {
+            [
+                "hola", "gracias", "buenas", "adios", "chao", "ok", "vale", "genial", "perfecto",
+            ]
+            .contains(p)
+        })
         || q.contains("que tal")
 }
 
@@ -120,19 +417,39 @@ fn es_charla(q: &str, palabras: &[&str]) -> bool {
 /// «dibuja este perrito», «pasalo al lienzo». No: «dibuja un circulo».
 pub fn pide_la_imagen(palabras: &[&str]) -> bool {
     const VERBOS: &[&str] = &[
-        "dibuj", "copi", "calc", "pasa", "pase", "pint", "replic", "pon", "mete", "lleva", "traza", "haz", "reproduc",
-        "imita", "convierte", "vectoriz",
+        "dibuj",
+        "copi",
+        "calc",
+        "pasa",
+        "pase",
+        "pint",
+        "replic",
+        "pon",
+        "mete",
+        "lleva",
+        "traza",
+        "haz",
+        "reproduc",
+        "imita",
+        "convierte",
+        "vectoriz",
     ];
     const ESTO: &[&str] = &[
-        "imagen", "foto", "adjunt", "captura", "este", "esta", "esto", "estos", "estas", "ese", "esa", "eso", "aqui",
+        "imagen", "foto", "adjunt", "captura", "este", "esta", "esto", "estos", "estas", "ese",
+        "esa", "eso", "aqui",
     ];
     let verbo = |p: &&str| VERBOS.iter().any(|v| p.starts_with(v));
-    let calca = palabras.iter().any(|p| p.starts_with("calc") || p.starts_with("replic") || p.starts_with("vectoriz"));
-    // «dibujalo», «copiala», «pasalos»: el pronombre pegado al verbo.
-    let con_pronombre = palabras
+    let calca = palabras
         .iter()
-        .any(|p| verbo(p) && ["lo", "la", "los", "las"].iter().any(|s| p.ends_with(s)) && p.len() > 5);
-    let objeto = palabras.iter().any(|p| ESTO.iter().any(|e| p == e || (e.len() > 4 && p.starts_with(e))));
+        .any(|p| p.starts_with("calc") || p.starts_with("replic") || p.starts_with("vectoriz"));
+    // «dibujalo», «copiala», «pasalos»: el pronombre pegado al verbo.
+    let con_pronombre = palabras.iter().any(|p| {
+        verbo(p) && ["lo", "la", "los", "las"].iter().any(|s| p.ends_with(s)) && p.len() > 5
+    });
+    let objeto = palabras.iter().any(|p| {
+        ESTO.iter()
+            .any(|e| p == e || (e.len() > 4 && p.starts_with(e)))
+    });
     calca || con_pronombre || (palabras.iter().any(verbo) && objeto)
 }
 
@@ -140,18 +457,30 @@ pub fn pide_la_imagen(palabras: &[&str]) -> bool {
 /// con una foto adjunta no es calcarla, es leer sus celdas
 /// (`tabla_de_imagen`).
 pub fn pide_una_tabla(palabras: &[&str]) -> bool {
-    palabras
-        .iter()
-        .any(|p| p.starts_with("tabla") || p.starts_with("excel") || *p == "xlsx" || p.starts_with("celda"))
+    palabras.iter().any(|p| {
+        p.starts_with("tabla") || p.starts_with("excel") || *p == "xlsx" || p.starts_with("celda")
+    })
 }
 
 /// Si el pedido nombra un documento (PDF, Word, plano, archivo...): entonces
 /// resaltar o subrayar es anotarlo, no el lienzo.
 pub fn habla_de_documentos(palabras: &[&str]) -> bool {
     palabras.iter().any(|p| {
-        ["pdf", "documento", "plano", "archivo", "fichero", "word", "excel", "pagina", "adjunt", "docx", "informe"]
-            .iter()
-            .any(|r| p.starts_with(r))
+        [
+            "pdf",
+            "documento",
+            "plano",
+            "archivo",
+            "fichero",
+            "word",
+            "excel",
+            "pagina",
+            "adjunt",
+            "docx",
+            "informe",
+        ]
+        .iter()
+        .any(|r| p.starts_with(r))
     })
 }
 
@@ -167,8 +496,50 @@ pub fn pide_pegar_o_recortar(palabras: &[&str]) -> bool {
 /// figuras, a lapiz, con grafito, como boceto) y no una copia exacta.
 pub fn pide_interpretar(q: &str) -> bool {
     [
-        "con figuras", "con formas", "a lapiz", "con lapiz", "grafito", "boceto", "bosquejo", "interpret", "ilustra",
-        "estilo", "caricatura", "a mano", "dibujo de", "en svg", "isometric",
+        "con figuras",
+        "con formas",
+        "a lapiz",
+        "con lapiz",
+        "grafito",
+        "boceto",
+        "bosquejo",
+        "interpret",
+        "ilustra",
+        "estilo",
+        "caricatura",
+        "a mano",
+        "dibujo de",
+        "en svg",
+        "isometric",
+    ]
+    .iter()
+    .any(|c| q.contains(c))
+}
+
+/// Las herramientas de reescribir lo escrito en el lienzo, por orden: la de
+/// editar textos (la anade la tabla de editar; si aun no esta, se salta) y
+/// la de encontrar sus #id.
+pub const REESCRIBIR_TEXTOS: &[&str] = &["editar_texto", crate::edicion::SELECCIONAR];
+
+/// Si el pedido es reescribir textos que ya estan: traducirlos o corregir su
+/// ortografia. (`q` ya normalizado: sin tildes y en minusculas.)
+pub fn pide_reescribir_textos(q: &str) -> bool {
+    [
+        "traduc",
+        "translat",
+        "en ingles",
+        "al ingles",
+        "al espanol",
+        "al chino",
+        "al frances",
+        "corrige las tildes",
+        "corrige tildes",
+        "pon las tildes",
+        "ponle tildes",
+        "ortografia",
+        "faltas de",
+        "acentos",
+        "tildes",
     ]
     .iter()
     .any(|c| q.contains(c))
@@ -194,7 +565,10 @@ pub fn para_el_pedido(pedido: &str, con_imagen: bool) -> Vec<Herramienta> {
     // ejercicio»): no es calcarla ni una pregunta sobre la app; se pasa en
     // limpio, y por si su figura es de fisica o una grafica, esas dos.
     if con_imagen && crate::problema::pide_problema(pedido) {
-        return [PROBLEMA, FISICA, FUNCION].iter().filter_map(|n| de(n)).collect();
+        return [PROBLEMA, FISICA, FUNCION]
+            .iter()
+            .filter_map(|n| de(n))
+            .collect();
     }
     if es_pregunta_de_ayuda(&q) {
         // «¿Donde dice JR. ANTISUYO en el plano?» es buscar DENTRO de un
@@ -207,7 +581,11 @@ pub fn para_el_pedido(pedido: &str, con_imagen: bool) -> Vec<Herramienta> {
         // primero buscar, y la ayuda por si acaso.
         if es_sobre_sus_documentos(&q) || !dentro.is_empty() {
             let mut v = dentro;
-            v.extend([crate::documentos::BUSCAR, AYUDA].iter().filter_map(|n| de(n)));
+            v.extend(
+                [crate::documentos::BUSCAR, AYUDA]
+                    .iter()
+                    .filter_map(|n| de(n)),
+            );
             v.truncate(MAXIMO);
             return v;
         }
@@ -215,7 +593,11 @@ pub fn para_el_pedido(pedido: &str, con_imagen: bool) -> Vec<Herramienta> {
     }
     // «Pega la foto y recorta la mitad»: es editar el lienzo con ella, no
     // calcarla (`edicion.rs`).
-    if con_imagen && pide_la_imagen(&palabras) && !pide_una_tabla(&palabras) && !pide_pegar_o_recortar(&palabras) {
+    if con_imagen
+        && pide_la_imagen(&palabras)
+        && !pide_una_tabla(&palabras)
+        && !pide_pegar_o_recortar(&palabras)
+    {
         // «Dibujala con figuras», «a lapiz», «con grafito»: interpretarla,
         // no calcarla. El modelo la ve y la redibuja con las herramientas
         // del lienzo (o en SVG, que da curvas).
@@ -239,39 +621,100 @@ pub fn para_el_pedido(pedido: &str, con_imagen: bool) -> Vec<Herramienta> {
     // La hoja al lienzo es solo para la nube (decision del usuario, 14-oct):
     // esta seleccion es la del modelo local. Lo mismo las de la app del
     // 15-oct (`acciones::SOLO_NUBE`: «la IA local, no la toques»).
-    for a in crate::acciones::todas()
-        .filter(|a| a.herramienta != crate::hoja::NOMBRE && !crate::acciones::es_solo_nube(a.herramienta))
-    {
-        puntuadas.push((puntuar(a.claves, &q, &palabras), crate::acciones::herramienta(a)));
+    for a in crate::acciones::todas().filter(|a| {
+        a.herramienta != crate::hoja::NOMBRE && !crate::acciones::es_solo_nube(a.herramienta)
+    }) {
+        puntuadas.push((
+            puntuar(a.claves, &q, &palabras),
+            crate::acciones::herramienta(a),
+        ));
     }
     // Editar lo que ya hay en el lienzo (tabla de `edicion.rs`).
     for f in crate::edicion::filas() {
-        puntuadas.push((puntuar(f.claves, &q, &palabras), crate::edicion::herramienta(f)));
+        puntuadas.push((
+            puntuar(f.claves, &q, &palabras),
+            crate::edicion::herramienta(f),
+        ));
+    }
+    // «Traduce la figura», «corrige las tildes» (22-oct): es leer lo escrito
+    // en el lienzo y reescribirlo; el idioma lo pone el modelo. Arriba del
+    // todo las de editar texto (`editar_texto`, si la tabla de editar ya la
+    // tiene) y la de buscar los #id.
+    if pide_reescribir_textos(&q) {
+        for n in REESCRIBIR_TEXTOS.iter().rev() {
+            if let Some(f) = crate::edicion::fila(n) {
+                puntuadas.retain(|(_, h)| h.nombre != *n);
+                puntuadas.insert(0, (u32::MAX, crate::edicion::herramienta(f)));
+            }
+        }
     }
     // Estable: a igual puntuacion, el orden del catalogo.
-    puntuadas.sort_by(|a, b| b.0.cmp(&a.0));
+    puntuadas.sort_by_key(|p| std::cmp::Reverse(p.0));
     // «Resalta el titulo», «subraya el resultado»: sin nombrar un documento,
     // es el lienzo. Con las dos a mano el 2B anotaba un PDF que no habia
     // (medido el 14-oct con `anotar_documento`).
-    let edita = puntuadas.iter().any(|(s, h)| *s >= 2 && crate::edicion::fila(&h.nombre).is_some());
+    let edita = puntuadas
+        .iter()
+        .any(|(s, h)| *s >= 2 && crate::edicion::fila(&h.nombre).is_some());
     if edita && !habla_de_documentos(&palabras) {
         puntuadas.retain(|(_, h)| !crate::acciones_documentos::es_de_documentos(&h.nombre));
     }
-    let mut elegidas: Vec<(u32, Herramienta)> = puntuadas.into_iter().filter(|(s, _)| *s >= 2).take(MAXIMO).collect();
+    // **Agrandar lo que ya hay** (25-oct-2026, el usuario: «tengo una figura
+    // del cronograma … quiero que sean 30 semanas y 30 actividades … siendo
+    // el mismo diseño»): la plantilla se rehace con SU codigo
+    // (`figuras_guardadas`, «alargar»). Con la de dibujar cronogramas a mano
+    // el modelo borraba la plantilla y la redibujaba peor.
+    // Y **reorganizar lo que ya hay** (25-oct): mover un recuadro, cambiar
+    // el orden, anadir filas. Con las piezas de la hoja
+    // (`edicion::REORGANIZAR`), nunca redibujando.
+    let reorganiza = pide_reorganizar(&q, &palabras);
+    let agranda = pide_agrandar(&q, &palabras);
+    if reorganiza || agranda {
+        puntuadas.retain(|(_, h)| h.nombre != CRONOGRAMA && h.nombre != DIBUJAR);
+        let mut arriba = Vec::new();
+        if agranda && let Some(f) = de(FIGURAS) {
+            arriba.push(f);
+        }
+        if let Some(f) = crate::edicion::fila(crate::edicion::REORGANIZAR) {
+            arriba.push(crate::edicion::herramienta(f));
+        }
+        if reorganiza && !agranda {
+            arriba.reverse();
+        }
+        for h in arriba.into_iter().rev() {
+            puntuadas.retain(|(_, x)| x.nombre != h.nombre);
+            puntuadas.insert(0, (u32::MAX, h));
+        }
+    }
+    let mut elegidas: Vec<(u32, Herramienta)> = puntuadas
+        .into_iter()
+        .filter(|(s, _)| *s >= 2)
+        .take(MAXIMO)
+        .collect();
     // «Saca las tareas de esta acta»: con las dos a mano, el 2B las apuntaba
     // una a una en el Inbox y no creaba la lista pedida (medido, 14-oct).
-    if let Some(varias) = elegidas.iter().find(|(_, h)| h.nombre == "anadir_tareas").map(|x| x.0) {
+    if let Some(varias) = elegidas
+        .iter()
+        .find(|(_, h)| h.nombre == "anadir_tareas")
+        .map(|x| x.0)
+    {
         elegidas.retain(|(s, h)| !(h.nombre == "anadir_tarea" && *s <= varias));
     }
     // «Dibuja el tiro parabolico...»: con dibujar a mano, el 2B dibujaba
     // cajas con rotulos en vez de la plantilla (medido, 14-oct). Si una de
     // estudiantes encaja de lleno, la de dibujar a mano sobra.
-    if elegidas.iter().any(|(s, h)| *s >= 4 && [FISICA, FUNCION, PROBLEMA].contains(&h.nombre.as_str())) {
+    if elegidas
+        .iter()
+        .any(|(s, h)| *s >= 4 && [FISICA, FUNCION, PROBLEMA].contains(&h.nombre.as_str()))
+    {
         elegidas.retain(|(s, h)| !(h.nombre == DIBUJAR && *s <= 2));
     }
     let elegidas: Vec<Herramienta> = elegidas.into_iter().map(|(_, h)| h).collect();
     if elegidas.is_empty() {
-        return [DIBUJAR, GRAFICA, AYUDA].iter().filter_map(|n| de(n)).collect();
+        return [DIBUJAR, GRAFICA, AYUDA]
+            .iter()
+            .filter_map(|n| de(n))
+            .collect();
     }
     elegidas
 }
@@ -294,22 +737,56 @@ pub fn pide_mejor_vista(pedido: &str, con_foto: bool) -> bool {
         .split(|c: char| !c.is_alphanumeric())
         .filter(|p| !p.is_empty())
         .collect();
-    let empieza = |raices: &[&str]| palabras.iter().any(|p| raices.iter().any(|r| p.starts_with(r)));
+    let empieza = |raices: &[&str]| {
+        palabras
+            .iter()
+            .any(|p| raices.iter().any(|r| p.starts_with(r)))
+    };
     // Hacer algo con la foto: el de siempre.
     if empieza(&[
-        "dibuj", "calca", "copia", "pasa", "traza", "grafic", "lienzo", "anota", "tarea", "lista", "borra",
-        "envia", "manda", "comparte", "guarda", "pinea", "recorta",
+        "dibuj", "calca", "copia", "pasa", "traza", "grafic", "lienzo", "anota", "tarea", "lista",
+        "borra", "envia", "manda", "comparte", "guarda", "pinea", "recorta",
     ]) {
         return false;
     }
     let frases = [
-        "que ves", "que hay", "que es esto", "que es eso", "que dice", "que pone", "que significa", "que marca",
-        "de que color", "donde esta", "quien es", "quienes son", "que se ve", "que aparece", "que sale",
+        "que ves",
+        "que hay",
+        "que es esto",
+        "que es eso",
+        "que dice",
+        "que pone",
+        "que significa",
+        "que marca",
+        "de que color",
+        "donde esta",
+        "quien es",
+        "quienes son",
+        "que se ve",
+        "que aparece",
+        "que sale",
     ];
     frases.iter().any(|f| q.contains(f))
         || empieza(&[
-            "describ", "lee", "leer", "texto", "escena", "identific", "reconoc", "cuant", "analiz", "mira",
-            "explica", "detall", "ocurr", "sucede", "letrero", "cartel", "etiqueta", "matricula", "placa",
+            "describ",
+            "lee",
+            "leer",
+            "texto",
+            "escena",
+            "identific",
+            "reconoc",
+            "cuant",
+            "analiz",
+            "mira",
+            "explica",
+            "detall",
+            "ocurr",
+            "sucede",
+            "letrero",
+            "cartel",
+            "etiqueta",
+            "matricula",
+            "placa",
         ])
 }
 
@@ -320,7 +797,11 @@ mod pruebas {
     #[test]
     fn la_mejor_vista_solo_para_mirar_una_foto() {
         for (pedido, foto, debe) in [
-            ("Te mando esta imagen. Descríbela en una o dos frases", true, true),
+            (
+                "Te mando esta imagen. Descríbela en una o dos frases",
+                true,
+                true,
+            ),
             ("¿Qué pone en el cartel?", true, true),
             ("léeme lo que dice la etiqueta", true, true),
             ("¿Qué está ocurriendo en esta escena?", true, true),
@@ -338,19 +819,34 @@ mod pruebas {
     }
 
     fn nombres(pedido: &str, img: bool) -> Vec<String> {
-        para_el_pedido(pedido, img).into_iter().map(|h| h.nombre).collect()
+        para_el_pedido(pedido, img)
+            .into_iter()
+            .map(|h| h.nombre)
+            .collect()
     }
 
     #[test]
     fn los_pedidos_de_editar_llevan_su_herramienta() {
         use crate::edicion::{CORTAR, EXTENDER, GEOMETRIA, IMAGEN, TRANSFORMAR, TRAZAR};
         for (pedido, img, debe) in [
-            ("dibuja dos rectas que se crucen y corta la de abajo en el cruce", false, CORTAR),
+            (
+                "dibuja dos rectas que se crucen y corta la de abajo en el cruce",
+                false,
+                CORTAR,
+            ),
             ("pega la foto y recorta la mitad izquierda", true, IMAGEN),
             ("resalta el titulo", false, TRAZAR),
             ("subraya el resultado con el lapiz rojo", false, TRAZAR),
-            ("alarga la recta hasta que toque el circulo", false, EXTENDER),
-            ("traza una perpendicular a la recta por su punto medio", false, GEOMETRIA),
+            (
+                "alarga la recta hasta que toque el circulo",
+                false,
+                EXTENDER,
+            ),
+            (
+                "traza una perpendicular a la recta por su punto medio",
+                false,
+                GEOMETRIA,
+            ),
             ("mueve el circulo rojo 50 a la derecha", false, TRANSFORMAR),
         ] {
             let n = nombres(pedido, img);
@@ -359,34 +855,101 @@ mod pruebas {
         }
         // Sin nombrar un documento, resaltar es del lienzo; nombrandolo, del
         // documento.
-        assert!(!nombres("resalta el titulo", false).iter().any(|x| x == "anotar_documento"));
-        assert!(nombres("resalta en el PDF el total", false).iter().any(|x| x == "anotar_documento"));
+        assert!(
+            !nombres("resalta el titulo", false)
+                .iter()
+                .any(|x| x == "anotar_documento")
+        );
+        assert!(
+            nombres("resalta en el PDF el total", false)
+                .iter()
+                .any(|x| x == "anotar_documento")
+        );
         // Negativo: con una foto, «copia esta imagen» sigue siendo calcarla.
-        assert_eq!(nombres("Copia esta imagen en el lienzo", true), vec![CALCAR.to_string()]);
+        assert_eq!(
+            nombres("Copia esta imagen en el lienzo", true),
+            vec![CALCAR.to_string()]
+        );
     }
 
     #[test]
     fn elige_pocas_y_las_que_vienen_a_cuento() {
         for (pedido, img, debe) in [
-            ("Dibuja un circulo rojo y un cuadrado azul", false, "dibujar_en_lienzo"),
-            ("Hazme una grafica de barras de ventas: enero 120", false, "grafica"),
+            (
+                "Dibuja un circulo rojo y un cuadrado azul",
+                false,
+                "dibujar_en_lienzo",
+            ),
+            (
+                "Hazme una grafica de barras de ventas: enero 120",
+                false,
+                "grafica",
+            ),
             ("Copia esta imagen en el lienzo", true, "calcar_imagen"),
-            ("Apunta la tarea: llamar al ingeniero", false, "anadir_tarea"),
-            ("Crea una lista de tareas que se llame Obra", false, "lista_nueva"),
+            (
+                "Apunta la tarea: llamar al ingeniero",
+                false,
+                "anadir_tarea",
+            ),
+            (
+                "Crea una lista de tareas que se llame Obra",
+                false,
+                "lista_nueva",
+            ),
             ("Abre la ventana de tareas", false, "abrir_ventana"),
             ("Enseñame la galeria de capturas", false, "abrir_ventana"),
-            ("Haz una captura de una zona de la pantalla", false, "capturar_pantalla"),
-            ("Saca como pin la ultima captura", false, "pinear_ultima_captura"),
-            ("Crea un lienzo nuevo llamado Croquis", false, "lienzo_nuevo"),
-            ("Graba una nota de voz que se llame reunion", false, "grabar_voz"),
-            (r"Abre el archivo C:\Users\yo\plano.pdf", false, "abrir_fichero"),
-            ("Busca en mis lecciones aprendidas las de encofrado", false, "buscar_lecciones"),
-            ("Crea una nota nueva que diga: comprar cemento", false, "nota_nueva"),
+            (
+                "Haz una captura de una zona de la pantalla",
+                false,
+                "capturar_pantalla",
+            ),
+            (
+                "Saca como pin la ultima captura",
+                false,
+                "pinear_ultima_captura",
+            ),
+            (
+                "Crea un lienzo nuevo llamado Croquis",
+                false,
+                "lienzo_nuevo",
+            ),
+            (
+                "Graba una nota de voz que se llame reunion",
+                false,
+                "grabar_voz",
+            ),
+            (
+                r"Abre el archivo C:\Users\yo\plano.pdf",
+                false,
+                "abrir_fichero",
+            ),
+            (
+                "Busca en mis lecciones aprendidas las de encofrado",
+                false,
+                "buscar_lecciones",
+            ),
+            (
+                "Crea una nota nueva que diga: comprar cemento",
+                false,
+                "nota_nueva",
+            ),
             ("Sincroniza con el movil", false, "sincronizar_movil"),
             ("Lee el texto de este pdf escaneado", false, "ocr"),
-            ("Saca las tareas de esta acta y ponlas en una lista nueva", false, "anadir_tareas"),
-            ("¿Qué tengo pendiente esta semana?", false, "consultar_tareas"),
-            ("Aplaza la tarea llamar al banco al viernes", false, "editar_tarea"),
+            (
+                "Saca las tareas de esta acta y ponlas en una lista nueva",
+                false,
+                "anadir_tareas",
+            ),
+            (
+                "¿Qué tengo pendiente esta semana?",
+                false,
+                "consultar_tareas",
+            ),
+            (
+                "Aplaza la tarea llamar al banco al viernes",
+                false,
+                "editar_tarea",
+            ),
         ] {
             let n = nombres(pedido, img);
             assert!(n.iter().any(|x| x == debe), "«{pedido}» → {n:?}");
@@ -410,22 +973,39 @@ mod pruebas {
             "Abre los ajustes",
         ] {
             let n = nombres(pedido, false);
-            assert!(!n.iter().any(|x| crate::acciones::es_solo_nube(x)), "«{pedido}» → {n:?}");
+            assert!(
+                !n.iter().any(|x| crate::acciones::es_solo_nube(x)),
+                "«{pedido}» → {n:?}"
+            );
         }
     }
 
     #[test]
     fn sacar_las_tareas_de_un_acta_no_ofrece_apuntarlas_de_una_en_una() {
-        let n = nombres("Saca las tareas de esta acta y ponlas en una lista nueva llamada Acta", false);
-        assert!(n.contains(&"anadir_tareas".to_string()) && !n.contains(&"anadir_tarea".to_string()), "{n:?}");
+        let n = nombres(
+            "Saca las tareas de esta acta y ponlas en una lista nueva llamada Acta",
+            false,
+        );
+        assert!(
+            n.contains(&"anadir_tareas".to_string()) && !n.contains(&"anadir_tarea".to_string()),
+            "{n:?}"
+        );
         // Una sola tarea sigue con la suya.
-        assert!(nombres("Apunta la tarea comprar pan", false).contains(&"anadir_tarea".to_string()));
+        assert!(
+            nombres("Apunta la tarea comprar pan", false).contains(&"anadir_tarea".to_string())
+        );
     }
 
     #[test]
     fn una_pregunta_solo_lleva_la_ayuda() {
-        assert_eq!(nombres("¿Cómo hago una captura de pantalla?", false), vec!["ayuda_app"]);
-        assert_eq!(nombres("¿Donde estan los ajustes de PixPin?", false), vec!["ayuda_app"]);
+        assert_eq!(
+            nombres("¿Cómo hago una captura de pantalla?", false),
+            vec!["ayuda_app"]
+        );
+        assert_eq!(
+            nombres("¿Donde estan los ajustes de PixPin?", false),
+            vec!["ayuda_app"]
+        );
         // Pedir algo con una pregunta de cortesia no es pedir ayuda.
         assert!(nombres("¿Puedes abrir la galeria?", false).contains(&"abrir_ventana".to_string()));
     }
@@ -434,17 +1014,32 @@ mod pruebas {
     fn un_saludo_no_lleva_herramientas_y_lo_raro_lleva_las_de_siempre() {
         assert!(nombres("Hola, ¿que tal?", false).is_empty());
         assert!(nombres("gracias", false).is_empty());
-        assert_eq!(nombres("hazme algo bonito", false), vec!["dibujar_en_lienzo", "grafica", "ayuda_app"]);
+        assert_eq!(
+            nombres("hazme algo bonito", false),
+            vec!["dibujar_en_lienzo", "grafica", "ayuda_app"]
+        );
     }
 
     #[test]
     fn las_preguntas_sobre_sus_documentos_llevan_buscar() {
         let b = crate::documentos::BUSCAR;
-        assert_eq!(nombres("¿Qué dice la tesis sobre las cunetas?", false)[0], b);
-        assert_eq!(nombres("busca en mis notas lo del presupuesto", false)[0], b);
-        assert_eq!(nombres("¿Dónde mandé el plano de cunetas?", false), vec![b, "ayuda_app"]);
+        assert_eq!(
+            nombres("¿Qué dice la tesis sobre las cunetas?", false)[0],
+            b
+        );
+        assert_eq!(
+            nombres("busca en mis notas lo del presupuesto", false)[0],
+            b
+        );
+        assert_eq!(
+            nombres("¿Dónde mandé el plano de cunetas?", false),
+            vec![b, "ayuda_app"]
+        );
         // Lo de la app sigue siendo solo ayuda.
-        assert_eq!(nombres("¿Donde estan los ajustes de PixPin?", false), vec!["ayuda_app"]);
+        assert_eq!(
+            nombres("¿Donde estan los ajustes de PixPin?", false),
+            vec!["ayuda_app"]
+        );
         assert!(!nombres("Dibuja un circulo rojo", false).contains(&b.to_string()));
     }
 
@@ -472,9 +1067,18 @@ mod pruebas {
     #[test]
     fn las_herramientas_nuevas_salen_cuando_vienen_a_cuento() {
         for (pedido, debe) in [
-            ("Dibuja un arbol en isometrico para arquitectura", "dibujar_svg"),
-            ("Grafica la funcion y = x^2 entre -3 y 3", "graficar_funcion"),
-            ("Escribe la formula cuadratica en el lienzo", "escribir_ecuacion"),
+            (
+                "Dibuja un arbol en isometrico para arquitectura",
+                "dibujar_svg",
+            ),
+            (
+                "Grafica la funcion y = x^2 entre -3 y 3",
+                "graficar_funcion",
+            ),
+            (
+                "Escribe la formula cuadratica en el lienzo",
+                "escribir_ecuacion",
+            ),
             ("Hazme un cronograma de la obra con sus hitos", "cronograma"),
             ("Guarda esto como arbol isometrico", "figuras_guardadas"),
             ("Pon el arbol isometrico en el lienzo", "figuras_guardadas"),
@@ -490,26 +1094,89 @@ mod pruebas {
     fn los_pedidos_de_estudiantes_traen_su_herramienta() {
         for (pedido, img, debe) in [
             ("Grafica r = 1 + cos θ", false, "graficar_funcion"),
-            ("Grafica la parametrica de una elipse", false, "graficar_funcion"),
+            (
+                "Grafica la parametrica de una elipse",
+                false,
+                "graficar_funcion",
+            ),
             ("Grafica x²-4 y marca sus raices", false, "graficar_funcion"),
-            ("Diagrama de cuerpo libre de un bloque en un plano inclinado de 30° con rozamiento", false, "diagrama_fisica"),
+            (
+                "Diagrama de cuerpo libre de un bloque en un plano inclinado de 30° con rozamiento",
+                false,
+                "diagrama_fisica",
+            ),
             ("Tiro parabolico a 20 m/s y 45°", false, "diagrama_fisica"),
-            ("Dibuja un circuito con dos resistencias en paralelo", false, "diagrama_fisica"),
+            (
+                "Dibuja un circuito con dos resistencias en paralelo",
+                false,
+                "diagrama_fisica",
+            ),
             ("Pasa en limpio este problema", true, "problema_en_limpio"),
             ("¿Como resuelvo este ejercicio?", true, "problema_en_limpio"),
-            ("Resuelve el problema: un tren sale a 60 km/h...", false, "problema_en_limpio"),
+            (
+                "Resuelve el problema: un tren sale a 60 km/h...",
+                false,
+                "problema_en_limpio",
+            ),
         ] {
             let n = nombres(pedido, img);
             assert!(n.iter().any(|x| x == debe), "«{pedido}» → {n:?}");
-            assert!(!n.contains(&"calcar_imagen".to_string()), "«{pedido}» → {n:?}");
+            assert!(
+                !n.contains(&"calcar_imagen".to_string()),
+                "«{pedido}» → {n:?}"
+            );
         }
         // Con la plantilla de lleno, dibujar a mano sobra (el 2B la elegia).
-        let n = nombres("Dibuja el tiro parabolico de un proyectil lanzado a 20 m/s y 45°", false);
+        let n = nombres(
+            "Dibuja el tiro parabolico de un proyectil lanzado a 20 m/s y 45°",
+            false,
+        );
         assert!(!n.contains(&"dibujar_en_lienzo".to_string()), "{n:?}");
         // Pero dibujar algo cualquiera sigue siendo dibujar.
-        assert!(nombres("Dibuja una casa con un arbol", false).contains(&"dibujar_en_lienzo".to_string()));
+        assert!(
+            nombres("Dibuja una casa con un arbol", false)
+                .contains(&"dibujar_en_lienzo".to_string())
+        );
         // Negativo: copiar una foto sigue siendo calcarla.
-        assert_eq!(nombres("Copia esta imagen en el lienzo", true), vec!["calcar_imagen"]);
+        assert_eq!(
+            nombres("Copia esta imagen en el lienzo", true),
+            vec!["calcar_imagen"]
+        );
+    }
+
+    #[test]
+    fn agrandar_el_cronograma_es_alargar_la_plantilla_y_no_redibujarlo() {
+        // 25-oct-2026: con la de dibujar cronogramas, el modelo borraba la
+        // plantilla y la redibujaba peor.
+        for pedido in [
+            "Amplía el cronograma a 30 semanas y 30 actividades",
+            "extiende esto para que sean 30 semanas",
+            "hazlo mas grande, con 25 filas",
+        ] {
+            let n = nombres(pedido, false);
+            assert_eq!(
+                n.first().map(String::as_str),
+                Some(FIGURAS),
+                "«{pedido}» → {n:?}"
+            );
+            assert!(!n.contains(&CRONOGRAMA.to_string()), "«{pedido}» → {n:?}");
+        }
+        // Reorganizar una hoja: con sus piezas, no redibujandola.
+        for pedido in [
+            "Reorganiza la hoja: pon el recuadro de arriba abajo",
+            "intercambia la seccion de notas con la de tareas",
+        ] {
+            let n = nombres(pedido, false);
+            assert_eq!(
+                n.first().map(String::as_str),
+                Some(crate::edicion::REORGANIZAR),
+                "«{pedido}» → {n:?}"
+            );
+            assert!(!n.contains(&DIBUJAR.to_string()), "«{pedido}» → {n:?}");
+        }
+        // Caso negativo: un cronograma nuevo sigue siendo el de dibujarlo.
+        let n = nombres("Hazme un cronograma de la obra con sus hitos", false);
+        assert!(n.contains(&CRONOGRAMA.to_string()), "{n:?}");
     }
 
     #[test]
@@ -520,17 +1187,34 @@ mod pruebas {
             "Haz un boceto con grafito de esta foto",
         ] {
             let n = nombres(pedido, true);
-            assert!(!n.contains(&"calcar_imagen".to_string()), "«{pedido}» → {n:?}");
-            assert!(n.contains(&"dibujar_svg".to_string()) && n.contains(&"dibujar_en_lienzo".to_string()), "«{pedido}» → {n:?}");
+            assert!(
+                !n.contains(&"calcar_imagen".to_string()),
+                "«{pedido}» → {n:?}"
+            );
+            assert!(
+                n.contains(&"dibujar_svg".to_string())
+                    && n.contains(&"dibujar_en_lienzo".to_string()),
+                "«{pedido}» → {n:?}"
+            );
         }
-        assert_eq!(nombres("Copia esta imagen en el lienzo", true), vec!["calcar_imagen"]);
+        assert_eq!(
+            nombres("Copia esta imagen en el lienzo", true),
+            vec!["calcar_imagen"]
+        );
     }
 
     #[test]
     fn dibujar_otra_cosa_con_una_imagen_en_el_chat_no_calca() {
-        for pedido in ["Dibuja un circulo rojo", "dibuja una casa con un arbol", "haz una grafica de barras: 1, 2, 3"] {
+        for pedido in [
+            "Dibuja un circulo rojo",
+            "dibuja una casa con un arbol",
+            "haz una grafica de barras: 1, 2, 3",
+        ] {
             let n = nombres(pedido, true);
-            assert!(!n.contains(&"calcar_imagen".to_string()), "«{pedido}» → {n:?}");
+            assert!(
+                !n.contains(&"calcar_imagen".to_string()),
+                "«{pedido}» → {n:?}"
+            );
             assert!(!n.is_empty(), "«{pedido}»");
         }
         // Sin imagen, aunque hable de «esta imagen», no hay nada que calcar.
@@ -549,15 +1233,60 @@ mod pruebas {
             ("Encierra en rojo la leyenda del plano", false, ANOTAR),
             ("¿Dónde dice JR. ANTISUYO en el plano?", false, BUSCAR_EN),
             ("Llevame a donde dice Av. Tahuantinsuyo", false, BUSCAR_EN),
-            ("Abre el plano de señalización de Tahuantinsuyo", false, ABRIR),
+            (
+                "Abre el plano de señalización de Tahuantinsuyo",
+                false,
+                ABRIR,
+            ),
             ("Exporta el plano a PDF", false, EXPORTAR),
         ] {
             let n = nombres(pedido, img);
             assert!(n.iter().any(|x| x == debe), "«{pedido}» → {n:?}");
             assert!(n.len() <= MAXIMO, "«{pedido}» → {n:?}");
-            assert!(!n.contains(&"calcar_imagen".to_string()), "«{pedido}» → {n:?}");
+            assert!(
+                !n.contains(&"calcar_imagen".to_string()),
+                "«{pedido}» → {n:?}"
+            );
         }
         // Caso negativo: una pregunta sobre la app sigue siendo de la ayuda.
-        assert_eq!(nombres("¿Donde estan los ajustes de PixPin?", false), vec!["ayuda_app"]);
+        assert_eq!(
+            nombres("¿Donde estan los ajustes de PixPin?", false),
+            vec!["ayuda_app"]
+        );
+    }
+
+    /// «Traduce la figura» (22-oct): antes no le daba nada que editara los
+    /// textos y el modelo decia que no tenia herramienta.
+    #[test]
+    fn traducir_o_corregir_tildes_da_las_de_reescribir_textos() {
+        for pedido in [
+            "Traduce esta figura al inglés",
+            "translate the diagram to Spanish",
+            "Corrige las tildes del lienzo",
+        ] {
+            let n = nombres(pedido, false);
+            assert_eq!(
+                n.first().map(String::as_str),
+                Some(
+                    REESCRIBIR_TEXTOS
+                        .iter()
+                        .copied()
+                        .find(|t| crate::edicion::fila(t).is_some())
+                        .unwrap()
+                ),
+                "{pedido}: {n:?}"
+            );
+            assert!(
+                n.iter().any(|x| x == crate::edicion::SELECCIONAR),
+                "{pedido}: {n:?}"
+            );
+        }
+        // Negativos: dibujar o preguntar por la app no son reescribir textos.
+        assert!(
+            !nombres("dibuja una casa", false)
+                .iter()
+                .any(|x| x == crate::edicion::SELECCIONAR)
+        );
+        assert!(!pide_reescribir_textos("dibuja un circulo rojo"));
     }
 }

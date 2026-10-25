@@ -81,7 +81,12 @@ pub struct Caja {
 
 impl Caja {
     pub fn nueva(x: f64, y: f64, w: f64, h: f64) -> Caja {
-        Caja { x, y, w: w.max(0.0), h: h.max(0.0) }
+        Caja {
+            x,
+            y,
+            w: w.max(0.0),
+            h: h.max(0.0),
+        }
     }
     pub fn de_esquinas(x0: f64, y0: f64, x1: f64, y1: f64) -> Caja {
         Caja::nueva(x0.min(x1), y0.min(y1), (x1 - x0).abs(), (y1 - y0).abs())
@@ -102,7 +107,12 @@ impl Caja {
         self.w * self.h
     }
     pub fn union(&self, o: &Caja) -> Caja {
-        Caja::de_esquinas(self.x.min(o.x), self.y.min(o.y), self.x1().max(o.x1()), self.y1().max(o.y1()))
+        Caja::de_esquinas(
+            self.x.min(o.x),
+            self.y.min(o.y),
+            self.x1().max(o.x1()),
+            self.y1().max(o.y1()),
+        )
     }
     /// Lo que se pisan (area).
     pub fn comun(&self, o: &Caja) -> f64 {
@@ -113,7 +123,11 @@ impl Caja {
     /// Que parte de esta caja cae dentro de `o` (0-1).
     pub fn dentro_de(&self, o: &Caja) -> f64 {
         if self.area() <= 0.0 {
-            return if o.contiene(self.cx(), self.cy()) { 1.0 } else { 0.0 };
+            return if o.contiene(self.cx(), self.cy()) {
+                1.0
+            } else {
+                0.0
+            };
         }
         self.comun(o) / self.area()
     }
@@ -133,7 +147,12 @@ impl Caja {
     }
     /// Recortada a `0..ancho, 0..alto`.
     pub fn dentro(&self, ancho: f64, alto: f64) -> Caja {
-        Caja::de_esquinas(self.x.clamp(0.0, ancho), self.y.clamp(0.0, alto), self.x1().clamp(0.0, ancho), self.y1().clamp(0.0, alto))
+        Caja::de_esquinas(
+            self.x.clamp(0.0, ancho),
+            self.y.clamp(0.0, alto),
+            self.x1().clamp(0.0, ancho),
+            self.y1().clamp(0.0, alto),
+        )
     }
 }
 
@@ -152,7 +171,12 @@ pub struct PalabraHoja {
 
 impl PalabraHoja {
     pub fn nueva(texto: &str, x: f64, y: f64, w: f64, h: f64) -> PalabraHoja {
-        PalabraHoja { texto: texto.to_string(), caja: Caja::nueva(x, y, w, h), negrita: false, color: None }
+        PalabraHoja {
+            texto: texto.to_string(),
+            caja: Caja::nueva(x, y, w, h),
+            negrita: false,
+            color: None,
+        }
     }
 }
 
@@ -197,7 +221,10 @@ impl Tipo {
     }
     /// Si su trabajo necesita el modelo con vision.
     pub fn usa_modelo(self) -> bool {
-        matches!(self, Tipo::Formula | Tipo::Dudosa | Tipo::Grafica | Tipo::Diagrama)
+        matches!(
+            self,
+            Tipo::Formula | Tipo::Dudosa | Tipo::Grafica | Tipo::Diagrama
+        )
     }
 }
 
@@ -267,7 +294,11 @@ pub struct Zona {
 impl Zona {
     /// Todo su texto, renglon a renglon.
     pub fn texto(&self) -> String {
-        self.renglones.iter().map(|r| r.texto.as_str()).collect::<Vec<_>>().join("\n")
+        self.renglones
+            .iter()
+            .map(|r| r.texto.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -346,13 +377,24 @@ pub struct Mapa {
 
 impl Mapa {
     pub fn para(s: &Seccionado, o: &Opciones) -> Mapa {
-        Mapa { escala: o.ancho / s.ancho.max(1) as f64, origen: (0.0, 0.0) }
+        Mapa {
+            escala: o.ancho / s.ancho.max(1) as f64,
+            origen: (0.0, 0.0),
+        }
     }
     pub fn caja(&self, c: &Caja) -> Caja {
-        Caja::nueva(self.origen.0 + c.x * self.escala, self.origen.1 + c.y * self.escala, c.w * self.escala, c.h * self.escala)
+        Caja::nueva(
+            self.origen.0 + c.x * self.escala,
+            self.origen.1 + c.y * self.escala,
+            c.w * self.escala,
+            c.h * self.escala,
+        )
     }
     pub fn punto(&self, x: f64, y: f64) -> (f64, f64) {
-        (self.origen.0 + x * self.escala, self.origen.1 + y * self.escala)
+        (
+            self.origen.0 + x * self.escala,
+            self.origen.1 + y * self.escala,
+        )
     }
     /// El tamano de la hoja entera en el lienzo.
     pub fn hoja(&self, s: &Seccionado) -> (f64, f64) {
@@ -378,28 +420,65 @@ pub fn mediana(mut v: Vec<f64>) -> Option<f64> {
 /// «esta pagina al lienzo».
 pub fn pide_hoja_a_lienzo(pedido: &str) -> bool {
     let q = crate::acciones::normalizar(pedido);
-    let palabras: Vec<&str> = q.split(|c: char| !c.is_alphanumeric()).filter(|p| !p.is_empty()).collect();
-    let empieza = |raices: &[&str]| palabras.iter().any(|p| raices.iter().any(|r| p.starts_with(r)));
+    let palabras: Vec<&str> = q
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p| !p.is_empty())
+        .collect();
+    let empieza = |raices: &[&str]| {
+        palabras
+            .iter()
+            .any(|p| raices.iter().any(|r| p.starts_with(r)))
+    };
     if empieza(&["digitaliz"]) {
         return true;
     }
-    let hoja = empieza(&["hoja", "pagina", "escaneo", "escanead", "apunte", "folio", "documento", "papel", "foto"]);
-    let al_lienzo = q.contains("al lienzo") || q.contains("en el lienzo") || q.contains("a un lienzo") || q.contains("en un lienzo");
-    let verbo = empieza(&["pas", "pon", "conviert", "lleva", "mete", "transcrib", "copia", "haz"]);
+    let hoja = empieza(&[
+        "hoja",
+        "pagina",
+        "escaneo",
+        "escanead",
+        "apunte",
+        "folio",
+        "documento",
+        "papel",
+        "foto",
+    ]);
+    let al_lienzo = q.contains("al lienzo")
+        || q.contains("en el lienzo")
+        || q.contains("a un lienzo")
+        || q.contains("en un lienzo");
+    let verbo = empieza(&[
+        "pas",
+        "pon",
+        "conviert",
+        "lleva",
+        "mete",
+        "transcrib",
+        "copia",
+        "haz",
+    ]);
     hoja && al_lienzo && verbo
 }
 
 /// **Con el modelo local no se intenta**: si el ultimo mensaje del usuario
 /// pide pasar una hoja al lienzo, la respuesta es [`SOLO_NUBE`] y el turno
 /// acaba sin preguntar al modelo. `None`: no era eso.
-pub fn solo_nube(historial: &mut Vec<Mensaje>, al_evento: &mut dyn FnMut(crate::agente::Evento) -> crate::motor::Seguir) -> Option<crate::agente::Final> {
+pub fn solo_nube(
+    historial: &mut Vec<Mensaje>,
+    al_evento: &mut dyn FnMut(crate::agente::Evento) -> crate::motor::Seguir,
+) -> Option<crate::agente::Final> {
     let ultimo = historial.last().filter(|m| m.rol == Rol::Usuario)?;
     if !pide_hoja_a_lienzo(&ultimo.texto_entero()) {
         return None;
     }
     al_evento(crate::agente::Evento::Texto(SOLO_NUBE.to_string()));
     historial.push(Mensaje::texto(Rol::Asistente, SOLO_NUBE));
-    Some(crate::agente::Final { texto: SOLO_NUBE.into(), herramientas_hechas: 0, reintentos: 0, cortado: false })
+    Some(crate::agente::Final {
+        texto: SOLO_NUBE.into(),
+        herramientas_hechas: 0,
+        reintentos: 0,
+        cortado: false,
+    })
 }
 
 /// Una respuesta vacia (para los motores de prueba).
@@ -432,7 +511,11 @@ pub fn resumen(s: &Seccionado, hechas: usize, rehechas: usize, ms: u128) -> Stri
         "hecho: la hoja esta en el lienzo, {hechas} zonas ({}), {} columna(s){}, en {:.1} s",
         por_tipo.join(", "),
         s.columnas.max(1),
-        if rehechas > 0 { format!(", {rehechas} rehecha(s) tras comprobar") } else { String::new() },
+        if rehechas > 0 {
+            format!(", {rehechas} rehecha(s) tras comprobar")
+        } else {
+            String::new()
+        },
         ms as f64 / 1000.0
     )
 }
@@ -451,11 +534,24 @@ pub struct Pedido {
 
 impl Pedido {
     pub fn de(args: &Value) -> Pedido {
-        let texto = |k: &str| args.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+        let texto = |k: &str| {
+            args.get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
         Pedido {
             archivo: texto("archivo"),
-            pagina: args.get("pagina").and_then(Value::as_u64).filter(|p| *p >= 1).map(|p| p as usize - 1),
-            ancho: args.get("ancho").and_then(Value::as_f64).filter(|a| (200.0..=4000.0).contains(a)),
+            pagina: args
+                .get("pagina")
+                .and_then(Value::as_u64)
+                .filter(|p| *p >= 1)
+                .map(|p| p as usize - 1),
+            ancho: args
+                .get("ancho")
+                .and_then(Value::as_f64)
+                .filter(|a| (200.0..=4000.0).contains(a)),
             fiel: texto("modo").as_deref() == Some("fiel"),
         }
     }

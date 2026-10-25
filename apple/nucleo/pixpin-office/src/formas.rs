@@ -71,7 +71,9 @@ fn leer_tabla(texto: &str) -> HashMap<String, Def> {
             actual = Some((n.trim().to_string(), Def::default()));
             continue;
         }
-        let Some((_, def)) = actual.as_mut() else { continue };
+        let Some((_, def)) = actual.as_mut() else {
+            continue;
+        };
         let mut it = l.split_whitespace();
         let cabeza = it.next().unwrap_or("");
         let resto: Vec<&str> = it.collect();
@@ -81,10 +83,19 @@ fn leer_tabla(texto: &str) -> HashMap<String, Def> {
                     def.ajustes.push((resto[0].to_string(), v));
                 }
             }
-            "gd" if resto.len() >= 2 => def.pasos.push(Paso::Guia(resto[0].to_string(), resto[1..].join(" "))),
+            "gd" if resto.len() >= 2 => def
+                .pasos
+                .push(Paso::Guia(resto[0].to_string(), resto[1..].join(" "))),
             "use" if resto.len() == 1 => def.pasos.push(Paso::Usa(resto[0].to_string())),
             "p" => {
-                let mut t = Trayecto { rellenar: true, trazar: true, sombra: Sombra::Ninguna, w: None, h: None, ordenes: vec![] };
+                let mut t = Trayecto {
+                    rellenar: true,
+                    trazar: true,
+                    sombra: Sombra::Ninguna,
+                    w: None,
+                    h: None,
+                    ordenes: vec![],
+                };
                 for o in resto {
                     match o {
                         "none" => t.rellenar = false,
@@ -111,7 +122,10 @@ fn leer_tabla(texto: &str) -> HashMap<String, Def> {
                     for trozo in l.split(';') {
                         let mut p = trozo.split_whitespace();
                         if let Some(op) = p.next().and_then(|s| s.chars().next()) {
-                            t.ordenes.push(Orden { op, args: p.map(str::to_string).collect() });
+                            t.ordenes.push(Orden {
+                                op,
+                                args: p.map(str::to_string).collect(),
+                            });
                         }
                     }
                 }
@@ -147,16 +161,41 @@ fn trazar(def: &Def, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> 
     let mut v = variables_base(w as f64, h as f64);
     for (n, por_defecto) in &def.ajustes {
         // Un ajuste que no es un numero (NaN, infinito) se ignora.
-        let x = adj.get(n).map(|a| *a as f64).filter(|a| a.is_finite()).unwrap_or(*por_defecto);
+        let x = adj
+            .get(n)
+            .map(|a| *a as f64)
+            .filter(|a| a.is_finite())
+            .unwrap_or(*por_defecto);
         v.insert(n.clone(), x);
     }
     correr_guias(def, &mut v, 0);
-    let num = |s: &str| -> f32 { s.parse::<f64>().ok().or_else(|| v.get(s).copied()).unwrap_or(0.0) as f32 };
+    let num = |s: &str| -> f32 {
+        s.parse::<f64>()
+            .ok()
+            .or_else(|| v.get(s).copied())
+            .unwrap_or(0.0) as f32
+    };
     let mut salida = Vec::new();
     for t in &def.trayectos {
-        let sx = t.w.as_deref().map(num).filter(|pw| *pw > 0.0).map(|pw| w / pw).unwrap_or(1.0);
-        let sy = t.h.as_deref().map(num).filter(|ph| *ph > 0.0).map(|ph| h / ph).unwrap_or(1.0);
-        let nueva = |inicio: (f32, f32)| Figura { inicio, rellenar: t.rellenar, trazar: t.trazar, sombra: t.sombra, ..Default::default() };
+        let sx =
+            t.w.as_deref()
+                .map(num)
+                .filter(|pw| *pw > 0.0)
+                .map(|pw| w / pw)
+                .unwrap_or(1.0);
+        let sy =
+            t.h.as_deref()
+                .map(num)
+                .filter(|ph| *ph > 0.0)
+                .map(|ph| h / ph)
+                .unwrap_or(1.0);
+        let nueva = |inicio: (f32, f32)| Figura {
+            inicio,
+            rellenar: t.rellenar,
+            trazar: t.trazar,
+            sombra: t.sombra,
+            ..Default::default()
+        };
         let mut actual: Option<Figura> = None;
         let mut pos = (0.0f32, 0.0f32);
         let cerrar = |f: Option<Figura>, salida: &mut Vec<Figura>| {
@@ -168,7 +207,12 @@ fn trazar(def: &Def, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> 
         };
         for o in &t.ordenes {
             let a: Vec<f32> = o.args.iter().map(|s| num(s)).collect();
-            let pt = |i: usize| (a.get(i).copied().unwrap_or(0.0) * sx, a.get(i + 1).copied().unwrap_or(0.0) * sy);
+            let pt = |i: usize| {
+                (
+                    a.get(i).copied().unwrap_or(0.0) * sx,
+                    a.get(i + 1).copied().unwrap_or(0.0) * sy,
+                )
+            };
             match o.op {
                 'M' => {
                     cerrar(actual.take(), &mut salida);
@@ -177,25 +221,43 @@ fn trazar(def: &Def, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> 
                 }
                 'L' => {
                     let p = pt(0);
-                    actual.get_or_insert_with(|| nueva(pos)).tramos.push(Tramo::Linea(p.0, p.1));
+                    actual
+                        .get_or_insert_with(|| nueva(pos))
+                        .tramos
+                        .push(Tramo::Linea(p.0, p.1));
                     pos = p;
                 }
                 'C' => {
                     let (p1, p2, p3) = (pt(0), pt(2), pt(4));
-                    actual.get_or_insert_with(|| nueva(pos)).tramos.push(Tramo::Bezier(p1, p2, p3));
+                    actual
+                        .get_or_insert_with(|| nueva(pos))
+                        .tramos
+                        .push(Tramo::Bezier(p1, p2, p3));
                     pos = p3;
                 }
                 'Q' => {
                     let (c, p) = (pt(0), pt(2));
-                    let c1 = (pos.0 + 2.0 / 3.0 * (c.0 - pos.0), pos.1 + 2.0 / 3.0 * (c.1 - pos.1));
+                    let c1 = (
+                        pos.0 + 2.0 / 3.0 * (c.0 - pos.0),
+                        pos.1 + 2.0 / 3.0 * (c.1 - pos.1),
+                    );
                     let c2 = (p.0 + 2.0 / 3.0 * (c.0 - p.0), p.1 + 2.0 / 3.0 * (c.1 - p.1));
-                    actual.get_or_insert_with(|| nueva(pos)).tramos.push(Tramo::Bezier(c1, c2, p));
+                    actual
+                        .get_or_insert_with(|| nueva(pos))
+                        .tramos
+                        .push(Tramo::Bezier(c1, c2, p));
                     pos = p;
                 }
                 'A' => {
                     let f = actual.get_or_insert_with(|| nueva(pos));
-                    let (wr, hr) = (a.first().copied().unwrap_or(0.0) * sx, a.get(1).copied().unwrap_or(0.0) * sy);
-                    let (st, sw) = (a.get(2).copied().unwrap_or(0.0) / 60000.0, a.get(3).copied().unwrap_or(0.0) / 60000.0);
+                    let (wr, hr) = (
+                        a.first().copied().unwrap_or(0.0) * sx,
+                        a.get(1).copied().unwrap_or(0.0) * sy,
+                    );
+                    let (st, sw) = (
+                        a.get(2).copied().unwrap_or(0.0) / 60000.0,
+                        a.get(3).copied().unwrap_or(0.0) / 60000.0,
+                    );
                     pos = arco(f, pos, wr, hr, st, sw);
                 }
                 'Z' => {
@@ -207,7 +269,11 @@ fn trazar(def: &Def, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> 
                 }
                 'E' => {
                     cerrar(actual.take(), &mut salida);
-                    let (c, rx, ry) = (pt(0), a.get(2).copied().unwrap_or(0.0) * sx, a.get(3).copied().unwrap_or(0.0) * sy);
+                    let (c, rx, ry) = (
+                        pt(0),
+                        a.get(2).copied().unwrap_or(0.0) * sx,
+                        a.get(3).copied().unwrap_or(0.0) * sy,
+                    );
                     let mut f = elipse(c.0 - rx, c.1 - ry, 2.0 * rx, 2.0 * ry);
                     (f.rellenar, f.trazar, f.sombra) = (t.rellenar, t.trazar, t.sombra);
                     salida.push(f);
@@ -216,14 +282,19 @@ fn trazar(def: &Def, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> 
                     cerrar(actual.take(), &mut salida);
                     let (p, q) = (pt(0), pt(2));
                     let mut f = nueva(p);
-                    f.tramos = vec![Tramo::Linea(q.0, p.1), Tramo::Linea(q.0, q.1), Tramo::Linea(p.0, q.1)];
+                    f.tramos = vec![
+                        Tramo::Linea(q.0, p.1),
+                        Tramo::Linea(q.0, q.1),
+                        Tramo::Linea(p.0, q.1),
+                    ];
                     f.cerrada = true;
                     salida.push(f);
                 }
                 'K' => {
                     cerrar(actual.take(), &mut salida);
                     let (p, q) = (pt(0), pt(2));
-                    let r = (a.get(4).copied().unwrap_or(0.0) * sx).clamp(0.0, ((q.0 - p.0).abs().min((q.1 - p.1).abs())) / 2.0);
+                    let r = (a.get(4).copied().unwrap_or(0.0) * sx)
+                        .clamp(0.0, ((q.0 - p.0).abs().min((q.1 - p.1).abs())) / 2.0);
                     salida.push(redondeado(p, q, r, &nueva));
                 }
                 _ => {}
@@ -234,7 +305,12 @@ fn trazar(def: &Def, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> 
     salida
 }
 
-fn redondeado(p: (f32, f32), q: (f32, f32), r: f32, nueva: &dyn Fn((f32, f32)) -> Figura) -> Figura {
+fn redondeado(
+    p: (f32, f32),
+    q: (f32, f32),
+    r: f32,
+    nueva: &dyn Fn((f32, f32)) -> Figura,
+) -> Figura {
     let mut f = nueva((p.0 + r, p.1));
     f.tramos.push(Tramo::Linea(q.0 - r, p.1));
     arco(&mut f, (q.0 - r, p.1), r, r, 270.0, 90.0);
@@ -250,8 +326,18 @@ fn redondeado(p: (f32, f32), q: (f32, f32), r: f32, nueva: &dyn Fn((f32, f32)) -
 
 // --- Las que se generan -------------------------------------------------
 
-const ESTRELLAS: [(usize, f32); 10] =
-    [(4, 12500.0), (5, 19098.0), (6, 28868.0), (7, 34601.0), (8, 37500.0), (10, 42533.0), (12, 37500.0), (16, 37500.0), (24, 37500.0), (32, 37500.0)];
+const ESTRELLAS: [(usize, f32); 10] = [
+    (4, 12500.0),
+    (5, 19098.0),
+    (6, 28868.0),
+    (7, 34601.0),
+    (8, 37500.0),
+    (10, 42533.0),
+    (12, 37500.0),
+    (16, 37500.0),
+    (24, 37500.0),
+    (32, 37500.0),
+];
 
 fn poligono(p: Vec<(f32, f32)>) -> Figura {
     Figura {
@@ -265,7 +351,12 @@ fn poligono(p: Vec<(f32, f32)>) -> Figura {
 }
 
 fn estrella(n: usize, por_defecto: f32, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> {
-    let a = adj.get("adj").copied().filter(|a| a.is_finite()).unwrap_or(por_defecto).clamp(0.0, 50000.0);
+    let a = adj
+        .get("adj")
+        .copied()
+        .filter(|a| a.is_finite())
+        .unwrap_or(por_defecto)
+        .clamp(0.0, 50000.0);
     let interior = a / 50000.0;
     // Los vertices exteriores salen desde arriba; los interiores, entre dos
     // de ellos. Como en la especificacion (`hf` y `vf`), las puntas tocan los
@@ -283,16 +374,35 @@ fn estrella(n: usize, por_defecto: f32, w: f32, h: f32, adj: &HashMap<String, f3
         }
     }
     let (sx, sy) = (w / (x1 - x0).max(1e-6), h / (y1 - y0).max(1e-6));
-    vec![poligono(crudo.iter().map(|(x, y)| (w / 2.0 + x * sx, (y - y0) * sy)).collect())]
+    vec![poligono(
+        crudo
+            .iter()
+            .map(|(x, y)| (w / 2.0 + x * sx, (y - y0) * sy))
+            .collect(),
+    )]
 }
 
 /// Engranaje de `n` dientes (gear6, gear9): aproximado (la especificacion lo
 /// define con guias muy largas); dientes trapezoidales sobre un cuerpo
 /// redondo, sin agujero.
 fn engranaje(n: usize, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> {
-    let (alto_def, ancho_def) = if n == 6 { (15000.0, 3526.0) } else { (10000.0, 1763.0) };
-    let a1 = adj.get("adj1").copied().filter(|a| a.is_finite()).unwrap_or(alto_def).clamp(0.0, 20000.0);
-    let a2 = adj.get("adj2").copied().filter(|a| a.is_finite()).unwrap_or(ancho_def).clamp(0.0, 5358.0);
+    let (alto_def, ancho_def) = if n == 6 {
+        (15000.0, 3526.0)
+    } else {
+        (10000.0, 1763.0)
+    };
+    let a1 = adj
+        .get("adj1")
+        .copied()
+        .filter(|a| a.is_finite())
+        .unwrap_or(alto_def)
+        .clamp(0.0, 20000.0);
+    let a2 = adj
+        .get("adj2")
+        .copied()
+        .filter(|a| a.is_finite())
+        .unwrap_or(ancho_def)
+        .clamp(0.0, 5358.0);
     let ss = w.min(h);
     let raiz = (1.0 - 2.0 * ss * a1 / 100000.0 / ss).clamp(0.4, 1.0);
     let paso = 2.0 * PI / n as f32;
@@ -317,7 +427,13 @@ fn engranaje(n: usize, w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura
 }
 
 fn sol(w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> {
-    let a = adj.get("adj").copied().filter(|a| a.is_finite()).unwrap_or(25000.0).clamp(12500.0, 46875.0) / 100000.0;
+    let a = adj
+        .get("adj")
+        .copied()
+        .filter(|a| a.is_finite())
+        .unwrap_or(25000.0)
+        .clamp(12500.0, 46875.0)
+        / 100000.0;
     // Radio del disco (1 = media caja): crece al bajar el ajuste.
     let disco = (1.0 - 2.0 * a).clamp(0.05, 0.8);
     let base = (disco + 0.14).min(0.92);
@@ -329,7 +445,12 @@ fn sol(w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> {
         let d = (0.12 / base).clamp(0.0, 1.0).asin();
         v.push(poligono(vec![en(1.0, c), en(base, c - d), en(base, c + d)]));
     }
-    let mut disco = elipse(cx - cx * disco, cy - cy * disco, 2.0 * cx * disco, 2.0 * cy * disco);
+    let mut disco = elipse(
+        cx - cx * disco,
+        cy - cy * disco,
+        2.0 * cx * disco,
+        2.0 * cy * disco,
+    );
     disco.rellenar = true;
     v.push(disco);
     v
@@ -354,11 +475,24 @@ fn nube(w: f32, h: f32) -> Figura {
         let lf = (fuera.0 * fuera.0 + fuera.1 * fuera.1).sqrt().max(1e-6);
         let fuera = (fuera.0 / lf, fuera.1 / lf);
         let bulto = ((q.0 - p.0).hypot(q.1 - p.1)) * 0.75;
-        let c1 = (p.0 + (medio.0 - p.0) * 0.2 + fuera.0 * bulto, p.1 + (medio.1 - p.1) * 0.2 + fuera.1 * bulto);
-        let c2 = (q.0 + (medio.0 - q.0) * 0.2 + fuera.0 * bulto, q.1 + (medio.1 - q.1) * 0.2 + fuera.1 * bulto);
+        let c1 = (
+            p.0 + (medio.0 - p.0) * 0.2 + fuera.0 * bulto,
+            p.1 + (medio.1 - p.1) * 0.2 + fuera.1 * bulto,
+        );
+        let c2 = (
+            q.0 + (medio.0 - q.0) * 0.2 + fuera.0 * bulto,
+            q.1 + (medio.1 - q.1) * 0.2 + fuera.1 * bulto,
+        );
         tramos.push(Tramo::Bezier(c1, c2, q));
     }
-    let mut f = Figura { inicio: pts[0], tramos, cerrada: true, rellenar: true, trazar: true, ..Default::default() };
+    let mut f = Figura {
+        inicio: pts[0],
+        tramos,
+        cerrada: true,
+        rellenar: true,
+        trazar: true,
+        ..Default::default()
+    };
     // Caja exacta de la curva (muestreada) para escalarla a la forma.
     let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
     let mut desde = f.inicio;
@@ -367,8 +501,14 @@ fn nube(w: f32, h: f32) -> Figura {
             for k in 0..=16 {
                 let u = k as f32 / 16.0;
                 let m = 1.0 - u;
-                let x = m * m * m * desde.0 + 3.0 * m * m * u * a.0 + 3.0 * m * u * u * b.0 + u * u * u * d.0;
-                let y = m * m * m * desde.1 + 3.0 * m * m * u * a.1 + 3.0 * m * u * u * b.1 + u * u * u * d.1;
+                let x = m * m * m * desde.0
+                    + 3.0 * m * m * u * a.0
+                    + 3.0 * m * u * u * b.0
+                    + u * u * u * d.0;
+                let y = m * m * m * desde.1
+                    + 3.0 * m * m * u * a.1
+                    + 3.0 * m * u * u * b.1
+                    + u * u * u * d.1;
                 (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
             }
             desde = d;
@@ -386,8 +526,12 @@ fn nube(w: f32, h: f32) -> Figura {
 }
 
 fn nube_globo(w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> {
-    let lee = |k: &str, d: f32| adj.get(k).copied().filter(|a| a.is_finite()).unwrap_or(d) / 100000.0;
-    let punta = (w / 2.0 + w * lee("adj1", -20833.0), h / 2.0 + h * lee("adj2", 62500.0));
+    let lee =
+        |k: &str, d: f32| adj.get(k).copied().filter(|a| a.is_finite()).unwrap_or(d) / 100000.0;
+    let punta = (
+        w / 2.0 + w * lee("adj1", -20833.0),
+        h / 2.0 + h * lee("adj2", 62500.0),
+    );
     let c = (w / 2.0, h / 2.0);
     let mut v = vec![nube(w, h)];
     let ss = w.min(h);
@@ -402,7 +546,9 @@ fn nube_globo(w: f32, h: f32, adj: &HashMap<String, f32>) -> Vec<Figura> {
 }
 
 fn especial(nombre: &str, w: f32, h: f32, adj: &HashMap<String, f32>) -> Option<Vec<Figura>> {
-    if let Some(n) = nombre.strip_prefix("star").and_then(|s| s.parse::<usize>().ok())
+    if let Some(n) = nombre
+        .strip_prefix("star")
+        .and_then(|s| s.parse::<usize>().ok())
         && let Some((_, def)) = ESTRELLAS.iter().find(|(k, _)| *k == n)
     {
         return Some(estrella(n, *def, w, h, adj));
@@ -432,7 +578,11 @@ pub fn buscar(nombre: &str, w: f32, h: f32, adj: &HashMap<String, f32>) -> Optio
 
 /// Los nombres de todas las formas que se dibujan (tabla y generadas).
 pub fn nombres() -> Vec<String> {
-    let mut v: Vec<String> = tabla().keys().filter(|k| !k.starts_with('_')).cloned().collect();
+    let mut v: Vec<String> = tabla()
+        .keys()
+        .filter(|k| !k.starts_with('_'))
+        .cloned()
+        .collect();
     v.extend(ESTRELLAS.iter().map(|(n, _)| format!("star{n}")));
     v.extend(["gear6", "gear9", "sun", "cloud", "cloudCallout"].map(String::from));
     v.sort();
@@ -475,7 +625,10 @@ mod pruebas {
         for (n, d) in t {
             if !n.starts_with('_') {
                 assert!(!d.trayectos.is_empty(), "{n} no tiene trayectos");
-                assert!(d.trayectos.iter().all(|p| !p.ordenes.is_empty()), "{n} tiene un trayecto vacio");
+                assert!(
+                    d.trayectos.iter().all(|p| !p.ordenes.is_empty()),
+                    "{n} tiene un trayecto vacio"
+                );
             }
         }
     }
@@ -495,7 +648,10 @@ mod pruebas {
             let f = crate::geometria::predefinida(n, 120.0, 80.0, &sin_ajustes());
             assert!(!f.is_empty(), "{n}: sin figuras");
             if !SON_RECTANGULO.contains(&n.as_str()) {
-                assert!(!es_el_de_reserva(&f, 120.0, 80.0), "{n}: sale como el rectangulo de reserva");
+                assert!(
+                    !es_el_de_reserva(&f, 120.0, 80.0),
+                    "{n}: sale como el rectangulo de reserva"
+                );
             }
         }
     }
@@ -506,10 +662,16 @@ mod pruebas {
             for (w, h) in [(120.0, 80.0), (60.0, 150.0), (40.0, 40.0), (500.0, 20.0)] {
                 let f = crate::geometria::predefinida(&n, w, h, &sin_ajustes());
                 let (x0, y0, x1, y1) = caja_de(&f);
-                assert!([x0, y0, x1, y1].iter().all(|v| v.is_finite()), "{n} {w}x{h}: no finita");
+                assert!(
+                    [x0, y0, x1, y1].iter().all(|v| v.is_finite()),
+                    "{n} {w}x{h}: no finita"
+                );
                 // Las llamadas con punta (callouts) se salen de la caja a proposito.
                 let margen = w.max(h) * 2.0;
-                assert!(x0 >= -margen && y0 >= -margen && x1 <= w + margen && y1 <= h + margen, "{n} {w}x{h}: ({x0},{y0})-({x1},{y1})");
+                assert!(
+                    x0 >= -margen && y0 >= -margen && x1 <= w + margen && y1 <= h + margen,
+                    "{n} {w}x{h}: ({x0},{y0})-({x1},{y1})"
+                );
             }
         }
     }
@@ -526,7 +688,13 @@ mod pruebas {
     #[test]
     fn los_ajustes_fuera_de_rango_se_acotan() {
         let con = |k: &str, v: f32| HashMap::from([(k.to_string(), v)]);
-        for (n, k, tope) in [("roundRect", "adj", 50000.0), ("snip1Rect", "adj", 50000.0), ("plus", "adj", 50000.0), ("octagon", "adj", 50000.0), ("frame", "adj1", 50000.0)] {
+        for (n, k, tope) in [
+            ("roundRect", "adj", 50000.0),
+            ("snip1Rect", "adj", 50000.0),
+            ("plus", "adj", 50000.0),
+            ("octagon", "adj", 50000.0),
+            ("frame", "adj1", 50000.0),
+        ] {
             let enorme = crate::geometria::predefinida(n, 100.0, 60.0, &con(k, 9.0e9));
             let en_el_tope = crate::geometria::predefinida(n, 100.0, 60.0, &con(k, tope));
             assert_eq!(enorme, en_el_tope, "{n}: el ajuste enorme no se acota");
@@ -536,8 +704,14 @@ mod pruebas {
         }
         // Y un ajuste que no es un numero se ignora: sale el de por defecto.
         let por_defecto = crate::geometria::predefinida("roundRect", 100.0, 60.0, &sin_ajustes());
-        assert_eq!(crate::geometria::predefinida("roundRect", 100.0, 60.0, &con("adj", f32::NAN)), por_defecto);
-        assert_eq!(crate::geometria::predefinida("star5", 100.0, 60.0, &con("adj", f32::NAN)), crate::geometria::predefinida("star5", 100.0, 60.0, &sin_ajustes()));
+        assert_eq!(
+            crate::geometria::predefinida("roundRect", 100.0, 60.0, &con("adj", f32::NAN)),
+            por_defecto
+        );
+        assert_eq!(
+            crate::geometria::predefinida("star5", 100.0, 60.0, &con("adj", f32::NAN)),
+            crate::geometria::predefinida("star5", 100.0, 60.0, &sin_ajustes())
+        );
     }
 
     #[test]
@@ -548,21 +722,46 @@ mod pruebas {
         assert_ne!(a, b);
         // El triangulo con la punta a la izquierda del todo.
         let t = crate::geometria::predefinida("triangle", 100.0, 60.0, &con(0.0));
-        assert!(t[0].tramos.iter().any(|x| matches!(x, Tramo::Linea(x, y) if *x == 0.0 && *y == 0.0)));
+        assert!(
+            t[0].tramos
+                .iter()
+                .any(|x| matches!(x, Tramo::Linea(x, y) if *x == 0.0 && *y == 0.0))
+        );
         // Ajustes de varias claves (la flecha: grosor y punta).
         let delgada = HashMap::from([("adj1".to_string(), 10000.0), ("adj2".to_string(), 20000.0)]);
         let f = crate::geometria::predefinida("rightArrow", 100.0, 60.0, &delgada);
-        assert!(f[0].tramos.iter().any(|x| matches!(x, Tramo::Linea(_, y) if (*y - 27.0).abs() < 1e-3)), "{:?}", f[0]);
+        assert!(
+            f[0].tramos
+                .iter()
+                .any(|x| matches!(x, Tramo::Linea(_, y) if (*y - 27.0).abs() < 1e-3)),
+            "{:?}",
+            f[0]
+        );
     }
 
     #[test]
     fn el_cubo_y_el_bisel_traen_sus_caras_sombreadas() {
         let cubo = crate::geometria::predefinida("cube", 100.0, 100.0, &sin_ajustes());
-        assert!(cubo.iter().any(|f| f.sombra == Sombra::OscuraSuave && !f.trazar));
-        assert!(cubo.iter().any(|f| f.sombra == Sombra::ClaraSuave && !f.trazar));
-        assert!(cubo.iter().any(|f| !f.rellenar && f.trazar && f.sombra == Sombra::Ninguna), "falta el contorno");
+        assert!(
+            cubo.iter()
+                .any(|f| f.sombra == Sombra::OscuraSuave && !f.trazar)
+        );
+        assert!(
+            cubo.iter()
+                .any(|f| f.sombra == Sombra::ClaraSuave && !f.trazar)
+        );
+        assert!(
+            cubo.iter()
+                .any(|f| !f.rellenar && f.trazar && f.sombra == Sombra::Ninguna),
+            "falta el contorno"
+        );
         let bisel = crate::geometria::predefinida("bevel", 100.0, 100.0, &sin_ajustes());
-        for s in [Sombra::ClaraSuave, Sombra::Clara, Sombra::OscuraSuave, Sombra::Oscura] {
+        for s in [
+            Sombra::ClaraSuave,
+            Sombra::Clara,
+            Sombra::OscuraSuave,
+            Sombra::Oscura,
+        ] {
             assert!(bisel.iter().any(|f| f.sombra == s), "bevel sin {s:?}");
         }
         let doblada = crate::geometria::predefinida("foldedCorner", 100.0, 100.0, &sin_ajustes());
@@ -584,7 +783,14 @@ mod pruebas {
         for n in [4, 5, 6, 7, 8, 10, 12, 16, 24, 32] {
             let f = crate::geometria::predefinida(&format!("star{n}"), 100.0, 60.0, &sin_ajustes());
             let (x0, y0, x1, y1) = caja_de(&f);
-            assert!(x0.abs() < 0.01 && y0.abs() < 0.01 && (x1 - 100.0).abs() < 0.01 && (y1 - 60.0).abs() < 0.01, "star{n}: {:?}", (x0, y0, x1, y1));
+            assert!(
+                x0.abs() < 0.01
+                    && y0.abs() < 0.01
+                    && (x1 - 100.0).abs() < 0.01
+                    && (y1 - 60.0).abs() < 0.01,
+                "star{n}: {:?}",
+                (x0, y0, x1, y1)
+            );
             assert_eq!(f[0].tramos.len(), 2 * n - 1);
         }
     }
@@ -602,10 +808,18 @@ mod pruebas {
     fn una_forma_con_valores_hostiles_no_revienta() {
         for n in crate::geometria::conocidas() {
             for v in [f32::NAN, f32::INFINITY, -1.0e12, 1.0e12, 0.0] {
-                let adj: HashMap<String, f32> = ["adj", "adj1", "adj2", "adj3", "adj4", "adj5", "adj6", "adj7", "adj8"].iter().map(|k| (k.to_string(), v)).collect();
+                let adj: HashMap<String, f32> = [
+                    "adj", "adj1", "adj2", "adj3", "adj4", "adj5", "adj6", "adj7", "adj8",
+                ]
+                .iter()
+                .map(|k| (k.to_string(), v))
+                .collect();
                 let f = crate::geometria::predefinida(&n, 100.0, 70.0, &adj);
                 let (x0, y0, x1, y1) = caja_de(&f);
-                assert!([x0, y0, x1, y1].iter().all(|c| c.is_finite()), "{n} con {v}");
+                assert!(
+                    [x0, y0, x1, y1].iter().all(|c| c.is_finite()),
+                    "{n} con {v}"
+                );
             }
             // Una caja vacia tampoco.
             let _ = crate::geometria::predefinida(&n, 0.0, 0.0, &sin_ajustes());
@@ -661,14 +875,25 @@ mod pruebas {
         for n in &todas {
             let hecha = hechas.iter().any(|h| h == n);
             let excusada = SIN_HACER.contains(n);
-            assert!(hecha != excusada, "{n}: {}", if hecha { "esta hecha y tambien en SIN_HACER" } else { "ni esta hecha ni excusada" });
+            assert!(
+                hecha != excusada,
+                "{n}: {}",
+                if hecha {
+                    "esta hecha y tambien en SIN_HACER"
+                } else {
+                    "ni esta hecha ni excusada"
+                }
+            );
             if excusada {
                 let f = crate::geometria::predefinida(n, 100.0, 60.0, &sin_ajustes());
                 assert!(es_el_de_reserva(&f, 100.0, 60.0), "{n} no es el rectangulo");
             }
         }
         for h in &hechas {
-            assert!(todas.contains(&h.as_str()), "{h} no es una forma de la especificacion");
+            assert!(
+                todas.contains(&h.as_str()),
+                "{h} no es una forma de la especificacion"
+            );
         }
     }
 }

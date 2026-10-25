@@ -51,7 +51,12 @@ impl Numeracion {
             return n;
         };
         let leer_nivel = |l: &Nodo| {
-            let mut v = Nivel { inicio: 1, sufijo: "tab".into(), alineacion: "left".into(), ..Default::default() };
+            let mut v = Nivel {
+                inicio: 1,
+                sufijo: "tab".into(),
+                alineacion: "left".into(),
+                ..Default::default()
+            };
             for e in l.elementos() {
                 match e.nombre.as_str() {
                     "start" => v.inicio = e.valor().parse().unwrap_or(1),
@@ -83,7 +88,10 @@ impl Numeracion {
         // (`numStyleLink`) se queda con los niveles del que lo define.
         for num in raiz.elementos().filter(|e| e.nombre == "num") {
             let id: u32 = num.atributo("numId").parse().unwrap_or(0);
-            let abs: u32 = num.hijo("abstractNumId").and_then(|a| a.valor().parse().ok()).unwrap_or(0);
+            let abs: u32 = num
+                .hijo("abstractNumId")
+                .and_then(|a| a.valor().parse().ok())
+                .unwrap_or(0);
             let mut sust = HashMap::new();
             for o in num.elementos().filter(|e| e.nombre == "lvlOverride") {
                 let i: u32 = o.atributo("ilvl").parse().unwrap_or(0);
@@ -110,9 +118,14 @@ impl Numeracion {
     pub fn siguiente(&mut self, num_id: u32, ilvl: u32) -> Option<(String, Nivel)> {
         let ilvl = ilvl.min(8);
         let (abs, sust) = self.numeros.get(&num_id)?.clone();
-        let niveles: Vec<Nivel> = (0..9).map(|i| self.nivel(num_id, i).unwrap_or_default()).collect();
+        let niveles: Vec<Nivel> = (0..9)
+            .map(|i| self.nivel(num_id, i).unwrap_or_default())
+            .collect();
         let nivel = niveles[ilvl as usize].clone();
-        let cambio = self.ultimo_num.insert(abs, num_id).is_some_and(|u| u != num_id);
+        let cambio = self
+            .ultimo_num
+            .insert(abs, num_id)
+            .is_some_and(|u| u != num_id);
         let contadores = self.contadores.entry(abs).or_insert([i64::MIN; 9]);
         if cambio {
             // Otro numId sobre la misma lista: si trae inicio propio, empieza.
@@ -125,18 +138,38 @@ impl Numeracion {
                 }
             }
         }
-        let inicio_de = |i: usize| -> i64 { sust.get(&(i as u32)).and_then(|(s, _)| *s).map(|v| v as i64).unwrap_or(niveles[i].inicio as i64) };
+        let inicio_de = |i: usize| -> i64 {
+            sust.get(&(i as u32))
+                .and_then(|(s, _)| *s)
+                .map(|v| v as i64)
+                .unwrap_or(niveles[i].inicio as i64)
+        };
         let i = ilvl as usize;
-        contadores[i] = if contadores[i] == i64::MIN { inicio_de(i) } else { contadores[i] + 1 };
+        contadores[i] = if contadores[i] == i64::MIN {
+            inicio_de(i)
+        } else {
+            contadores[i] + 1
+        };
         // Los niveles inferiores vuelven a empezar.
         for k in i + 1..9 {
-            let reinicia = niveles[k].reinicio.map(|r| r as usize > i || r == 0).unwrap_or(true);
+            let reinicia = niveles[k]
+                .reinicio
+                .map(|r| r as usize > i || r == 0)
+                .unwrap_or(true);
             if reinicia {
                 contadores[k] = i64::MIN;
             }
         }
         // Los superiores que no hayan salido aun valen su inicio.
-        let valores: Vec<i64> = (0..9).map(|k| if contadores[k] == i64::MIN { inicio_de(k) } else { contadores[k] }).collect();
+        let valores: Vec<i64> = (0..9)
+            .map(|k| {
+                if contadores[k] == i64::MIN {
+                    inicio_de(k)
+                } else {
+                    contadores[k]
+                }
+            })
+            .collect();
         if nivel.formato == "none" {
             return Some((String::new(), nivel));
         }
@@ -147,7 +180,11 @@ impl Numeracion {
             if cs[j] == '%' && j + 1 < cs.len() && cs[j + 1].is_ascii_digit() {
                 let k = cs[j + 1].to_digit(10).unwrap_or(1) as usize;
                 if (1..=9).contains(&k) {
-                    let fmt = if nivel.legal && k - 1 < i { "decimal" } else { niveles[k - 1].formato.as_str() };
+                    let fmt = if nivel.legal && k - 1 < i {
+                        "decimal"
+                    } else {
+                        niveles[k - 1].formato.as_str()
+                    };
                     texto.push_str(&formatear(valores[k - 1], fmt));
                 }
                 j += 2;
@@ -241,8 +278,14 @@ mod pruebas {
         )
         .unwrap();
         let mut n = Numeracion::leer(Some(&x), &Tema::default());
-        let t: Vec<String> = [(0, 0), (1, 0), (1, 0), (0, 0), (1, 0)].iter().map(|&(l, _)| n.siguiente(5, l).unwrap().0).collect();
+        let t: Vec<String> = [(0, 0), (1, 0), (1, 0), (0, 0), (1, 0)]
+            .iter()
+            .map(|&(l, _)| n.siguiente(5, l).unwrap().0)
+            .collect();
         assert_eq!(t, vec!["1.", "1.a)", "1.b)", "2.", "2.a)"]);
-        assert!(n.siguiente(99, 0).is_none(), "una lista que no existe no numera");
+        assert!(
+            n.siguiente(99, 0).is_none(),
+            "una lista que no existe no numera"
+        );
     }
 }

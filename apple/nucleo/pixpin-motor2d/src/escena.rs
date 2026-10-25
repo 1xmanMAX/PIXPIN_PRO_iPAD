@@ -120,7 +120,10 @@ enum Cambio {
     Alfileres(Vec<crate::nudos::Alfiler>),
     /// Las tablas de coordenadas y su eje **antes** del cambio: tampoco son
     /// de ningun elemento.
-    Tablas(Vec<crate::instrumento::tabla::TablaDeCoordenadas>, Option<Punto2>),
+    Tablas(
+        Vec<crate::instrumento::tabla::TablaDeCoordenadas>,
+        Option<Punto2>,
+    ),
 }
 
 /// Todo lo que hizo un gesto. Un arrastre que mueve cuarenta elementos es
@@ -718,6 +721,78 @@ impl Escena {
         self.historia.push(junto);
     }
 
+    /// **Vuelve a una copia de sus elementos** (un `elementos.clone()`
+    /// tomado antes) como UN paso nuevo de deshacer, no deshaciendo.
+    ///
+    /// Lo usa la revision del asistente (22-oct): si una correccion deja el
+    /// dibujo peor que la version guardada, se vuelve a esa. Deshacer los
+    /// pasos no vale: `pasos_cerrados` no baja al deshacer, y el paso que
+    /// junta todo el turno en un solo `Ctrl+Z` (`juntar_pasos`) se comeria
+    /// pasos del usuario de antes del turno. Como paso nuevo, el `Ctrl+Z`
+    /// del turno lo deshace todo junto y el fichero se guarda como siempre.
+    ///
+    /// Lo que no estaba en la copia (anadido despues) se borra; lo que
+    /// estaba vuelve tal cual (con su version subida, para que la
+    /// sincronizacion lo tome por nuevo), y el orden vuelve al de la copia.
+    /// `siguiente_id` no baja: los ids nunca se reusan. Devuelve si cambio
+    /// algo.
+    pub fn volver_a(&mut self, copia: &[Elemento]) -> bool {
+        let abierto_aqui = self.en_curso.is_none();
+        self.abrir_paso();
+        // El orden: el de la copia, y detras lo que ella no tenia.
+        let mut orden: Vec<u64> = copia
+            .iter()
+            .map(|c| c.id)
+            .filter(|id| self.buscar(*id).is_some())
+            .collect();
+        orden.extend(
+            self.elementos
+                .iter()
+                .map(|e| e.id)
+                .filter(|id| !copia.iter().any(|c| c.id == *id)),
+        );
+        let ahora: Vec<u64> = self.elementos.iter().map(|e| e.id).collect();
+        let mut cambio = false;
+        if orden != ahora {
+            self.apuntar_reordenamiento();
+            let mut viejos = std::mem::take(&mut self.elementos);
+            for id in &orden {
+                if let Some(i) = viejos.iter().position(|e| e.id == *id) {
+                    self.elementos.push(viejos.remove(i));
+                }
+            }
+            cambio = true;
+        }
+        for id in orden {
+            let Some(actual) = self.buscar(id) else {
+                continue;
+            };
+            let objetivo = match copia.iter().find(|c| c.id == id) {
+                Some(c) => c.clone(),
+                None if actual.borrado => continue,
+                None => Elemento {
+                    borrado: true,
+                    ..actual.clone()
+                },
+            };
+            if *actual == objetivo {
+                continue;
+            }
+            let version = actual.version.max(objetivo.version);
+            self.apuntar_edicion(id);
+            if let Some(e) = self.buscar_mut(id) {
+                *e = objetivo;
+                e.version = version;
+                e.tocar();
+            }
+            cambio = true;
+        }
+        if abierto_aqui {
+            self.cerrar_paso();
+        }
+        cambio
+    }
+
     /// Tira los pasos mas antiguos hasta caber en el techo (D25).
     ///
     /// El techo va en memoria y no en numero de pasos porque quinientos
@@ -751,7 +826,11 @@ impl Escena {
     /// un `Ctrl+Z` lo quita entero, como si se hubiera dibujado aqui. Los
     /// que no esten se ignoran; sin ninguno no hay paso.
     pub fn apuntar_anadidos(&mut self, ids: &[u64]) {
-        let ids: Vec<u64> = ids.iter().copied().filter(|id| self.buscar(*id).is_some()).collect();
+        let ids: Vec<u64> = ids
+            .iter()
+            .copied()
+            .filter(|id| self.buscar(*id).is_some())
+            .collect();
         if ids.is_empty() {
             return;
         }
@@ -1326,5 +1405,60 @@ mod pruebas {
         e.juntar_pasos(desde);
         assert!(e.deshacer());
         assert_eq!(e.visibles().count(), 1);
+    }
+
+    #[test]
+    fn volver_a_una_copia_es_un_paso_nuevo_que_se_deshace_con_el_turno() {
+        let mut e = Escena::nueva();
+        let a = e.anadir(Elemento {
+            x: 10.0,
+            ancho: 5.0,
+            alto: 5.0,
+            ..Default::default()
+        });
+        let b = e.anadir(Elemento {
+            x: 50.0,
+            ancho: 5.0,
+            alto: 5.0,
+            ..Default::default()
+        });
+        let desde = e.pasos_cerrados();
+        // Lo que dibujo el turno antes de la revision.
+        let d = e.anadir(Elemento {
+            x: 120.0,
+            ancho: 5.0,
+            alto: 5.0,
+            ..Default::default()
+        });
+        let copia = e.elementos.clone();
+        // La «correccion»: mueve a, borra b y anade c, en pasos sueltos.
+        e.abrir_paso();
+        e.apuntar_edicion(a);
+        e.buscar_mut(a).unwrap().x = 99.0;
+        e.cerrar_paso();
+        e.borrar_apuntando(b);
+        let c = e.anadir(Elemento {
+            x: 200.0,
+            ancho: 5.0,
+            alto: 5.0,
+            ..Default::default()
+        });
+        assert!(e.volver_a(&copia));
+        assert_eq!(e.buscar(a).unwrap().x, 10.0);
+        assert!(!e.buscar(b).unwrap().borrado);
+        assert!(e.buscar(c).unwrap().borrado);
+        assert!(!e.buscar(d).unwrap().borrado);
+        assert!(e.siguiente_id > c, "los ids no se reusan");
+        // Todo el turno (con la vuelta) en un Ctrl+Z: queda como antes del turno.
+        e.juntar_pasos(desde);
+        assert!(e.deshacer());
+        assert_eq!(e.visibles().count(), 2);
+        assert!(e.buscar(d).unwrap().borrado);
+        assert_eq!(e.buscar(a).unwrap().x, 10.0);
+        // Caso negativo: volver a lo que ya hay no cambia nada ni gasta un paso.
+        let n = e.pasos_cerrados();
+        let igual = e.elementos.clone();
+        assert!(!e.volver_a(&igual));
+        assert_eq!(e.pasos_cerrados(), n);
     }
 }

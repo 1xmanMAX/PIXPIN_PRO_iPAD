@@ -119,14 +119,29 @@ pub struct Progreso {
 
 impl Progreso {
     pub fn fraccion(&self) -> f32 {
-        if self.total == 0 { 0.0 } else { (self.hecho as f64 / self.total as f64).min(1.0) as f32 }
+        if self.total == 0 {
+            0.0
+        } else {
+            (self.hecho as f64 / self.total as f64).min(1.0) as f32
+        }
     }
 }
 
 /// Baja `url` a `destino` con el WinHTTP de la voz.
 #[cfg(windows)]
-fn bajar(url: &str, destino: &Path, base: u64, total: u64, avance: &mut dyn FnMut(Progreso), cancelado: &AtomicBool) -> Result<(), ErrorIa> {
-    let nombre = destino.file_name().unwrap_or_default().to_string_lossy().into_owned();
+fn bajar(
+    url: &str,
+    destino: &Path,
+    base: u64,
+    total: u64,
+    avance: &mut dyn FnMut(Progreso),
+    cancelado: &AtomicBool,
+) -> Result<(), ErrorIa> {
+    let nombre = destino
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
     pixpin_voz::whisper::bajar::bajar(
         url,
         destino,
@@ -156,10 +171,23 @@ fn bajar(url: &str, destino: &Path, base: u64, total: u64, avance: &mut dyn FnMu
 /// [`verificar`] (huella y marca `.ok`) o a [`extraer`]. Asi el ejecutable
 /// no lleva un cliente HTTPS ni TLS propios (§4bis del plan de Apple).
 #[cfg(not(windows))]
-fn bajar(url: &str, destino: &Path, _base: u64, _total: u64, _avance: &mut dyn FnMut(Progreso), _cancelado: &AtomicBool) -> Result<(), ErrorIa> {
+fn bajar(
+    url: &str,
+    destino: &Path,
+    _base: u64,
+    _total: u64,
+    _avance: &mut dyn FnMut(Progreso),
+    _cancelado: &AtomicBool,
+) -> Result<(), ErrorIa> {
     Err(ErrorIa::Descarga {
-        que: destino.file_name().unwrap_or_default().to_string_lossy().into_owned(),
-        detalle: format!("en este sistema la descarga ({url}) la hace la app (en Apple, URLSession desde Swift), no el nucleo"),
+        que: destino
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        detalle: format!(
+            "en este sistema la descarga ({url}) la hace la app (en Apple, URLSession desde Swift), no el nucleo"
+        ),
     })
 }
 
@@ -174,8 +202,13 @@ pub fn asegurar(
 ) -> Result<(), ErrorIa> {
     let faltan_runtime = !runtime_listo(raiz, runtime);
     let carpeta_m = carpeta_modelo(raiz, modelo);
-    let faltan: Vec<Fichero> = modelo.ficheros().into_iter().filter(|f| !fichero_listo(&carpeta_m, f)).collect();
-    let total = faltan.iter().map(|f| f.bytes).sum::<u64>() + if faltan_runtime { runtime.zip.bytes } else { 0 };
+    let faltan: Vec<Fichero> = modelo
+        .ficheros()
+        .into_iter()
+        .filter(|f| !fichero_listo(&carpeta_m, f))
+        .collect();
+    let total = faltan.iter().map(|f| f.bytes).sum::<u64>()
+        + if faltan_runtime { runtime.zip.bytes } else { 0 };
     let mut hecho = 0;
     if faltan_runtime {
         instalar_runtime(raiz, runtime, hecho, total, avance, cancelado)?;
@@ -226,13 +259,17 @@ fn instalar_runtime(
 
 /// Saca del zip solo los ficheros de la lista, a `destino`. Devuelve cuantos.
 pub fn extraer(zip: &Path, destino: &Path, patrones: &[&str]) -> Result<usize, ErrorIa> {
-    let mut archivo = zip::ZipArchive::new(BufReader::new(File::open(zip)?))
-        .map_err(|e| ErrorIa::Descarga { que: "motor".into(), detalle: e.to_string() })?;
+    let mut archivo =
+        zip::ZipArchive::new(BufReader::new(File::open(zip)?)).map_err(|e| ErrorIa::Descarga {
+            que: "motor".into(),
+            detalle: e.to_string(),
+        })?;
     let mut n = 0;
     for i in 0..archivo.len() {
-        let mut entrada = archivo
-            .by_index(i)
-            .map_err(|e| ErrorIa::Descarga { que: "motor".into(), detalle: e.to_string() })?;
+        let mut entrada = archivo.by_index(i).map_err(|e| ErrorIa::Descarga {
+            que: "motor".into(),
+            detalle: e.to_string(),
+        })?;
         if entrada.is_dir() {
             continue;
         }
@@ -264,7 +301,8 @@ mod pruebas {
     use std::io::Write;
 
     fn carpeta(nombre: &str) -> PathBuf {
-        let c = std::env::temp_dir().join(format!("pixpin-ia-pruebas-{nombre}-{}", std::process::id()));
+        let c =
+            std::env::temp_dir().join(format!("pixpin-ia-pruebas-{nombre}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&c);
         std::fs::create_dir_all(&c).unwrap();
         c
@@ -288,8 +326,16 @@ mod pruebas {
         let c = carpeta("mala");
         let r = c.join("m.gguf");
         std::fs::write(&r, b"esto no es el modelo").unwrap();
-        let f = Fichero { nombre: "m.gguf", url: "https://x/y", bytes: 20, sha256: "00" };
-        assert!(matches!(verificar(&r, &f, &NO), Err(ErrorIa::HuellaDistinta { .. })));
+        let f = Fichero {
+            nombre: "m.gguf",
+            url: "https://x/y",
+            bytes: 20,
+            sha256: "00",
+        };
+        assert!(matches!(
+            verificar(&r, &f, &NO),
+            Err(ErrorIa::HuellaDistinta { .. })
+        ));
         assert!(!r.exists());
         assert!(!fichero_listo(&c, &f));
     }
@@ -318,7 +364,10 @@ mod pruebas {
         let c = carpeta("cancelar");
         let r = c.join("x");
         std::fs::write(&r, b"abc").unwrap();
-        assert!(matches!(huella(&r, &AtomicBool::new(true)), Err(ErrorIa::Cancelado)));
+        assert!(matches!(
+            huella(&r, &AtomicBool::new(true)),
+            Err(ErrorIa::Cancelado)
+        ));
     }
 
     #[test]
@@ -328,7 +377,12 @@ mod pruebas {
         {
             let mut w = zip::ZipWriter::new(File::create(&z).unwrap());
             let o = zip::write::SimpleFileOptions::default();
-            for n in ["llama-server.exe", "ggml-cpu-haswell.dll", "llama-cli.exe", "LICENSE-x"] {
+            for n in [
+                "llama-server.exe",
+                "ggml-cpu-haswell.dll",
+                "llama-cli.exe",
+                "LICENSE-x",
+            ] {
                 w.start_file(n, o).unwrap();
                 w.write_all(n.as_bytes()).unwrap();
             }
@@ -348,7 +402,8 @@ mod pruebas {
         let z = c.join("r.zip");
         {
             let mut w = zip::ZipWriter::new(File::create(&z).unwrap());
-            w.start_file("README.md", zip::write::SimpleFileOptions::default()).unwrap();
+            w.start_file("README.md", zip::write::SimpleFileOptions::default())
+                .unwrap();
             w.finish().unwrap();
         }
         assert!(extraer(&z, &c, crate::modelos::LLAMA_CPP.extraer).is_err());

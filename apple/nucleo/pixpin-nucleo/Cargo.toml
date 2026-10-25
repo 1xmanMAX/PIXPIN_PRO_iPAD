@@ -27,9 +27,6 @@ bindgen = ["uniffi/cli"]
 [dependencies]
 pixpin-motor2d = { version = "0.1.0", path = "../pixpin-motor2d" }
 pixpin-proyecto = { version = "0.1.0", path = "../pixpin-proyecto" }
-# Las tarjetas de Anki de una nota o una foto (Windows, 24-oct): el mismo
-# crate, Rust puro.
-pixpin-anki = { version = "0.1.0", path = "../pixpin-anki" }
 pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro" }
 pixpin-sistema = { version = "0.1.0", path = "../pixpin-sistema" }
 # Los ajustes en el mismo `pixpinmax.toml` que Windows (solo las claves que
@@ -49,6 +46,12 @@ pixpin-bim = { version = "0.1.0", path = "../pixpin-bim" }
 # Medir una foto del chat (su lienzo propio, B9) y leer las de un croquis
 # 3D: el mismo crate que Windows (ya estaba en el arbol por `pixpin-ia`).
 pixpin-codec = { path = "../pixpin-codec" }
+# Las tarjetas de Anki de una nota, una foto o una clase grabada y
+# AnkiConnect (127.0.0.1:8765): el mismo crate que Windows (2561be0).
+pixpin-anki = { version = "0.1.0", path = "../pixpin-anki" }
+# La nota rica del chat: los bloques de su Markdown y el reparto del album
+# (`nota_rica`), el mismo crate que Windows (974d5ba). Puro.
+pixpin-ui = { version = "0.1.0", path = "../pixpin-ui" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"

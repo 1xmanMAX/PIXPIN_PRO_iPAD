@@ -36,7 +36,14 @@ public enum AsistenteDelIPad {
             }
             guard let almacen = entorno.almacen else { return }
             MotorAutomatizaciones.compartido.arrancar(nucleo: almacen.nucleo, almacen: almacen)
-            Task { await almacen.asegurarAsistente() }
+            Task {
+                await almacen.asegurarAsistente()
+                // Lo que el asistente dejo a medias al cerrarse PixPin (una
+                // vez, como el Mac): la burbuja cortada dice que paso y lo que
+                // no habia empezado se vuelve a lanzar.
+                await almacen.cargarChats()
+                await AsistenteEnElChat.compartido.retomarAlArrancar(almacen)
+            }
         }
     }
 }

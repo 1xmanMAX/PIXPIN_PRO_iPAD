@@ -122,8 +122,8 @@ pub const NO_HICE_NADA: &str = "No hice nada";
 /// Las palabras que cuentan de un texto (sin tildes, sin relleno).
 fn palabras(s: &str) -> Vec<String> {
     const RELLENO: &[&str] = &[
-        "el", "la", "los", "las", "de", "del", "a", "al", "que", "en", "y", "un", "una", "unos", "unas", "para", "por",
-        "mi", "mis", "lo", "tarea", "tareas", "lista", "con",
+        "el", "la", "los", "las", "de", "del", "a", "al", "que", "en", "y", "un", "una", "unos",
+        "unas", "para", "por", "mi", "mis", "lo", "tarea", "tareas", "lista", "con",
     ];
     normalizar(s)
         .split(|c: char| !c.is_alphanumeric())
@@ -144,7 +144,8 @@ pub fn parecido(consulta: &str, texto: &str) -> u32 {
     if q == t {
         return 100;
     }
-    let contiene = |a: &[String], b: &[String]| b.len() <= a.len() && a.windows(b.len()).any(|w| w == b);
+    let contiene =
+        |a: &[String], b: &[String]| b.len() <= a.len() && a.windows(b.len()).any(|w| w == b);
     if contiene(&t, &q) {
         return 85;
     }
@@ -152,7 +153,9 @@ pub fn parecido(consulta: &str, texto: &str) -> u32 {
         return 70;
     }
     // Palabras en comun (una palabra vale si empieza igual: «llamar»/«llama»).
-    let igual = |a: &str, b: &str| a == b || (a.len() >= 4 && b.len() >= 4 && (a.starts_with(b) || b.starts_with(a)));
+    let igual = |a: &str, b: &str| {
+        a == b || (a.len() >= 4 && b.len() >= 4 && (a.starts_with(b) || b.starts_with(a)))
+    };
     let comunes = q.iter().filter(|p| t.iter().any(|x| igual(p, x))).count();
     let ratio = comunes as f32 / q.len() as f32;
     if comunes > 0 && ratio >= 0.6 {
@@ -163,7 +166,10 @@ pub fn parecido(consulta: &str, texto: &str) -> u32 {
 }
 
 fn es_guardados(nombre: &str) -> bool {
-    matches!(normalizar(nombre.trim()).as_str(), "mensajes guardados" | "guardados" | "mis mensajes")
+    matches!(
+        normalizar(nombre.trim()).as_str(),
+        "mensajes guardados" | "guardados" | "mis mensajes"
+    )
 }
 
 /// El chat que dijo el usuario.
@@ -173,12 +179,20 @@ pub fn buscar_chat<'a>(chats: &'a [Chat], nombre: &str) -> Result<&'a Chat, Stri
     {
         return Ok(c);
     }
-    let mut v: Vec<(u32, &Chat)> = chats.iter().map(|c| (parecido(nombre, &c.nombre), c)).filter(|x| x.0 > 0).collect();
-    v.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut v: Vec<(u32, &Chat)> = chats
+        .iter()
+        .map(|c| (parecido(nombre, &c.nombre), c))
+        .filter(|x| x.0 > 0)
+        .collect();
+    v.sort_by_key(|x| std::cmp::Reverse(x.0));
     match v.as_slice() {
         [] => Err(format!(
             "No hay ningun chat «{nombre}». Chats: {}. No hice nada.",
-            chats.iter().map(|c| format!("«{}»", c.nombre)).collect::<Vec<_>>().join(", ")
+            chats
+                .iter()
+                .map(|c| format!("«{}»", c.nombre))
+                .collect::<Vec<_>>()
+                .join(", ")
         )),
         [(a, x), (b, _), ..] if a == b => Err(format!(
             "Hay varios chats que se parecen a «{nombre}» (p. ej. «{}»). No hice nada: di cual.",
@@ -200,11 +214,15 @@ pub fn buscar_lista<'a>(
     // («PixPin», medido con el 2B). Uno que existe, si (y si la lista esta
     // en otro, se dice).
     let chat = chat.filter(|c| !c.trim().is_empty() && buscar_chat(chats, c).is_ok());
-    let en_chat: Option<String> = chat.and_then(|c| buscar_chat(chats, c).ok()).map(|c| c.id.clone());
+    let en_chat: Option<String> = chat
+        .and_then(|c| buscar_chat(chats, c).ok())
+        .map(|c| c.id.clone());
     let candidatas: Vec<(u32, &VistaLista)> = listas
         .iter()
         .map(|l| {
-            let s = if matches!(q.as_str(), "inbox" | "bandeja" | "bandeja de entrada") && l.es_inbox() {
+            let s = if matches!(q.as_str(), "inbox" | "bandeja" | "bandeja de entrada")
+                && l.es_inbox()
+            {
                 100
             } else {
                 parecido(nombre, &l.titulo)
@@ -225,11 +243,19 @@ pub fn buscar_lista<'a>(
                 otra.titulo, otra.chat
             ));
         }
-        let todas: Vec<String> = listas.iter().take(12).map(|l| format!("«{}»", l.nombre())).collect();
+        let todas: Vec<String> = listas
+            .iter()
+            .take(12)
+            .map(|l| format!("«{}»", l.nombre()))
+            .collect();
         return Err(format!(
             "No hay ninguna lista «{nombre}»{}. Tus listas: {}. No hice nada.",
             chat.map(|c| format!(" en «{c}»")).unwrap_or_default(),
-            if todas.is_empty() { "ninguna".to_string() } else { todas.join(", ") }
+            if todas.is_empty() {
+                "ninguna".to_string()
+            } else {
+                todas.join(", ")
+            }
         ));
     }
     let mejor = en.iter().map(|x| x.0).max().unwrap_or(0);
@@ -237,7 +263,10 @@ pub fn buscar_lista<'a>(
     if top.len() > 1 {
         return Err(format!(
             "Hay varias listas «{nombre}»: {}. No hice nada: di de que chat.",
-            top.iter().map(|l| format!("«{}»", l.nombre())).collect::<Vec<_>>().join(", ")
+            top.iter()
+                .map(|l| format!("«{}»", l.nombre()))
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     Ok(top[0])
@@ -262,7 +291,11 @@ pub fn buscar_tarea<'a>(
     if let (Some(l), Ok(n)) = (lista, q.trim().parse::<usize>()) {
         return match l.tareas.get(n.wrapping_sub(1)) {
             Some(t) => Ok((l, t)),
-            None => Err(format!("La lista «{}» no tiene tarea {n} (tiene {}). No hice nada.", l.nombre(), l.tareas.len())),
+            None => Err(format!(
+                "La lista «{}» no tiene tarea {n} (tiene {}). No hice nada.",
+                l.nombre(),
+                l.tareas.len()
+            )),
         };
     }
     let mut v: Vec<(u32, &VistaLista, &VistaTarea)> = Vec::new();
@@ -275,7 +308,7 @@ pub fn buscar_tarea<'a>(
             }
         }
     }
-    v.sort_by(|a, b| b.0.cmp(&a.0));
+    v.sort_by_key(|x| std::cmp::Reverse(x.0));
     match v.as_slice() {
         [] => {
             let pendientes: Vec<String> = donde
@@ -286,7 +319,9 @@ pub fn buscar_tarea<'a>(
                 .collect();
             Err(format!(
                 "No encuentro ninguna tarea «{consulta}»{}. No hice nada. {}",
-                lista.map(|l| format!(" en la lista «{}»", l.nombre())).unwrap_or_default(),
+                lista
+                    .map(|l| format!(" en la lista «{}»", l.nombre()))
+                    .unwrap_or_default(),
                 if pendientes.is_empty() {
                     "No hay tareas pendientes.".to_string()
                 } else {
@@ -294,7 +329,9 @@ pub fn buscar_tarea<'a>(
                 }
             ))
         }
-        [(a, la, ta), (b, lb, tb), ..] if a == b && !(la.codigo == lb.codigo && ta.indice == tb.indice) => {
+        [(a, la, ta), (b, lb, tb), ..]
+            if a == b && !(la.codigo == lb.codigo && ta.indice == tb.indice) =>
+        {
             let iguales: Vec<String> = v
                 .iter()
                 .filter(|x| x.0 == *a)
@@ -325,7 +362,11 @@ pub struct Pasos {
 }
 
 fn texto_de(m: &Map<String, Value>, k: &str) -> Option<String> {
-    m.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+    m.get(k)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 /// La marca de fecha leida con el reloj de la fuente.
@@ -370,7 +411,9 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
         Some(n) if fila.herramienta != "anadir_tareas" || texto_de(r, "lista_nueva").is_none() => {
             match buscar_lista(&listas, &n, chat.as_deref(), &chats) {
                 Ok(l) => Some(l),
-                Err(e) if texto_de(r, "tarea").is_some() && e.starts_with("No hay ninguna lista") => {
+                Err(e)
+                    if texto_de(r, "tarea").is_some() && e.starts_with("No hay ninguna lista") =>
+                {
                     pista = Some(n);
                     None
                 }
@@ -399,7 +442,10 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
         };
         let (l, x) = match buscar_tarea(&listas, &t, lista, prefiere) {
             Ok(x) => x,
-            Err(e) => match pista.as_deref().map(|p| buscar_tarea(&listas, p, None, prefiere)) {
+            Err(e) => match pista
+                .as_deref()
+                .map(|p| buscar_tarea(&listas, p, None, prefiere))
+            {
                 Some(Ok(x)) => x,
                 _ => return Err(e),
             },
@@ -412,7 +458,11 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
         tarea = Some((l, x));
         if accion == "marcar_tarea" {
             let hecha = pedido["hecha"].as_bool().unwrap_or(true);
-            poner_valor(&mut valores, "estado", if hecha { "hecha" } else { "pendiente" }.into());
+            poner_valor(
+                &mut valores,
+                "estado",
+                if hecha { "hecha" } else { "pendiente" }.into(),
+            );
         }
     }
 
@@ -422,7 +472,10 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
         if let Some((l, _)) = tarea
             && l.codigo == destino.codigo
         {
-            return Err(format!("La tarea ya esta en la lista «{}». No hice nada.", destino.nombre()));
+            return Err(format!(
+                "La tarea ya esta en la lista «{}». No hice nada.",
+                destino.nombre()
+            ));
         }
         pedido["a_codigo"] = json!(destino.codigo);
         pedido["a_proyecto"] = json!(destino.proyecto);
@@ -439,12 +492,20 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
     }
     if accion == "corregir_tarea" {
         let (_, x) = tarea.expect("editar_tarea pide la tarea");
-        let base = pedido["texto"].as_str().map(str::to_string).unwrap_or_else(|| x.texto.clone());
+        let base = pedido["texto"]
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_else(|| x.texto.clone());
         if pedido["texto"].is_null() && cuando.is_none() {
-            return Err("Para cambiar una tarea dime el texto nuevo o la fecha nueva. No hice nada.".into());
+            return Err(
+                "Para cambiar una tarea dime el texto nuevo o la fecha nueva. No hice nada.".into(),
+            );
         }
         // Sin fecha nueva, la de antes se queda.
-        let marca = cuando.or(x.vence).map(|m| format!(" {}", m.marca())).unwrap_or_default();
+        let marca = cuando
+            .or(x.vence)
+            .map(|m| format!(" {}", m.marca()))
+            .unwrap_or_default();
         pedido["texto"] = json!(format!("{}{marca}", base.trim()));
         poner_valor(&mut valores, "texto", base.trim().to_string());
         if cuando.is_none()
@@ -468,7 +529,9 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
             b["accion"] = json!("anadir_tarea");
             b
         };
-        let mut nombre_lista = lista.map(VistaLista::nombre).unwrap_or_else(|| "Inbox".to_string());
+        let mut nombre_lista = lista
+            .map(VistaLista::nombre)
+            .unwrap_or_else(|| "Inbox".to_string());
         if let Some(t) = texto_de(r, "lista_nueva") {
             let mut nueva = json!({"pixpin": 1, "accion": "lista_nueva", "titulo": t});
             if let Some(p) = base.get("proyecto") {
@@ -478,10 +541,13 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
             nombre_lista = t.clone();
         }
         for it in items {
-            let Some(texto) = it.as_str().map(str::trim).filter(|s| !s.is_empty()) else { continue };
+            let Some(texto) = it.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+                continue;
+            };
             let mut p = base.clone();
             // Cada una puede traer su fecha al final («revisar planos el viernes»).
-            let (texto, cuando) = fechas::separar(texto, ahora).unwrap_or((texto.to_string(), None));
+            let (texto, cuando) =
+                fechas::separar(texto, ahora).unwrap_or((texto.to_string(), None));
             p["texto"] = json!(match cuando {
                 Some(m) => format!("{texto} {}", m.marca()),
                 None => texto,
@@ -491,7 +557,11 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
             }
             pedidos.push(p);
         }
-        poner_valor(&mut valores, "n", (pedidos.len() - usize::from(texto_de(r, "lista_nueva").is_some())).to_string());
+        poner_valor(
+            &mut valores,
+            "n",
+            (pedidos.len() - usize::from(texto_de(r, "lista_nueva").is_some())).to_string(),
+        );
         poner_valor(&mut valores, "lista", nombre_lista);
     }
 
@@ -506,14 +576,23 @@ pub fn resolver(a: &AccionApp, f: &dyn FuenteTareas) -> Result<Pasos, String> {
 /// Completa un pedido que va a una lista recien creada: su codigo y su chat,
 /// leidos de nuevo. La mas nueva con ese titulo.
 pub fn en_lista_nueva(pedido: &mut Value, f: &dyn FuenteTareas) -> Result<(), String> {
-    let Some(titulo) = pedido.get("__en_lista_nueva").and_then(Value::as_str).map(str::to_string) else {
+    let Some(titulo) = pedido
+        .get("__en_lista_nueva")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
         return Ok(());
     };
-    let proyecto = pedido.get("proyecto").and_then(Value::as_str).map(str::to_string);
+    let proyecto = pedido
+        .get("proyecto")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let l = f
         .listas()
         .into_iter()
-        .filter(|l| l.titulo.trim() == titulo.trim() && proyecto.as_ref().is_none_or(|p| &l.proyecto == p))
+        .filter(|l| {
+            l.titulo.trim() == titulo.trim() && proyecto.as_ref().is_none_or(|p| &l.proyecto == p)
+        })
         .max_by_key(|l| l.cuando)
         .ok_or_else(|| format!("No encuentro la lista nueva «{titulo}» recien creada."))?;
     pedido["codigo"] = json!(l.codigo);
@@ -583,7 +662,11 @@ pub fn consultar(filtro: &Map<String, Value>, f: &dyn FuenteTareas) -> Result<St
     // El periodo, en dias locales: [desde, hasta].
     let lunes = ahora.dia - fechas::dia_de_la_semana(ahora.dia);
     let (y, m, _) = fechas::fecha_de(ahora.dia);
-    let fin_de_mes = if m == 12 { fechas::dias_de(y + 1, 1, 1) } else { fechas::dias_de(y, m + 1, 1) } - 1;
+    let fin_de_mes = if m == 12 {
+        fechas::dias_de(y + 1, 1, 1)
+    } else {
+        fechas::dias_de(y, m + 1, 1)
+    } - 1;
     let rango = match periodo.as_str() {
         "hoy" => Some((ahora.dia, ahora.dia)),
         "semana" => Some((lunes, lunes + 6)),
@@ -597,7 +680,8 @@ pub fn consultar(filtro: &Map<String, Value>, f: &dyn FuenteTareas) -> Result<St
             "todas" => true,
             _ => !t.hecha,
         };
-        let por_fecha = rango.is_none_or(|(a, b)| t.vence.is_some_and(|v| v.dia >= a && v.dia <= b));
+        let por_fecha =
+            rango.is_none_or(|(a, b)| t.vence.is_some_and(|v| v.dia >= a && v.dia <= b));
         let por_texto = buscar.as_deref().is_none_or(|q| parecido(q, &t.texto) > 0);
         por_estado && por_fecha && por_texto
     };
@@ -672,45 +756,86 @@ pub(crate) mod pruebas {
             texto: texto.into(),
             hecha,
             creada: None,
-            vence: vence.map(|(d, m)| Momento { dia: ahora().dia + d, minuto: m }),
+            vence: vence.map(|(d, m)| Momento {
+                dia: ahora().dia + d,
+                minuto: m,
+            }),
         }
     }
 
     /// Inbox (guardados), Obra (chat Casa Lima), Compras (chat Obra Norte).
     pub fn fuente() -> Fijas {
-        let lista = |proyecto: &str, chat: &str, g: bool, codigo: &str, titulo: &str, tareas| VistaLista {
-            proyecto: proyecto.into(),
-            chat: chat.into(),
-            guardados: g,
-            codigo: codigo.into(),
-            titulo: titulo.into(),
-            cuando: 0,
-            tareas,
-        };
+        let lista =
+            |proyecto: &str, chat: &str, g: bool, codigo: &str, titulo: &str, tareas| VistaLista {
+                proyecto: proyecto.into(),
+                chat: chat.into(),
+                guardados: g,
+                codigo: codigo.into(),
+                titulo: titulo.into(),
+                cuando: 0,
+                tareas,
+            };
         Fijas {
             listas: vec![
-                lista("g", "Mensajes guardados", true, "inbox", "Inbox", vec![
-                    t(0, "comprar pan", false, None),
-                    t(1, "llamar al banco", false, Some((-1, 600))),
-                    t(2, "pagar la luz", true, None),
-                ]),
-                lista("casa", "Casa Lima", false, "obra", "Obra", vec![
-                    t(0, "revisar encofrado", false, Some((1, 540))),
-                    t(1, "pedir cemento", true, None),
-                ]),
-                lista("norte", "Obra Norte", false, "compras", "Compras", vec![t(0, "comprar clavos", false, Some((20, 540)))]),
+                lista(
+                    "g",
+                    "Mensajes guardados",
+                    true,
+                    "inbox",
+                    "Inbox",
+                    vec![
+                        t(0, "comprar pan", false, None),
+                        t(1, "llamar al banco", false, Some((-1, 600))),
+                        t(2, "pagar la luz", true, None),
+                    ],
+                ),
+                lista(
+                    "casa",
+                    "Casa Lima",
+                    false,
+                    "obra",
+                    "Obra",
+                    vec![
+                        t(0, "revisar encofrado", false, Some((1, 540))),
+                        t(1, "pedir cemento", true, None),
+                    ],
+                ),
+                lista(
+                    "norte",
+                    "Obra Norte",
+                    false,
+                    "compras",
+                    "Compras",
+                    vec![t(0, "comprar clavos", false, Some((20, 540)))],
+                ),
             ],
             chats: vec![
-                Chat { id: "g".into(), nombre: "Mensajes guardados".into(), guardados: true },
-                Chat { id: "casa".into(), nombre: "Casa Lima".into(), guardados: false },
-                Chat { id: "norte".into(), nombre: "Obra Norte".into(), guardados: false },
+                Chat {
+                    id: "g".into(),
+                    nombre: "Mensajes guardados".into(),
+                    guardados: true,
+                },
+                Chat {
+                    id: "casa".into(),
+                    nombre: "Casa Lima".into(),
+                    guardados: false,
+                },
+                Chat {
+                    id: "norte".into(),
+                    nombre: "Obra Norte".into(),
+                    guardados: false,
+                },
             ],
             ahora: Some(ahora()),
         }
     }
 
     fn accion(nombre: &str, args: &str) -> AccionApp {
-        validar(por_nombre(nombre).unwrap(), &serde_json::from_str(args).unwrap()).unwrap()
+        validar(
+            por_nombre(nombre).unwrap(),
+            &serde_json::from_str(args).unwrap(),
+        )
+        .unwrap()
     }
 
     fn pasos(nombre: &str, args: &str) -> Result<Pasos, String> {
@@ -721,19 +846,29 @@ pub(crate) mod pruebas {
     fn se_parecen_como_se_espera() {
         assert_eq!(parecido("comprar pan", "Comprar pan"), 100);
         assert_eq!(parecido("pan", "comprar pan"), 85);
-        assert_eq!(parecido("la tarea de revisar el encofrado ya", "revisar encofrado"), 70);
+        assert_eq!(
+            parecido("la tarea de revisar el encofrado ya", "revisar encofrado"),
+            70
+        );
         assert!(parecido("llama al banco", "llamar al banco") > 0);
         assert_eq!(parecido("pintar la luna", "comprar pan"), 0);
     }
 
     #[test]
     fn anadir_con_lista_fecha_y_chat() {
-        let p = pasos("anadir_tarea", r#"{"texto":"revisar planos","fecha":"mañana a las 10"}"#).unwrap();
+        let p = pasos(
+            "anadir_tarea",
+            r#"{"texto":"revisar planos","fecha":"mañana a las 10"}"#,
+        )
+        .unwrap();
         assert_eq!(p.pedidos[0]["texto"], "revisar planos ⏰ 2026-10-15 10:00");
         assert!(p.pedidos[0].get("codigo").is_none(), "sin lista: al Inbox");
         assert_eq!(p.hecho, "Apuntada «revisar planos» para mañana 10:00.");
         let p = pasos("anadir_tarea", r#"{"texto":"tornillos","lista":"compras"}"#).unwrap();
-        assert_eq!((&p.pedidos[0]["codigo"], &p.pedidos[0]["proyecto"]), (&json!("compras"), &json!("norte")));
+        assert_eq!(
+            (&p.pedidos[0]["codigo"], &p.pedidos[0]["proyecto"]),
+            (&json!("compras"), &json!("norte"))
+        );
         assert_eq!(p.hecho, "Apuntada «tornillos» en «Compras (Obra Norte)».");
         let p = pasos("lista_nueva", r#"{"titulo":"Acabados","chat":"casa lima"}"#).unwrap();
         assert_eq!(p.pedidos[0]["proyecto"], "casa");
@@ -742,21 +877,42 @@ pub(crate) mod pruebas {
     #[test]
     fn marcar_mover_editar_y_quitar_por_su_nombre() {
         let p = pasos("marcar_tarea", r#"{"tarea":"revisar el encofrado"}"#).unwrap();
-        assert_eq!(p.pedidos[0], json!({"pixpin":1,"accion":"marcar_tarea","hecha":true,"codigo":"obra","proyecto":"casa","indice":0}));
+        assert_eq!(
+            p.pedidos[0],
+            json!({"pixpin":1,"accion":"marcar_tarea","hecha":true,"codigo":"obra","proyecto":"casa","indice":0})
+        );
         assert_eq!(p.hecho, "«revisar encofrado» marcada como hecha.");
         let p = pasos("marcar_tarea", r#"{"tarea":"pedir cemento","hecha":false}"#).unwrap();
         assert_eq!(p.pedidos[0]["indice"], 1);
         assert!(p.hecho.ends_with("pendiente."));
-        let p = pasos("mover_tarea", r#"{"tarea":"comprar pan","a_lista":"Compras"}"#).unwrap();
+        let p = pasos(
+            "mover_tarea",
+            r#"{"tarea":"comprar pan","a_lista":"Compras"}"#,
+        )
+        .unwrap();
         assert_eq!(p.pedidos[0]["a_codigo"], "compras");
         assert_eq!(p.pedidos[0]["a_proyecto"], "norte");
-        let p = pasos("editar_tarea", r#"{"tarea":"llamar al banco","texto":"llamar al banco y al seguro"}"#).unwrap();
+        let p = pasos(
+            "editar_tarea",
+            r#"{"tarea":"llamar al banco","texto":"llamar al banco y al seguro"}"#,
+        )
+        .unwrap();
         assert_eq!(p.pedidos[0]["accion"], "corregir_tarea");
-        assert_eq!(p.pedidos[0]["texto"], "llamar al banco y al seguro ⏰ 2026-10-13 10:00", "conserva su fecha");
-        let p = pasos("editar_tarea", r#"{"tarea":"comprar pan","fecha":"el viernes"}"#).unwrap();
+        assert_eq!(
+            p.pedidos[0]["texto"], "llamar al banco y al seguro ⏰ 2026-10-13 10:00",
+            "conserva su fecha"
+        );
+        let p = pasos(
+            "editar_tarea",
+            r#"{"tarea":"comprar pan","fecha":"el viernes"}"#,
+        )
+        .unwrap();
         assert_eq!(p.pedidos[0]["texto"], "comprar pan ⏰ 2026-10-16 09:00");
         let p = pasos("quitar_tarea", r#"{"tarea":"pan"}"#).unwrap();
-        assert_eq!(p.confirmar.as_deref(), Some("¿Quito la tarea «comprar pan» de «Inbox»?"));
+        assert_eq!(
+            p.confirmar.as_deref(),
+            Some("¿Quito la tarea «comprar pan» de «Inbox»?")
+        );
         let p = pasos("borrar_lista", r#"{"lista":"obra"}"#).unwrap();
         assert!(p.confirmar.unwrap().contains("«Obra (Casa Lima)»"));
     }
@@ -769,14 +925,23 @@ pub(crate) mod pruebas {
         )
         .unwrap();
         assert_eq!(p.pedidos.len(), 3);
-        assert_eq!(p.pedidos[0], json!({"pixpin":1,"accion":"lista_nueva","titulo":"Acta 14-oct","proyecto":"casa"}));
-        assert_eq!(p.pedidos[1]["texto"], "Enviar presupuesto ⏰ 2026-10-16 09:00");
+        assert_eq!(
+            p.pedidos[0],
+            json!({"pixpin":1,"accion":"lista_nueva","titulo":"Acta 14-oct","proyecto":"casa"})
+        );
+        assert_eq!(
+            p.pedidos[1]["texto"],
+            "Enviar presupuesto ⏰ 2026-10-16 09:00"
+        );
         assert_eq!(p.pedidos[2]["__en_lista_nueva"], "Acta 14-oct");
         assert_eq!(p.hecho, "Apuntadas 2 tareas en «Acta 14-oct».");
         // Al hacerla, cada tarea va a la lista recien creada.
         let mut f = fuente();
         let mut mandados = Vec::new();
-        let a = accion("anadir_tareas", r#"{"tareas":["a","b"],"lista_nueva":"Acta"}"#);
+        let a = accion(
+            "anadir_tareas",
+            r#"{"tareas":["a","b"],"lista_nueva":"Acta"}"#,
+        );
         let mut primero = true;
         let r = hacer(&a, &f.clone(), &|_| true, &mut |p| {
             mandados.push(p.clone());
@@ -810,14 +975,32 @@ pub(crate) mod pruebas {
     #[test]
     fn lo_que_no_casa_vuelve_con_el_motivo() {
         let e = pasos("marcar_tarea", r#"{"tarea":"pintar la luna"}"#).unwrap_err();
-        assert!(e.contains("No encuentro") && e.contains("comprar pan"), "{e}");
-        let e = pasos("anadir_tarea", r#"{"texto":"pagar alquiler","fecha":"el 31 de febrero"}"#).unwrap_err();
+        assert!(
+            e.contains("No encuentro") && e.contains("comprar pan"),
+            "{e}"
+        );
+        let e = pasos(
+            "anadir_tarea",
+            r#"{"texto":"pagar alquiler","fecha":"el 31 de febrero"}"#,
+        )
+        .unwrap_err();
         assert!(e.contains("no existe"), "{e}");
-        let e = pasos("anadir_tarea", r#"{"texto":"x","lista":"Compras","chat":"Casa Lima"}"#).unwrap_err();
+        let e = pasos(
+            "anadir_tarea",
+            r#"{"texto":"x","lista":"Compras","chat":"Casa Lima"}"#,
+        )
+        .unwrap_err();
         assert!(e.contains("esta en el chat «Obra Norte»"), "{e}");
         let e = pasos("anadir_tarea", r#"{"texto":"x","lista":"Ferreteria"}"#).unwrap_err();
-        assert!(e.contains("No hay ninguna lista") && e.contains("Compras"), "{e}");
-        let e = pasos("mover_tarea", r#"{"tarea":"comprar clavos","a_lista":"compras"}"#).unwrap_err();
+        assert!(
+            e.contains("No hay ninguna lista") && e.contains("Compras"),
+            "{e}"
+        );
+        let e = pasos(
+            "mover_tarea",
+            r#"{"tarea":"comprar clavos","a_lista":"compras"}"#,
+        )
+        .unwrap_err();
         assert!(e.contains("ya esta"), "{e}");
         // «comprar» se parece igual a dos tareas: se pregunta cual.
         let e = pasos("quitar_tarea", r#"{"tarea":"comprar"}"#).unwrap_err();
@@ -831,10 +1014,23 @@ pub(crate) mod pruebas {
     fn un_chat_inventado_o_una_lista_que_es_la_tarea_se_entienden() {
         let p = pasos("borrar_lista", r#"{"lista":"Compras","chat":"PixPin"}"#).unwrap();
         assert!(p.confirmar.unwrap().contains("«Compras (Obra Norte)»"));
-        let p = pasos("marcar_tarea", r#"{"tarea":"táchalo de mis pendientes","lista":"encofrado"}"#).unwrap();
-        assert_eq!((&p.pedidos[0]["codigo"], &p.pedidos[0]["indice"]), (&json!("obra"), &json!(0)));
+        let p = pasos(
+            "marcar_tarea",
+            r#"{"tarea":"táchalo de mis pendientes","lista":"encofrado"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (&p.pedidos[0]["codigo"], &p.pedidos[0]["indice"]),
+            (&json!("obra"), &json!(0))
+        );
         // Pero un chat que existe si manda, y una lista que no esta sin tarea es error.
-        assert!(pasos("anadir_tarea", r#"{"texto":"x","lista":"Compras","chat":"Casa Lima"}"#).is_err());
+        assert!(
+            pasos(
+                "anadir_tarea",
+                r#"{"texto":"x","lista":"Compras","chat":"Casa Lima"}"#
+            )
+            .is_err()
+        );
         assert!(pasos("borrar_lista", r#"{"lista":"encofrado"}"#).is_err());
     }
 
@@ -855,17 +1051,41 @@ pub(crate) mod pruebas {
         let c = |args: &str| consultar(&accion("consultar_tareas", args).por_resolver, &f).unwrap();
         let s = c("{}");
         assert!(s.starts_with("Tareas pendientes (4):"), "{s}");
-        assert!(s.contains("Inbox:\n  ☐ llamar al banco — venció ayer 10:00\n  ☐ comprar pan"), "{s}");
-        assert!(s.contains("Obra (Casa Lima):\n  ☐ revisar encofrado — mañana 09:00"), "{s}");
+        assert!(
+            s.contains("Inbox:\n  ☐ llamar al banco — venció ayer 10:00\n  ☐ comprar pan"),
+            "{s}"
+        );
+        assert!(
+            s.contains("Obra (Casa Lima):\n  ☐ revisar encofrado — mañana 09:00"),
+            "{s}"
+        );
         let s = c(r#"{"estado":"vencidas","periodo":"semana"}"#);
-        assert_eq!(s, "Tareas vencidas de esta semana (1):\nInbox:\n  ☐ llamar al banco — venció ayer 10:00");
+        assert_eq!(
+            s,
+            "Tareas vencidas de esta semana (1):\nInbox:\n  ☐ llamar al banco — venció ayer 10:00"
+        );
         let s = c(r#"{"estado":"hechas","chat":"Casa Lima"}"#);
-        assert!(s.contains("pedir cemento") && !s.contains("pagar la luz"), "{s}");
-        assert_eq!(c(r#"{"periodo":"hoy"}"#), "No tienes tareas pendientes para hoy.");
+        assert!(
+            s.contains("pedir cemento") && !s.contains("pagar la luz"),
+            "{s}"
+        );
+        assert_eq!(
+            c(r#"{"periodo":"hoy"}"#),
+            "No tienes tareas pendientes para hoy."
+        );
         // «buscar» repitiendo el chat no deja la consulta vacia.
         assert!(c(r#"{"chat":"Casa Lima","buscar":"Casa Lima"}"#).contains("revisar encofrado"));
         assert!(c(r#"{"periodo":"mes"}"#).contains("revisar encofrado"));
-        assert!(!c(r#"{"periodo":"mes"}"#).contains("clavos"), "el 3-nov no es de este mes");
-        assert!(consultar(&accion("consultar_tareas", r#"{"lista":"cocina"}"#).por_resolver, &f).is_err());
+        assert!(
+            !c(r#"{"periodo":"mes"}"#).contains("clavos"),
+            "el 3-nov no es de este mes"
+        );
+        assert!(
+            consultar(
+                &accion("consultar_tareas", r#"{"lista":"cocina"}"#).por_resolver,
+                &f
+            )
+            .is_err()
+        );
     }
 }
