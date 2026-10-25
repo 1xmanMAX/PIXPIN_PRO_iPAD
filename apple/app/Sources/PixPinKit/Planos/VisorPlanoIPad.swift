@@ -793,13 +793,13 @@ final class CapaEncimaPlano: UIView {
         ctx.setLineWidth(1.2)
         ctx.setStrokeColor(CapaEncimaPlano.azul.cgColor)
         ctx.setLineDash(phase: 0, lengths: [6, 4])
-        for m in visor.anotado.marcos { ctx.stroke(rect(v, m)) }
+        for m in visor.anotado.marcos { ctx.stroke(self.rect(v, m)) }
         if case let (a, b)? = v.marcoEnCurso {
-            ctx.stroke(rect(v, CajaPlano(x0: min(a.x, b.x), y0: min(a.y, b.y), x1: max(a.x, b.x), y1: max(a.y, b.y))))
+            ctx.stroke(self.rect(v, CajaPlano(x0: min(a.x, b.x), y0: min(a.y, b.y), x1: max(a.x, b.x), y1: max(a.y, b.y))))
         }
         ctx.setLineDash(phase: 0, lengths: [])
         for (i, m) in visor.anotado.marcos.enumerated() {
-            let r = rect(v, m)
+            let r = self.rect(v, m)
             let t = "\(i + 1)" as NSString
             let atr: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 10, weight: .semibold),
                                                       .foregroundColor: UIColor.white]

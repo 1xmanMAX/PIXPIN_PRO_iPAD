@@ -57,7 +57,7 @@ simulador)
     # CI ensena todos los errores, no solo los primeros.
     correr "$DIST/simulador.log" build "${comun[@]}" -configuration Debug -sdk iphonesimulator \
         -destination "generic/platform=iOS Simulator" \
-        SWIFT_COMPILATION_MODE=singlefile
+        SWIFT_COMPILATION_MODE=singlefile ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
     app="$DERIVADOS/Build/Products/Debug-iphonesimulator/PixPin.app"
     (cd "$(dirname "$app")" && rm -f "$DIST/PixPin-simulador.zip" && zip -qry "$DIST/PixPin-simulador.zip" PixPin.app)
     echo "==> $DIST/PixPin-simulador.zip"

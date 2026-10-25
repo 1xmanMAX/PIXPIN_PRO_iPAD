@@ -56,7 +56,7 @@ public struct VistaTimeline: View {
         .ventanaConCabecera()
         .overlay(alignment: .bottom) { aviso }
         .onChange(of: modelo.consulta) { _, _ in modelo.consultaCambiada() }
-        .onChange(of: modelo.filtro) { _, _ in Task { await modelo.recargar() } }
+        .onChange(of: modelo.filtro) { _, _ in _ = Task<Void, Never> { await modelo.recargar() } }
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
             Task { await modelo.recargar() }
         }
