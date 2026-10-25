@@ -172,11 +172,31 @@ public struct VistaElegirSincro: View {
                 }
             }
         }
-        .toggleStyle(.checkbox)
+        .toggleStyle(EstiloCasilla())
     }
 
     private func contestar(_ e: EleccionSincro?) {
         pendiente.contestar(e)
         cerrar()
+    }
+}
+
+/// La casilla de Windows (`.checkbox` es solo del Mac): el cuadro a la
+/// izquierda y toda la fila se toca.
+struct EstiloCasilla: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                    .font(.title3)
+                    .foregroundStyle(configuration.isOn ? Color.accentColor : Color.secondary)
+                configuration.label
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

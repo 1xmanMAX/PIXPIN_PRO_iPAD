@@ -31,7 +31,7 @@ struct SeccionEsteAparato: View {
     @State private var cambiando = false
 
     var body: some View {
-        Section("Este Mac") {
+        Section("Este iPad") {
             LabeledContent("Nombre") {
                 HStack {
                     Text(sincro.aparato?.nombre ?? "—").textSelection(.enabled)
@@ -72,6 +72,7 @@ struct HojaNombre: View {
             Text("Es como lo verán tus otros aparatos.").foregroundStyle(.secondary)
             TextField("Nombre", text: $nombre)
                 .textFieldStyle(.roundedBorder)
+                .submitLabel(.done)
                 .onChange(of: nombre) { _, n in
                     if n.count > Self.tope { nombre = String(n.prefix(Self.tope)) }
                 }
@@ -85,7 +86,8 @@ struct HojaNombre: View {
             }
         }
         .padding(20)
-        .frame(width: 360)
+        .frame(minWidth: 360)
+        .presentationDetents([.height(220)])
     }
 
     private func aceptar() {
@@ -132,9 +134,13 @@ struct SeccionTusAparatos: View {
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     TextField("192.168.1.20:47474", text: $direccion)
+                        .keyboardType(.numbersAndPunctuation)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                         .onSubmit(conectar)
                     Button("Conectar", action: conectar)
                         .disabled(sincro.ocupado || Direccion(texto: direccion) == nil)
+                        .buttonStyle(.borderless)
                 }
                 if let puerto = sincro.puerto {
                     Text("La de este aparato: \(ipv4Local() ?? "—"):\(String(puerto))")

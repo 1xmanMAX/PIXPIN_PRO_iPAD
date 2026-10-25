@@ -39,6 +39,8 @@ struct FilaConexion: View {
             }
             if let aviso { Text(aviso).font(.caption).foregroundStyle(.secondary) }
         }
+        // iPad: dentro de una fila de `Form`, cada boton con su toque.
+        .buttonStyle(.borderless)
         .onAppear(perform: leer)
     }
 
@@ -67,7 +69,8 @@ struct FilaConexion: View {
             let r = await Task.detached { Result { try iaConectar(servicioId: id) } }.value
             conectando = false
             if case let .failure(e) = r { aviso = "\(e)" }
-            if case .success = r, id == "google_calendar" { Recordatorios.compartido.leerCalendario() }
+            // iPad: el calendario lo lee otra zona (`GanchosAjustes`).
+            if case .success = r { GanchosAjustes.alConectar?(id) }
             leer()
         }
     }

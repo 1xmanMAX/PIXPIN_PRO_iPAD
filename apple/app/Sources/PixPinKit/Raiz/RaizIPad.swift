@@ -8,7 +8,6 @@ import SwiftUI
 public struct RaizIPad: View {
     @ObservedObject var entorno: EntornoApp
     @ObservedObject private var nav = Navegacion.compartida
-    @Environment(\.scenePhase) private var fase
     @State private var columnas: NavigationSplitViewVisibility = .automatic
 
     public init(entorno: EntornoApp) {
@@ -38,13 +37,6 @@ public struct RaizIPad: View {
         }
         .environmentObject(entorno)
         .environmentObject(nav)
-        .onChange(of: fase, initial: true) { _, nueva in
-            switch nueva {
-            case .active: entorno.alActivarse()
-            case .background: entorno.alIrseAlFondo()
-            default: break
-            }
-        }
         .onOpenURL { url in AbrirDesdeFuera.abrir(url, entorno: entorno) }
     }
 

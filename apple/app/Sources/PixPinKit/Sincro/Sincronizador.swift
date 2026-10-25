@@ -149,6 +149,8 @@ public final class Sincronizador: ObservableObject {
     /// Los que se estan probando en su direccion recordada ahora mismo.
     private var probando: Set<String> = []
     private var observadores: [NSObjectProtocol] = []
+    /// Si ya se leyo `[sincro] automatica` del TOML (iPad: al arrancar).
+    private var automaticaLeida = false
     private let reloj: () -> Date
 
     public init(nucleo: Nucleo, reloj: @escaping () -> Date = { Date() }) {
@@ -255,7 +257,10 @@ public final class Sincronizador: ObservableObject {
     /// nombre nuevo, y los demas lo ven en la siguiente vuelta.
     public func renombrar(_ nombre: String) async {
         await trabajar("Cambiando el nombre…") { nucleo in
-            _ = try nucleo.renombrarAparato(nombre: nombre)
+            let info = try nucleo.renombrarAparato(nombre: nombre)
+            // iPad: el sistema solo da «iPad»; el nombre elegido se guarda
+            // tambien aqui (`nombreDeEsteAparato()` lo lee al abrir).
+            UserDefaults.standard.set(info.nombre, forKey: claveNombreDelAparato)
         }
         await refrescar()
     }
@@ -511,6 +516,12 @@ public final class Sincronizador: ObservableObject {
             codigoLegible = info.grupo.map { PixPinCore.codigoLegible(codigo: $0) }
             etiqueta = anuncio?.etiqueta
             presencia = ajustes?.sincroPresencia ?? true
+            // iPad: la sincronizacion sola de `pixpinmax.toml`, la primera
+            // vez (despues la cambian los Ajustes, que guardan el TOML).
+            if !automaticaLeida, let ajustes {
+                automaticaLeida = true
+                automatica = ajustes.sincroAutomatica
+            }
             // Con grupo, o sin el pero dentro de un chat compartido con
             // personas (que llaman aqui): se escucha y se anuncia, salvo que
             // la presencia este apagada en los ajustes.
@@ -560,12 +571,12 @@ public final class Sincronizador: ObservableObject {
             // Sincronizo o se unio: puede haber chats nuevos y miembros
             // nuevos en el grupo.
             ultimaVuelta[id] = reloj()
-            ultimoResultado = "\(nombre) sincronizó con este Mac."
+            ultimoResultado = "\(nombre) sincronizó con este iPad."
             alTraerCambios?()
             Task { await refrescar() }
         case let .success(.persona(_, nombre)):
             // Una persona de un chat compartido se junto con este Mac.
-            ultimoResultado = "\(nombre) sincronizó un chat compartido con este Mac."
+            ultimoResultado = "\(nombre) sincronizó un chat compartido con este iPad."
             alTraerCambios?()
         case let .success(.archivos(_, nombre, llegadas)):
             ultimasLlegadas = llegadas
@@ -573,11 +584,9 @@ public final class Sincronizador: ObservableObject {
             // **El aviso al recibirlo** (Windows, 17-oct): PixPin puede estar
             // en la barra de menus sin nada a la vista, y lo que llega de otro
             // aparato del grupo sin escanear nada tiene que notarse.
+            // iPad: el aviso lo pone quien tenga los avisos (`GanchosSincro`).
             if !llegadas.isEmpty {
-                CentroAvisos.compartido.mostrarEnLaApp(
-                    Aviso(id: "llegada-\(Date().timeIntervalSince1970)", categoria: .mini,
-                          titulo: "Llegó de \(nombre)", texto: textoDeLlegadas(llegadas, de: nombre), datos: [:]),
-                    sonar: true)
+                GanchosSincro.alLlegar?("Llegó de \(nombre)", textoDeLlegadas(llegadas, de: nombre))
             }
             for l in llegadas where l.donde == .lienzo {
                 NotificationCenter.default.post(name: .pixpinFotoAlLienzo, object: l)
@@ -903,4 +912,17 @@ final class PuenteElegir: ElegirSincro, @unchecked Sendable {
         listo.wait()
         return caja.valor
     }
+}
+
+/// La clave de `UserDefaults` del nombre de este iPad (la que lee
+/// `nombreDeEsteAparato()` en `Almacen.swift`).
+public let claveNombreDelAparato = "pixpin.nombreDelAparato"
+
+/// Lo que la sincronizacion avisa a otras partes de la app sin depender de
+/// ellas (iPad: los avisos los lleva otra zona). Sin gancho, no pasa nada.
+@MainActor
+public enum GanchosSincro {
+    /// Llego algo suelto de otro aparato («Enviar a…»): titulo y texto del
+    /// aviso para ensenarlo en la app.
+    public static var alLlegar: ((String, String) -> Void)?
 }
