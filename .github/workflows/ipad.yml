@@ -89,12 +89,16 @@ jobs:
           brew install xcodegen
           cd xcode && xcodegen generate
       - name: Compilar para el simulador del iPad
+        id: simulador
         run: herramientas/app.sh simulador
       - name: Pruebas en el simulador del iPad
         run: herramientas/app.sh pruebas
       - name: Compilar para el iPad (sin firmar) y montar el .ipa
+        # Aunque falle alguna prueba: asi se ve si la app del iPad compila.
+        if: ${{ !cancelled() && steps.simulador.outcome == 'success' }}
         run: herramientas/app.sh ipa
       - name: Subir la app del simulador
+        if: ${{ !cancelled() && steps.simulador.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: PixPin-ipad-simulador
@@ -102,6 +106,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Subir el .ipa sin firmar
+        if: ${{ !cancelled() && hashFiles('apple/dist/PixPin-sin-firmar.ipa') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: PixPin-ipad-sin-firmar
