@@ -1,0 +1,107 @@
+name: iPad
+
+# PixPin para iPad (apple/): compila el nucleo de Rust como xcframework para
+# el iPad y su simulador, monta el proyecto de Xcode con XcodeGen, compila la
+# app, pasa las pruebas en el simulador del iPad y deja para descargar:
+#   - PixPin-ipad-simulador: la app para el simulador (xcrun simctl install);
+#   - PixPin-ipad-sin-firmar: el .ipa sin firmar, para firmarlo con tu Apple ID
+#     (AltStore, Sideloadly o Xcode) e instalarlo en un iPad de verdad.
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ipad-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+
+jobs:
+  nucleo:
+    name: Nucleo de Rust (pruebas)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apple
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apple
+      - name: Pruebas del puente con Swift
+        run: cargo test -p pixpin-nucleo -- --test-threads=2
+
+  ipad:
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: apple
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apple
+          cache-on-failure: true
+      - name: Versiones
+        run: |
+          sw_vers
+          xcodebuild -version
+          rustup show active-toolchain || true
+      - name: Nucleo ya compilado (si no cambio)
+        id: nucleo
+        uses: actions/cache/restore@v4
+        with:
+          path: apple/PixPinCore/PixPinCoreFFI.xcframework
+          key: xcframework-ios-${{ hashFiles('apple/nucleo/**', 'apple/Cargo.lock', 'apple/Cargo.toml', 'apple/rust-toolchain.toml', 'apple/herramientas/xcframework.sh') }}
+      - name: Nucleo de Rust -> PixPinCoreFFI.xcframework (iPad + simulador)
+        if: steps.nucleo.outputs.cache-hit != 'true'
+        env:
+          PIXPIN_PERFIL: ffi-rapido
+        run: herramientas/xcframework.sh
+      - name: Guardar el nucleo compilado
+        if: steps.nucleo.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: apple/PixPinCore/PixPinCoreFFI.xcframework
+          key: ${{ steps.nucleo.outputs.cache-primary-key }}
+      - name: Los enlaces de Swift versionados siguen al dia
+        if: steps.nucleo.outputs.cache-hit != 'true'
+        run: |
+          if ! git diff --quiet -- PixPinCore/Sources; then
+            echo "::warning::Los enlaces de Swift cambiaron al regenerarlos; hay que versionar PixPinCore/Sources/PixPinCore/pixpin_nucleo.swift"
+            git diff --stat -- PixPinCore/Sources
+          fi
+      - name: XcodeGen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew install xcodegen
+          cd xcode && xcodegen generate
+      - name: Compilar para el simulador del iPad
+        run: herramientas/app.sh simulador
+      - name: Pruebas en el simulador del iPad
+        run: herramientas/app.sh pruebas
+      - name: Compilar para el iPad (sin firmar) y montar el .ipa
+        run: herramientas/app.sh ipa
+      - name: Subir la app del simulador
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixPin-ipad-simulador
+          path: apple/dist/PixPin-simulador.zip
+          if-no-files-found: error
+          retention-days: 30
+      - name: Subir el .ipa sin firmar
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixPin-ipad-sin-firmar
+          path: apple/dist/PixPin-sin-firmar.ipa
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,21 @@
+[package]
+name = "pixpin-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Las palabras de fabrica de cada urgencia de las tareas (`[tareas]`).
+pixpin-frase = { path = "../pixpin-frase" }
+fluent-bundle = "0.16.0"
+pixpin-motor2d = { version = "0.1.0", path = "../pixpin-motor2d" }
+# Atajos y entorno, portables: sin arrastrar Win32 (ver pixpin-sistema).
+pixpin-sistema = { version = "0.1.0", path = "../pixpin-sistema" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+toml = "1.1.4"
+toml_edit = { version = "0.23", features = ["serde"] }
+tracing = "0.1.44"
+unic-langid = "0.9.6"

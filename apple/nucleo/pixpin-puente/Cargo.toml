@@ -1,0 +1,13 @@
+# El puente de la extension del navegador (`apps/pixpin-puente` de Windows)
+# en el Mac: Chrome lo arranca como «host» de mensajeria nativa y el pedido
+# llega a PixPin por el enlace firmado `pixpinmax://pedido`.
+[package]
+name = "pixpin-puente"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10.9"

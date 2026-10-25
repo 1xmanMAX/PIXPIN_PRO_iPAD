@@ -1,0 +1,30 @@
+[package]
+name = "pixpin-proyecto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pixpin-motor2d = { version = "0.1.0", path = "../pixpin-motor2d" }
+# El cable de sincronizar (capa 1): `vista` es su `Disco` sobre el almacen.
+pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro" }
+# Las uniones de directorio (enlaces simbolicos fuera de Windows): un
+# proyecto guardado en la carpeta que elija el usuario (`ubicacion`), y la
+# hora local. Capa 0, portable.
+pixpin-sistema = { version = "0.1.0", path = "../pixpin-sistema" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+# Nombres de fichero siempre en NFC (`almacen::nombre_seguro`): el Mac los da
+# en NFD y la sincronizacion compara rutas byte a byte.
+unicode-normalization = "0.1.25"
+# Solo `deflate`: un `.pixpin` no lleva cifrado ni formatos raros, y cada
+# metodo de compresion de mas es codigo que hay que arrastrar sin usarlo.
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# El «movil» de las pruebas de sincronizar: un Disco con la carpeta de
+# Android, para hablar con el del PC por un socket de verdad.
+pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro", features = ["simulador"] }
+flate2 = "1.1"

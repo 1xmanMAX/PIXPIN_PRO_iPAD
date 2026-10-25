@@ -1,0 +1,104 @@
+# El nucleo de PixPin para Mac, iPad e iPhone: un espacio de trabajo aparte,
+# copia de los crates de `crates/` que no dependen de Windows (ver
+# README.md de esta carpeta y docs/investigacion/2026-10-15-mac-ipad-iphone.md).
+#
+# Solo compila `nucleo/`. `por-adaptar/` y `por-traducir/` son copias de
+# referencia que se iran pasando a `nucleo/` (adaptadas) o a Swift.
+[workspace]
+resolver = "3"
+members = ["nucleo/*"]
+exclude = ["por-adaptar", "por-traducir"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+authors = ["Max Anthony Mamani Maquera"]
+repository = "https://github.com/1xmanMAX/pixpin-max"
+
+[workspace.dependencies]
+pixpin-geom = { path = "nucleo/pixpin-geom" }
+pdfsqueeze-core = { path = "nucleo/pdfsqueeze-core" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = 3
+
+# Las macros y los build.rs no se adelgazan: el `strip` de Xcode 27 deja sus
+# .dylib con el LINKEDIT mal alineado, macOS 26 se niega a cargarlas y rustc
+# dice "can't find crate". Solo corren al compilar; no van en la app.
+[profile.release.build-override]
+strip = false
+
+# El de `PixPinCore.xcframework` (herramientas/xcframework.sh): el release
+# de arriba, pero con los panicos que se desenrollan. UniFFI envuelve cada
+# llamada de Swift en `catch_unwind`, asi que un panico de Rust llega a la
+# app como error; con `abort` la cerraria de golpe.
+[profile.ffi]
+inherits = "release"
+panic = "unwind"
+
+# El de la CI (`PIXPIN_PERFIL=ffi-rapido`): el mismo codigo, con LTO fino y en
+# paralelo. Optimiza casi igual y compila en una fraccion del tiempo; lo que
+# se publica sigue saliendo con `ffi`.
+[profile.ffi-rapido]
+inherits = "ffi"
+lto = "thin"
+codegen-units = 16
+
+# La criptografia y el gzip de sincronizar, optimizados tambien sin
+# `--release`: sin optimizar, cifrar un chat de un par de megas tarda decenas
+# de segundos y las pruebas de sincronizar de verdad se eternizan. Solo estos
+# paquetes: el resto se sigue compilando como siempre.
+[profile.dev.package.aes]
+opt-level = 3
+[profile.dev.package.aes-gcm]
+opt-level = 3
+[profile.dev.package.ghash]
+opt-level = 3
+[profile.dev.package.polyval]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+# Y el propio cable: sincronizar un chat de cientos de mensajes recorre su
+# JSON decenas de veces (resumenes, copias, inventarios en los dos lados).
+[profile.dev.package.pixpin-sincro]
+opt-level = 2
+# Aligerar un PDF: sin optimizar, pdfsqueeze tarda minutos en lo que en
+# release son segundos (zopfli y las carreras de JPEG), y las pruebas que
+# comprimen de verdad se eternizarian.
+[profile.dev.package.pdfsqueeze-core]
+opt-level = 3
+# pdfsqueeze cuenta con la aritmetica del release, que da la vuelta sin
+# avisar (la imagen integral de mrc.rs resta u32 que se envuelven a
+# proposito, y sus pruebas multiplican u8 que desbordan). Con las
+# comprobaciones de depuracion encendidas cuatro de sus pruebas entran en
+# panico; asi se prueba el mismo codigo que se compila en el ejecutable.
+overflow-checks = false
+debug-assertions = false
+[profile.dev.package.zopfli]
+opt-level = 3
+[profile.dev.package.jpeg-encoder]
+opt-level = 3
+[profile.dev.package.jpeg-decoder]
+opt-level = 3
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+# Las hojas de un PDF como imagen en la pagina web van en WebP sin perdida
+# (Android v0.98.1): sin optimizar, cada hoja tarda segundos en las pruebas.
+[profile.dev.package.image-webp]
+opt-level = 3
+[profile.dev.package.lopdf]
+opt-level = 3
+# El motor de formulas de las hojas: recalcular una hoja de 2 000 celdas tiene
+# que bajar de 50 ms tambien en las pruebas (formula/pruebas_funciones.rs), y
+# sin optimizar tardaba ~80 ms. El nivel 1 lo deja en ~15 ms; el resto del
+# crate sigue igual de depurable.
+[profile.dev.package.pixpin-proyecto]
+opt-level = 1

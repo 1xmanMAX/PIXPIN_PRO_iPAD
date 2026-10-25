@@ -1,0 +1,11 @@
+[toolchain]
+# El mismo Rust que la version de Windows (../rust-toolchain.toml), con los
+# objetivos de Apple: Mac (Apple Silicon e Intel), iPhone/iPad y su simulador.
+channel = "1.97.1"
+components = ["clippy", "rustfmt"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+]

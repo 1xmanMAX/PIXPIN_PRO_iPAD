@@ -1,0 +1,24 @@
+# El servidor MCP de PixPin Max para el Mac (`pixpin-mcp`), el de Windows
+# (`apps/pixpin-mcp`) adaptado: Claude Desktop, Claude Code y cualquier
+# cliente MCP lo arrancan y le hablan JSON-RPC 2.0 por stdin/stdout. Lo que
+# escribe en PixPin va por el enlace firmado `pixpinmax://pedido` (el pedido
+# `herramienta`, con su fichero de respuesta); lo que lee, aqui mismo.
+[package]
+name = "pixpin-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "pixpin-mcp"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1.0"
+sha2 = "0.10.9"
+pixpin-ia = { path = "../pixpin-ia" }
+pixpin-proyecto = { path = "../pixpin-proyecto" }
+pixpin-pdf = { path = "../pixpin-pdf" }
+pixpin-docs = { path = "../pixpin-docs" }
+pixpin-office = { path = "../pixpin-office" }
+pixpin-hojas = { path = "../pixpin-hojas" }

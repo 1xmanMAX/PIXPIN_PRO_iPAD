@@ -1,0 +1,78 @@
+[package]
+name = "pixpin-nucleo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "El puente Rust <-> Swift de PixPin para Mac, iPad e iPhone (UniFFI)"
+
+[lib]
+# `staticlib` para el xcframework (lo que enlaza la app de Apple), `cdylib`
+# para que uniffi-bindgen lea los metadatos de la biblioteca en Linux/Mac, y
+# `lib` para las pruebas de Rust.
+crate-type = ["lib", "staticlib", "cdylib"]
+name = "pixpin_nucleo"
+
+[[bin]]
+# El generador de los enlaces de Swift (`herramientas/xcframework.sh`). Solo
+# con la funcion `bindgen`: sin ella, compilar la biblioteca no arrastra el
+# generador entero (clap, askama...).
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+pixpin-motor2d = { version = "0.1.0", path = "../pixpin-motor2d" }
+pixpin-proyecto = { version = "0.1.0", path = "../pixpin-proyecto" }
+pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro" }
+pixpin-sistema = { version = "0.1.0", path = "../pixpin-sistema" }
+# Los ajustes en el mismo `pixpinmax.toml` que Windows (solo las claves que
+# valen en los dos sistemas), las lecciones aprendidas y el asistente
+# (herramientas en JSON para Foundation Models y el cliente de llama-server).
+pixpin-store = { version = "0.1.0", path = "../pixpin-store" }
+pixpin-lecciones = { version = "0.1.0", path = "../pixpin-lecciones" }
+pixpin-ia = { version = "0.1.0", path = "../pixpin-ia" }
+# Lo que se entiende al escribir una tarea (#etiquetas, urgencia, hora).
+pixpin-frase = { path = "../pixpin-frase" }
+# El timeline (`momentos.jsonl`), el mismo crate que Windows.
+pixpin-timeline = { version = "0.1.0", path = "../pixpin-timeline" }
+# Los planos DWG/DXF y los modelos 3D (IFC, Revit, Civil 3D) para el visor de
+# Metal: los mismos crates que el visor de Windows, sin su D3D11.
+pixpin-cad = { version = "0.1.0", path = "../pixpin-cad" }
+pixpin-bim = { version = "0.1.0", path = "../pixpin-bim" }
+# Medir una foto del chat (su lienzo propio, B9) y leer las de un croquis
+# 3D: el mismo crate que Windows (ya estaba en el arbol por `pixpin-ia`).
+pixpin-codec = { path = "../pixpin-codec" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+# NFC para el nombre de un fichero adjuntado (el Finder los da en NFD). Ya
+# estaba en el arbol (`pixpin-proyecto`).
+unicode-normalization = "0.1.25"
+# El azar del sistema para el nonce de cada conexion y el codigo de grupo
+# (SecRandomCopyBytes / getentropy en Apple). Ya estaba en el arbol.
+getrandom = "0.2"
+uniffi = "0.32"
+# Documentos (lector, notas, hojas, Office, aligerar PDF): los mismos crates
+# que Windows. `pixpin-docs` (lectura, Markdown vivo, formulas),
+# `pixpin-office` (Word y PowerPoint paginados como Office) y
+# `pdfsqueeze-core` (aligerar), con `rayon` para darle su propio grupo de
+# hilos (ya en el arbol por pdfsqueeze) y `sha2` para la huella de lo ya
+# aligerado (`cache/pdf-aligerados.txt`, la de Windows).
+pixpin-docs = { version = "0.1.0", path = "../pixpin-docs" }
+pixpin-office = { version = "0.1.0", path = "../pixpin-office" }
+# La capa de texto de un PDF (buscar y anotar desde el asistente, E1): el
+# mismo lector que el de Windows, Rust puro.
+pixpin-pdf = { path = "../pixpin-pdf" }
+pdfsqueeze-core = { workspace = true }
+rayon = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+# El «movil» de las pruebas: un Disco con la carpeta de Android.
+pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro", features = ["simulador"] }
+# Un `.docx` de prueba (el mismo zip que ya lleva el arbol).
+zip = { version = "2.2", default-features = false, features = ["deflate"] }

@@ -1,0 +1,4 @@
+# Lo hace herramientas/xcframework.sh en un Mac: es un resultado, no fuente.
+/PixPinCoreFFI.xcframework/
+/.build/
+/.swiftpm/

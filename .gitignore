@@ -1,0 +1,21 @@
+# Rust
+/apple/target/
+/apple/target-enlaces/
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# Editores
+.idea/
+.vscode/*
+*.swp
+
+# Swift / Xcode
+.build/
+/apple/PixPinCore/PixPinCoreFFI.xcframework/
+/apple/xcode/*.xcodeproj/
+/apple/app/dist*/
+DerivedData/
+xcuserdata/
+/apple/dist/

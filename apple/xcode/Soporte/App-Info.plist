@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>es</string>
+	<key>CFBundleDisplayName</key>
+	<string>PixPin</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>PixPin</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.github.1xmanmax.pixpin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pixpinmax</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Documento</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+				<string>org.openxmlformats.wordprocessingml.document</string>
+				<string>org.openxmlformats.spreadsheetml.sheet</string>
+				<string>org.openxmlformats.presentationml.presentation</string>
+				<string>public.comma-separated-values-text</string>
+				<string>org.idpf.epub-container</string>
+				<string>public.image</string>
+				<string>public.movie</string>
+				<string>public.audio</string>
+				<string>com.autodesk.dwg</string>
+				<string>com.autodesk.dxf</string>
+				<string>org.buildingsmart.ifc</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>UIFileSharingEnabled</key>
+	<false/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_pixpin._tcp</string>
+		<string>_pixpinenvio._tcp</string>
+		<string>_pixpinrecibe._tcp</string>
+		<string>_pixpinchat._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>PixPin busca tus otros aparatos (PC, Mac y móvil) en tu Wi-Fi para sincronizar tus proyectos sin pasar por internet.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>PixPin graba notas de voz para tus proyectos.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>PixPin pasa tus notas de voz a texto en este iPad, sin enviarlas a internet.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PixPin hace fotos y escanea documentos para tus proyectos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PixPin mete fotos de tu fototeca en tus proyectos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>PixPin guarda en Fotos las imágenes que exportas.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>io.github.1xmanmax.pixpin.sincronizar</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIRequiresFullScreen</key>
+	<false/>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+</dict>
+</plist>

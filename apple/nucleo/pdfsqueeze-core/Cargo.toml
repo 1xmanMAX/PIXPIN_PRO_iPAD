@@ -1,0 +1,38 @@
+# Copia del nucleo de pdfsqueeze (github.com/1xmanMAX/Thesis, crates/core).
+# Ver PROCEDENCIA.md: de donde sale, que commit, y como se actualiza.
+#
+# Las versiones son las del Cargo.toml de Thesis, escritas aqui a mano porque
+# alli venian de su `[workspace.dependencies]`. La edicion se queda en 2021 a
+# proposito, y no en la 2024 del workspace: el codigo se copia tal cual y
+# cambiarle la edicion es cambiarle las reglas del lenguaje.
+#
+# Un unico cambio de version: lopdf 0.36 -> 0.42. La 0.36 tiene un aviso de
+# seguridad (RUSTSEC-2026-0187: un PDF con arrays anidados miles de veces
+# agota la pila y aborta el proceso) que `cargo deny` rechaza, y el arreglo
+# llega en la 0.42. El codigo de pdfsqueeze compila sin tocar una linea y sus
+# 21 pruebas siguen en verde (medido en Thesis y aqui).
+[package]
+name = "pdfsqueeze-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Content-aware PDF optimizer: lossless structure cleanup, per-image codec racing under a perceptual quality constraint, and MRC layering for scans."
+
+[dependencies]
+lopdf = { version = "0.42", default-features = false }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+zopfli = "0.8"
+jpeg-encoder = "0.6"
+jpeg-decoder = { version = "0.3", default-features = false }
+flate2 = "1"
+fax = "0.2"
+sha2 = "0.10"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+
+[dev-dependencies]
+jpeg-encoder = "0.6"

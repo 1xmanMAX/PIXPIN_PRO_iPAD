@@ -1,0 +1,39 @@
+[package]
+name = "pixpin-sincro"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Criptografia de RustCrypto (MIT OR Apache-2.0). Aqui NO se escribe
+# criptografia a mano: el proyecto tiene su propio SHA-256 porque un hash es
+# corto y se comprueba contra los vectores del NIST, pero un AES-GCM hecho en
+# casa es un riesgo de seguridad, no un ahorro de dependencia.
+aes-gcm = "0.10.3"
+hmac = "0.12.1"
+pbkdf2 = { version = "0.12.2", default-features = false, features = ["hmac"] }
+sha2 = "0.10.9"
+# Chats compartidos con personas (13-oct-2026): el par de claves P-256 de cada
+# aparato, ECDH para la clave de la conversacion y ECDSA SHA-256 para firmar
+# entradas y salidas, como `Llaves` de Android (`KeyPairGenerator("EC")`,
+# `KeyAgreement("ECDH")`, `Signature("SHA256withECDSA")`), con las claves en
+# X.509 (SPKI) y PKCS#8 DER. RustCrypto, nada hecho a mano.
+p256 = { version = "0.13.2", default-features = false, features = ["ecdh", "ecdsa", "pkcs8", "std"] }
+rand_core = { version = "0.6.4", features = ["getrandom"] }
+base64 = "0.22.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+# gzip: los lienzos y croquis del movil (`.excalidraw.gz`, `.croquis.gz`) y
+# lo acordado (`sincro/objetos/<resumen>.gz`). Ya estaba en el arbol por
+# `zip`; aqui solo el lector y el escritor, sin mas.
+flate2 = "1.1"
+# Juntar dos versiones de una leccion aprendida en vez de pisar una con la
+# otra (`disco::juntar_leccion`). Logica pura, sin mas dependencias.
+pixpin-lecciones = { path = "../pixpin-lecciones" }
+
+[features]
+# Un `Disco` con la carpeta `files` de Android, puerto directo de `Disco.kt`:
+# es el «movil» de las pruebas de sincronizar de verdad. No va en la app.
+simulador = []

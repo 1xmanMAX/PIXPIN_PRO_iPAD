@@ -1,0 +1,79 @@
+[package]
+name = "pixpin-ia"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# El nucleo del asistente es portable (Windows, Mac, iPad, iPhone, Linux):
+# instrucciones, catalogo de herramientas y su validacion, del JSON al
+# lienzo, el protocolo de OpenAI con llama-server por HTTP local y el
+# catalogo de modelos. Lo de Windows (bajar por HTTPS con WinHTTP, el
+# «trabajo» que mata a llama-server si PixPin muere, DPAPI para las claves)
+# va en `[target.'cfg(windows)'.dependencies]` y en `#[cfg(windows)]`.
+[dependencies]
+# Las fechas dichas y lo que se reconoce al escribir una tarea (sin dependencias).
+pixpin-frase = { path = "../pixpin-frase" }
+thiserror = "2.0.20"
+tracing = "0.1.44"
+# El protocolo con el modelo es JSON de punta a punta (peticiones al estilo
+# OpenAI, llamadas a herramientas, elementos de Excalidraw para el lienzo).
+serde_json = "1.0"
+# La huella de cada fichero bajado (modelo y motor). Ya estaba en el arbol
+# por pixpin-sincro y pdfsqueeze-core.
+sha2 = "0.10.9"
+# El motor (llama.cpp) llega en un .zip de su pagina de versiones; de el se
+# sacan solo los ficheros que hacen falta. Mismo crate y rasgos que
+# pixpin-docs, pixpin-hojas y pixpin-office.
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
+# Las piezas que el lienzo ya sabe hacer (grafica de funciones, ecuacion
+# compuesta, instrumento, tabla dibujada, biblioteca de figuras) se piden a
+# su motor y se escriben con su escritor de Excalidraw: un solo componente.
+# Es Rust puro (serde), sin ventanas.
+pixpin-motor2d = { path = "../pixpin-motor2d" }
+# Los tiradores del editor (`Tirador`), para escalar con la misma
+# operacion que el raton (`edicion::hacer`). Sin dependencias.
+pixpin-geom = { path = "../pixpin-geom" }
+# Leer la ecuacion en LaTeX o a mano (`formulas::leer`, el de las notas, el
+# mismo que el de Android): asi el lienzo entiende lo mismo que las notas.
+# En Windows viene de `pixpin-notas` (el editor con RichEdit, solo Windows);
+# aqui la parte pura vive en `pixpin-docs` (`formulas.rs`, copia exacta del
+# de `pixpin-notas`). Se llama `pixpin-notas` para que el codigo sea el
+# mismo que el de Windows (`pixpin_notas::formulas`).
+pixpin-notas = { package = "pixpin-docs", path = "../pixpin-docs" }
+# Leer el SVG de las ilustraciones (`svg.rs`). Ya esta en el arbol por
+# pixpin-bim; no carga DTD ni entidades (nada de bombas de XML).
+roxmltree = "0.20"
+
+[target.'cfg(windows)'.dependencies]
+# Bajar por HTTPS con WinHTTP (lo que ya trae Windows): se reutiliza el de la
+# voz, que ya sigue redirecciones, escribe en `.parte` y se deja cancelar.
+# En Apple baja URLSession desde Swift (ver `descarga`).
+pixpin-voz = { path = "../../por-adaptar/pixpin-voz" }
+# El proceso del modelo va dentro de un «trabajo» de Windows que lo mata si
+# PixPin muere, y se lanza sin ventana.
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    # Las claves de las API de la nube, cifradas con DPAPI (nube/claves.rs).
+    "Win32_Security_Cryptography",
+    # Hablar con Claude y DeepSeek por HTTPS con lo que ya trae Windows
+    # (nube/http.rs), sin un cliente HTTP ni TLS propios en el ejecutable.
+    "Win32_Networking_WinHttp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+# Solo en pruebas: el PDF de vectores de lo dibujado en el banco y el PNG de
+# las tiras. En Windows el PDF se pasa a pixeles con Windows.Data.Pdf
+# (`pixpin-shell` para el COM del hilo); aqui no hay quien lo pinte (en Apple
+# lo hace PDFKit desde Swift), asi que el banco no guarda las imagenes.
+pixpin-pdf = { path = "../pixpin-pdf" }
+pixpin-codec = { path = "../pixpin-codec" }
+# Solo en pruebas: leer las imagenes de muestra del banco y del calcado.
+image = { version = "0.25.9", default-features = false, features = ["png", "jpeg"] }
+# El OCR de Windows (`pixpin-ocr`) que la app pega al mensaje de la foto de
+# un problema no esta en este espacio de trabajo: el banco se lo salta (en
+# Apple el OCR es Vision, desde Swift).

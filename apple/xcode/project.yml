@@ -1,0 +1,76 @@
+# PixPin para iPad, como proyecto de Xcode (XcodeGen).
+#
+# El `.xcodeproj` no se versiona: lo genera `xcodegen generate` aqui (o
+# `herramientas/app.sh`). Se compila sin firmar; para ponerlo en un iPad se
+# firma despues (Xcode con tu Apple ID, o `herramientas/app.sh ipa` y una
+# herramienta de instalar como AltStore/Sideloadly).
+#
+# - `AppPixPin`: la app (iPadOS 18+), con `PixPinKit` del paquete local
+#   `../app` y el nucleo de Rust `PixPinCore` (`../PixPinCore`).
+# - `PixPinKitTests`: las pruebas, en el simulador del iPad.
+name: PixPin
+options:
+  bundleIdPrefix: io.github.1xmanmax
+  developmentLanguage: es
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  PixPinIPad:
+    path: ../app
+  PixPinCore:
+    path: ../PixPinCore
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    # Solo iPad (2). El iPhone (1) vendra despues con su interfaz compacta.
+    TARGETED_DEVICE_FAMILY: "2"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+    SWIFT_COMPILATION_MODE: wholemodule
+    # El xcframework solo trae arm64 (iPad y simulador de Apple Silicon).
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+targets:
+  AppPixPin:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../app/Sources/PixPin
+      - path: App
+    dependencies:
+      - package: PixPinIPad
+        product: PixPinKit
+      - package: PixPinCore
+        product: PixPinCore
+    settings:
+      base:
+        PRODUCT_NAME: PixPin
+        PRODUCT_MODULE_NAME: PixPinIPadApp
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin
+        INFOPLIST_FILE: Soporte/App-Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    scheme:
+      testTargets:
+        - PixPinKitTests
+  PixPinKitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../app/Tests/PixPinKitTests
+    dependencies:
+      - target: AppPixPin
+      - package: PixPinIPad
+        product: PixPinKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin.pruebas
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PixPin.app/PixPin"
+        BUNDLE_LOADER: "$(TEST_HOST)"
