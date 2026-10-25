@@ -37,7 +37,7 @@ public final class CapturadorIPad: ObservableObject {
 
     /// De donde sale la captura.
     public enum Fuente: String, CaseIterable, Identifiable, Sendable {
-        case camara, escaner, fotos, pegar, app, appConRetardo, grabar
+        case camara, escaner, fotos, pegar, app, appConRetardo, larga, anotar, grabar, gif
 
         public var id: String { rawValue }
 
@@ -49,7 +49,10 @@ public final class CapturadorIPad: ObservableObject {
             case .pegar: "Pegar"
             case .app: "Capturar PixPin"
             case .appConRetardo: "Capturar PixPin en 3 s"
+            case .larga: "Captura larga (con scroll)"
+            case .anotar: "Anotar la pantalla"
             case .grabar: "Grabar PixPin"
+            case .gif: "Grabar GIF de PixPin"
             }
         }
 
@@ -61,7 +64,10 @@ public final class CapturadorIPad: ObservableObject {
             case .pegar: "doc.on.clipboard"
             case .app: "rectangle.dashed"
             case .appConRetardo: "timer"
+            case .larga: "arrow.up.and.down.text.horizontal"
+            case .anotar: "pencil.tip.crop.circle"
             case .grabar: "record.circle"
+            case .gif: "livephoto"
             }
         }
 
@@ -71,9 +77,9 @@ public final class CapturadorIPad: ObservableObject {
             switch self {
             case .camara: UIImagePickerController.isSourceTypeAvailable(.camera)
             case .escaner: VNDocumentCameraViewController.isSupported
-            case .fotos, .app, .appConRetardo: true
+            case .fotos, .app, .appConRetardo, .larga, .anotar: true
             case .pegar: UIPasteboard.general.hasImages
-            case .grabar: GrabadorIPad.compartido.disponible
+            case .grabar, .gif: GrabadorIPad.compartido.disponible
             }
         }
     }
@@ -154,8 +160,14 @@ public final class CapturadorIPad: ObservableObject {
             capturarApp()
         case .appConRetardo:
             capturarAppConRetardo()
+        case .larga:
+            CapturaLargaIPad.capturar()
+        case .anotar:
+            AnotadorPantallaIPad.empezar()
         case .grabar:
             GrabadorIPad.compartido.alternar()
+        case .gif:
+            GrabadorIPad.compartido.alternarGif()
         }
     }
 
@@ -420,7 +432,7 @@ public struct BotonCapturar: View {
                 Button {
                     // Que se cierre el menu antes de fotografiar la app.
                     Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(f == .app ? 350 : 50))
+                        try? await Task.sleep(for: .milliseconds([.app, .larga, .anotar].contains(f) ? 350 : 50))
                         CapturadorIPad.compartido.capturar(f)
                     }
                 } label: {

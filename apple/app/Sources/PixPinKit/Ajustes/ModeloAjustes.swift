@@ -22,6 +22,9 @@ public enum Tema: String, CaseIterable, Identifiable, Sendable {
     case sistema
     case claro
     case oscuro
+    /// El del movil: noche y el cielo del sistema solar detras de la lista
+    /// de proyectos (`Sistema/CieloCosmos.swift`).
+    case cosmos
 
     public var id: String { rawValue }
 
@@ -30,6 +33,7 @@ public enum Tema: String, CaseIterable, Identifiable, Sendable {
         case .sistema: return "Como el iPad"
         case .claro: return "Claro"
         case .oscuro: return "Oscuro"
+        case .cosmos: return "Cosmos"
         }
     }
 
@@ -48,7 +52,7 @@ public enum Tema: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .sistema: return nil
         case .claro: return .light
-        case .oscuro: return .dark
+        case .oscuro, .cosmos: return .dark
         }
     }
 
@@ -57,7 +61,7 @@ public enum Tema: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .sistema: return .unspecified
         case .claro: return .light
-        case .oscuro: return .dark
+        case .oscuro, .cosmos: return .dark
         }
     }
 

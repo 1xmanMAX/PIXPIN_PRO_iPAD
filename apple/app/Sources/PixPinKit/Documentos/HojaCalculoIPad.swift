@@ -492,10 +492,7 @@ struct VistaHojaIPad: View {
                     .padding(.trailing, 12)
             }
             .overlay(alignment: .bottom) {
-                if tinta.modelo.poniendoMarca {
-                    TiraEmojisMarca { e in tinta.ponerMarca(e) } cerrar: { tinta.modelo.poniendoMarca = false }
-                        .padding(.bottom, 24)
-                }
+                TiraDeMarcaDeHoja(tinta: tinta, modelo: tinta.modelo).padding(.bottom, 24)
             }
             if modelo.nombres.count > 1 { pestanas }
         }

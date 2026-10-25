@@ -215,6 +215,9 @@ public enum LienzoDelIPad {
     public static func activar() {
         guard !activado else { return }
         activado = true
+        // El motor mide el texto con las letras de verdad (Core Text), no a
+        // ojo: la caja de un texto es la de lo escrito.
+        instalarMedidorDelLienzo(medidor: MedidorLetrasLienzo())
         OjosDelAsistente.pintor = { lienzo, ctx, limites, imagen in
             PintorLienzo(lienzo: lienzo, imagen: imagen).pintar(en: ctx, limites: limites)
         }

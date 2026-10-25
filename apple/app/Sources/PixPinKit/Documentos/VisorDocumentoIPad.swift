@@ -85,7 +85,7 @@ public struct VisorDocumentoIPad: View {
         case .html:
             VisorHtmlIPad(url: url, titulo: titulo, nucleo: almacen.nucleo)
         case .texto:
-            TextoSueltoIPad(url: url, titulo: titulo)
+            TextoSueltoIPad(url: url, titulo: titulo, nucleo: almacen.nucleo)
         case .vistaRapida:
             VistaRapida(url: url)
         }
@@ -97,13 +97,14 @@ public struct VisorDocumentoIPad: View {
 private struct TextoSueltoIPad: View {
     let url: URL
     let titulo: String
+    let nucleo: Nucleo
     @State private var texto: String?
     @State private var fallo = false
 
     var body: some View {
         Group {
             if let texto {
-                VisorMarkdownIPad(url: url, titulo: titulo, texto: texto)
+                VisorMarkdownIPad(url: url, titulo: titulo, texto: texto, nucleo: nucleo)
             } else if fallo {
                 VistaRapida(url: url)
             } else {

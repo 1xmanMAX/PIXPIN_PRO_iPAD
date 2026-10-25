@@ -84,9 +84,9 @@ public final class CalendarioDelIPad: ObservableObject {
         let hasta = ahora.addingTimeInterval(Self.horas * 3600)
         let predicado = almacen.predicateForEvents(withStart: ahora, end: hasta, calendars: nil)
         let eventos = almacen.events(matching: predicado).filter { !$0.isAllDay }
-        let lista = eventos.compactMap { e -> AvisoCalendario? in
+        let lista = eventos.compactMap { e -> EventoDelCalendario? in
             guard let inicio = e.startDate else { return nil }
-            return AvisoCalendario(id: e.calendarItemIdentifier, titulo: e.title ?? "", inicio: inicio,
+            return EventoDelCalendario(id: e.calendarItemIdentifier, titulo: e.title ?? "", inicio: inicio,
                                    fin: e.endDate, lugar: e.location)
         }
         let hechos = CalendarioDelIPad.avisos(lista, antelacion: antelacion, ahora: ahora, evitando: evitando)
@@ -101,22 +101,13 @@ public final class CalendarioDelIPad: ObservableObject {
 
     // MARK: Lo puro (se prueba solo)
 
-    /// Un evento, lo que importa de el.
-    struct AvisoCalendario: Equatable {
-        var id: String
-        var titulo: String
-        var inicio: Date
-        var fin: Date?
-        var lugar: String?
-    }
-
     /// El prefijo de los ids (el vigia los trata como los del horario).
     nonisolated static let prefijo = "horario:ical:"
 
     /// Los avisos de `eventos`: `antelacion` minutos antes de empezar, los
     /// que aun no pasaron, sin los que ya trae `evitando` (mismo nombre y
     /// misma hora de empezar), por hora.
-    nonisolated static func avisos(_ eventos: [AvisoCalendario], antelacion: UInt32, ahora: Date,
+    nonisolated static func avisos(_ eventos: [EventoDelCalendario], antelacion: UInt32, ahora: Date,
                                    evitando: [AvisoHorario], calendario: Calendar = .current) -> [AvisoHorario] {
         let antes = TimeInterval(antelacion) * 60
         func clave(_ s: String) -> String {
@@ -142,7 +133,7 @@ public final class CalendarioDelIPad: ObservableObject {
     }
 
     /// «10:00–11:30 · Aula 3»: la hora y el lugar.
-    nonisolated static func detalle(_ e: AvisoCalendario, calendario: Calendar = .current) -> String {
+    nonisolated static func detalle(_ e: EventoDelCalendario, calendario: Calendar = .current) -> String {
         func hora(_ d: Date) -> String {
             let c = calendario.dateComponents([.hour, .minute], from: d)
             return String(format: "%d:%02d", c.hour ?? 0, c.minute ?? 0)
@@ -152,4 +143,14 @@ public final class CalendarioDelIPad: ObservableObject {
         if let l = e.lugar?.trimmingCharacters(in: .whitespacesAndNewlines), !l.isEmpty { t += " · " + l }
         return t
     }
+}
+
+/// Un evento del calendario del iPad, lo que importa de el (fuera de la
+/// clase: se usa en lo puro, sin actor).
+struct EventoDelCalendario: Equatable, Sendable {
+    var id: String
+    var titulo: String
+    var inicio: Date
+    var fin: Date?
+    var lugar: String?
 }

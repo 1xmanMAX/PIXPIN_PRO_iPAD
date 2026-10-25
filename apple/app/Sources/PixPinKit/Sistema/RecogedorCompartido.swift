@@ -107,6 +107,14 @@ public final class RecogedorCompartido {
 
     /// Una entrega, a su proyecto (o a «Mensajes guardados» si ya no esta).
     private func meter(_ e: EntregaCompartida, de carpeta: URL, en almacen: Almacen, resumen: inout Resumen) async {
+        // La extension del navegador: un pedido (`pixpinmax://`) sin
+        // ficheros. Se hace como un enlace de fuera (lo que no es inofensivo
+        // pregunta) y la entrega se va.
+        if let enlace = e.enlace, e.ficheros.isEmpty {
+            BuzonCompartido.quitar(carpeta)
+            if let url = URL(string: enlace) { AbrirDesdeFuera.alEnlace?(url, almacen) }
+            return
+        }
         var chat = e.chat
         var nombre = e.nombreDelChat
         if !almacen.chats.contains(where: { $0.id == chat }) {

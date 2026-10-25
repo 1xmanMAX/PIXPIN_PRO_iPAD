@@ -212,6 +212,9 @@ final class ModeloReflujoIPad: ObservableObject {
     @Published var consulta = ""
     @Published var encontradas = 0
     @Published var actual: Int?
+    /// Escribiendo el nombre nuevo (F2, «Cambiar el nombre…»).
+    @Published var renombrando = false
+    @Published var nombreNuevo = ""
 
     var anotando: Bool { herramienta != "leer" }
 
@@ -301,9 +304,15 @@ final class GestoTintaReflujoIPad: UIGestureRecognizer {
 /// **Un Word o un libro abierto en la lectura seguida.**
 @MainActor
 final class ControladorReflujoIPad: NSObject, ObservableObject {
-    let url: URL
+    /// Cambia si se renombra un documento suelto (se mueve con sus hermanos).
+    private(set) var url: URL
     let nucleo: Nucleo
     let modelo = ModeloReflujoIPad()
+    /// Los marcos numerados para imprimir (`MarcosDocIPad.swift`), en las
+    /// unidades del lector (las de la tinta).
+    let marcos: MarcosDoc
+    private var inicioMarco: CGPoint?
+    private var finMarco: CGPoint?
     let avance = AvanceLectorIPad()
     let desplazar = DesplazarReflujoIPad()
     private let contenido = UIView()
@@ -354,6 +363,7 @@ final class ControladorReflujoIPad: NSObject, ObservableObject {
     init(url: URL, nucleo: Nucleo, titulo: String) {
         self.url = url
         self.nucleo = nucleo
+        marcos = MarcosDoc(documento: url, nucleo: nucleo)
         super.init()
         modelo.nombre = titulo
         montar()
@@ -601,7 +611,26 @@ final class ControladorReflujoIPad: NSObject, ObservableObject {
         let enUnidades = CGRect(x: (sucio.minX + o.x) / z + izq, y: (sucio.minY + o.y) / z,
                                 width: sucio.width / z, height: sucio.height / z)
         pintar(en: ctx, sucio: enUnidades, linea: 1 / z, conTinta: true, marcar: true)
+        pintarMarcos(en: ctx, k: z)
         ctx.restoreGState()
+    }
+
+    /// Los marcos (y el que se arrastra), en unidades del lector.
+    private func pintarMarcos(en ctx: CGContext, k: CGFloat) {
+        for (i, m) in marcos.lista.enumerated() {
+            PintarMarcos.pintar(m.rect, numero: i + 1, en: ctx, k: k)
+        }
+        if let a = inicioMarco, let b = finMarco {
+            let r = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+            ctx.saveGState()
+            ctx.setStrokeColor(PintarMarcos.azul.cgColor)
+            ctx.setLineWidth(1.2 / max(k, 0.0001))
+            ctx.setLineDash(phase: 0, lengths: [5 / max(k, 0.0001), 3 / max(k, 0.0001)])
+            ctx.stroke(r)
+            ctx.setFillColor(PintarMarcos.azul.withAlphaComponent(0.08).cgColor)
+            ctx.fill(r)
+            ctx.restoreGState()
+        }
     }
 
     /// Pinta, en unidades del lector, lo que cae en `sucio`: el papel, cada
@@ -919,16 +948,22 @@ final class ControladorReflujoIPad: NSObject, ObservableObject {
 
     private func actualizarGestos() {
         var tipos: [UITouch.TouchType] = [.pencil]
-        if modelo.anotando {
+        if marcos.activo {
+            // Poniendo marcos: el lapiz, el dedo y el raton dibujan el marco
+            // (se desplaza con dos dedos).
+            tipos += [.direct, .indirectPointer]
+        } else if modelo.anotando {
             tipos.append(.indirectPointer)
             if modelo.conDedo { tipos.append(.direct) }
         }
         gesto.allowedTouchTypes = tipos.map { NSNumber(value: $0.rawValue) }
-        desplazar.panGestureRecognizer.minimumNumberOfTouches = modelo.anotando && modelo.conDedo ? 2 : 1
+        desplazar.panGestureRecognizer.minimumNumberOfTouches =
+            marcos.activo || (modelo.anotando && modelo.conDedo) ? 2 : 1
     }
 
     private func aceptar(_ t: UITouch) -> Bool {
         guard maqueta != nil else { return false }
+        if marcos.activo { return true }
         switch t.type {
         case .pencil:
             if !modelo.anotando { elegir(ultimaHerramienta) }
@@ -941,6 +976,10 @@ final class ControladorReflujoIPad: NSObject, ObservableObject {
     }
 
     private func trazo(_ fase: FasePuntero, _ toques: [UITouch]) {
+        if marcos.activo || inicioMarco != nil {
+            if let t = toques.last { trazoDeMarco(fase, t) }
+            return
+        }
         guard let ed = editor else { return }
         trazando = fase == .pulsar || fase == .mover
         for t in toques {
@@ -1087,6 +1126,148 @@ final class ControladorReflujoIPad: NSObject, ObservableObject {
             self.ponerEditor(ed)
             let alDia = self.alDia
             cola.async { alDia.apuntar(0, visto) }
+        }
+    }
+
+    // MARK: Marcos para imprimir
+
+    private func trazoDeMarco(_ fase: FasePuntero, _ t: UITouch) {
+        let p = t.preciseLocation(in: contenido)
+        let u = CGPoint(x: p.x + izq, y: p.y)
+        switch fase {
+        case .pulsar:
+            inicioMarco = u
+            finMarco = u
+        case .mover:
+            finMarco = u
+        case .soltar:
+            if let a = inicioMarco, abs(a.x - u.x) > 8, abs(a.y - u.y) > 8 {
+                marcos.poner(CGRect(x: min(a.x, u.x), y: min(a.y, u.y), width: abs(a.x - u.x),
+                                    height: abs(a.y - u.y)), parte: 0)
+            }
+            inicioMarco = nil
+            finMarco = nil
+        default:
+            inicioMarco = nil
+            finMarco = nil
+        }
+        pagina.setNeedsDisplay()
+    }
+
+    /// El boton del marco del riel (o la I): entra y sale de poner marcos.
+    func alternarMarcos() {
+        if modelo.anotando { elegir("leer") }
+        modelo.poniendoMarca = false
+        marcos.activo.toggle()
+        actualizarGestos()
+        pagina.setNeedsDisplay()
+    }
+
+    /// La ficha de un marco: a el.
+    func irAMarco(_ i: Int) {
+        guard i < marcos.lista.count else { return }
+        irA(y: max(marcos.lista[i].rect.minY - 20, 0))
+    }
+
+    func quitarUltimoMarco() {
+        if marcos.quitarUltimo() { pagina.setNeedsDisplay() }
+    }
+
+    /// **Los marcos en grupo** (⌘P con marcos): cada uno en su hoja, con lo
+    /// anotado, en claro.
+    func pdfDeMarcos() -> Data? {
+        guard maqueta != nil, !marcos.lista.isEmpty else { return nil }
+        let guardados = (colores, lineas, adaptada)
+        colores = ColoresReflujo.de(TonoHojas())
+        lineas = [:]
+        adaptada = nil
+        defer {
+            (colores, lineas, adaptada) = guardados
+            pagina.setNeedsDisplay()
+        }
+        let datos = NSMutableData()
+        guard let consumidor = CGDataConsumer(data: datos as CFMutableData),
+              let ctx = CGContext(consumer: consumidor, mediaBox: nil, nil) else { return nil }
+        for m in marcos.lista {
+            let r = m.rect
+            guard r.width > 1, r.height > 1 else { continue }
+            // Una hoja A4 a lo ancho del marco, con la Y hacia abajo.
+            let k = 595 / r.width
+            var caja = CGRect(x: 0, y: 0, width: 595, height: r.height * k)
+            ctx.beginPage(mediaBox: &caja)
+            ctx.saveGState()
+            ctx.translateBy(x: 0, y: caja.height)
+            ctx.scaleBy(x: k, y: -k)
+            ctx.translateBy(x: -r.minX, y: -r.minY)
+            ctx.clip(to: r)
+            UIGraphicsPushContext(ctx)
+            pintar(en: ctx, sucio: r, linea: 1 / k, conTinta: true, marcar: false)
+            UIGraphicsPopContext()
+            ctx.restoreGState()
+            ctx.endPage()
+        }
+        ctx.closePDF()
+        return datos as Data
+    }
+
+    func imprimirMarcos() {
+        guard let d = pdfDeMarcos() else { return }
+        SalidaDocumentoIPad.imprimir(d, titulo: (modelo.nombre as NSString).deletingPathExtension, desde: desplazar)
+    }
+
+    // MARK: Cambiar el nombre (F2)
+
+    func empezarRenombrar() {
+        modelo.nombreNuevo = (modelo.nombre as NSString).deletingPathExtension
+        modelo.renombrando = true
+    }
+
+    /// La tinta y lo que se recuerda se guardan antes: un documento suelto se
+    /// mueve con sus hermanos y todo va con el.
+    func confirmarNombre(_ escrito: String) {
+        modelo.renombrando = false
+        guardadoPendiente?.cancel()
+        guardarLectura()
+        let ed = editor, ruta = url.path, alDia = self.alDia, nucleo = self.nucleo, cola = colaGuardar
+        Task {
+            let r: DocumentoRenombrado? = await withCheckedContinuation { cont in
+                cola.async {
+                    if let ed { _ = ControladorReflujoIPad.guardarTinta(ed, ruta: ruta, alDia: alDia) }
+                    cont.resume(returning: try? nucleo.renombrarDocumento(documento: ruta, escrito: escrito))
+                }
+            }
+            self.renombrado(r)
+        }
+    }
+
+    private func renombrado(_ r: DocumentoRenombrado?) {
+        let sinExtension = { (n: String) in (n as NSString).deletingPathExtension }
+        switch r {
+        case .sinCambios:
+            return
+        case let .enElChat(nombre):
+            modelo.nombre = nombre
+            avisar("Ahora se llama «\(sinExtension(nombre))»")
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+        case let .enDisco(nombre, ruta):
+            url = URL(fileURLWithPath: ruta)
+            modelo.nombre = nombre
+            // La tinta abierta era de la ruta de antes: se vuelve a abrir.
+            let habia = editor != nil
+            editor = nil
+            leido = nil
+            adaptada = nil
+            let alDia = self.alDia
+            colaGuardar.async { alDia.olvidar() }
+            marcos.mudar(a: url, nucleo: nucleo)
+            if habia { abrirTinta(siHay: true) }
+            pagina.setNeedsDisplay()
+            avisar("Ahora se llama «\(sinExtension(nombre))»")
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+        case let .yaExiste(nombre):
+            avisar("Ya hay un archivo que se llama «\(nombre)»")
+        case .noSePuede, nil:
+            avisar("No se pudo cambiar el nombre")
         }
     }
 
@@ -1316,6 +1497,10 @@ final class ControladorReflujoIPad: NSObject, ObservableObject {
     }
 
     func imprimir() {
+        if !marcos.lista.isEmpty {
+            imprimirMarcos()
+            return
+        }
         guard let hecho = pdf(), let d = try? Data(contentsOf: hecho) else { return }
         SalidaDocumentoIPad.olvidar(hecho)
         SalidaDocumentoIPad.imprimir(d, titulo: (modelo.nombre as NSString).deletingPathExtension, desde: desplazar)
@@ -1403,7 +1588,8 @@ struct VisorReflujoIPad: View {
     }
 
     var body: some View {
-        CuerpoReflujoIPad(c: c, modelo: c.modelo, avance: c.avance, voz: LeerEnVoz.compartida, alPaginar: alPaginar)
+        CuerpoReflujoIPad(c: c, modelo: c.modelo, avance: c.avance, voz: LeerEnVoz.compartida, marcos: c.marcos,
+                          alPaginar: alPaginar)
     }
 }
 
@@ -1412,6 +1598,7 @@ private struct CuerpoReflujoIPad: View {
     @ObservedObject var modelo: ModeloReflujoIPad
     @ObservedObject var avance: AvanceLectorIPad
     @ObservedObject var voz: LeerEnVoz
+    @ObservedObject var marcos: MarcosDoc
     var alPaginar: (() -> Void)?
     @ObservedObject private var noche = ModoNoche.compartido
     @FocusState private var enBuscar: Bool
@@ -1448,6 +1635,11 @@ private struct CuerpoReflujoIPad: View {
                 Spacer()
                 BarraAvanceIPad(avance: avance, cambiar: { c.cambiarVelocidad($0) }, cerrar: { c.alternarAvance() })
                 BarraEscuchar(voz: voz, clave: { c.url.path })
+                HStack {
+                    FichasDeMarcos(marcos: marcos, ir: { c.irAMarco($0) }, imprimir: { c.imprimirMarcos() })
+                    Spacer()
+                }
+                .padding(.leading, 16)
                 if modelo.poniendoMarca {
                     TiraEmojisMarca { e in c.ponerMarca(emoji: e) } cerrar: { modelo.poniendoMarca = false }
                 }
@@ -1466,6 +1658,12 @@ private struct CuerpoReflujoIPad: View {
         .onAppear { c.abrir() }
         .onDisappear { c.cerrar() }
         .onChange(of: noche.activo) { _, _ in c.aplicarTono() }
+        .onChange(of: marcos.lista.count) { _, _ in c.pagina.setNeedsDisplay() }
+        .alert("Cambiar el nombre", isPresented: $modelo.renombrando) {
+            TextField("Nombre", text: $modelo.nombreNuevo)
+            Button("Guardar") { c.confirmarNombre(modelo.nombreNuevo) }
+            Button("Cancelar", role: .cancel) {}
+        }
         .sheet(isPresented: $modelo.viendoIndice) {
             HojaIndiceIPad(entradas: c.entradasDelIndice, actual: c.bloqueDeArriba, rotulo: nil,
                            ir: { c.ir(aBloque: UInt32($0.destino)) })
@@ -1514,7 +1712,10 @@ private struct CuerpoReflujoIPad: View {
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .help("Compartir con lo anotado (⇧⌘S)")
         Menu {
-            Button { c.imprimir() } label: { Label("Imprimir… (⌘P)", systemImage: "printer") }
+            Button { c.imprimir() } label: {
+                Label(marcos.lista.isEmpty ? "Imprimir… (⌘P)" : "Imprimir los marcos… (⌘P)", systemImage: "printer")
+            }
+            Button { c.empezarRenombrar() } label: { Label("Cambiar el nombre… (⇧⌘R)", systemImage: "pencil") }
             if let alPaginar {
                 Button(action: alPaginar) { Label("Ver paginado (como Word)", systemImage: "doc.richtext") }
             }
@@ -1533,6 +1734,8 @@ private struct CuerpoReflujoIPad: View {
             .help("Más")
             .background {
                 Button("") { c.imprimir() }.keyboardShortcut("p", modifiers: .command).opacity(0)
+                    .accessibilityHidden(true)
+                Button("") { c.empezarRenombrar() }.keyboardShortcut("r", modifiers: [.command, .shift]).opacity(0)
                     .accessibilityHidden(true)
             }
     }
@@ -1571,7 +1774,13 @@ private struct CuerpoReflujoIPad: View {
                     modelo.poniendoMarca.toggle()
                 }
                 BotonRielIPad(simbolo: "pencil.tip", ayuda: modelo.anotando ? "Dejar de anotar" : "Anotar",
-                              encendido: modelo.anotando) { c.alternarAnotar() }
+                              encendido: modelo.anotando) {
+                    if marcos.activo { c.alternarMarcos() }
+                    c.alternarAnotar()
+                }
+                BotonRielIPad(simbolo: "rectangle.dashed",
+                              ayuda: marcos.activo ? "Dejar de poner marcos" : "Marcos para imprimir",
+                              encendido: marcos.activo) { c.alternarMarcos() }
             }
             .padding(3)
             .background(RoundedRectangle(cornerRadius: 9).fill(.regularMaterial))

@@ -37,7 +37,9 @@ extension HacerPedidos {
         let c = CapturadorIPad.compartido
         switch modo ?? "zona" {
         case "gif":
-            avisar("En el iPad, para grabar la pantalla usa «Grabación de pantalla» del Centro de control; luego compártela con PixPin.")
+            // De otras apps no se puede; de PixPin si (lo de dentro de la app).
+            avisar("Grabo un GIF de PixPin: toca «Parar el GIF» al acabar. Para otras apps, la grabación de pantalla del Centro de control.")
+            c.capturar(.gif)
         case "retardo":
             // Lo que tiene sentido esperar en el iPad: la propia app con un
             // menu abierto.
@@ -47,10 +49,11 @@ extension HacerPedidos {
             }
         case "repetir":
             c.capturar(.app)
-        case "scroll", "en_vivo":
-            avisar(modo == "scroll"
-                ? "En el iPad no hay captura con desplazamiento de otras apps: elige de dónde capturar."
-                : "En el iPad no hay pin en vivo de otras apps: elige de dónde capturar.")
+        case "scroll":
+            // Lo que tenga rollo en PixPin (el chat, el timeline), entero.
+            c.capturar(.larga)
+        case "en_vivo":
+            avisar("En el iPad no hay pin en vivo de otras apps: elige de dónde capturar.")
             c.empezar()
         default:
             c.empezar()

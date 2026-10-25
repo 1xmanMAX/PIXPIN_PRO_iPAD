@@ -9,7 +9,11 @@
 #   `../app` y el nucleo de Rust `PixPinCore` (`../PixPinCore`).
 # - `CompartirPixPin`: la extension de Compartir (mandar fotos, PDF,
 #   enlaces, texto y ficheros a un proyecto desde cualquier app);
-# - `WidgetsPixPin`: los widgets (ultimas capturas, tareas de hoy);
+# - `WidgetsPixPin`: los widgets (ultimas capturas, tareas de hoy) y los
+#   controles del Centro de control (iPadOS 18);
+# - `NavegadorPixPin`: la extension de Safari (lo seleccionado a tareas,
+#   notas, chat...; el enlace o la foto de la pagina al chat), que deja lo
+#   pedido en el buzon;
 # - `PixPinKitTests`: las pruebas, en el simulador del iPad.
 #
 # Las extensiones no llevan PixPinKit ni el nucleo: hablan con la app por el
@@ -61,6 +65,8 @@ targets:
         embed: true
       - target: WidgetsPixPin
         embed: true
+      - target: NavegadorPixPin
+        embed: true
     settings:
       base:
         PRODUCT_NAME: PixPin
@@ -105,6 +111,25 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin.widgets
         INFOPLIST_FILE: Soporte/Widgets-Info.plist
         CODE_SIGN_ENTITLEMENTS: Soporte/Widgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+  NavegadorPixPin:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Navegador/SafariWebExtensionHandler.swift
+      # El manifiesto, los scripts, el menu y el icono, sueltos en la raiz
+      # del bundle (donde Safari busca `manifest.json`).
+      - path: Navegador/Recursos
+        buildPhase: resources
+      - path: ../app/Sources/PixPinKit/Sistema/BuzonCompartido.swift
+    settings:
+      base:
+        PRODUCT_NAME: NavegadorPixPin
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin.navegador
+        INFOPLIST_FILE: Soporte/Navegador-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Soporte/Navegador.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"

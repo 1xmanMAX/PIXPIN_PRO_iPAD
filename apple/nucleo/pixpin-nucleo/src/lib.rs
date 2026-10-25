@@ -91,6 +91,8 @@ pub mod lienzo_suelto;
 pub mod letras_lienzo;
 // Las palabras magicas de Pinear (iPad, 25-oct; `pixpin_pin::magia`).
 pub mod magia;
+// Los marcadores del lienzo y su riel (iPad, 25-oct).
+pub mod marcas_lienzo;
 // Fusionar paginas del PDF del proyecto en un lienzo (iPad, 25-oct).
 pub mod fusionar_paginas;
 // La zona al chat como sublienzo y el salto por su enlace (iPad, 25-oct).

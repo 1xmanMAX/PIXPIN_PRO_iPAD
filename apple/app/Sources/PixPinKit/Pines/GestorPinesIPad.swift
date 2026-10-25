@@ -78,6 +78,13 @@ final class PinIPad: ObservableObject, Identifiable {
     weak var pip: AVPictureInPictureController?
     /// Las paginas de un pin de PDF (nil si no es un PDF).
     @Published private(set) var paginas: PaginasPdfPin?
+    /// El reproductor flotante: su fila de audios y por cual va (desde 0).
+    @Published var pistas: [URL] = []
+    @Published var pistaActual = 0
+    /// Se va solo al acabar el ultimo audio (el reproductor flotante).
+    var cierraAlAcabar = false
+    /// Empieza a sonar en cuanto se ve.
+    var sonarAlAbrir = false
     /// El PDF abierto, para pasar de pagina sin volver a leerlo.
     var documentoPdf: PDFDocument?
 
@@ -370,6 +377,36 @@ public final class GestorPinesIPad: ObservableObject {
         return true
     }
 
+    /// El pin del reproductor flotante (uno solo).
+    private weak var pinReproductor: PinIPad?
+
+    /// **El reproductor flotante** (pedido «reproducir»,
+    /// `reproductor_flotante.rs` de Windows): uno solo; si ya suena, un
+    /// pedido nuevo le cambia la fila entera. Varios audios suenan en fila
+    /// en el mismo pin, y el pin se va al acabar el ultimo.
+    public func reproducir(_ urls: [URL]) {
+        let pistas = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard let primera = pistas.first else { return avisarFalloPin() }
+        let items = pistas.map { AVPlayerItem(url: $0) }
+        if let pin = pinReproductor, !pin.cerrado, case let .video(r, _, true) = pin.contenido,
+           let cola = r as? AVQueuePlayer {
+            cola.pause()
+            cola.removeAllItems()
+            for i in items { cola.insert(i, after: nil) }
+            pin.pistas = pistas
+            pin.pistaActual = 0
+            cola.play()
+            return
+        }
+        let cola = AVQueuePlayer(items: items)
+        let pin = abrir(.video(cola, fichero: primera, soloAudio: true), tamano: CGSize(width: 360, height: 112),
+                        para: .nada)
+        pin.pistas = pistas
+        pin.cierraAlAcabar = true
+        pin.sonarAlAbrir = true
+        pinReproductor = pin
+    }
+
     /// Pinea un PDF por su pagina `pagina` (desde 0) con todas las demas
     /// detras: se pasan desde la barra del pin. `false` si no se pudo leer.
     @discardableResult
@@ -443,7 +480,19 @@ public final class GestorPinesIPad: ObservableObject {
         }
         if let url = tablero.url, url.isFileURL, pinear(url: url) { return true }
         if let texto = tablero.string, !texto.isEmpty {
-            pinearNota(texto: texto)
+            // La palabra magica sola saca su herramienta (`PalabraMagicaPin`).
+            switch PalabraMagicaPin.detectar(texto) {
+            case let .miniapp(m)?:
+                pinearMiniapp(m)
+            case .lienzo?:
+                if let g = almacenApp?.chats.first(where: \.esGuardados)?.id {
+                    Navegacion.compartida.abrir(.lienzo(chat: g, mensaje: nil, foto: nil))
+                } else {
+                    pinearNota(texto: texto)
+                }
+            case nil:
+                pinearNota(texto: texto)
+            }
             return true
         }
         return false

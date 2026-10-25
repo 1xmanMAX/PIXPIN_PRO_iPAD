@@ -73,6 +73,15 @@ struct VistaVideoPin: View {
     private var barraAudio: some View {
         VStack(spacing: 4) {
             Spacer(minLength: 26)
+            if pin.pistas.count > 1 {
+                // La fila del reproductor flotante: cual suena y de cuantas.
+                Text(ReglasAudioPin.fila(pin.pistaActual, de: pin.pistas.count,
+                                         nombre: pin.pistas[min(pin.pistaActual, pin.pistas.count - 1)].lastPathComponent))
+                    .font(.caption2)
+                    .foregroundStyle(Paleta.v2.gris)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Slider(value: $tiempo, in: 0 ... max(duracion, 0.1), onEditingChanged: { editando in
                 buscando = editando
                 if !editando { reproductor.seek(to: CMTime(seconds: tiempo, preferredTimescale: 600)) }
@@ -112,8 +121,36 @@ struct VistaVideoPin: View {
         .onReceive(reloj) { _ in leerTiempo() }
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { aviso in
             guard (aviso.object as? AVPlayerItem) === reproductor.currentItem else { return }
+            if let cola = reproductor as? AVQueuePlayer {
+                // La fila: sigue sola con la siguiente; tras la ultima, el
+                // reproductor flotante se va (con la barra llena un momento).
+                if cola.items().count > 1 {
+                    pin.pistaActual += 1
+                    tiempo = 0
+                    return
+                }
+                enMarcha = false
+                if pin.cierraAlAcabar {
+                    _ = Task<Void, Never> { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(700))
+                        GestorPinesIPad.compartido.cerrar(pin)
+                    }
+                }
+                return
+            }
             enMarcha = false
             reproductor.seek(to: .zero)
+        }
+        .onAppear {
+            if pin.sonarAlAbrir {
+                pin.sonarAlAbrir = false
+                if !enMarcha { alternar() }
+            }
+        }
+        .onChange(of: pin.pistas) { _, _ in
+            // Una fila nueva (otro pedido) ya suena.
+            enMarcha = reproductor.rate != 0 || reproductor.timeControlStatus != .paused
+            tiempo = 0
         }
     }
 
@@ -197,6 +234,12 @@ enum ReglasAudioPin {
     static func saltar(_ tiempo: Double, _ paso: Double, duracion: Double) -> Double {
         let nuevo = max(0, tiempo + paso)
         return duracion > 0 ? min(nuevo, duracion) : nuevo
+    }
+
+    /// «2 de 3 · clase.m4a»: por donde va la fila del reproductor.
+    static func fila(_ actual: Int, de total: Int, nombre: String) -> String {
+        let n = min(max(actual, 0), max(total - 1, 0)) + 1
+        return nombre.isEmpty ? "\(n) de \(total)" : "\(n) de \(total) · \(nombre)"
     }
 
     /// «1×», «1,5×».

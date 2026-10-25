@@ -118,7 +118,8 @@ public struct VisorMedio: View {
             if let reproductor {
                 ReproductorConPiP(reproductor: reproductor).ignoresSafeArea()
             }
-            BarraVisorIPad(tipo: "Vídeo", icono: "play.rectangle", titulo: titulo)
+            BarraVisorIPad(tipo: "Vídeo", icono: "play.rectangle", titulo: titulo,
+                           alFijar: { GestorPinesIPad.compartido.pinear(url: url) })
         }
         .onAppear {
             try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)

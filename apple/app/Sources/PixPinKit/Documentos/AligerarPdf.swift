@@ -148,6 +148,8 @@ public enum DocumentosDelIPad {
     public static func activar() {
         guard !activado else { return }
         activado = true
+        PantallaExternaIPad.compartida.activar()
+        NocheRecordada.activar()
         Arranque.apuntar { _ in
             GanchosAlmacen.alEntrarPdf = { url, nucleo in
                 ColaAligerar.compartida.alEntrar(url, nucleo: nucleo)

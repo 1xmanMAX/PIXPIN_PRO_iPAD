@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "PixPin",
+  "version": "1.0.0",
+  "description": "Manda a PixPin lo que ves en Safari: lo seleccionado a tareas, notas, el chat, lecciones, la voz o el asistente; el enlace o la foto de la página al chat.",
+  "background": {
+    "service_worker": "fondo.js"
+  },
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "PixPin",
+    "default_popup": "menu.html",
+    "default_icon": {
+      "16": "pixpin.png",
+      "32": "pixpin.png",
+      "48": "pixpin.png"
+    }
+  },
+  "icons": {
+    "48": "pixpin.png",
+    "96": "pixpin.png",
+    "128": "pixpin.png",
+    "256": "pixpin.png"
+  }
+}

@@ -53,6 +53,11 @@ public enum GrupoHerramientaLienzo: String, CaseIterable {
     public var miembros: [HerramientaLienzo] {
         HerramientaLienzo.todas.filter { $0.grupo == self }
     }
+
+    /// Los miembros sin los apagados en Ajustes → Lienzo (`ocultas`).
+    public func miembros(sin ocultas: Set<String>) -> [HerramientaLienzo] {
+        ocultas.isEmpty ? miembros : miembros.filter { !ocultas.contains($0.id) }
+    }
 }
 
 /// Una herramienta de la barra: nombre del motor, titulo, icono y letra.
@@ -210,6 +215,26 @@ public enum BotonBarraLienzo: Hashable {
     /// barra del pin).
     public static let barraDelLector: [BotonBarraLienzo] = barraDeCaptura.filter { $0 != .salir }
 
+    /// **La barra sin lo apagado en Ajustes → Lienzo**: fuera las
+    /// herramientas sueltas apagadas, los grupos que se quedan sin ninguna y
+    /// las figuras si estan apagadas. `corte` (donde se partia en dos filas)
+    /// pasa a la barra que queda.
+    public static func visibles(_ botones: [BotonBarraLienzo], corte: Int,
+                                ocultas: Set<String>) -> (botones: [BotonBarraLienzo], corte: Int) {
+        guard !ocultas.isEmpty else { return (botones, corte) }
+        let sale: (BotonBarraLienzo) -> Bool = { b in
+            switch b {
+            case let .herramienta(id): return !ocultas.contains(id)
+            case let .grupo(g): return !g.miembros(sin: ocultas).isEmpty
+            case .figuras: return !ocultas.contains("figuras")
+            case .deshacer, .rehacer, .salir: return true
+            }
+        }
+        let quedan = botones.filter(sale)
+        let antes = botones.prefix(max(0, min(corte, botones.count))).filter(sale).count
+        return (quedan, antes)
+    }
+
     /// Si entre este y el siguiente de `botones` va un separador.
     static func corte(tras i: Int, en botones: [BotonBarraLienzo] = barra) -> Bool {
         i + 1 < botones.count && botones[i].seccion != botones[i + 1].seccion
@@ -262,8 +287,9 @@ public enum GruposBarraLienzo {
     /// **La cara del grupo** con la herramienta `activa` puesta: la puesta si
     /// es del grupo (y pasa a ser la recordada); si no, la ultima usada; si
     /// no, la primera.
-    public static func cara(_ g: GrupoHerramientaLienzo, activa: String) -> HerramientaLienzo? {
-        let miembros = g.miembros
+    public static func cara(_ g: GrupoHerramientaLienzo, activa: String,
+                            ocultas: Set<String> = []) -> HerramientaLienzo? {
+        let miembros = g.miembros(sin: ocultas)
         if let puesta = miembros.first(where: { $0.id == activa }) {
             recordadas[g] = puesta.id
             return puesta
@@ -285,10 +311,10 @@ public enum GruposBarraLienzo {
     /// de una sola herramienta no se abre. La cara de un grupo de acciones
     /// (compartir, imprimir) no se dispara: imprimir por sorpresa no.
     public static func pulsar(_ g: GrupoHerramientaLienzo, activa: String,
-                              desplegado: GrupoHerramientaLienzo?) -> Clic {
+                              desplegado: GrupoHerramientaLienzo?, ocultas: Set<String> = []) -> Clic {
         var elegir: String?
-        if let c = cara(g, activa: activa), c.id != activa, !c.accion { elegir = c.id }
-        let abierto: GrupoHerramientaLienzo? = desplegado == g || g.miembros.count <= 1 ? nil : g
+        if let c = cara(g, activa: activa, ocultas: ocultas), c.id != activa, !c.accion { elegir = c.id }
+        let abierto: GrupoHerramientaLienzo? = desplegado == g || g.miembros(sin: ocultas).count <= 1 ? nil : g
         return Clic(elegir: elegir, desplegado: abierto)
     }
 }

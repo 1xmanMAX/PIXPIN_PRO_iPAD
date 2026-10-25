@@ -94,6 +94,15 @@ public final class ModeloEditorLienzo: ObservableObject {
     /// Lo que hace el boton de cerrar de la barra del lienzo. Sin el,
     /// cierra el visor.
     public var alCerrar: (() -> Void)?
+    /// Lo que hace tocar el icono de una zona vinculada: abrir el mensaje de
+    /// su sublienzo (lo pone `EditorLienzoIPad` con su navegacion).
+    public var alSeguirEnlace: ((MensajeChat) -> Void)?
+    /// **Los marcadores del lienzo** (`MarcasLienzo.swift`), en el orden del
+    /// riel.
+    @Published public internal(set) var marcas: [MarcaDocumento] = []
+    /// El emoticono que se va a plantar con el siguiente toque, si se esta
+    /// poniendo un marcador.
+    @Published public var poniendoMarca: String?
 
     /// Guardar, uno detras de otro y fuera del hilo principal.
     private let colaGuardar = DispatchQueue(label: "pixpin.lienzo.guardar", qos: .utility)
@@ -129,6 +138,7 @@ public final class ModeloEditorLienzo: ObservableObject {
             self.vista?.cambioDeNoche()
         }
         vigilarAjustes()
+        cargarMarcas()
     }
 
     /// Lo que mira el modo noche comun.

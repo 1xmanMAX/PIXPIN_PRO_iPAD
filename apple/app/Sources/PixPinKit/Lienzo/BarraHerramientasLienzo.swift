@@ -96,7 +96,7 @@ struct AnclasGruposLienzo: PreferenceKey {
 extension ModeloEditorLienzo {
     /// El clic en el boton de un grupo (`dibujo::grupos::pulsar`).
     func pulsarGrupo(_ g: GrupoHerramientaLienzo) {
-        let clic = GruposBarraLienzo.pulsar(g, activa: herramienta, desplegado: desplegado)
+        let clic = GruposBarraLienzo.pulsar(g, activa: herramienta, desplegado: desplegado, ocultas: ocultas)
         if let h = clic.elegir { elegir(h) }
         desplegado = clic.desplegado
     }
@@ -151,10 +151,12 @@ struct BarraHerramientasLienzo: View {
 
     var body: some View {
         let tema = TemaBarraLienzo.de(modelo)
+        // Sin lo apagado en Ajustes → Lienzo.
+        let (botones, corte) = BotonBarraLienzo.visibles(self.botones, corte: self.corte, ocultas: modelo.ocultas)
         let n = botones.count
         VStack(alignment: .leading, spacing: MedidasBarraLienzo.relleno) {
-            fila(0..<min(corte, n), tema: tema)
-            if corte < n { fila(corte..<n, tema: tema) }
+            fila(0..<min(corte, n), botones, tema: tema)
+            if corte < n { fila(corte..<n, botones, tema: tema) }
         }
         .padding(MedidasBarraLienzo.relleno)
         .modifier(IslaLienzo(tema: tema))
@@ -163,7 +165,7 @@ struct BarraHerramientasLienzo: View {
 
     /// Una fila de la barra. Donde se parte no hay separador: ya separa el
     /// cambio de fila.
-    private func fila(_ indices: Range<Int>, tema: TemaBarraLienzo) -> some View {
+    private func fila(_ indices: Range<Int>, _ botones: [BotonBarraLienzo], tema: TemaBarraLienzo) -> some View {
         HStack(spacing: MedidasBarraLienzo.hueco) {
             ForEach(Array(indices), id: \.self) { i in
                 boton(botones[i], tema: tema)
@@ -188,10 +190,10 @@ struct BarraHerramientasLienzo: View {
                 }
             }
         case let .grupo(g):
-            let cara = GruposBarraLienzo.cara(g, activa: modelo.herramienta)
+            let cara = GruposBarraLienzo.cara(g, activa: modelo.herramienta, ocultas: modelo.ocultas)
             BotonIslaLienzo(icono: cara?.icono ?? .dots, tecla: cara?.tecla,
                             elegido: cara?.id == modelo.herramienta || modelo.desplegado == g,
-                            piquito: g.miembros.count > 1, tema: tema,
+                            piquito: g.miembros(sin: modelo.ocultas).count > 1, tema: tema,
                             ayuda: "\(g.titulo): \(cara.map(Self.ayuda) ?? "")") {
                 modelo.pulsarGrupo(g)
             }
@@ -286,7 +288,7 @@ struct MenuGrupoLienzo: View {
                 let tema = TemaBarraLienzo.de(modelo)
                 let x = min(max(r.minX, 0), max(0, geo.size.width - MedidasBarraLienzo.anchoMenu))
                 VStack(spacing: 1) {
-                    ForEach(g.miembros) { h in
+                    ForEach(g.miembros(sin: modelo.ocultas)) { h in
                         FilaMenuLienzo(h: h, elegida: h.id == modelo.herramienta, tema: tema) {
                             modelo.elegirDelDesplegable(h.id)
                         }
@@ -353,6 +355,13 @@ struct MenuFigurasLienzo: View {
             Button("Gráfica de una función…") { modelo.pedirGrafica() }
             Button("Tabla en blanco…") { modelo.pedirTablaEnBlanco() }
             Button("Pegar tabla (de Excel)") { modelo.pegarTabla() }
+            if modelo.hayTablaElegida {
+                Button("Editar la tabla…") { modelo.editarTabla() }
+            }
+            if modelo.alSeguirEnlace != nil, modelo.proyectoConPdf {
+                Divider()
+                Button("Fusionar páginas del PDF…") { modelo.pedirFusionarPaginas() }
+            }
             Divider()
             Button("Plano de funciones") { modelo.estamparInstrumento(2) }
             Button("Recta de funciones") { modelo.estamparInstrumento(1) }
@@ -395,7 +404,7 @@ struct AtajosLienzo: View {
 
     var body: some View {
         ZStack {
-            ForEach(HerramientaLienzo.herramientas.filter { $0.tecla != nil }) { h in
+            ForEach(HerramientaLienzo.herramientas.filter { $0.tecla != nil && !modelo.ocultas.contains($0.id) }) { h in
                 atajo(KeyEquivalent(h.tecla ?? " "), []) {
                     // La letra del angulo con el angulo ya en la mano: la
                     // variante de 90 grados y vuelta (Windows, `dibujo/mano.rs`).
@@ -419,6 +428,8 @@ struct AtajosLienzo: View {
                     if let g = OpcionesEstiloLienzo.grosor(tecla: c) { modelo.cambiarEstilo(.grosor(grosor: g)) }
                 }
             }
+            // Intro con una tabla elegida: su cajetin (Windows).
+            atajo(.return, []) { if modelo.hayTablaElegida { modelo.editarTabla() } }
             atajo(.delete, []) { modelo.borrarSeleccion() }
             atajo(.deleteForward, []) { modelo.borrarSeleccion() }
             atajo("a", .command) { modelo.seleccionarTodo() }

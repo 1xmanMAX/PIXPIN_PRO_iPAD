@@ -2730,6 +2730,28 @@ public protocol EditorLienzoProtocol: AnyObject, Sendable {
     func contenidoDeTapado(idObjeto: UInt64)  -> ContenidoTapado?
     
     /**
+     * **Los marcadores de este lienzo**, en el orden del riel (de arriba
+     * abajo). Sin fichero, ninguno. `x` e `y` son del mundo del lienzo.
+     */
+    func marcas()  -> [MarcaDocumento]
+    
+    /**
+     * Mueve el marcador `id` a `(x, y)`.
+     */
+    func moverMarca(id: Int64, x: Double, y: Double) throws  -> [MarcaDocumento]
+    
+    /**
+     * **Un marcador mas** en `(x, y)` del mundo (si ya hay 24, se va el mas
+     * viejo). Devuelve la lista como queda.
+     */
+    func ponerMarca(x: Double, y: Double, emoji: String) throws  -> [MarcaDocumento]
+    
+    /**
+     * Quita el marcador `id`.
+     */
+    func quitarMarca(id: Int64) throws  -> [MarcaDocumento]
+    
+    /**
      * **El enlace cuyo icono esta bajo el punto** `(x, y)` del mundo, con
      * `zoom` pixeles por unidad (el icono mide lo mismo en pantalla a
      * cualquier aumento). `None` si no hay ninguno.
@@ -3643,6 +3665,63 @@ open func contenidoDeTapado(idObjeto: UInt64) -> ContenidoTapado?  {
     uniffi_pixpin_nucleo_fn_method_editorlienzo_contenido_de_tapado(
             self.uniffiCloneHandle(),
         FfiConverterUInt64.lower(idObjeto),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Los marcadores de este lienzo**, en el orden del riel (de arriba
+     * abajo). Sin fichero, ninguno. `x` e `y` son del mundo del lienzo.
+     */
+open func marcas() -> [MarcaDocumento]  {
+    return try!  FfiConverterSequenceTypeMarcaDocumento.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_editorlienzo_marcas(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Mueve el marcador `id` a `(x, y)`.
+     */
+open func moverMarca(id: Int64, x: Double, y: Double)throws  -> [MarcaDocumento]  {
+    return try  FfiConverterSequenceTypeMarcaDocumento.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_editorlienzo_mover_marca(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(id),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Un marcador mas** en `(x, y)` del mundo (si ya hay 24, se va el mas
+     * viejo). Devuelve la lista como queda.
+     */
+open func ponerMarca(x: Double, y: Double, emoji: String)throws  -> [MarcaDocumento]  {
+    return try  FfiConverterSequenceTypeMarcaDocumento.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_editorlienzo_poner_marca(
+            self.uniffiCloneHandle(),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),
+        FfiConverterString.lower(emoji),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Quita el marcador `id`.
+     */
+open func quitarMarca(id: Int64)throws  -> [MarcaDocumento]  {
+    return try  FfiConverterSequenceTypeMarcaDocumento.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_editorlienzo_quitar_marca(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(id),uniffiCallStatus
     )
 })
 }
@@ -18341,6 +18420,79 @@ public func FfiConverterTypeColorHoja_lower(_ value: ColorHoja) -> RustBuffer {
 
 
 /**
+ * Una entrada del menu de la barra.
+ */
+public struct ComandoBarraMd: Equatable, Hashable {
+    /**
+     * `titulo1`, `lista`, `tabla`, `imagen`...: lo que se pide al elegirla.
+     */
+    public var clave: String
+    public var nombre: String
+    /**
+     * El atajo de Markdown (en gris, a la derecha).
+     */
+    public var atajo: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `titulo1`, `lista`, `tabla`, `imagen`...: lo que se pide al elegirla.
+         */clave: String, nombre: String, 
+        /**
+         * El atajo de Markdown (en gris, a la derecha).
+         */atajo: String) {
+        self.clave = clave
+        self.nombre = nombre
+        self.atajo = atajo
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ComandoBarraMd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeComandoBarraMd: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ComandoBarraMd {
+        return
+            try ComandoBarraMd(
+                clave: FfiConverterString.read(from: &buf), 
+                nombre: FfiConverterString.read(from: &buf), 
+                atajo: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ComandoBarraMd, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.clave, into: &buf)
+        FfiConverterString.write(value.nombre, into: &buf)
+        FfiConverterString.write(value.atajo, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeComandoBarraMd_lift(_ buf: RustBuffer) throws -> ComandoBarraMd {
+    return try FfiConverterTypeComandoBarraMd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeComandoBarraMd_lower(_ value: ComandoBarraMd) -> RustBuffer {
+    return FfiConverterTypeComandoBarraMd.lower(value)
+}
+
+
+/**
  * Un servicio que se puede conectar, como se ve en Ajustes.
  */
 public struct ConexionIa: Equatable, Hashable {
@@ -18422,6 +18574,75 @@ public func FfiConverterTypeConexionIa_lift(_ buf: RustBuffer) throws -> Conexio
 #endif
 public func FfiConverterTypeConexionIa_lower(_ value: ConexionIa) -> RustBuffer {
     return FfiConverterTypeConexionIa.lower(value)
+}
+
+
+/**
+ * Lo que se esta escribiendo tras una barra al principio del renglon.
+ */
+public struct ConsultaBarraMd: Equatable, Hashable {
+    /**
+     * Donde esta la barra.
+     */
+    public var barra: UInt32
+    /**
+     * Lo tecleado detras (lo que filtra el menu).
+     */
+    public var escrito: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Donde esta la barra.
+         */barra: UInt32, 
+        /**
+         * Lo tecleado detras (lo que filtra el menu).
+         */escrito: String) {
+        self.barra = barra
+        self.escrito = escrito
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ConsultaBarraMd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConsultaBarraMd: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConsultaBarraMd {
+        return
+            try ConsultaBarraMd(
+                barra: FfiConverterUInt32.read(from: &buf), 
+                escrito: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ConsultaBarraMd, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.barra, into: &buf)
+        FfiConverterString.write(value.escrito, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConsultaBarraMd_lift(_ buf: RustBuffer) throws -> ConsultaBarraMd {
+    return try FfiConverterTypeConsultaBarraMd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConsultaBarraMd_lower(_ value: ConsultaBarraMd) -> RustBuffer {
+    return FfiConverterTypeConsultaBarraMd.lower(value)
 }
 
 
@@ -21561,6 +21782,89 @@ public func FfiConverterTypeFotoIa_lift(_ buf: RustBuffer) throws -> FotoIa {
 #endif
 public func FfiConverterTypeFotoIa_lower(_ value: FotoIa) -> RustBuffer {
     return FfiConverterTypeFotoIa.lower(value)
+}
+
+
+/**
+ * Una foto de la nota con su renglon.
+ */
+public struct FotoMd: Equatable, Hashable {
+    /**
+     * El renglon (desde 0).
+     */
+    public var linea: UInt32
+    public var alt: String
+    /**
+     * El ancho pedido (pixeles a 96 ppp) o nada (a lo ancho de la columna).
+     */
+    public var ancho: UInt32?
+    /**
+     * La ruta tal cual va en el Markdown (`Nucleo::ruta_en_la_nota`).
+     */
+    public var ruta: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * El renglon (desde 0).
+         */linea: UInt32, alt: String, 
+        /**
+         * El ancho pedido (pixeles a 96 ppp) o nada (a lo ancho de la columna).
+         */ancho: UInt32?, 
+        /**
+         * La ruta tal cual va en el Markdown (`Nucleo::ruta_en_la_nota`).
+         */ruta: String) {
+        self.linea = linea
+        self.alt = alt
+        self.ancho = ancho
+        self.ruta = ruta
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FotoMd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFotoMd: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FotoMd {
+        return
+            try FotoMd(
+                linea: FfiConverterUInt32.read(from: &buf), 
+                alt: FfiConverterString.read(from: &buf), 
+                ancho: FfiConverterOptionUInt32.read(from: &buf), 
+                ruta: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FotoMd, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.linea, into: &buf)
+        FfiConverterString.write(value.alt, into: &buf)
+        FfiConverterOptionUInt32.write(value.ancho, into: &buf)
+        FfiConverterString.write(value.ruta, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFotoMd_lift(_ buf: RustBuffer) throws -> FotoMd {
+    return try FfiConverterTypeFotoMd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFotoMd_lower(_ value: FotoMd) -> RustBuffer {
+    return FfiConverterTypeFotoMd.lower(value)
 }
 
 
@@ -30521,6 +30825,89 @@ public func FfiConverterTypeTablaDelLienzo_lower(_ value: TablaDelLienzo) -> Rus
 
 
 /**
+ * **Una tabla de barras** de la nota, con donde esta.
+ */
+public struct TablaMd: Equatable, Hashable {
+    /**
+     * De donde a donde va (UTF-16, sin el ultimo salto).
+     */
+    public var desde: UInt32
+    public var hasta: UInt32
+    /**
+     * Las filas (la primera es la cabecera) con el texto de cada celda.
+     */
+    public var filas: [[String]]
+    /**
+     * `i`, `c` o `d` por columna.
+     */
+    public var alineaciones: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * De donde a donde va (UTF-16, sin el ultimo salto).
+         */desde: UInt32, hasta: UInt32, 
+        /**
+         * Las filas (la primera es la cabecera) con el texto de cada celda.
+         */filas: [[String]], 
+        /**
+         * `i`, `c` o `d` por columna.
+         */alineaciones: [String]) {
+        self.desde = desde
+        self.hasta = hasta
+        self.filas = filas
+        self.alineaciones = alineaciones
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TablaMd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTablaMd: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TablaMd {
+        return
+            try TablaMd(
+                desde: FfiConverterUInt32.read(from: &buf), 
+                hasta: FfiConverterUInt32.read(from: &buf), 
+                filas: FfiConverterSequenceSequenceString.read(from: &buf), 
+                alineaciones: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TablaMd, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.desde, into: &buf)
+        FfiConverterUInt32.write(value.hasta, into: &buf)
+        FfiConverterSequenceSequenceString.write(value.filas, into: &buf)
+        FfiConverterSequenceString.write(value.alineaciones, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTablaMd_lift(_ buf: RustBuffer) throws -> TablaMd {
+    return try FfiConverterTypeTablaMd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTablaMd_lower(_ value: TablaMd) -> RustBuffer {
+    return FfiConverterTypeTablaMd.lower(value)
+}
+
+
+/**
  * Una tarea de una lista.
  */
 public struct Tarea: Equatable, Hashable {
@@ -38649,6 +39036,30 @@ fileprivate struct FfiConverterOptionTypeColorEstilo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeConsultaBarraMd: FfiConverterRustBuffer {
+    typealias SwiftType = ConsultaBarraMd?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeConsultaBarraMd.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeConsultaBarraMd.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeContenidoTapado: FfiConverterRustBuffer {
     typealias SwiftType = ContenidoTapado?
 
@@ -39433,6 +39844,30 @@ fileprivate struct FfiConverterOptionTypeTareaRecordada: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTareaRecordada.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeTextoElegido: FfiConverterRustBuffer {
+    typealias SwiftType = TextoElegido?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTextoElegido.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTextoElegido.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -40456,6 +40891,31 @@ fileprivate struct FfiConverterSequenceTypeColorHoja: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeComandoBarraMd: FfiConverterRustBuffer {
+    typealias SwiftType = [ComandoBarraMd]
+
+    public static func write(_ value: [ComandoBarraMd], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeComandoBarraMd.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ComandoBarraMd] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ComandoBarraMd]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeComandoBarraMd.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeConexionIa: FfiConverterRustBuffer {
     typealias SwiftType = [ConexionIa]
 
@@ -40973,6 +41433,31 @@ fileprivate struct FfiConverterSequenceTypeFilaElegir: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFilaElegir.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFotoMd: FfiConverterRustBuffer {
+    typealias SwiftType = [FotoMd]
+
+    public static func write(_ value: [FotoMd], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFotoMd.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FotoMd] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FotoMd]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFotoMd.read(from: &buf))
         }
         return seq
     }
@@ -42223,6 +42708,31 @@ fileprivate struct FfiConverterSequenceTypeSerieGrafico: FfiConverterRustBuffer 
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSerieGrafico.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTablaMd: FfiConverterRustBuffer {
+    typealias SwiftType = [TablaMd]
+
+    public static func write(_ value: [TablaMd], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTablaMd.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TablaMd] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TablaMd]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTablaMd.read(from: &buf))
         }
         return seq
     }
@@ -44535,6 +45045,86 @@ public func mdTramos(texto: String) -> [TramoMd]  {
 })
 }
 /**
+ * Las entradas que encajan con lo tecleado, en el orden de Windows.
+ */
+public func mdBarraComandos(escrito: String) -> [ComandoBarraMd]  {
+    return try!  FfiConverterSequenceTypeComandoBarraMd.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_md_barra_comandos(
+        FfiConverterString.lower(escrito),uniffiCallStatus
+    )
+})
+}
+/**
+ * Si el cursor esta escribiendo un comando de la barra (`/` al principio
+ * del renglon y letras detras).
+ */
+public func mdBarraConsulta(texto: String, cursor: UInt32) -> ConsultaBarraMd?  {
+    return try!  FfiConverterOptionTypeConsultaBarraMd.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_md_barra_consulta(
+        FfiConverterString.lower(texto),
+        FfiConverterUInt32.lower(cursor),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Pone el bloque `clave`** en lugar de la barra y lo tecleado
+ * (`desde..hasta`): el texto nuevo y el cursor (en `desde` y `hasta`, que
+ * son iguales). `ahora_local_ms`: la hora de este equipo (para la fecha).
+ * `None` para `imagen` (la pone el editor, con su selector de fotos) o una
+ * clave que no se conoce.
+ */
+public func mdBarraPoner(texto: String, desde: UInt32, hasta: UInt32, clave: String, ahoraLocalMs: Int64) -> TextoElegido?  {
+    return try!  FfiConverterOptionTypeTextoElegido.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_md_barra_poner(
+        FfiConverterString.lower(texto),
+        FfiConverterUInt32.lower(desde),
+        FfiConverterUInt32.lower(hasta),
+        FfiConverterString.lower(clave),
+        FfiConverterInt64.lower(ahoraLocalMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * Las fotos `![…](…)` de la nota, una por renglon (las de un bloque de
+ * codigo no cuentan).
+ */
+public func mdFotos(texto: String) -> [FotoMd]  {
+    return try!  FfiConverterSequenceTypeFotoMd.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_md_fotos(
+        FfiConverterString.lower(texto),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Una tabla escrita en Markdown** como la escribe el movil (sin salto al
+ * final). Las filas cortas se completan.
+ */
+public func mdTablaTexto(filas: [[String]], alineaciones: [String]) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_md_tabla_texto(
+        FfiConverterSequenceSequenceString.lower(filas),
+        FfiConverterSequenceString.lower(alineaciones),uniffiCallStatus
+    )
+})
+}
+/**
+ * Las tablas de barras de `texto` (una fila de barras con la de guiones
+ * debajo), fuera de los bloques de codigo.
+ */
+public func mdTablas(texto: String) -> [TablaMd]  {
+    return try!  FfiConverterSequenceTypeTablaMd.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_md_tablas(
+        FfiConverterString.lower(texto),uniffiCallStatus
+    )
+})
+}
+/**
  * **La pagina del editor de notas**, lista para el `WKWebView`.
  */
 public func notaPagina() -> String  {
@@ -45200,6 +45790,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_md_tramos() != 14058) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_md_barra_comandos() != 57990) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_md_barra_consulta() != 43375) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_md_barra_poner() != 11422) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_md_fotos() != 34832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_md_tabla_texto() != 42661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_md_tablas() != 55231) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_nota_pagina() != 6212) {
@@ -46253,6 +46861,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_contenido_de_tapado() != 23023) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_marcas() != 51537) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_mover_marca() != 2100) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_poner_marca() != 58977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_quitar_marca() != 35218) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_enlace_en() != 35484) {

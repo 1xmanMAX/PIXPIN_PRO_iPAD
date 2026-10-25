@@ -26,6 +26,7 @@
 import CoreGraphics
 import CoreText
 import Foundation
+import PixPinCore
 import UIKit
 
 public enum LetrasLienzo {
@@ -232,5 +233,46 @@ public enum LetrasLienzo {
         }
         ctx.restoreGState()
         return true
+    }
+}
+
+/// **Quien mide las letras del lienzo para el motor** (`MedidorLetras` del
+/// nucleo, `instalarMedidorDelLienzo`): Core Text con la MISMA letra con que
+/// se pinta (`LetrasLienzo.cara`), como el medidor de DirectWrite de Windows
+/// (`dibujo::pintar::medir_para_el_motor`). Asi la caja de un texto es la de
+/// lo escrito: el cursor, la seleccion y el centrado caen donde se ve. Rust
+/// lo llama desde cualquier hilo (y guarda lo medido).
+final class MedidorLetrasLienzo: MedidorLetras, @unchecked Sendable {
+    /// El tamano al que se mide (el que pide el puente).
+    private static let tam: CGFloat = 1000
+
+    func avances(caracteres: String, familia: String, negrita: Bool, cursiva: Bool) -> [Float] {
+        let fuente = LetrasLienzo.cara(familia: familia, tam: Self.tam, negrita: negrita, cursiva: cursiva).fuente
+        let sistema = CTFontCreateUIFontForLanguage(.system, Self.tam, nil)
+        return caracteres.unicodeScalars.map { c in
+            Self.avance(c, en: fuente) ?? sistema.flatMap { Self.avance(c, en: $0) } ?? Float(Self.tam) * 0.5
+        }
+    }
+
+    /// El avance de un caracter en `fuente`, o `nil` si no lo tiene.
+    private static func avance(_ c: Unicode.Scalar, en fuente: CTFont) -> Float? {
+        let unidades = Array(String(c).utf16)
+        var glifos = [CGGlyph](repeating: 0, count: unidades.count)
+        guard CTFontGetGlyphsForCharacters(fuente, unidades, &glifos, unidades.count), glifos[0] != 0 else {
+            return nil
+        }
+        var adelanto = CGSize.zero
+        CTFontGetAdvancesForGlyphs(fuente, .horizontal, &glifos, &adelanto, 1)
+        return Float(adelanto.width)
+    }
+
+    func metricas(familia: String, negrita: Bool, cursiva: Bool) -> MetricasLetra {
+        let f = LetrasLienzo.cara(familia: familia, tam: Self.tam, negrita: negrita, cursiva: cursiva).fuente
+        return MetricasLetra(ascenso: Float(CTFontGetAscent(f)), descenso: Float(CTFontGetDescent(f)),
+                             hueco: Float(CTFontGetLeading(f)))
+    }
+
+    func existe(familia: String) -> Bool {
+        LetrasLienzo.existe(familia)
     }
 }

@@ -252,14 +252,79 @@ public struct EntregaCompartida: Codable, Hashable, Sendable {
     public var ficheros: [String]
     /// Cuando (ms).
     public var creada: Int64
+    /// Un enlace `pixpinmax://` que hacer en vez de meter nada (la
+    /// extension del navegador: «Nueva tarea» con lo seleccionado...). Las
+    /// entregas de antes no lo llevan.
+    public var enlace: String?
 
-    public init(chat: String, nombreDelChat: String, comentario: String, textos: [String], ficheros: [String], creada: Int64) {
+    public init(chat: String, nombreDelChat: String, comentario: String, textos: [String], ficheros: [String], creada: Int64,
+                enlace: String? = nil) {
         self.chat = chat
         self.nombreDelChat = nombreDelChat
         self.comentario = comentario
         self.textos = textos
         self.ficheros = ficheros
         self.creada = creada
+        self.enlace = enlace
+    }
+}
+
+// MARK: - La extension del navegador
+
+/// **Lo que pide la extension de Safari** (`extensiones/navegador` de
+/// Windows: las mismas acciones que su menu), traducido a un enlace
+/// `pixpinmax://` de la casa (el mismo verbo que la linea de ordenes), que
+/// la app hace al recoger la entrega. Puro: lo compilan la app y la
+/// extension.
+public enum PedidoDelNavegador {
+    /// Lo mas largo que se manda de texto (el enlace tiene un tope de 16 KB).
+    public static let topeTexto = 6000
+
+    /// El enlace de `accion` con lo de la pagina; `nil` si la accion no
+    /// existe o le falta lo que necesita (texto seleccionado). Las acciones
+    /// que llevan una imagen (`captura_pagina`) no van por enlace.
+    public static func enlace(accion: String, texto: String?, url: String?, titulo: String?,
+                              pregunta: String? = nil) -> String? {
+        let t = recortar(texto)
+        let conTexto = ["tarea", "nota", "chat", "leccion", "leer", "asistente"]
+        if conTexto.contains(accion), t.isEmpty { return nil }
+        switch accion {
+        case "tarea": return armar("tarea", ["texto": t])
+        case "nota": return armar("nota", ["texto": t])
+        case "chat": return armar("chat", ["texto": t])
+        case "leccion": return armar("leccion", ["texto": t])
+        case "leer": return armar("leer", ["texto": t, "titulo": recortar(titulo)])
+        case "asistente":
+            let p = recortar(pregunta)
+            return armar("asistente", ["texto": p.isEmpty ? t : p + "\n\n«" + t + "»"])
+        case "enlace_al_chat":
+            let u = recortar(url)
+            guard !u.isEmpty else { return nil }
+            let n = recortar(titulo)
+            return armar("chat", ["texto": n.isEmpty ? u : n + "\n" + u])
+        default:
+            return nil
+        }
+    }
+
+    /// Las acciones que entiende (las de `nucleo.js`).
+    public static let acciones = ["tarea", "nota", "chat", "leccion", "leer", "asistente", "enlace_al_chat",
+                                  "captura_pagina"]
+
+    private static func recortar(_ t: String?) -> String {
+        let limpio = (t ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return limpio.count > topeTexto ? String(limpio.prefix(topeTexto)) + "…" : limpio
+    }
+
+    /// `pixpinmax://verbo?campo=valor` con todo lo que no es letra o cifra
+    /// en `%XX` (un `+` no se lee como espacio).
+    static func armar(_ verbo: String, _ campos: [String: String]) -> String {
+        var permitidos = CharacterSet.alphanumerics
+        permitidos.insert(charactersIn: "-._~")
+        let consulta = campos.filter { !$0.value.isEmpty }.sorted { $0.key < $1.key }.map { k, v in
+            k + "=" + (v.addingPercentEncoding(withAllowedCharacters: permitidos) ?? "")
+        }.joined(separator: "&")
+        return "pixpinmax://" + verbo + (consulta.isEmpty ? "" : "?" + consulta)
     }
 }
 

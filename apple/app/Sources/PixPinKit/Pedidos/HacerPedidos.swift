@@ -235,11 +235,20 @@ public final class HacerPedidos {
         case "borrar_captura": await borrarCaptura(p)
         case "copiar_imagen": copiarImagen(p)
         case "reproducir":
-            guard let r = p.texto("ruta"), FileManager.default.fileExists(atPath: r) else {
+            // El reproductor flotante (un pin de audio con su fila), como
+            // Windows: no abre el visor. Un video, a su visor.
+            let rutas = ([p.texto("ruta")].compactMap { $0 } + (p["rutas"]?.lista?.compactMap(\.texto) ?? []))
+                .filter { FileManager.default.fileExists(atPath: $0) }
+            guard let r = rutas.first else {
                 return avisar("No existe el audio «\(p.texto("ruta") ?? "")».")
             }
-            let url = URL(fileURLWithPath: r)
-            nav.abrir(.medio(url: url, titulo: p.texto("titulo") ?? url.lastPathComponent))
+            let urls = rutas.map { URL(fileURLWithPath: $0) }
+            if TipoDeFichero(urls[0]) == .medio, ["mp4", "mov", "m4v", "webm", "3gp"].contains(urls[0].pathExtension.lowercased()) {
+                let url = URL(fileURLWithPath: r)
+                nav.abrir(.medio(url: url, titulo: p.texto("titulo") ?? url.lastPathComponent))
+            } else {
+                GestorPinesIPad.compartido.reproducir(urls)
+            }
         case "lecciones":
             ir(.lecciones)
             ConsultaPedida.lecciones.poner(p.texto("consulta"))

@@ -345,11 +345,43 @@ extension ModeloEditorLienzo {
 
     // MARK: La zona, al chat
 
-    /// **La foto de una zona, al chat del lienzo** (`zona_al_chat.rs` de
-    /// Windows): entra como una foto, con «Viene de» en su descripcion.
-    /// Lo que Windows y el movil hacen ademas (el sublienzo de la foto como
-    /// hoja del proyecto y la marca con enlace en el lienzo de origen) pide
-    /// al nucleo una llamada que aun no tiene.
+    /// **La foto de una zona, al chat del proyecto** (`zona_al_chat.rs` de
+    /// Windows, `mandarLaZona` del movil): va como **sublienzo** (la foto
+    /// clavada en su propio lienzo, hoja del proyecto detras de este, con
+    /// «Viene de: Lienzo «…»») y aqui queda la marca azul con su enlace,
+    /// en un paso de deshacer. Tocar el icono de la marca lleva a el.
+    /// `png` es la foto tal cual (sin redondear: solo se redondea la copia)
+    /// y `caja` la zona en el mundo.
+    func mandarZonaAlChat(_ png: Data, caja: CGRect) {
+        guard let chat, let nucleo, let vista, let dibujo = referencia else { return }
+        let tam = ImagenPegadaLienzo.tamano(de: png) ?? CGSize(width: caja.width, height: caja.height)
+        let nombre = titulo
+        let editor = self.editor
+        Task { [weak self] in
+            let hecho = await Task.detached(priority: .userInitiated) { () -> ZonaMandada? in
+                try? nucleo.zonaAlChat(chat: chat, dibujo: dibujo, pagina: nil, nombre: nombre, png: png,
+                                       ancho: UInt32(max(1, tam.width)), alto: UInt32(max(1, tam.height)))
+            }.value
+            guard let self else { return }
+            guard let z = hecho else {
+                CajetinesLienzo.avisar("Zona al chat", "No se pudo mandar la zona al chat.", desde: vista)
+                return
+            }
+            if editor.marcarZona(x0: Float(caja.minX), y0: Float(caja.minY), x1: Float(caja.maxX),
+                                 y1: Float(caja.maxY), dibujo: z.dibujo) {
+                self.vista?.trasCambio()
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // El chat se vuelve a leer (como cuando llegan cambios) y la
+            // sincronizacion cuenta su calma desde aqui.
+            NotificationCenter.default.post(name: .pixpinTrajoCambios, object: nil)
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+        }
+    }
+
+    /// **La foto de una zona, al chat, sin marca** (la usan los planos, que
+    /// no son un lienzo del proyecto): entra como una foto, con «Viene de» en
+    /// su descripcion.
     func mandarZonaAlChat(_ png: Data) {
         guard let chat, let nucleo, let vista else { return }
         let carpeta = carpetaTemporal()
@@ -367,8 +399,6 @@ extension ModeloEditorLienzo {
             guard self != nil else { return }
             if hecho {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
-                // El chat se vuelve a leer (como cuando llegan cambios) y la
-                // sincronizacion cuenta su calma desde aqui.
                 NotificationCenter.default.post(name: .pixpinTrajoCambios, object: nil)
                 NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
             } else {

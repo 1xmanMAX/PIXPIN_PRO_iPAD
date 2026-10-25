@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PixPin</title>
+<style>
+  :root { color-scheme: light dark; --acento: #2E7BE6; --borde: #8884; --apagado: #888; }
+  body { margin: 0; min-width: 280px; font: 15px -apple-system, system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px 6px; font-weight: 600; }
+  header img { width: 20px; height: 20px; }
+  h2 { margin: 10px 14px 2px; font-size: 12px; font-weight: 600; color: var(--apagado); text-transform: uppercase; letter-spacing: .04em; }
+  .vista { margin: 0 14px 4px; color: var(--apagado); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic; }
+  button { display: block; width: 100%; padding: 11px 14px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  button:active, button:focus-visible { background: #2E7BE622; outline: none; }
+  button:disabled { opacity: .45; cursor: default; }
+  #pregunta { display: none; margin: 2px 14px 8px; width: calc(100% - 28px); box-sizing: border-box; padding: 8px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; background: none; color: inherit; }
+  #estado { min-height: 20px; padding: 8px 14px 12px; color: var(--apagado); }
+  #estado.mal { color: #C62828; }
+</style>
+</head>
+<body>
+<header><img src="pixpin.png" alt="">PixPin</header>
+<h2>Lo seleccionado</h2>
+<div class="vista" id="vista">(nada seleccionado)</div>
+<div id="seleccion"></div>
+<input id="pregunta" placeholder="¿Qué le pregunto al asistente? (Intro)" enterkeyhint="send">
+<h2>La página</h2>
+<div id="pagina"></div>
+<div id="estado"></div>
+<script type="module" src="menu.js"></script>
+</body>
+</html>

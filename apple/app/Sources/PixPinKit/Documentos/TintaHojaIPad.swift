@@ -793,3 +793,16 @@ private struct FondoRielHoja: ViewModifier {
             .shadow(color: .black.opacity(0.16), radius: 6, y: 2)
     }
 }
+
+/// La tira de emoticonos de un marcador nuevo (con el marcador del riel
+/// pulsado).
+struct TiraDeMarcaDeHoja: View {
+    let tinta: ControladorTintaHoja
+    @ObservedObject var modelo: ModeloLectorIPad
+
+    var body: some View {
+        if modelo.poniendoMarca {
+            TiraEmojisMarca { e in tinta.ponerMarca(e) } cerrar: { modelo.poniendoMarca = false }
+        }
+    }
+}

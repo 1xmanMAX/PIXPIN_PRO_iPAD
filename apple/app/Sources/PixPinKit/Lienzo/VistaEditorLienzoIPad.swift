@@ -85,6 +85,14 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     /// terminarlo se vuelve a la flecha.
     private var volverALaFlecha = false
 
+    // El metodo de entrada (`MetodoDeEntradaLienzo.swift`).
+    /// Lo que se esta componiendo (japones, chino, el acento mantenido, el
+    /// dictado) y aun no ha entrado en el texto.
+    var marcado = ""
+    public weak var inputDelegate: UITextInputDelegate?
+    public var markedTextStyle: [NSAttributedString.Key: Any]?
+    lazy var tokenizadorDeEntrada: UITextInputTokenizer = UITextInputStringTokenizer(textInput: self)
+
     /// El dedo pinta: «Dibujar con el dedo» puesto, o no hay Pencil a la
     /// vista y el sistema no pide solo Pencil.
     var dedoPinta: Bool {
@@ -227,6 +235,83 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     /// Lo que tapan arriba la barra del visor y la de herramientas.
     static let margenArriba: CGFloat = 110
 
+    // MARK: Viajar a un marcador
+
+    /// El viaje de la camara en curso (`marcas::Vuelo`): el origen al que va.
+    private var destinoDelViaje: CGPoint?
+    private var relojDelViaje: CADisplayLink?
+
+    /// **Lleva la vista al marcador**, arriba y centrado a lo ancho, por
+    /// debajo de las barras (`camara_con_la_marca_arriba`). El aumento no se
+    /// toca: se marca un sitio, no un encuadre.
+    func ir(a marca: MarcaDocumento) {
+        let aire = VistaEditorLienzoIPad.margenArriba + 48
+        destinoDelViaje = CGPoint(x: CGFloat(marca.x) - bounds.width / (2 * zoom), y: CGFloat(marca.y) - aire / zoom)
+        guard relojDelViaje == nil else { return }
+        let enlace = CADisplayLink(target: self, selector: #selector(pasoDelViaje(_:)))
+        enlace.add(to: .main, forMode: .common)
+        relojDelViaje = enlace
+    }
+
+    /// El radio del redondel de un marcador en pantalla (los 36 dp del movil).
+    static let radioMarca: CGFloat = 18
+
+    /// Un toque en `p` (vista) para los marcadores: plantar el que se esta
+    /// poniendo o, con otra herramienta que la flecha, ir al que se toca.
+    /// `true` si era suyo.
+    private func tocarMarca(en p: CGPoint) -> Bool {
+        if let emoji = modelo.poniendoMarca {
+            let m = alMundo(p)
+            modelo.plantarMarca(x: Double(m.x), y: Double(m.y), emoji: emoji)
+            return true
+        }
+        guard modelo.herramienta != "seleccion" else { return false }
+        let r = VistaEditorLienzoIPad.radioMarca
+        if let marca = modelo.marcas.last(where: { m in
+            hypot((CGFloat(m.x) - origen.x) * zoom - p.x, (CGFloat(m.y) - origen.y) * zoom - p.y) <= r
+        }) {
+            ir(a: marca)
+            return true
+        }
+        return false
+    }
+
+    /// **Los marcadores** sobre el dibujo: un redondel oscuro con su
+    /// emoticono, del mismo tamano en pantalla a cualquier aumento.
+    private func pintarMarcas(_ ctx: CGContext) {
+        guard !modelo.marcas.isEmpty else { return }
+        let r = VistaEditorLienzoIPad.radioMarca
+        let letra: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: r)]
+        for m in modelo.marcas {
+            let c = CGPoint(x: (CGFloat(m.x) - origen.x) * zoom, y: (CGFloat(m.y) - origen.y) * zoom)
+            guard bounds.insetBy(dx: -r, dy: -r).contains(c) else { continue }
+            let caja = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+            ctx.setFillColor(CGColor(srgbRed: 0x14 / 255, green: 0x18 / 255, blue: 0x2B / 255, alpha: 0.92))
+            ctx.fillEllipse(in: caja)
+            let e = m.emoji as NSString
+            let t = e.size(withAttributes: letra)
+            e.draw(at: CGPoint(x: c.x - t.width / 2, y: c.y - t.height / 2), withAttributes: letra)
+        }
+    }
+
+    @objc private func pasoDelViaje(_ enlace: CADisplayLink) {
+        guard let d = destinoDelViaje else {
+            enlace.invalidate()
+            relojDelViaje = nil
+            return
+        }
+        // Persigue el destino, cada vez mas despacio (`VELOCIDAD_VUELO`).
+        let k = min(1, CGFloat(enlace.targetTimestamp - enlace.timestamp) * 14)
+        origen = CGPoint(x: origen.x + (d.x - origen.x) * k, y: origen.y + (d.y - origen.y) * k)
+        if hypot(d.x - origen.x, d.y - origen.y) * zoom < 0.5 {
+            origen = d
+            destinoDelViaje = nil
+            enlace.invalidate()
+            relojDelViaje = nil
+        }
+        setNeedsDisplay()
+    }
+
     // MARK: Pintar
 
     override public func draw(_ rect: CGRect) {
@@ -277,6 +362,9 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
             ctx.strokePath()
         }
         ctx.restoreGState()
+        pintarEnlaces(ctx, visible: visible)
+        pintarMarcas(ctx)
+        pintarMarcado(ctx)
         pintarPrediccion(ctx)
         pintarFlotando(ctx)
         if soltandoImagen {
@@ -299,6 +387,32 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     private var colorDeTinta: CGColor {
         let c = modelo.estilo.trazo
         return CGColor(srgbRed: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: CGFloat(c.a))
+    }
+
+    /// **Los iconos de enlace** de las zonas vinculadas: un redondel azul con
+    /// el eslabon en la esquina de arriba a la derecha de su marca, del mismo
+    /// tamano en pantalla a cualquier aumento (`pintarIconoDeEnlace` del
+    /// movil).
+    private func pintarEnlaces(_ ctx: CGContext, visible: CGRect) {
+        let enlaces = editor.enlacesEnLaVista(x0: Float(visible.minX), y0: Float(visible.minY),
+                                              x1: Float(visible.maxX), y1: Float(visible.maxY))
+        guard !enlaces.isEmpty else { return }
+        let r = CGFloat(radioDelIconoDeEnlace())
+        let eslabon = UIImage(systemName: "link",
+                              withConfiguration: UIImage.SymbolConfiguration(pointSize: r * 0.9, weight: .semibold))?
+            .withTintColor(.white, renderingMode: .alwaysOriginal)
+        for e in enlaces {
+            let c = CGPoint(x: (CGFloat(e.x) - origen.x) * zoom, y: (CGFloat(e.y) - origen.y) * zoom)
+            let caja = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+            ctx.setFillColor(UIColor.white.cgColor)
+            ctx.fillEllipse(in: caja.insetBy(dx: -1.5, dy: -1.5))
+            ctx.setFillColor(CGColor(srgbRed: 0.20, green: 0.45, blue: 0.90, alpha: 1))
+            ctx.fillEllipse(in: caja)
+            if let eslabon {
+                let t = eslabon.size
+                eslabon.draw(in: CGRect(x: c.x - t.width / 2, y: c.y - t.height / 2, width: t.width, height: t.height))
+            }
+        }
     }
 
     /// Lo que iOS predice del trazo a mano, de lo ultimo a la punta.
@@ -362,6 +476,8 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     override public func removeFromSuperview() {
         reloj60?.invalidate()
         reloj60 = nil
+        relojDelViaje?.invalidate()
+        relojDelViaje = nil
         super.removeFromSuperview()
     }
 
@@ -393,6 +509,10 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     /// El teclado sale mientras se escribe un texto y se va al terminar.
     private func ajustarTeclado() {
         let escribe = editor.escribiendo()
+        if !escribe, !marcado.isEmpty {
+            marcado = ""
+            setNeedsDisplay()
+        }
         if escribe, !isFirstResponder {
             becomeFirstResponder()
         } else if !escribe, isFirstResponder {
@@ -434,14 +554,22 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
                                         anchoPx: Float(caja.width * k), altoPx: Float(caja.height * k))
         guard let img = PintorDeHojas.imagen(plano, caja: caja, escala: k, transparente: false,
                                              tapados: modelo.tapados, version: editor.version(),
-                                             fotos: { [weak self] in self?.modelo.foto($0) }),
-              let redonda = PintorDeHojas.enRedondo(img, papelDeNoche: modelo.papelOscuro),
-              let png = PintorDeHojas.png(redonda) else {
+                                             fotos: { [weak self] in self?.modelo.foto($0) }) else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
         if modelo.zonaAlChat {
-            modelo.mandarZonaAlChat(png)
+            // Al chat va tal cual: solo la copia se redondea.
+            if let png = PintorDeHojas.png(img) {
+                modelo.mandarZonaAlChat(png, caja: caja)
+            } else {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+            return
+        }
+        guard let redonda = PintorDeHojas.enRedondo(img, papelDeNoche: modelo.papelOscuro),
+              let png = PintorDeHojas.png(redonda) else {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
         guard let foto = try? editor.ponerCopiaDeZona(png: png, x0: Float(caja.minX), y0: Float(caja.minY),
@@ -489,13 +617,51 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         return Float(min(1, max(0.02, p)))
     }
 
+    /// El filtro del suavizado «Natural» (Ajustes → Lienzo) del trazo en
+    /// curso, si lo hay.
+    private var filtro: FiltroUnEuro?
+
+    /// Donde va el toque, en la vista: con el suavizado «Natural» y trazando
+    /// a mano, pasado por el filtro de 1 euro (`dibujo::mano::al_motor`).
+    private func suavizado(_ fase: FasePuntero, _ t: UITouch) -> CGPoint {
+        let p = enVista(t)
+        guard let mandos = modelo.suavizado, HerramientaLienzo.aMano.contains(modelo.herramienta) else {
+            filtro = nil
+            return p
+        }
+        switch fase {
+        case .pulsar:
+            filtro = FiltroUnEuro(mandos)
+        case .mover:
+            if filtro == nil { return p }
+        default:
+            return p
+        }
+        guard var f = filtro else { return p }
+        let (x, y) = f.filtrar(Float(p.x), Float(p.y), ms: t.timestamp * 1000)
+        filtro = f
+        return CGPoint(x: CGFloat(x), y: CGFloat(y))
+    }
+
     private func mandar(_ fase: FasePuntero, _ t: UITouch, _ evento: UIEvent?) -> UInt64 {
-        let p = alMundo(enVista(t))
+        let p = alMundo(suavizado(fase, t))
         return editor.puntero(fase: fase, x: Float(p.x), y: Float(p.y), presion: presion(t),
                               modificadores: modificadores(evento), zoom: Float(zoom))
     }
 
     private func empezar(_ t: UITouch, _ evento: UIEvent?, pencil: Bool) {
+        // **Un marcador**: plantar el que se esta poniendo, o ir al que se
+        // toca (con cualquier herramienta menos la flecha).
+        if !editor.escribiendo(), tocarMarca(en: enVista(t)) { return }
+        // **El icono de una zona vinculada** lleva a su sublienzo, con la
+        // herramienta que sea (sin esto pintaria un punto encima).
+        if !editor.escribiendo() {
+            let m = alMundo(enVista(t))
+            if let enlace = editor.enlaceEn(x: Float(m.x), y: Float(m.y), zoom: Float(zoom)) {
+                modelo.seguirEnlace(enlace)
+                return
+            }
+        }
         toque = t
         toqueEsPencil = pencil
         prediccion = []
@@ -615,6 +781,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     // MARK: Mover y acercar la vista
 
     private func desplazar(dx: CGFloat, dy: CGFloat) {
+        destinoDelViaje = nil
         origen.x -= dx / zoom
         origen.y -= dy / zoom
         setNeedsDisplay()
@@ -624,6 +791,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     private func acercar(_ factor: CGFloat, en foco: CGPoint) {
         let nuevo = max(VistaEditorLienzoIPad.zoomMinimo, min(VistaEditorLienzoIPad.zoomMaximo, zoom * factor))
         guard nuevo != zoom, nuevo.isFinite else { return }
+        destinoDelViaje = nil
         let mundo = alMundo(foco)
         zoom = nuevo
         origen = CGPoint(x: mundo.x - foco.x / zoom, y: mundo.y - foco.y / zoom)
@@ -726,6 +894,11 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     public var hasText: Bool { true }
 
     public func insertText(_ text: String) {
+        // Lo que se componia lo sustituye lo que entra.
+        if !marcado.isEmpty {
+            marcado = ""
+            setNeedsDisplay()
+        }
         guard editor.escribiendo() else { return }
         if text == "\n" {
             if editor.tecla(nombre: "entrar") { trasCambio() }

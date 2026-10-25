@@ -63,11 +63,28 @@ public struct EditorLienzoIPad: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .listo(modelo):
                 EditorLienzoVistaIPad(modelo: modelo)
-                    .onAppear { if modelo.alCerrar == nil { modelo.alCerrar = { [nav] in nav.cerrarVisor() } } }
+                    .onAppear {
+                        if modelo.alCerrar == nil { modelo.alCerrar = { [nav] in nav.cerrarVisor() } }
+                        // La zona vinculada: su sublienzo en este visor.
+                        if modelo.alSeguirEnlace == nil {
+                            modelo.alSeguirEnlace = { [nav, chat] m in nav.abrir(.lienzo(chat: chat, mensaje: m, foto: nil)) }
+                        }
+                    }
             }
             BarraVisorIPad(tipo: "Lienzo", icono: "scribble.variable", titulo: carga.titulo ?? tituloDePartida,
                            alFijar: fijarComoPin) {
                 if case let .listo(modelo) = carga.estado {
+                    if let salto = SaltosDeLienzo.vuelta(a: modelo.referencia) {
+                        // Del sublienzo de una zona, al lienzo de donde salio.
+                        Button {
+                            modelo.guardarAhora(terminarTexto: true)
+                            SaltosDeLienzo.quitar(salto)
+                            nav.abrir(.lienzo(chat: salto.chat, mensaje: salto.origen, foto: nil))
+                        } label: {
+                            Label("Volver a «\(salto.titulo)»", systemImage: "arrow.uturn.backward")
+                        }
+                        .help("Volver a «\(salto.titulo)»")
+                    }
                     Button { modelo.vista?.encajar() } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                     }
@@ -283,6 +300,11 @@ struct EditorLienzoVistaIPad: View {
                         .allowsHitTesting(false)
                 }
                 AtajosLienzo(modelo: modelo)
+                // El riel de los marcadores, a la derecha bajo la barra.
+                RielMarcasLienzo(modelo: modelo)
+                    .padding(.trailing, MedidasBarraLienzo.distanciaBorde)
+                    .padding(.top, arriba + filas * (MedidasBarraLienzo.lado + 2 * MedidasBarraLienzo.relleno) + 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
         .overlayPreferenceValue(AnclasGruposLienzo.self) { anclas in

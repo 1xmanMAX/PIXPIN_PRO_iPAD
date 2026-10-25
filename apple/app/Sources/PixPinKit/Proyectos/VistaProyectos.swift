@@ -329,7 +329,8 @@ struct ListaProyectos<Menu: View>: View {
             }
             .refreshable { await almacen.cargarChats() }
         }
-        .background(Paleta.proyectos.lista.ignoresSafeArea())
+        // Con el tema Cosmos, el cielo detras de la lista (`Sistema/CieloCosmos.swift`).
+        .fondoCosmos(Paleta.proyectos.lista.ignoresSafeArea())
         .overlay(alignment: .bottomTrailing) {
             if !marcando {
                 BotonProyectoNuevo { creando = true }

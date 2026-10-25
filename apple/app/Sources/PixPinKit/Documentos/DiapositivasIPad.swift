@@ -15,8 +15,9 @@
 //   que calcula Rust (`capasDeTransicion`), las mismas que en Windows.
 // - **Videos y audios**: su poster ya viene en la diapositiva; tocarlo suena
 //   el audio en el reproductor de la app y abre el video con el del sistema.
-// - Con AirPlay o una pantalla conectada, iPadOS duplica la pantalla: la
-//   presentacion sale en el proyector tal cual.
+// - Con AirPlay o una pantalla conectada, la diapositiva va a ella y el iPad
+//   pasa a la vista del orador (la de ahora, la siguiente, las notas y el
+//   reloj): `PantallaExternaIPad.swift`.
 //
 // Las diapositivas las maqueta Rust (`DocumentoOffice`) y las pinta
 // `PintorOffice`, fuera del hilo principal. Solo se guardan las de
@@ -281,6 +282,12 @@ enum TextosPase {
 /// el aviso y la pastilla; recoge toques, deslizar y el teclado.
 final class VistaPaseIPad: UIView {
     weak var pase: PresentacionIPad?
+    /// La de la pantalla externa: solo la diapositiva (ni pastilla, ni notas,
+    /// ni avisos) y sin toques.
+    var publico = false
+    /// La del iPad mientras la diapositiva va a la pantalla externa: la vista
+    /// del orador.
+    var orador = false
     /// Los botones de la pastilla pintada.
     private var botones: [(CGRect, MandoDiapositiva)] = []
 
@@ -306,12 +313,18 @@ final class VistaPaseIPad: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window != nil { becomeFirstResponder() }
+        if window != nil, !publico { becomeFirstResponder() }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        pase?.alCambiarElTamano()
+        if !publico { pase?.alCambiarElTamano() }
+    }
+
+    /// Lo que cambia en el iPad cambia tambien en la pantalla externa.
+    override func setNeedsDisplay() {
+        super.setNeedsDisplay()
+        if !publico { pase?.publico?.setNeedsDisplay() }
     }
 
     @objc private func tocado(_ g: UITapGestureRecognizer) {
@@ -321,7 +334,7 @@ final class VistaPaseIPad: UIView {
             p.mandar(b.1)
             return
         }
-        if p.reproducirMedio(en: punto, caja: bounds.size) { return }
+        if !orador, p.reproducirMedio(en: punto, caja: bounds.size) { return }
         p.mandar(CuentasDiapositivas.mando(toqueEn: punto.x, ancho: bounds.width))
     }
 
@@ -366,8 +379,11 @@ final class VistaPaseIPad: UIView {
             centrado(TextosPase.preparando, UIColor(white: 0.65, alpha: 1))
             return
         }
+        if orador { pintarOrador(ctx, archivo, p) }
         if p.estado.negro { return }
-        let caja = CuentasDiapositivas.encajarEntera(archivo.tamano, en: bounds.size)
+        let zona = orador ? VistaPaseIPad.zonaDelOrador(bounds) : CGRect(origin: .zero, size: bounds.size)
+        let caja = CuentasDiapositivas.encajarEntera(archivo.tamano, en: zona.size)
+            .offsetBy(dx: zona.minX, dy: zona.minY)
         let nueva = p.fotos[p.estado.actual]
         if let (vieja, capas) = p.fotograma() {
             ctx.saveGState()
@@ -388,8 +404,9 @@ final class VistaPaseIPad: UIView {
         } else if let nueva {
             VistaPaseIPad.imagen(nueva, en: caja, recorte: nil, alfa: 1, ctx: ctx)
         }
+        if publico { return }
         var suelo = alto - safeAreaInsets.bottom
-        if p.notasAbajo {
+        if p.notasAbajo, !orador {
             let margen: CGFloat = 24
             let notas = archivo.notasSiHay(p.estado.actual) ?? nil
             let estilo = NSMutableParagraphStyle()
@@ -454,6 +471,60 @@ final class VistaPaseIPad: UIView {
         boton("xmark", true, .salir, x)
     }
 
+    /// Donde va la diapositiva de ahora en la vista del orador (arriba a la
+    /// izquierda, tres quintos del ancho).
+    static func zonaDelOrador(_ b: CGRect) -> CGRect {
+        CGRect(x: 24, y: 64, width: b.width * 0.6 - 36, height: b.height * 0.58)
+    }
+
+    /// **La vista del orador**: el reloj y la cuenta arriba, la siguiente a
+    /// la derecha y las notas debajo (la de ahora la pinta `draw`).
+    private func pintarOrador(_ ctx: CGContext, _ archivo: ArchivoDiapositivas, _ p: PresentacionIPad) {
+        let ancho = bounds.width, alto = bounds.height
+        let gris = UIColor(white: 0.65, alpha: 1)
+        let arriba = NSAttributedString(
+            string: "\(relojDelOrador(segundos: Int(Date().timeIntervalSince(p.empezo))))   ·   \(p.estado.actual + 1) / \(p.estado.total)",
+            attributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: 22, weight: .semibold), .foregroundColor: UIColor.white])
+        arriba.draw(at: CGPoint(x: 24, y: 18 + safeAreaInsets.top * 0.3))
+        let zona = VistaPaseIPad.zonaDelOrador(bounds)
+        // La siguiente.
+        let derecha = CGRect(x: zona.maxX + 24, y: zona.minY + 26, width: ancho - zona.maxX - 48, height: zona.height * 0.62)
+        NSAttributedString(string: "Siguiente", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: gris])
+            .draw(at: CGPoint(x: derecha.minX, y: zona.minY))
+        if p.estado.actual + 1 < p.estado.total {
+            let c = CuentasDiapositivas.encajarEntera(archivo.tamano, en: derecha.size).offsetBy(dx: derecha.minX, dy: derecha.minY)
+            if let img = p.fotos[p.estado.actual + 1] {
+                VistaPaseIPad.imagen(img, en: c, recorte: nil, alfa: 1, ctx: ctx)
+            } else {
+                ctx.setFillColor(UIColor(white: 0.12, alpha: 1).cgColor)
+                ctx.fill(c)
+            }
+        } else {
+            NSAttributedString(string: "Fin de la presentación",
+                               attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: gris])
+                .draw(at: CGPoint(x: derecha.minX, y: derecha.minY + 8))
+        }
+        // Las notas.
+        let notas = archivo.notasSiHay(p.estado.actual) ?? nil
+        if archivo.notasSiHay(p.estado.actual) == nil {
+            let a = archivo, i = p.estado.actual
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = a.notas(i)
+                DispatchQueue.main.async { MainActor.assumeIsolated { p.vista.setNeedsDisplay() } }
+            }
+        }
+        let franja = CGRect(x: 24, y: zona.maxY + 20, width: ancho - 48,
+                            height: alto - zona.maxY - 20 - max(safeAreaInsets.bottom, 12) - 90)
+        guard franja.height > 20 else { return }
+        let estilo = NSMutableParagraphStyle()
+        estilo.lineBreakMode = .byWordWrapping
+        NSAttributedString(string: notas ?? TextosPase.sinNotas, attributes: [
+            .font: UIFont.systemFont(ofSize: 22),
+            .foregroundColor: notas == nil ? gris : UIColor.white,
+            .paragraphStyle: estilo,
+        ]).draw(with: franja, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+    }
+
     /// Una imagen (o un trozo, en fracciones) en `r`, con su alfa.
     private static func imagen(_ img: CGImage, en r: CGRect, recorte: CGRect?, alfa: CGFloat, ctx: CGContext) {
         var fuente = img
@@ -479,6 +550,10 @@ final class VistaPaseIPad: UIView {
 final class PresentacionIPad: NSObject, ObservableObject {
     let url: URL
     let vista = VistaPaseIPad()
+    /// La de la pantalla externa, si la hay (`PantallaExternaIPad`).
+    var publico: VistaPaseIPad?
+    /// Cuando empezo (el reloj del orador).
+    private(set) var empezo = Date()
     var alSalir: ((Int) -> Void)?
     private(set) var archivo: ArchivoDiapositivas?
     private(set) var fallo = false
@@ -515,6 +590,8 @@ final class PresentacionIPad: NSObject, ObservableObject {
 
     func empezar() {
         UIApplication.shared.isIdleTimerDisabled = true
+        empezo = Date()
+        PantallaExternaIPad.compartida.presentar(self)
         ensenarPastilla()
         let url = self.url
         cola.async { [weak self] in
@@ -724,6 +801,7 @@ final class PresentacionIPad: NSObject, ObservableObject {
     func terminar() {
         guard !cerrada else { return }
         cerrada = true
+        PantallaExternaIPad.compartida.dejar(self)
         UIApplication.shared.isIdleTimerDisabled = false
         enlace?.invalidate()
         enlace = nil

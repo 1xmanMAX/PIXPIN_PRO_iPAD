@@ -19,6 +19,7 @@
 // pausa de 120 ms al escribir, no por cada tecla.
 
 import Combine
+import PhotosUI
 import PixPinCore
 import SwiftUI
 import UIKit
@@ -285,7 +286,19 @@ final class ModeloTextoNota: ObservableObject {
     let markdown: Bool
     /// Escribe el texto donde viva (fuera del hilo principal lo hace el).
     var guardar: (@MainActor (String) -> Void)?
-    fileprivate weak var vista: UITextView?
+    weak var vista: UITextView?
+    /// Donde vive la nota (sus comentarios y sus fotos, `NotaMasIPad.swift`)
+    /// y el nucleo; sin ellos, ni comentarios ni fotos nuevas.
+    var destino: DestinoNota?
+    var nucleo: Nucleo?
+    var comentarios: ComentariosNota?
+    @Published var hilos: [HiloNota] = []
+    @Published var viendoComentarios = false
+    @Published var menuBarra: MenuBarraNota?
+    @Published var tablaEnCursor: TablaMd?
+    @Published var editandoTabla: TablaMd?
+    @Published var pidiendoFoto = false
+    let fotos = FotosDeLaNota()
     private var guardado: String
     private var restilo: DispatchWorkItem?
     private var pendiente: DispatchWorkItem?
@@ -308,16 +321,20 @@ final class ModeloTextoNota: ObservableObject {
         let tramos = mdTramos(texto: s.string)
         let seleccion = v.selectedRange
         EstiloDeNotaIPad.aplicar(s, tramos: tramos, lineaDelCursor: lineaDelCursor)
+        extrasTrasRestilar(s)
         v.selectedRange = seleccion
         v.typingAttributes = [.font: EstiloDeNotaIPad.letraBase, .foregroundColor: UIColor.label]
     }
 
-    fileprivate func cambio() {
+    func cambio() {
         programarRestilo()
         programarGuardado()
+        mirarBarra()
     }
 
     fileprivate func cambioDeSeleccion() {
+        mirarBarra()
+        mirarTabla()
         guard let v = vista, markdown else { return }
         let l = EstiloDeNotaIPad.linea(de: v.selectedRange.location, en: v.text)
         if l != lineaDelCursor {
@@ -445,7 +462,9 @@ struct TextoNotaIPad: UIViewRepresentable {
     func makeCoordinator() -> Coordinador { Coordinador(modelo: modelo) }
 
     func makeUIView(context: Context) -> UITextView {
-        let v = UITextView()
+        let v = TextoNotaUIView()
+        let m = modelo
+        v.alCambiarDeAncho = { MainActor.assumeIsolated { m.restilar() } }
         v.font = modelo.markdown ? EstiloDeNotaIPad.letraBase : UIFont.monospacedSystemFont(ofSize: 15, weight: .regular)
         v.textColor = .label
         v.backgroundColor = .systemBackground
@@ -499,9 +518,10 @@ struct TextoNotaIPad: UIViewRepresentable {
     }
 }
 
-/// La barra de Markdown (encima del texto): los botones de `MarcaNota`.
+/// La barra de Markdown (encima del texto): los botones de `MarcaNota`, la
+/// tabla y la foto.
 struct BarraMarkdownIPad: View {
-    let modelo: ModeloTextoNota
+    @ObservedObject var modelo: ModeloTextoNota
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -514,6 +534,23 @@ struct BarraMarkdownIPad: View {
                     .help(m.ayuda)
                     .accessibilityLabel(m.ayuda)
                     .modifier(AtajoDeMarca(marca: m))
+                }
+                Divider().frame(height: 22)
+                Button { modelo.editarTabla() } label: {
+                    Image(systemName: modelo.tablaEnCursor == nil ? "tablecells.badge.ellipsis" : "tablecells")
+                        .frame(width: 36, height: 32)
+                        .foregroundStyle(modelo.tablaEnCursor == nil ? Color.primary : Paleta.v2.acento)
+                }
+                .buttonStyle(.borderless)
+                .help(modelo.tablaEnCursor == nil ? "Insertar una tabla" : "Editar la tabla")
+                .accessibilityLabel(modelo.tablaEnCursor == nil ? "Insertar una tabla" : "Editar la tabla")
+                if modelo.destino != nil {
+                    Button { modelo.pidiendoFoto = true } label: {
+                        Image(systemName: "photo").frame(width: 36, height: 32)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Poner una foto")
+                    .accessibilityLabel("Poner una foto")
                 }
             }
             .padding(.horizontal, 12)
@@ -548,6 +585,7 @@ struct EditorTextoIPad: View {
     @ObservedObject private var voz = LeerEnVoz.compartida
     @EnvironmentObject private var nav: Navegacion
     @State private var sinVoz = false
+    @State private var fotoElegida: PhotosPickerItem?
 
     private var claveVoz: String { fichero?.path ?? modelo.claveDeVoz }
 
@@ -571,6 +609,22 @@ struct EditorTextoIPad: View {
                     Image(systemName: voz.suena(claveVoz) && voz.leyendo ? "speaker.wave.2.fill" : "speaker.wave.2")
                 }
                 .help("Escuchar desde el cursor")
+                if modelo.comentarios != nil {
+                    Button { modelo.viendoComentarios.toggle() } label: {
+                        Image(systemName: modelo.viendoComentarios ? "text.bubble.fill" : "text.bubble")
+                            .overlay(alignment: .topTrailing) {
+                                if modelo.abiertos > 0 {
+                                    Text("\(modelo.abiertos)").font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 3)
+                                        .background(Capsule().fill(Paleta.v2.rojo))
+                                        .offset(x: 8, y: -6)
+                                }
+                            }
+                    }
+                    .help("Comentarios")
+                    .accessibilityLabel("Comentarios, \(modelo.abiertos) abiertos")
+                }
                 ShareLink(item: modelo.texto) { Image(systemName: "square.and.arrow.up") }
                     .help("Compartir el texto")
             }
@@ -578,11 +632,48 @@ struct EditorTextoIPad: View {
                 BarraMarkdownIPad(modelo: modelo)
                 Divider()
             }
-            TextoNotaIPad(modelo: modelo)
-                .ignoresSafeArea(.container, edges: .bottom)
-                .overlay(alignment: .bottom) {
-                    BarraEscuchar(voz: voz, clave: { claveVoz }).padding(.bottom, 16)
+            HStack(spacing: 0) {
+                TextoNotaIPad(modelo: modelo)
+                    .ignoresSafeArea(.container, edges: .bottom)
+                    .overlay(alignment: .bottom) {
+                        BarraEscuchar(voz: voz, clave: { claveVoz }).padding(.bottom, 16)
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if let m = modelo.menuBarra {
+                            GeometryReader { g in
+                                let alto = CGFloat(m.comandos.count) * 34 + 30
+                                let abajo = m.cursor.maxY + 6 + alto <= g.size.height
+                                MenuBarraNotaIPad(menu: m) { modelo.elegir($0) }
+                                    .offset(x: min(max(m.cursor.minX, 8), max(g.size.width - 270, 8)),
+                                            y: abajo ? m.cursor.maxY + 6 : max(m.cursor.minY - 6 - alto, 8))
+                            }
+                        }
+                    }
+                if modelo.viendoComentarios, modelo.comentarios != nil {
+                    Divider()
+                    PanelComentariosNotaIPad(modelo: modelo)
                 }
+            }
+        }
+        .sheet(isPresented: Binding(get: { modelo.editandoTabla != nil },
+                                    set: { if !$0 { modelo.editandoTabla = nil } })) {
+            if let t = modelo.editandoTabla {
+                EditorTablaNotaIPad(tabla: t) { filas, alineaciones in
+                    modelo.guardarTabla(t, filas: filas, alineaciones: alineaciones)
+                }
+            }
+        }
+        .photosPicker(isPresented: $modelo.pidiendoFoto, selection: $fotoElegida, matching: .images)
+        .onChange(of: fotoElegida) { _, item in
+            guard let item else { return }
+            fotoElegida = nil
+            _ = Task<Void, Never> {
+                guard let datos = try? await item.loadTransferable(type: Data.self) else { return }
+                let jpg = await Task.detached(priority: .userInitiated) {
+                    UIImage(data: datos)?.jpegData(compressionQuality: 0.85)
+                }.value
+                if let jpg { modelo.adjuntarFoto(jpg, nombre: "foto.jpg") }
+            }
         }
         .alert("No se puede escuchar", isPresented: $sinVoz) {
             Button("Aceptar", role: .cancel) {}
@@ -636,6 +727,9 @@ public struct EditorNotaIPad: View {
     private func conectar() {
         let nucleo = almacen.nucleo, chat = self.chat, id = mensaje.id
         let almacen = self.almacen
+        modelo.nucleo = nucleo
+        modelo.destino = .mensaje(chat: chat, mensaje: id)
+        modelo.abrirComentarios()
         modelo.guardar = { texto in
             Task {
                 let hecho = await Task.detached(priority: .utility) { () -> Result<MensajeChat, Error> in
@@ -657,12 +751,15 @@ public struct EditorNotaIPad: View {
 struct VisorMarkdownIPad: View {
     let url: URL
     let titulo: String
+    /// Para los comentarios y las fotos de un `.md` (a su lado).
+    var nucleo: Nucleo?
     @StateObject private var modelo: ModeloTextoNota
     @State private var error: String?
 
-    init(url: URL, titulo: String, texto: String) {
+    init(url: URL, titulo: String, texto: String, nucleo: Nucleo? = nil) {
         self.url = url
         self.titulo = titulo
+        self.nucleo = nucleo
         let ext = url.pathExtension.lowercased()
         _modelo = StateObject(wrappedValue: ModeloTextoNota(texto: texto, markdown: ext == "md" || ext == "markdown"))
     }
@@ -681,6 +778,11 @@ struct VisorMarkdownIPad: View {
             }
             .onAppear {
                 let url = self.url
+                if modelo.markdown, let nucleo {
+                    modelo.nucleo = nucleo
+                    modelo.destino = .fichero(ruta: url.path)
+                    modelo.abrirComentarios()
+                }
                 modelo.guardar = { texto in
                     Task {
                         let fallo = await Task.detached(priority: .utility) { () -> String? in

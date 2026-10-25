@@ -38,7 +38,7 @@ enum AnotarPinConLienzo {
                 _ = Task.detached(priority: .utility) { try? FileManager.default.removeItem(at: carpeta) }
             }
             let hecho = ArribaUIKit.presentar(estilo: .fullScreen) { cerrar in
-                VistaAnotarPinLienzo(modelo: modelo, listo: {
+                VistaAnotarConLienzo(modelo: modelo, titulo: "Anotar el pin", icono: "pin", listo: {
                     if let anotada = quemar(imagen, modelo: modelo) { listo(anotada) }
                     cerrar()
                     limpiar()
@@ -79,9 +79,12 @@ enum AnotarPinConLienzo {
 }
 
 /// El lienzo a pantalla completa con su barra, y arriba «Cancelar» y
-/// «Listo».
-struct VistaAnotarPinLienzo: View {
+/// «Listo» (anotar un pin, anotar la pantalla).
+struct VistaAnotarConLienzo: View {
     @ObservedObject var modelo: ModeloEditorLienzo
+    var titulo = "Anotar"
+    var icono = "pencil.tip.crop.circle"
+    var textoListo = "Listo"
     let listo: () -> Void
     let cancelar: () -> Void
 
@@ -92,10 +95,10 @@ struct VistaAnotarPinLienzo: View {
                 Button("Cancelar", action: cancelar)
                     .keyboardShortcut(.cancelAction)
                 Spacer(minLength: 8)
-                Label("Anotar el pin", systemImage: "pin")
+                Label(titulo, systemImage: icono)
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
-                Button("Listo", action: listo)
+                Button(textoListo, action: listo)
                     .fontWeight(.semibold)
                     .keyboardShortcut(.defaultAction)
             }
