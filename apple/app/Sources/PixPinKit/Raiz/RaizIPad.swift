@@ -23,6 +23,14 @@ public struct RaizIPad: View {
                     }
                 }
                 .navigationTitle("PixPin")
+                .safeAreaInset(edge: .bottom) {
+                    BotonCapturar()
+                        .keyboardShortcut("1", modifiers: [.command, .shift])
+                        .padding(12)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { BotonPinesAbiertos() }
+                }
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
             } detail: {
                 seccion(nav.seccion ?? .proyectos, almacen: almacen)
