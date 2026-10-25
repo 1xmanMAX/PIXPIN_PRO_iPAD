@@ -115,13 +115,31 @@ public final class Sincronizador: ObservableObject {
     /// La sincronizacion sola (al aparecer, tras los cambios, cada 10 min y
     /// las tareas al instante).
     @Published public var automatica = true {
-        didSet { latido() }
+        didSet {
+            latido()
+            latidoPersonas()
+        }
     }
 
     /// Como va «Enviar a…» con cada aparato (por su id).
     @Published public private(set) var envios: [String: EstadoEnvioSuelto] = [:]
     /// Lo ultimo que llego suelto de otro aparato (para ensenarlo).
     @Published public private(set) var ultimasLlegadas: [ArchivoLlegado] = []
+
+    /// Si este aparato esta en algun chat compartido con personas
+    /// (`hayChatsCompartidos`): sin grupo, tambien se escucha y se anuncia
+    /// (`anuncioDePresencia`), y se sincroniza solo con ellas.
+    @Published public private(set) var hayCompartidos = false
+    /// **Con quien va la sincronizacion sola** ahora (los que contestan a la
+    /// sonda, `RelojSincro.conQuien`), por nombre: los del grupo.
+    @Published public private(set) var conQuienAuto: [String] = []
+    /// Las personas de los chats compartidos que contestan (por nombre).
+    @Published public private(set) var personasQueContestan: [String] = []
+    /// Fallos seguidos de la sincronizacion sola (`RelojSincro.fallosSeguidos`).
+    @Published public private(set) var fallosAuto: UInt32 = 0
+    /// Las direcciones recordadas (`sincro/direcciones.txt`), con el nombre
+    /// de quien es si se sabe: se releen al refrescar.
+    @Published public private(set) var recordadas: [DireccionConNombre] = []
 
     /// Se llama cuando una vuelta trajo algo (para releer la lista de chats).
     public var alTraerCambios: (@MainActor () -> Void)?
@@ -151,6 +169,18 @@ public final class Sincronizador: ObservableObject {
     private var observadores: [NSObjectProtocol] = []
     /// Si ya se leyo `[sincro] automatica` del TOML (iPad: al arrancar).
     private var automaticaLeida = false
+    /// **Las personas de los chats compartidos llevan su propio reloj**
+    /// (`automatica.rs` de Windows, `conPersonas` del movil): aparecer, un
+    /// cambio aqui o el periodo, por cada una.
+    private let relojPersonas = RelojSincro()
+    /// Donde contesto cada persona en la ultima sonda.
+    private var dondePersonas: [String: Direccion] = [:]
+    private var nombresPersonas: [String: String] = [:]
+    private var ultimoSondeoPersonas: Int64 = 0
+    private var sondeandoPersonas = false
+    /// Una vuelta con las personas en marcha.
+    private var corriendoPersonas = false
+    private var esperaPersonas: Task<Void, Never>?
     private let reloj: () -> Date
 
     public init(nucleo: Nucleo, reloj: @escaping () -> Date = { Date() }) {
@@ -179,13 +209,33 @@ public final class Sincronizador: ObservableObject {
         })
         vecinos.alCambiar = { [weak self] _ in self?.vecinosCambiaron() }
         relojAuto.verCambios(cambios: cambios, ahora: ahoraMs())
+        relojPersonas.verCambios(cambios: cambios, ahora: ahoraMs())
         Task { await refrescar() }
     }
 
     /// Lo deja todo: deja de anunciarse, de escuchar y de buscar.
+    ///
+    /// iPad: se para al irse la app al fondo. Lo que el reloj sabia de quien
+    /// contesta ya no vale: al volver, cada uno que conteste cuenta como
+    /// «aparecio» (la vuelta al volver a la app), salvo que se sincronizara
+    /// con el hace nada (`tocaPorAparecer`, como el Bonjour que va y viene);
+    /// y los encontrados en su direccion recordada se vuelven a probar (la IP
+    /// puede haber cambiado).
     public func parar() {
         espera?.cancel()
         espera = nil
+        esperaPersonas?.cancel()
+        esperaPersonas = nil
+        let ahora = reloj()
+        for id in relojAuto.conQuien() where tocaPorAparecer(ultimaVuelta: ultimaVuelta[id], ahora: ahora) {
+            relojAuto.olvidar(id: id)
+        }
+        for id in relojPersonas.conQuien() { relojPersonas.olvidar(id: id) }
+        porRecordada = []
+        dondePersonas = [:]
+        ultimoSondeoPersonas = 0
+        conQuienAuto = []
+        personasQueContestan = []
         pregunta?.contestar(nil)
         anunciador.retirar()
         puerta?.cerrar()
@@ -511,8 +561,13 @@ public final class Sincronizador: ObservableObject {
                 try (nucleo.aparato(), nucleo.anuncio(), nucleo.anuncioDePresencia(), try? nucleo.ajustes(),
                      (try? nucleo.miembrosDelGrupo()) ?? [])
             }.value
+            let (compartidos, direcciones) = await Task.detached(priority: .utility) {
+                ((try? nucleo.hayChatsCompartidos()) ?? false, nucleo.direccionesRecordadas())
+            }.value
             aparato = info
             miembros = grupo
+            hayCompartidos = compartidos
+            recordadas = direccionesConNombre(direcciones, miembros: grupo, personas: nombresPersonas)
             codigoLegible = info.grupo.map { PixPinCore.codigoLegible(codigo: $0) }
             etiqueta = anuncio?.etiqueta
             presencia = ajustes?.sincroPresencia ?? true
@@ -540,6 +595,9 @@ public final class Sincronizador: ObservableObject {
             self.error = textoDeError(error)
         }
         latido()
+        // Las personas se vuelven a mirar ya (un chat nuevo, la vuelta a la app).
+        ultimoSondeoPersonas = 0
+        latidoPersonas()
     }
 
     private func encender(_ anuncio: AnuncioBonjour) throws {
@@ -586,7 +644,12 @@ public final class Sincronizador: ObservableObject {
             // aparato del grupo sin escanear nada tiene que notarse.
             // iPad: el aviso lo pone quien tenga los avisos (`GanchosSincro`).
             if !llegadas.isEmpty {
-                GanchosSincro.alLlegar?("Llegó de \(nombre)", textoDeLlegadas(llegadas, de: nombre))
+                let titulo = "Llegó de \(nombre)", texto = textoDeLlegadas(llegadas, de: nombre)
+                if let gancho = GanchosSincro.alLlegar {
+                    gancho(titulo, texto)
+                } else {
+                    avisarDeLlegada(titulo: titulo, texto: texto)
+                }
             }
             for l in llegadas where l.donde == .lienzo {
                 NotificationCenter.default.post(name: .pixpinFotoAlLienzo, object: l)
@@ -766,7 +829,9 @@ public final class Sincronizador: ObservableObject {
     public func cambioLocal() {
         cambios &+= 1
         relojAuto.verCambios(cambios: cambios, ahora: ahoraMs())
+        relojPersonas.verCambios(cambios: cambios, ahora: ahoraMs())
         latido()
+        latidoPersonas()
     }
 
     /// Cambiaron las tareas del chat de `ficha`: salen al instante.
@@ -778,6 +843,7 @@ public final class Sincronizador: ObservableObject {
     private func cambioDeEnergia() {
         bajoConsumo = ProcessInfo.processInfo.isLowPowerModeEnabled
         latido()
+        latidoPersonas()
     }
 
     /// Si lo automatico puede andar ahora.
@@ -795,9 +861,14 @@ public final class Sincronizador: ObservableObject {
     private func latido() {
         espera?.cancel()
         espera = nil
+        let ids = relojAuto.conQuien()
+        let nombres = ids.map { id in filas.first { $0.id == id }?.nombre ?? id }
+        if nombres != conQuienAuto { conQuienAuto = nombres }
+        let fallos = relojAuto.fallosSeguidos()
+        if fallos != fallosAuto { fallosAuto = fallos }
         guard autoEncendida else { return }
         let ahora = ahoraMs()
-        let enMarcha = ocupado || corriendo
+        let enMarcha = ocupado || corriendo || corriendoPersonas
         switch relojAuto.siguiente(ahora: ahora, ocupado: enMarcha) {
         case .nada:
             break
@@ -810,6 +881,7 @@ public final class Sincronizador: ObservableObject {
                 await tareasAlInstante(fichas)
                 corriendo = false
                 latido()
+                latidoPersonas()
             }
             return
         case let .entera(motivo):
@@ -827,6 +899,7 @@ public final class Sincronizador: ObservableObject {
                         + (ultimoResultado.map { ": \($0)" } ?? ".")
                 }
                 latido()
+                latidoPersonas()
             }
             return
         }
@@ -836,6 +909,138 @@ public final class Sincronizador: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.latido()
         }
+    }
+
+    // MARK: - Las personas de los chats compartidos (lo automatico)
+
+    /// Cada cuanto se mira si las personas de los chats compartidos estan en
+    /// la red (`SONDEO_PERSONAS` de Windows): un minuto, sin prisa.
+    static let sondeoPersonasMs: Int64 = 60_000
+
+    /// Si lo automatico con las personas puede andar: hay chats compartidos
+    /// y la sincronizacion sola esta permitida (la misma regla que el grupo).
+    private var personasEncendida: Bool {
+        hayCompartidos && sePuedeSincronizar(.periodo, automatica: automatica, bajoConsumo: bajoConsumo,
+                                             presencia: presencia)
+    }
+
+    /// **El reloj de las personas** (el bucle de `automatica.rs` de Windows):
+    /// cada minuto se mira quien de ellas contesta y, cuando toca (aparecer,
+    /// un cambio aqui tras 30 s, cada 10 min), una vuelta con cada una que
+    /// contesto, solo con los chats que compartimos. Nunca a la par que una
+    /// vuelta del grupo.
+    private func latidoPersonas() {
+        esperaPersonas?.cancel()
+        esperaPersonas = nil
+        guard personasEncendida else { return }
+        let ahora = ahoraMs()
+        if !sondeandoPersonas, ahora - ultimoSondeoPersonas >= Self.sondeoPersonasMs {
+            sondearPersonas()
+        }
+        let enMarcha = ocupado || corriendo || corriendoPersonas
+        if case .entera = relojPersonas.siguiente(ahora: ahora, ocupado: enMarcha) {
+            relojPersonas.empezo(ahora: ahora)
+            corriendoPersonas = true
+            let ids = relojPersonas.conQuien()
+            Task {
+                let bien = await conPersonas(ids)
+                corriendoPersonas = false
+                if relojPersonas.acabo(bien: bien, cambios: cambios, ahora: ahoraMs()) {
+                    error = "La sincronización automática con los chats compartidos falla desde hace un rato"
+                        + (ultimoResultado.map { ": \($0)" } ?? ".")
+                }
+                latidoPersonas()
+                latido()
+            }
+            return
+        }
+        // Las tareas al instante son del grupo: aqui no se apuntan nunca.
+        var ms = Self.sondeoPersonasMs - (ahora - ultimoSondeoPersonas)
+        if let p = relojPersonas.proximoMs(ahora: ahora, corriendo: corriendoPersonas) { ms = min(ms, p) }
+        // Con otra vuelta en marcha se vuelve a mirar al acabar (y, por si
+        // acaso, cada segundo: nunca girando en vacio).
+        if enMarcha { ms = max(ms, 1_000) }
+        let espera = max(ms, 20)
+        esperaPersonas = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(espera))
+            guard !Task.isCancelled else { return }
+            self?.latidoPersonas()
+        }
+    }
+
+    /// **Quien de las personas contesta**: en su direccion recordada y, si
+    /// no, en su anuncio de Bonjour (por el `id`; su presencia sin grupo se
+    /// anuncia asi), que se apunta. Lo dice al reloj de las personas.
+    private func sondearPersonas() {
+        sondeandoPersonas = true
+        ultimoSondeoPersonas = ahoraMs()
+        let nucleo = self.nucleo
+        Task {
+            let lista = await Task.detached(priority: .utility) { personasDeLosChats(nucleo) }.value
+            var siguen = Set<String>()
+            for p in lista {
+                siguen.insert(p.id)
+                nombresPersonas[p.id] = p.nombre
+                var donde: Direccion?
+                if let r = p.recordada {
+                    let si = await Task.detached(priority: .utility) {
+                        nucleo.sondearDireccion(host: r.host, puerto: r.puerto)
+                    }.value
+                    if si { donde = r }
+                }
+                if donde == nil, let v = vecinos.todos.first(where: { $0.id == p.id }),
+                   let d = await Vecinos.sondear(v.punto) {
+                    donde = d
+                    apuntar(p.id, d)
+                }
+                dondePersonas[p.id] = donde
+                relojPersonas.responde(id: p.id, si: donde != nil)
+            }
+            // Quien ya no esta en ningun chat compartido conmigo, fuera.
+            for id in relojPersonas.conQuien() where !siguen.contains(id) {
+                relojPersonas.olvidar(id: id)
+                dondePersonas[id] = nil
+            }
+            personasQueContestan = relojPersonas.conQuien().map { nombresPersonas[$0] ?? $0 }
+            sondeandoPersonas = false
+            latidoPersonas()
+        }
+    }
+
+    /// **Una vuelta con cada persona que contesto** (`con_personas` de
+    /// Windows): solo los chats que compartimos (`chats` vacio), con la
+    /// direccion de la sonda. Ocupado no es un fallo: la proxima. Devuelve
+    /// si fue bien.
+    private func conPersonas(_ ids: [String]) async -> Bool {
+        let nucleo = self.nucleo
+        var bien = true
+        var trajo: [String] = []
+        var fallo: String?
+        for id in ids {
+            guard let d = dondePersonas[id] else { continue }
+            let nombre = nombresPersonas[id] ?? id
+            do {
+                let r = try await Task.detached(priority: .utility) {
+                    try nucleo.sincronizarConPersona(host: d.host, puerto: d.puerto, id: id, chats: [])
+                }.value
+                if r.puertoDelOtro > 0 { apuntar(id, Direccion(host: d.host, puerto: r.puertoDelOtro)) }
+                if r.trajoAlgo {
+                    trajo.append("Chat compartido con \(r.otroNombre): \(resumenDePersona(r))")
+                }
+            } catch {
+                let texto = textoDeError(error)
+                if esOcupado(texto) { continue }
+                bien = false
+                fallo = "No se pudo sincronizar solo con \(nombre) (\(texto))"
+            }
+        }
+        if !trajo.isEmpty {
+            ultimoResultado = "Automática: " + trajo.joined(separator: "\n")
+            alTraerCambios?()
+        } else if let fallo {
+            ultimoResultado = "Automática: \(fallo)"
+        }
+        return bien
     }
 
     /// Hace `trabajo` con el nucleo fuera del hilo principal, con su fase.

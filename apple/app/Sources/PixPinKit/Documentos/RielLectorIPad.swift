@@ -1,7 +1,7 @@
 // **El riel del lector** a la derecha, como el pin del lector de Windows
 // (`lector_pin.rs`, la isla con el marcador y el lapiz): arriba la isla
 // (marcador y lapiz), debajo los marcadores puestos (un toque va, mantener
-// quita) y, al anotar, las herramientas de la tinta: lapiz, resaltador,
+// quita), el de los marcos numerados para imprimir y, al anotar, las herramientas de la tinta: lapiz, resaltador,
 // goma, los cinco colores, deshacer y rehacer, «Dibujar con el dedo» y los
 // espacios para anotar a cada lado.
 
@@ -11,6 +11,7 @@ import SwiftUI
 struct RielLectorIPad: View {
     let c: ControladorLectorIPad
     @ObservedObject var modelo: ModeloLectorIPad
+    @ObservedObject var marcos: MarcosDoc
 
     var body: some View {
         VStack(spacing: 10) {
@@ -29,6 +30,10 @@ struct RielLectorIPad: View {
             BotonRielIPad(simbolo: "pencil.tip", ayuda: modelo.anotando ? "Dejar de anotar" : "Anotar",
                           encendido: modelo.anotando) {
                 c.alternarAnotar()
+            }
+            BotonRielIPad(simbolo: "rectangle.dashed", ayuda: marcos.activo ? "Dejar de poner marcos" : "Marcos para imprimir",
+                          encendido: marcos.activo) {
+                c.alternarMarcos()
             }
         }
         .padding(3)

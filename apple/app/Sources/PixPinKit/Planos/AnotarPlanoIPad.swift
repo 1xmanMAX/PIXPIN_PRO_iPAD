@@ -1,25 +1,32 @@
-// **Anotar el plano a mano con el Apple Pencil** (`plano_cad::anotar` de
-// Windows, `AnotarPlano.swift` del Mac), en sencillo: el editor del lienzo
-// de Rust (`Plano.anotar`) recibe los trazos del lapiz en las coordenadas de
-// la capa del plano y lo dibujado se pinta encima con Core Graphics.
+// **Anotar el plano** (`plano_cad::anotar` de Windows, `AnotarPlano.swift`
+// del Mac): el editor del lienzo de Rust (`Plano.anotar`) con **todas sus
+// herramientas** (la barra del lienzo: lapiz, formas, flechas, texto,
+// colores, grosores...), como en Android v0.114 («anotar en el visor de
+// planos usa las herramientas del motor del lienzo, sin herramientas
+// propias»).
 //
 // - La capa es la de siempre (`anot-<uid>` del mensaje o la de la cache):
 //   lo anotado aqui se ve en Windows, el Mac y Android, y al reves.
 // - Las coordenadas: `x = cero_x + x_capa * u`, `y = cero_y - y_capa * u`
-//   (`EncajePlano`; la y de la capa baja, como en el lienzo).
+//   (`EncajePlano`; la y de la capa baja, como en el lienzo). El plano
+//   manda la camara: la vista de Metal pasa los toques a la capa y lo de
+//   encima se pinta con el pintor del lienzo (`PintorLienzo`).
+// - Las barras (herramientas y estilo) son las del lienzo
+//   (`BarraHerramientasLienzo`, `PanelEstiloLienzo`) sobre un
+//   `ModeloEditorLienzo` con el editor de la capa; el teclado del texto lo
+//   lleva la vista del plano (`UIKeyInput`).
 // - Solo el lapiz pinta en cuanto se ha visto un Pencil (la palma no pinta);
 //   sin Pencil (el simulador, un iPad sin lapiz) pinta un dedo.
-// - Al terminar, lo escrito se guarda y la `.hoja` va detras de la capa.
-//
-// Pendiente: la barra entera del lienzo (formas, texto, colores...) cuando
-// el lienzo del iPad tenga su vista con papel transparente y camara de fuera.
+// - Lo anotado se guarda solo (el modelo del lienzo, 1 s despues del ultimo
+//   cambio) y al terminar; la `.hoja` va detras de la capa.
 
 import CoreGraphics
 import Foundation
 import PixPinCore
 import UIKit
 
-/// Las herramientas del lapiz sobre el plano (los nombres del motor del lienzo).
+/// Las herramientas que el doble toque del Pencil alterna (los nombres del
+/// motor del lienzo).
 enum HerramientaTintaPlano: String, CaseIterable, Identifiable {
     case lapiz, resaltador, borrador
 
@@ -45,7 +52,9 @@ enum HerramientaTintaPlano: String, CaseIterable, Identifiable {
 /// El editor del lienzo sobre la capa del plano mientras se anota.
 @MainActor
 final class AnotadorPlanoIPad {
-    let editor: EditorLienzo
+    /// El modelo del lienzo (sus barras, su estilo y su guardado solo).
+    let modelo: ModeloEditorLienzo
+    var editor: EditorLienzo { modelo.editor }
     /// Como cae la capa en el dibujo (el de cuando se empezo: con el se
     /// escribe la `.hoja`).
     let encaje: EncajePlano
@@ -53,25 +62,47 @@ final class AnotadorPlanoIPad {
     /// Lo dibujado, leido de nuevo solo cuando cambia la version o la vista.
     private(set) var leido: LienzoLeido?
     private var clave: [Double] = []
+    private var vigia: NSObjectProtocol?
 
-    init(plano: Plano) throws {
+    init(plano: Plano, nucleo: Nucleo? = nil, titulo: String = "Plano") throws {
         self.plano = plano
-        editor = try plano.anotar()
+        let editor = try plano.anotar()
         encaje = plano.encaje()
-        try editor.herramienta(nombre: HerramientaTintaPlano.lapiz.rawValue)
+        let referencia = "plano|" + plano.rutaDeLaCapa()
+        modelo = ModeloEditorLienzo(editor: editor, referencia: referencia, nucleo: nucleo, titulo: titulo)
+        modelo.elegir(HerramientaTintaPlano.lapiz.rawValue)
         // Trazo limpio: sobre un plano se senala, no se boceta.
-        _ = editor.cambiarEstilo(cambio: .rugosidad(valor: 0))
+        modelo.cambiarEstilo(.rugosidad(valor: 0))
+        // La capa de un plano que no es de ningun chat: su `.hoja` la pone
+        // el visor cuando el lienzo guarda (en un chat la escribe el editor).
+        let encaje = self.encaje
+        vigia = NotificationCenter.default.addObserver(forName: .pixpinLienzoGuardado, object: nil, queue: .main) {
+            [plano] n in
+            guard (n.object as? String) == referencia else { return }
+            Task.detached(priority: .utility) { _ = try? plano.ponerHoja(encaje: encaje) }
+        }
         releer()
     }
 
     func herramienta(_ h: HerramientaTintaPlano) {
-        try? editor.herramienta(nombre: h.rawValue)
+        modelo.elegir(h.rawValue)
     }
 
     /// Un punto del lapiz, ya en coordenadas de la capa; `zoom` es lo que
-    /// mide en puntos de la pantalla una unidad de la capa.
-    func puntero(_ fase: FasePuntero, x: Double, y: Double, presion: Float?, zoom: Double) {
-        _ = editor.puntero(fase: fase, x: Float(x), y: Float(y), presion: presion, modificadores: 0, zoom: Float(zoom))
+    /// mide en puntos de la pantalla una unidad de la capa. Devuelve la
+    /// version del dibujo.
+    @discardableResult
+    func puntero(_ fase: FasePuntero, x: Double, y: Double, presion: Float?, modificadores: UInt32 = 0,
+                 zoom: Double) -> UInt64 {
+        editor.puntero(fase: fase, x: Float(x), y: Float(y), presion: presion, modificadores: modificadores,
+                       zoom: Float(zoom))
+    }
+
+    /// Tras algo que pudo cambiar el dibujo: la barra mira al editor y se
+    /// programa el guardado.
+    func trasCambio() {
+        modelo.refrescarBarra()
+        modelo.revisarCambios()
     }
 
     /// Lo nuevo, a la escala de lo que se ve (como Windows): un trazo fino
@@ -84,7 +115,14 @@ final class AnotadorPlanoIPad {
     @discardableResult
     func deshacer() -> Bool {
         let hecho = editor.deshacer()
-        if hecho { releer() }
+        if hecho { trasCambio() }
+        return hecho
+    }
+
+    @discardableResult
+    func rehacer() -> Bool {
+        let hecho = editor.rehacer()
+        if hecho { trasCambio() }
         return hecho
     }
 
@@ -114,9 +152,14 @@ final class AnotadorPlanoIPad {
         return true
     }
 
+    /// Se vuelve a leer en el siguiente pintado (deshacer, otro estilo).
+    func olvidarLeido() { clave = [] }
+
     /// **Termina**: lo que se escribia se queda escrito y la capa se guarda
     /// (con su `.hoja`) fuera del hilo principal.
     func terminar() async {
+        if let v = vigia { NotificationCenter.default.removeObserver(v) }
+        vigia = nil
         let editor = self.editor, plano = self.plano, encaje = self.encaje
         await Task.detached(priority: .userInitiated) {
             _ = editor.terminarTexto()

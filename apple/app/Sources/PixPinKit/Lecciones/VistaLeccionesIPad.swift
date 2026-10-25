@@ -215,3 +215,56 @@ struct AbrirAdjuntoLeccion: ViewModifier {
         }
     }
 }
+
+// MARK: - «Hacer lección» desde un mensaje
+
+/// **«Hacer lección»** del menu de un mensaje (`GanchosChat.hacerLeccion`,
+/// lo pone `ArranqueOrganizar`): la ficha nueva con lo que dice el mensaje
+/// ya repartido por el nucleo (`leccionDeMensaje`), enlazada a el
+/// (`deMensaje`) y en su chat, en una hoja encima de lo que este abierto.
+@MainActor
+enum HacerLeccionIPad {
+    static func abrir(chat: String, mensaje m: MensajeChat, almacen: Almacen) {
+        let nucleo = almacen.nucleo
+        let id = m.id
+        Task {
+            let hecho = await Task.detached(priority: .userInitiated) {
+                Result { try nucleo.leccionDeMensaje(chat: chat, id: id) }
+            }.value
+            let b = borrador(chat: chat, mensaje: id, de: try? hecho.get(), texto: m.texto)
+            let modelo = ModeloLecciones(nucleo: nucleo)
+            ArribaUIKit.presentar(estilo: .formSheet, tamano: CGSize(width: 620, height: 760)) { cerrar in
+                NavigationStack {
+                    FichaLeccionVista(modelo: modelo, ficha: nil, inicial: b) { _ in cerrar() }
+                        .navigationTitle("Nueva lección")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { cerrar() } }
+                        }
+                }
+                .environment(\.colorScheme, .dark)
+            }
+        }
+    }
+
+    /// Lo que trae escrito la ficha: lo del nucleo o, si no supo, el texto
+    /// del mensaje como titulo (la primera linea) y «Qué pasó».
+    nonisolated static func borrador(chat: String, mensaje: String, de l: LeccionDeMensaje?, texto: String) -> BorradorLeccion {
+        var b = BorradorLeccion()
+        b.chat = chat
+        b.deMensaje = mensaje
+        if let l {
+            b.titulo = l.titulo
+            b.quePaso = l.quePaso
+            b.porQue = l.porQue
+            b.proxima = l.proxima
+            b.etiquetas = l.etiquetas
+        } else {
+            let t = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+            let primera = t.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
+            b.titulo = String(primera.prefix(140))
+            if t.count > primera.count { b.quePaso = t }
+        }
+        return b
+    }
+}

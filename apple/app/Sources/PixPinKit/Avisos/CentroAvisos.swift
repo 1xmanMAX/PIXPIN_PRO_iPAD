@@ -66,6 +66,9 @@ public enum CategoriaAviso: String, CaseIterable, Sendable {
     /// Un temporizador o una alarma de una mini-app (`AvisosMini`): sin
     /// botones, suena en su ventana.
     case mini = "pixpin.mini"
+    /// Una llamada (una clase del horario, una nota de voz con hora): con
+    /// sonido de llamada; tocarla la abre ya contestada (`LlamadaIPad`).
+    case llamada = "pixpin.llamada"
 
     /// Los botones, en el orden de Windows (`notificaciones::de_recordatorio`,
     /// `de_capturas`).
@@ -76,13 +79,14 @@ public enum CategoriaAviso: String, CaseIterable, Sendable {
         case .captura: [.conservar, .abrir]
         case .capturas: [.galeria]
         case .mini: []
+        case .llamada: [.posponer]
         }
     }
 
     /// Lo que hace pulsar el aviso (el `al_pulsar` del toast de Windows).
     public var alPulsar: AccionAviso? {
         switch self {
-        case .recordatorio, .recordatorioTarea: .abrir
+        case .recordatorio, .recordatorioTarea, .llamada: .abrir
         case .captura, .capturas: .galeria
         case .mini: nil
         }
@@ -93,7 +97,7 @@ public enum CategoriaAviso: String, CaseIterable, Sendable {
     /// notificacion del sistema sobraria.
     public var suenaEnLaApp: Bool {
         switch self {
-        case .recordatorio, .recordatorioTarea, .mini: true
+        case .recordatorio, .recordatorioTarea, .mini, .llamada: true
         case .captura, .capturas: false
         }
     }
@@ -113,6 +117,9 @@ public struct Aviso: Equatable, Sendable, Identifiable {
     /// Cuando sale; `nil`, ya.
     public var cuando: Date?
     public var datos: [String: String]
+    /// El sonido de la notificacion del sistema (un fichero de
+    /// `Library/Sounds`, como el de la llamada); `nil`, el de siempre.
+    public var sonido: String?
 
     public init(id: String, categoria: CategoriaAviso, titulo: String, texto: String,
                 imagen: URL? = nil, cuando: Date? = nil, datos: [String: String] = [:]) {
@@ -217,7 +224,12 @@ public final class CentroAvisos: NSObject, ObservableObject {
         let contenido = UNMutableNotificationContent()
         contenido.title = a.titulo
         contenido.body = a.texto
-        contenido.sound = .default
+        contenido.sound = a.sonido.map { UNNotificationSound(named: UNNotificationSoundName($0)) } ?? .default
+        if a.categoria == .llamada {
+            // Que se oiga aunque haya un modo de concentracion (si el
+            // usuario lo deja en los ajustes de la app).
+            contenido.interruptionLevel = .timeSensitive
+        }
         contenido.categoryIdentifier = a.categoria.rawValue
         contenido.userInfo = a.datos
         if let imagen = a.imagen,
@@ -438,6 +450,7 @@ struct TarjetaAviso: View {
         case .recordatorioTarea: "checklist"
         case .captura, .capturas: "trash"
         case .mini: "bell.fill"
+        case .llamada: "phone.fill"
         }
     }
 

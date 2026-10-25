@@ -80,6 +80,13 @@ final class ModeloLectorIPad: ObservableObject {
     @Published var pidiendoPagina = false
     @Published var paginaPedida = ""
     @Published var puedeDeshacer = false
+    /// La hoja del indice abierta.
+    @Published var viendoIndice = false
+    /// Escribiendo el nombre nuevo (F2).
+    @Published var renombrando = false
+    @Published var nombreNuevo = ""
+    /// Un aviso que se va solo («Ahora se llama…»).
+    @Published var nota: String?
 
     var anotando: Bool { herramienta != "leer" }
 
@@ -234,13 +241,24 @@ final class GestoTintaIPad: UIGestureRecognizer {
 /// **Un documento abierto en el lector.**
 @MainActor
 final class ControladorLectorIPad: NSObject, ObservableObject {
-    let url: URL
+    /// Cambia si se renombra un documento suelto (se mueve con sus hermanos).
+    private(set) var url: URL
     let nucleo: Nucleo
     let modelo = ModeloLectorIPad()
     let voz = VozDocumentoIPad()
     let vistaPDF = PDFView()
     let miniaturas = PDFThumbnailView()
     private let gesto = GestoTintaIPad(target: nil, action: nil)
+    /// La pagina que sube sola.
+    let avance = AvanceLectorIPad()
+    private lazy var reloj = RelojAvanceIPad(avance: avance) { [weak self] in
+        self.flatMap { ControladorLectorIPad.desplazador(en: $0.vistaPDF) }
+    }
+    /// Los marcos numerados para imprimir.
+    let marcos: MarcosDoc
+    private let goma = GomaDeMarcoIPad()
+    private var inicioMarco: CGPoint?
+    private var tareaNota: DispatchWorkItem?
 
     /// Las vistas de tinta de las hojas que PDFKit tiene puestas.
     private var hojas: [Int: HojaTintaIPad] = [:]
@@ -271,6 +289,7 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     private var lecturaPendiente: DispatchWorkItem?
     private var tareaOffice: Task<Void, Never>?
     private var vigias: [NSObjectProtocol] = []
+    private var suscripciones: Set<AnyCancellable> = []
     private var mirarDisco: Timer?
     private var abierto = false
     private var cerrado = false
@@ -280,9 +299,11 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     init(url: URL, nucleo: Nucleo, titulo: String) {
         self.url = url
         self.nucleo = nucleo
+        marcos = MarcosDoc(documento: url, nucleo: nucleo)
         super.init()
         modelo.nombre = titulo
         montar()
+        DocumentosDelIPad.activar()
     }
 
     private func montar() {
@@ -307,8 +328,29 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         miniaturas.backgroundColor = .secondarySystemBackground
         voz.vistaPDF = vistaPDF
         voz.alParar = { [weak self] pagina, altura in self?.ponerMarcaDeVoz(pagina: pagina, altura: altura) }
+        goma.frame = vistaPDF.bounds
+        goma.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        vistaPDF.addSubview(goma)
+        reloj.quieta = { [weak self] in
+            guard let self else { return true }
+            return self.modelo.anotando || self.marcos.activo
+        }
+        // Los marcos se pintan en la capa de cada hoja.
+        marcos.$lista.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.repintarHojas() }
+        }.store(in: &suscripciones)
+        marcos.$activo.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.actualizarGestos() }
+        }.store(in: &suscripciones)
         actualizarGestos()
         let centro = NotificationCenter.default
+        // Aligerado en su sitio mientras se lee: se vuelve a abrir.
+        vigias.append(centro.addObserver(forName: .pixpinPdfAligerado, object: nil, queue: .main) { [weak self] n in
+            let ruta = n.object as? String
+            MainActor.assumeIsolated {
+                if let self, ruta == self.url.path { self.recargar() }
+            }
+        })
         for nombre in [Notification.Name.PDFViewPageChanged, .PDFViewScaleChanged, .PDFViewVisiblePagesChanged] {
             vigias.append(centro.addObserver(forName: nombre, object: vistaPDF, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.alMoverse() }
@@ -355,13 +397,57 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
             case .officePaginado:
                 self.abrirOffice(lectura)
             default:
-                guard let doc = ControladorLectorIPad.documento(url: self.url) else {
+                if let doc = ControladorLectorIPad.documento(url: self.url), doc.pageCount > 0 {
+                    self.poner(doc, lectura: lectura)
+                    return
+                }
+                // Roto: el de un proyecto se rehace desde su copia limpia.
+                let roto = self.url
+                let sano = await Task.detached(priority: .userInitiated) { PdfSano.reparar(roto) }.value
+                guard !self.cerrado, let sano, let doc = ControladorLectorIPad.documento(url: sano),
+                      doc.pageCount > 0 else {
                     self.modelo.aviso = "No se puede abrir este PDF."
                     return
                 }
                 self.poner(doc, lectura: lectura)
+                self.avisar(sano == roto ? "El PDF estaba roto: se rehízo desde su copia limpia."
+                                         : "El PDF está roto: se enseña su copia limpia.")
             }
         }
+    }
+
+    /// Vuelve a abrir el PDF en el mismo sitio (cambio en su sitio al
+    /// aligerarse). Un Word o un PowerPoint no cambian asi.
+    private func recargar() {
+        guard !cerrado, TiposDeDocumento.clase(de: url) == .pdf, vistaPDF.document != nil,
+              let nuevo = ControladorLectorIPad.documento(url: url), nuevo.pageCount > 0 else { return }
+        if let viejo = vistaPDF.document { TonosDeDocumentos.compartidos.olvidar(viejo) }
+        TonosDeDocumentos.compartidos.poner(tono, a: nuevo)
+        let i = modelo.pagina
+        let auto = vistaPDF.autoScales, escala = vistaPDF.scaleFactor
+        hojas = [:]
+        vistaPDF.document = nuevo
+        vistaPDF.autoScales = auto
+        if !auto { vistaPDF.scaleFactor = escala }
+        if let p = nuevo.page(at: min(i, nuevo.pageCount - 1)) { vistaPDF.go(to: p) }
+        modelo.paginas = nuevo.pageCount
+        ponerMargenes()
+        actualizarGestos()
+        avance.palabras = nil
+        if let r = ColaAligerar.compartida.resultado[url.path] { avisar(r) }
+    }
+
+    /// Un aviso arriba que se va solo a los 2,5 s.
+    func avisar(_ texto: String) {
+        modelo.nota = texto
+        tareaNota?.cancel()
+        let t = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.modelo.nota = nil } }
+        tareaNota = t
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: t)
+    }
+
+    private func repintarHojas() {
+        for h in hojas.values { h.repintar() }
     }
 
     /// Un PDF con hojas del lector (las que saben pintarse en oscuro).
@@ -464,6 +550,9 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         guard !cerrado else { return }
         cerrado = true
         voz.parar()
+        reloj.parar()
+        avance.activo = false
+        suscripciones = []
         tareaOffice?.cancel()
         guardadoPendiente?.cancel()
         lecturaPendiente?.cancel()
@@ -583,6 +672,7 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         for r in [izq, der].compactMap({ $0 }) where r.intersects(sucio) {
             ctx.fill(r)
         }
+        defer { pintarMarcos(i, en: ctx, pagina: pagina, sucio: sucio) }
         guard let ed = editores[i] else { return }
         let v = ed.version()
         if leidos[i]?.version != v, let l = try? leerLienzo(ed.plano()) {
@@ -675,7 +765,11 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     /// (o pinta con «Dibujar con el dedo», y se desplaza con dos).
     private func actualizarGestos() {
         var tipos: [UITouch.TouchType] = [.pencil]
-        if modelo.anotando {
+        if marcos.activo {
+            // Poniendo marcos: el lapiz, el dedo y el raton dibujan el marco
+            // (se desplaza con dos dedos).
+            tipos += [.direct, .indirectPointer]
+        } else if modelo.anotando {
             tipos.append(.indirectPointer)
             if modelo.conDedo { tipos.append(.direct) }
         }
@@ -686,7 +780,8 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
                 NSNumber(value: UITouch.TouchType.indirect.rawValue),
                 NSNumber(value: UITouch.TouchType.indirectPointer.rawValue),
             ]
-            desplazar.panGestureRecognizer.minimumNumberOfTouches = modelo.anotando && modelo.conDedo ? 2 : 1
+            desplazar.panGestureRecognizer.minimumNumberOfTouches =
+                marcos.activo || (modelo.anotando && modelo.conDedo) ? 2 : 1
         }
     }
 
@@ -702,6 +797,7 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     /// Si un toque es para la tinta. Apoyar el lapiz leyendo empieza a
     /// anotar con la ultima herramienta.
     func aceptar(_ t: UITouch) -> Bool {
+        if marcos.activo { return true }
         switch t.type {
         case .pencil:
             if !modelo.anotando { elegir(ultimaHerramienta) }
@@ -715,6 +811,10 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
 
     func trazo(_ fase: FasePuntero, _ toques: [UITouch], vista: UIView?) {
         guard let primero = toques.first else { return }
+        if marcos.activo || inicioMarco != nil {
+            trazoDeMarco(fase, primero)
+            return
+        }
         if fase == .pulsar {
             let p = primero.location(in: vistaPDF)
             guard let pagina = vistaPDF.page(for: p, nearest: true) else { return }
@@ -982,6 +1082,256 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     }
 }
 
+// MARK: - Marcos, desplazar sola, indice, compartir, imprimir y el nombre
+
+extension ControladorLectorIPad {
+    private var hojasDelLector: HojasDelLector? {
+        vistaPDF.document.map { HojasDelLector($0, caja: vistaPDF.displayBox) }
+    }
+
+    /// Los marcos de la hoja `i`, encima de su tinta.
+    fileprivate func pintarMarcos(_ i: Int, en ctx: CGContext, pagina: CGRect, sucio: CGRect) {
+        guard !marcos.lista.isEmpty, let h = hojasDelLector else { return }
+        let vista = hojas[i]
+        let k = vista.map { v in v.bounds.width > 0 ? v.convert(v.bounds, to: nil).width / v.bounds.width : 1 } ?? 1
+        for (n, m) in marcos.lista.enumerated() {
+            guard let r = h.rect(m, enHoja: i, vista: pagina), r.insetBy(dx: -24, dy: -24).intersects(sucio) else {
+                continue
+            }
+            PintarMarcos.pintar(r, numero: n + 1, en: ctx, k: k)
+        }
+    }
+
+    /// El marco que se arrastra (en la vista del PDF) y, al soltar, el
+    /// marco en las unidades del lector.
+    fileprivate func trazoDeMarco(_ fase: FasePuntero, _ t: UITouch) {
+        let p = t.location(in: vistaPDF)
+        switch fase {
+        case .pulsar:
+            inicioMarco = p
+            goma.rect = nil
+        case .mover:
+            guard let a = inicioMarco else { return }
+            goma.rect = CGRect(x: min(a.x, p.x), y: min(a.y, p.y), width: abs(a.x - p.x), height: abs(a.y - p.y))
+        case .soltar:
+            defer {
+                inicioMarco = nil
+                goma.rect = nil
+            }
+            // Menos de 8 puntos de ancho o de alto es un toque.
+            guard let a = inicioMarco, abs(a.x - p.x) > 8, abs(a.y - p.y) > 8, let h = hojasDelLector,
+                  let ua = unidades(a, h), let ub = unidades(p, h) else { return }
+            marcos.poner(CGRect(x: min(ua.x, ub.x), y: min(ua.y, ub.y), width: abs(ua.x - ub.x),
+                                height: abs(ua.y - ub.y)), parte: 0)
+        default:
+            inicioMarco = nil
+            goma.rect = nil
+        }
+    }
+
+    private func unidades(_ p: CGPoint, _ h: HojasDelLector) -> CGPoint? {
+        guard let doc = vistaPDF.document, let hoja = vistaPDF.page(for: p, nearest: true) else { return nil }
+        return h.unidades(vistaPDF.convert(p, to: hoja), hoja: doc.index(for: hoja),
+                          bounds: hoja.bounds(for: vistaPDF.displayBox))
+    }
+
+    /// El boton del marco del riel (o la I): poner marcos numerados.
+    func alternarMarcos() {
+        if modelo.anotando { elegir("leer") }
+        marcos.activo.toggle()
+        modelo.poniendoMarca = false
+        actualizarGestos()
+    }
+
+    /// Una ficha: ir al marco `n`.
+    func irAMarco(_ n: Int) {
+        guard n >= 0, n < marcos.lista.count, let doc = vistaPDF.document, let h = hojasDelLector else { return }
+        let m = marcos.lista[n]
+        let i = h.hoja(de: CGFloat(m.caja[1]))
+        guard let p = doc.page(at: i) else { return }
+        let b = p.bounds(for: vistaPDF.displayBox)
+        let a = h.punto(CGPoint(x: m.caja[0], y: m.caja[1]), bounds: b, hoja: i)
+        let z = h.punto(CGPoint(x: m.caja[2], y: m.caja[3]), bounds: b, hoja: i)
+        vistaPDF.go(to: CGRect(x: min(a.x, z.x), y: min(a.y, z.y), width: abs(a.x - z.x), height: abs(a.y - z.y)), on: p)
+    }
+
+    // MARK: Desplazar sola
+
+    /// D: pone o quita la barra de la pagina que sube sola.
+    func alternarAvance() {
+        if avance.activo {
+            avance.activo = false
+            reloj.parar()
+            return
+        }
+        guard let doc = vistaPDF.document, doc.pageCount > 0 else { return }
+        avance.ppm = nucleo.palabrasPorMinuto()
+        avance.enMarcha = true
+        avance.antes = nil
+        avance.activo = true
+        avance.quedan = "Contando las palabras…"
+        if avance.palabras == nil { contarPalabrasDelDocumento(doc) }
+        reloj.empezar()
+    }
+
+    /// Las palabras del documento, fuera del hilo principal. Un escaneo
+    /// cuenta 250 por hoja, lo de una pagina corriente.
+    private func contarPalabrasDelDocumento(_ doc: PDFDocument) {
+        let hojas = doc.pageCount
+        let deOffice = TiposDeDocumento.clase(de: url) == .officePaginado
+        let texto = deOffice ? (doc.string ?? "") : nil
+        let url = self.url
+        Task {
+            let n = await Task.detached(priority: .utility) { () -> Int in
+                let t = texto ?? PDFDocument(url: url)?.string ?? ""
+                return Int(contarPalabras(texto: t))
+            }.value
+            self.avance.palabras = n > 0 ? n : hojas * 250
+            self.reloj.reponerQuedan()
+        }
+    }
+
+    func cambiarVelocidad(_ sentido: Int32) {
+        avance.ppm = otraVelocidadDeLeer(ppm: avance.ppm, sentido: sentido)
+        reloj.reponerQuedan()
+        let ppm = avance.ppm, nucleo = self.nucleo
+        colaGuardar.async { try? nucleo.guardarPalabrasPorMinuto(ppm: ppm) }
+    }
+
+    // MARK: Indice
+
+    var indice: [EntradaIndice] { EntradaIndice.de(vistaPDF.document) }
+
+    func ir(a e: EntradaIndice) {
+        guard let p = vistaPDF.document?.page(at: e.destino) else { return }
+        vistaPDF.go(to: p)
+    }
+
+    // MARK: Compartir e imprimir
+
+    private var hayTinta: Bool { !conTinta.isEmpty || !editores.isEmpty }
+
+    /// **El PDF con la tinta quemada** (en una carpeta temporal).
+    func pdfConTinta() -> URL? {
+        guard let doc = vistaPDF.document else { return nil }
+        let (nucleo, ruta) = (self.nucleo, url.path)
+        return SalidaDocumentoIPad.pdfConTinta(doc, nombre: url.deletingPathExtension().lastPathComponent) { i, p in
+            let ed = self.editores[i] ?? (self.conTinta.contains(i)
+                ? try? nucleo.anotarHoja(documento: ruta, pagina: UInt32(i), alto: self.alto(p)) : nil)
+            return ed.flatMap { try? leerLienzo($0.plano()) }
+        }
+    }
+
+    /// ⇧⌘S: el original y, si tiene tinta, «<nombre> (anotado).pdf».
+    func compartir() {
+        var cosas: [Any] = [url]
+        let anotado = hayTinta ? pdfConTinta() : nil
+        if let anotado { cosas.append(anotado) }
+        SalidaDocumentoIPad.compartir(cosas, desde: vistaPDF) { SalidaDocumentoIPad.olvidar(anotado) }
+    }
+
+    /// ⌘P: con lo anotado encima. Con marcos, se imprimen ellos en grupo
+    /// (una hoja por marco), como Windows.
+    func imprimir() {
+        guard let doc = vistaPDF.document else { return }
+        let titulo = url.deletingPathExtension().lastPathComponent
+        let anotado = hayTinta ? pdfConTinta() : nil
+        defer { SalidaDocumentoIPad.olvidar(anotado) }
+        if !marcos.lista.isEmpty {
+            let fuente = anotado.flatMap { PDFDocument(url: $0) } ?? doc
+            guard let d = PintarMarcos.pdf(marcos.lista, documento: fuente) else { return }
+            SalidaDocumentoIPad.imprimir(d, titulo: titulo, desde: vistaPDF)
+            return
+        }
+        if let anotado, let d = try? Data(contentsOf: anotado) {
+            SalidaDocumentoIPad.imprimir(d, titulo: titulo, desde: vistaPDF)
+        } else if TiposDeDocumento.clase(de: url) == .pdf {
+            SalidaDocumentoIPad.imprimir(url, titulo: titulo, desde: vistaPDF)
+        } else if let d = doc.dataRepresentation() {
+            SalidaDocumentoIPad.imprimir(d, titulo: titulo, desde: vistaPDF)
+        }
+    }
+
+    /// «Aligerar el PDF» a mano: va delante, con el nivel de los ajustes.
+    func aligerar() {
+        avisar("Aligerando…")
+        ColaAligerar.compartida.aMano(url, nucleo: nucleo)
+        let ruta = url.path
+        Task { [weak self] in
+            // Lo que no cambio el fichero tambien se dice.
+            while ColaAligerar.compartida.pendiente(URL(fileURLWithPath: ruta)) {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
+            guard let self, let r = ColaAligerar.compartida.resultado[ruta] else { return }
+            self.avisar(r)
+        }
+    }
+
+    // MARK: Cambiar el nombre (F2)
+
+    func empezarRenombrar() {
+        modelo.nombreNuevo = (modelo.nombre as NSString).deletingPathExtension
+        modelo.renombrando = true
+    }
+
+    /// La tinta se guarda antes: un documento suelto se mueve con sus
+    /// hermanos y la tinta abierta va con el.
+    func confirmarNombre(_ escrito: String) {
+        modelo.renombrando = false
+        guardadoPendiente?.cancel()
+        let pares = editores.map { ($0.key, $0.value) }
+        let ruta = url.path, alDia = self.alDia, nucleo = self.nucleo
+        let cola = colaGuardar
+        Task {
+            let r: DocumentoRenombrado? = await withCheckedContinuation { cont in
+                cola.async {
+                    _ = ControladorLectorIPad.guardarTinta(pares, ruta: ruta, alDia: alDia)
+                    cont.resume(returning: try? nucleo.renombrarDocumento(documento: ruta, escrito: escrito))
+                }
+            }
+            self.renombrado(r)
+        }
+    }
+
+    private func renombrado(_ r: DocumentoRenombrado?) {
+        let sinExtension = { (n: String) in (n as NSString).deletingPathExtension }
+        switch r {
+        case .sinCambios:
+            return
+        case let .enElChat(nombre):
+            modelo.nombre = nombre
+            avisar("Ahora se llama «\(sinExtension(nombre))»")
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+        case let .enDisco(nombre, ruta):
+            url = URL(fileURLWithPath: ruta)
+            modelo.nombre = nombre
+            // La tinta abierta era de la ruta de antes: se vuelve a abrir.
+            editores = [:]
+            leidos = [:]
+            adaptadas = [:]
+            usadas = []
+            let alDia = self.alDia
+            colaGuardar.async { alDia.olvidar() }
+            marcos.mudar(a: url, nucleo: nucleo)
+            if let n = vistaPDF.document?.pageCount {
+                let nucleo = self.nucleo
+                Task {
+                    let hojas = await Task.detached { nucleo.hojasConTinta(documento: ruta, paginas: UInt32(n)) }.value
+                    self.conTinta = Set(hojas.map { Int($0) })
+                    self.cargarVisibles()
+                    self.repintarHojas()
+                }
+            }
+            avisar("Ahora se llama «\(sinExtension(nombre))»")
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+        case let .yaExiste(nombre):
+            avisar("Ya hay un archivo que se llama «\(nombre)»")
+        case .noSePuede, nil:
+            avisar("No se pudo cambiar el nombre")
+        }
+    }
+}
+
 // MARK: - PDFKit y el Apple Pencil
 
 extension ControladorLectorIPad: @preconcurrency PDFPageOverlayViewProvider {
@@ -1048,7 +1398,7 @@ struct LectorPDFIPad: View {
     }
 
     var body: some View {
-        CuerpoLectorIPad(c: c, modelo: c.modelo, voz: c.voz)
+        CuerpoLectorIPad(c: c, modelo: c.modelo, voz: c.voz, marcos: c.marcos, avance: c.avance)
     }
 }
 
@@ -1056,6 +1406,8 @@ private struct CuerpoLectorIPad: View {
     let c: ControladorLectorIPad
     @ObservedObject var modelo: ModeloLectorIPad
     @ObservedObject var voz: VozDocumentoIPad
+    @ObservedObject var marcos: MarcosDoc
+    @ObservedObject var avance: AvanceLectorIPad
     @ObservedObject private var noche = ModoNoche.compartido
 
     private var icono: String {
@@ -1096,13 +1448,27 @@ private struct CuerpoLectorIPad: View {
                 barra
                 HStack(alignment: .top) {
                     Spacer()
-                    RielLectorIPad(c: c, modelo: modelo)
+                    RielLectorIPad(c: c, modelo: modelo, marcos: marcos)
                         .padding(.trailing, 10)
                 }
                 .padding(.top, 70)
             }
+            if let nota = modelo.nota {
+                Text(nota)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(red: 0.96, green: 0.96, blue: 0.97))
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(Color(red: 0.118, green: 0.118, blue: 0.125, opacity: 0.95),
+                                in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.top, modelo.completa ? 12 : 66)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
             VStack(spacing: 8) {
                 Spacer()
+                BarraAvanceIPad(avance: c.avance, cambiar: { c.cambiarVelocidad($0) },
+                                cerrar: { c.alternarAvance() })
                 if modelo.poniendoMarca {
                     TiraEmojisMarca { e in c.ponerMarca(emoji: e) } cerrar: { modelo.poniendoMarca = false }
                 }
@@ -1126,8 +1492,27 @@ private struct CuerpoLectorIPad: View {
                 }
             }
             .padding(.bottom, 12)
+            VStack {
+                Spacer()
+                HStack {
+                    FichasDeMarcos(marcos: marcos, ir: { c.irAMarco($0) }, imprimir: { c.imprimir() })
+                    Spacer()
+                }
+            }
+            .padding(.leading, 14)
+            .padding(.bottom, modelo.miniaturas && !modelo.completa ? 100 : 14)
         }
         .statusBarHidden(modelo.completa)
+        .sheet(isPresented: $modelo.viendoIndice) {
+            HojaIndiceIPad(entradas: c.indice, actual: modelo.pagina) { c.ir(a: $0) }
+        }
+        .alert("Cambiar el nombre", isPresented: $modelo.renombrando) {
+            TextField("Nombre", text: $modelo.nombreNuevo)
+            Button("Guardar") { c.confirmarNombre(modelo.nombreNuevo) }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("La extensión no cambia.")
+        }
         .onAppear { c.abrir() }
         .onDisappear { c.cerrar() }
         .onChange(of: noche.activo) { _, _ in c.aplicarNoche() }
@@ -1158,8 +1543,44 @@ private struct CuerpoLectorIPad: View {
                 Image(systemName: voz.leyendo ? "speaker.wave.2.fill" : "speaker.wave.2")
             }
             .help("Leer en voz alta (L)")
-            ShareLink(item: c.url) { Image(systemName: "square.and.arrow.up") }
-                .help("Compartir")
+            Button { modelo.viendoIndice = true } label: { Image(systemName: "list.bullet.indent") }
+                .help("Índice")
+            Button { c.alternarAvance() } label: {
+                Image(systemName: "chevron.down.2")
+                    .foregroundStyle(avance.activo ? Paleta.v2.acento : Color.primary)
+            }
+            .help("Desplazar sola (D)")
+            Button { c.compartir() } label: { Image(systemName: "square.and.arrow.up") }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .help("Compartir con lo anotado (⇧⌘S)")
+            Menu {
+                Button { c.imprimir() } label: { Label("Imprimir… (⌘P)", systemImage: "printer") }
+                Button { c.alternarMarcos() } label: {
+                    Label(marcos.activo ? "Dejar de poner marcos" : "Marcos para imprimir", systemImage: "rectangle.dashed")
+                }
+                if !marcos.lista.isEmpty {
+                    Button(role: .destructive) { marcos.borrar() } label: {
+                        Label("Quitar todos los marcos", systemImage: "trash")
+                    }
+                }
+                Divider()
+                Button { c.empezarRenombrar() } label: { Label("Cambiar el nombre…", systemImage: "pencil") }
+                if TiposDeDocumento.clase(de: c.url) == .pdf {
+                    Button { c.aligerar() } label: { Label("Aligerar el PDF", systemImage: "arrow.down.right.and.arrow.up.left.circle") }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .help("Más")
+            .background {
+                // Los atajos del menu (dentro de un `Menu` no valen hasta abrirlo).
+                Group {
+                    Button("") { c.imprimir() }.keyboardShortcut("p", modifiers: .command)
+                    Button("") { c.empezarRenombrar() }.keyboardShortcut("r", modifiers: [.command, .shift])
+                }
+                .opacity(0)
+                .accessibilityHidden(true)
+            }
             Button { modelo.completa = true } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
             }

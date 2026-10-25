@@ -28,7 +28,9 @@
 // En el iPad (del Mac): con la app en segundo plano iOS no deja correr el
 // temporizador, asi que lo que suena entonces es la notificacion del
 // sistema (con sus botones); al volver a primer plano se revisa lo vencido.
-// Las notas de voz con hora suenan como un aviso (no hay «llamada secreta»).
+// Las notas de voz con hora y las clases del horario suenan como una
+// llamada (`LlamadaIPad.swift`): con la app delante, su pantalla de
+// llamada; cerrada, su notificacion con sonido de llamada.
 
 import Foundation
 import PixPinCore
@@ -57,6 +59,9 @@ struct RecordatorioPuesto: Equatable, Sendable {
     let cuando: Date
     let texto: String
     let tarea: TareaRecordada?
+    /// Si suena como una llamada (una nota de voz con hora, una clase del
+    /// horario): su notificacion lleva el timbre.
+    var llamada = false
 
     /// Unico entre todos los chats: el id de un mensaje solo es unico en el
     /// suyo. Es tambien el id de su notificacion.
@@ -168,7 +173,9 @@ public final class Recordatorios {
         self.nucleo = nucleo
         arranque = Date()
         CentroAvisos.compartido.preparar()
-        CentroAvisos.compartido.alResponder([.recordatorio, .recordatorioTarea]) { accion, datos in
+        // El timbre de las llamadas, donde lo busca el sistema.
+        Task.detached(priority: .utility) { TonoLlamada.preparar() }
+        CentroAvisos.compartido.alResponder([.recordatorio, .recordatorioTarea, .llamada]) { accion, datos in
             Recordatorios.compartido.responder(accion, datos)
         }
         let local = NotificationCenter.default
@@ -239,7 +246,9 @@ public final class Recordatorios {
         let base = id.split(separator: "|", maxSplits: 1).first.map(String.init) ?? id
         let nuevo = "\(base)|\(milisegundos(cuando))"
         pospuestos.removeAll { $0.id == id }
-        pospuestos.append(RecordatorioPuesto(chat: Self.chatHorario, id: nuevo, cuando: cuando, texto: nombre))
+        var r = RecordatorioPuesto(chat: Self.chatHorario, id: nuevo, cuando: cuando, texto: nombre)
+        r.llamada = true
+        pospuestos.append(r)
         releer()
     }
 
@@ -250,15 +259,33 @@ public final class Recordatorios {
         let desfase = desfaseLocalMs()
         lectura?.cancel()
         lectura = Task { [weak self] in
-            let (leidos, horario) = await Task.detached(priority: .utility) {
-                ((try? nucleo.recordatorios(desfaseLocalMs: desfase)) ?? [], nucleo.avisosDelHorario(desfaseMs: desfase))
+            let (leidos, horario, llamadas) = await Task.detached(priority: .utility) {
+                () -> ([RecordatorioMac], [AvisoHorario], Set<String>) in
+                let leidos = (try? nucleo.recordatorios(desfaseLocalMs: desfase)) ?? []
+                // Las notas de voz (las llamadas secretas): su notificacion
+                // lleva el timbre. Solo las que aun no vencieron.
+                let ahora = milisegundos()
+                var llamadas = Set<String>()
+                for r in leidos where r.tarea == nil && r.cuandoUtcMs > ahora {
+                    if (try? nucleo.llamadaSecreta(chat: r.chat, mensaje: r.id)) != nil {
+                        llamadas.insert(r.chat + "\u{0}" + r.id)
+                    }
+                }
+                return (leidos, nucleo.avisosDelHorario(desfaseMs: desfase), llamadas)
             }.value
             guard !Task.isCancelled, let self else { return }
             let delHorario = horario.map {
-                RecordatorioPuesto(chat: Self.chatHorario, nombreChat: "Horario", id: $0.id,
-                                   cuando: fechaDe(ms: $0.cuandoUtcMs), texto: $0.nombre)
+                var r = RecordatorioPuesto(chat: Self.chatHorario, nombreChat: "Horario", id: $0.id,
+                                           cuando: fechaDe(ms: $0.cuandoUtcMs), texto: $0.nombre)
+                r.llamada = true
+                return r
             }
-            self.aplicar(leidos.map { RecordatorioPuesto($0, desfaseHoy: desfase) } + delHorario + self.pospuestos)
+            let deChats = leidos.map { l -> RecordatorioPuesto in
+                var r = RecordatorioPuesto(l, desfaseHoy: desfase)
+                r.llamada = llamadas.contains(l.chat + "\u{0}" + l.id)
+                return r
+            }
+            self.aplicar(deChats + delHorario + self.pospuestos)
         }
     }
 
@@ -320,15 +347,36 @@ public final class Recordatorios {
         }
         olvidar(r.chat, r.id, tarea: r.tarea != nil)
         guard hechos.insert(Self.marca(r.clave, milisegundos(r.cuando))).inserted else { return }
+        // **Una nota de voz con hora es una llamada secreta**: suena como
+        // una llamada. Lo que vencio hace rato con la app cerrada sale como
+        // el aviso de siempre.
+        if r.tarea == nil, let nucleo, Llamada.aunSuena(r.cuando, ahora: Date()) {
+            Task {
+                let l = await Task.detached(priority: .userInitiated) {
+                    try? nucleo.llamadaSecreta(chat: r.chat, mensaje: r.id)
+                }.value
+                if let l {
+                    Llamada.sonar(l, nucleo: nucleo)
+                } else {
+                    self.avisar(r)
+                }
+            }
+            return
+        }
         avisar(r)
     }
 
-    /// **Suena un aviso del horario**: con la hora y el aula. Si el horario
-    /// cambio y ya no se encuentra, sale igual con lo que se apunto al
-    /// ponerlo.
+    /// **Suena un aviso del horario**: la pantalla de la llamada con la hora
+    /// y el aula. Si el horario cambio y ya no se encuentra, sale igual con
+    /// lo que se apunto al ponerlo. Lo que vencio hace rato (la app
+    /// cerrada) es un aviso de siempre.
     private func sonarHorario(_ r: RecordatorioPuesto) {
         guard let nucleo else {
             avisar(r)
+            return
+        }
+        if Llamada.aunSuena(r.cuando, ahora: Date()) {
+            sonarClase(id: r.id, nombre: r.texto, nucleo: nucleo, contestada: false)
             return
         }
         let desfase = desfaseLocalMs()
@@ -342,6 +390,61 @@ public final class Recordatorios {
             aviso.texto = [a?.detalle, a?.texto].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
             if aviso.texto.isEmpty { aviso.texto = "Horario" }
             CentroAvisos.compartido.mostrarEnLaApp(aviso, sonar: true)
+        }
+    }
+
+    /// **La llamada de una clase**: lee otra vez su aviso del horario (la
+    /// hora, el aula, su nota de voz y lo apuntado) y la hace sonar.
+    func sonarClase(id: String, nombre: String, nucleo: Nucleo, contestada: Bool) {
+        let desfase = desfaseLocalMs()
+        Task {
+            let a = await Task.detached(priority: .userInitiated) {
+                nucleo.avisoDelHorario(id: id, desfaseMs: desfase)
+            }.value
+            let l = LlamadaSecreta(audio: a?.audio ?? "", nombre: a?.nombre ?? nombre,
+                                   chat: Self.chatHorario, mensaje: id)
+            Llamada.sonar(l, nucleo: nucleo, detalle: a?.detalle ?? "", texto: a?.texto, contestada: contestada)
+        }
+    }
+
+    /// Lo que hacen los botones de una llamada (su notificacion del
+    /// sistema o la «Llamada perdida» de la ventanita): tocarla la abre ya
+    /// contestada; «+10 min» vuelve a llamar.
+    private func responderLlamada(_ accion: AccionAviso, chat: String, id: String, nombre: String, nucleo: Nucleo) {
+        let horario = chat == Self.chatHorario
+        switch accion {
+        case .abrir:
+            if horario {
+                sonarClase(id: id, nombre: nombre, nucleo: nucleo, contestada: true)
+            } else {
+                olvidar(chat, id, tarea: false)
+                Task {
+                    let l = await Task.detached(priority: .userInitiated) {
+                        try? nucleo.llamadaSecreta(chat: chat, mensaje: id)
+                    }.value
+                    if let l {
+                        Llamada.sonar(l, nucleo: nucleo, contestada: true)
+                    } else {
+                        Recordatorios.abrir(chat: chat, mensaje: id, nucleo: nucleo)
+                    }
+                }
+            }
+        case .posponer:
+            let cuando = Date().addingTimeInterval(TimeInterval(CentroAvisos.posponerMinutos * 60))
+            if horario {
+                posponerHorario(id: id, nombre: nombre, a: cuando)
+            } else {
+                Task.detached(priority: .userInitiated) {
+                    let hecho = (try? nucleo.volverARecordar(chat: chat, mensaje: id,
+                                                             cuandoUtcMs: milisegundos(cuando))) == true
+                    await MainActor.run {
+                        if hecho { Recordatorios.avisarCambio(chat: chat, tarea: false) }
+                        Recordatorios.compartido.releer()
+                    }
+                }
+            }
+        case .hecha, .conservar, .galeria, .cerrar:
+            if !horario { olvidar(chat, id, tarea: false) }
         }
     }
 
@@ -402,6 +505,10 @@ public final class Recordatorios {
         }
         agenda.cancelar(clave)
         guard let nucleo else { return }
+        if datos[Llamada.claveNombre] != nil || chat == Self.chatHorario {
+            responderLlamada(accion, chat: chat, id: id, nombre: datos[Llamada.claveNombre] ?? "", nucleo: nucleo)
+            return
+        }
         switch accion {
         case .posponer:
             let cuando = Date().addingTimeInterval(TimeInterval(CentroAvisos.posponerMinutos * 60))

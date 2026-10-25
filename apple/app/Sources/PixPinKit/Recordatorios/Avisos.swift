@@ -27,6 +27,14 @@ enum AvisosRecordatorio {
             datos[claveIndice] = String(t.indice)
         }
         let texto = r.texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        if r.llamada {
+            // Una llamada: con su timbre, y tocarla la abre contestada.
+            datos[Llamada.claveNombre] = r.texto
+            var a = Aviso(id: r.clave, categoria: .llamada, titulo: "Llamada entrante",
+                          texto: Llamada.titulo(texto), cuando: r.cuando, datos: datos)
+            a.sonido = TonoLlamada.nombre
+            return a
+        }
         return Aviso(id: r.clave, categoria: r.tarea == nil ? .recordatorio : .recordatorioTarea,
                      titulo: "Recordatorio", texto: texto.isEmpty ? "Recordatorio" : texto,
                      cuando: r.cuando, datos: datos)

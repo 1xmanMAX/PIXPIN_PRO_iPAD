@@ -8,7 +8,12 @@
 //   guarda como cota en la capa que viaja;
 // - los marcos para imprimir (arrastrar), las capas (encender y apagar) y
 //   el modo noche comun (`ModoNoche`);
-// - anotar a mano con el Apple Pencil (`AnotarPlanoIPad.swift`).
+// - anotar con todas las herramientas del lienzo (`AnotarPlanoIPad.swift`);
+// - imprimir los marcos (con lamina y membrete o sin marco) y exportar en
+//   HTML, PDF, PNG, JPG y DXF (`PapelPlanoIPad.swift`);
+// - buscar en los textos del plano, las letras SHX del usuario («Aa») y el
+//   aviso de los objetos de Civil 3D guardados sin su dibujo;
+// - los marcadores con su vista (`MarcadoresPlanoIPad.swift`).
 //
 // **Solo se pinta cuando algo cambia** (§4bis): la `MTKView` esta parada
 // (`isPaused`) y pinta al pedirselo (`enableSetNeedsDisplay`). Lo de encima
@@ -60,8 +65,25 @@ final class VisorPlano: ObservableObject {
     @Published private(set) var puntosEnCurso = 0
     /// Anotando con el lapiz encima.
     @Published private(set) var anotando = false
-    @Published private(set) var herramientaTinta: HerramientaTintaPlano = .lapiz
-    @Published private(set) var puedeDeshacerTinta = false
+    /// El modelo del lienzo mientras se anota (sus barras).
+    @Published private(set) var modeloAnotar: ModeloEditorLienzo?
+    /// El buscador de textos a la vista, lo hallado y si se busca.
+    @Published var buscando = false
+    @Published private(set) var hallados: [TextoHallado] = []
+    @Published private(set) var buscandoAhora = false
+    @Published private(set) var sinResultado = false
+    /// El texto hallado que se ensena (con una marca encima).
+    @Published private(set) var hallado: TextoHallado?
+    /// La hoja de las letras («Aa»).
+    @Published var verLetras = false
+    /// Las letras que el plano pide y no estan.
+    @Published private(set) var faltan: [String] = []
+    /// Cuantos objetos de Civil 3D se guardaron sin su dibujo
+    /// (`PROXYGRAPHICS = 0`), y si el aviso se ve.
+    @Published private(set) var sinDibujoCivil: UInt32 = 0
+    @Published var avisoCivil = false
+    /// Algo se esta preparando para exportar o imprimir.
+    @Published private(set) var preparando = false
     /// Se ha visto un Apple Pencil: desde entonces solo el pinta (la palma no).
     @Published var vistoLapiz = false
 
@@ -76,6 +98,12 @@ final class VisorPlano: ObservableObject {
     private(set) var etiquetas: [[String]] = []
     weak var vista: VistaPlanoMetal?
     private(set) var anotador: AnotadorPlanoIPad?
+    /// El nucleo con que se abrio (letras, el lienzo, los marcadores).
+    private(set) var nucleo: Nucleo?
+    /// Para no pisar una busqueda con la anterior.
+    private var turnoBusqueda = 0
+    /// Los marcadores con su vista (`.vistas.json` de Windows).
+    private(set) lazy var marcadores = MarcadoresDeVista(documento: URL(fileURLWithPath: ruta), nucleo: nucleo)
 
     init(ruta: String, titulo: String) {
         self.ruta = ruta
@@ -92,6 +120,7 @@ final class VisorPlano: ObservableObject {
             error = "Este iPad no tiene una tarjeta gráfica con Metal."
             return
         }
+        self.nucleo = nucleo
         let ruta = self.ruta
         Task {
             let hecho = await Task.detached(priority: .userInitiated) { () -> Result<PlanoEnTarjeta, Error> in
@@ -109,9 +138,39 @@ final class VisorPlano: ObservableObject {
         visibles = Set(d.plano.gruposVisibles())
         capas = d.plano.capas()
         anotado = d.plano.anotado()
+        faltan = d.plano.letrasQueFaltan()
+        sinDibujoCivil = VisorPlano.cuantosSinDibujo(d.resumen.sinDibujar)
+        avisoCivil = sinDibujoCivil > 0
         rehacerEtiquetas()
         leerTinta()
         vista?.alLlegarElPlano()
+    }
+
+    /// Los objetos de otras aplicaciones (Civil 3D...) guardados sin su
+    /// dibujo de reserva: Rust los apunta con «sin dibujo: <clase>».
+    nonisolated static func cuantosSinDibujo(_ l: [NoDibujado]) -> UInt32 {
+        l.filter { $0.tipo.hasPrefix("sin dibujo: ") }.reduce(0) { $0 + $1.cuantos }
+    }
+
+    /// El aviso de Civil 3D, con los textos de Windows.
+    var textoAvisoCivil: String {
+        "\(sinDibujoCivil) objetos de Civil 3D se guardaron sin su dibujo: guárdalo con PROXYGRAPHICS = 1 o exporta a LandXML"
+    }
+
+    /// **Vuelve a leer el plano** (con letras nuevas): fuera lo de la
+    /// tarjeta y otra vez desde el principio (la cache lo lee de nuevo).
+    func releer() {
+        guard let nucleo else { return }
+        if anotador != nil { terminarDeAnotar() }
+        datos = nil
+        error = nil
+        capas = []
+        visibles = []
+        tinta = nil
+        hallados = []
+        hallado = nil
+        vista?.repintar()
+        cargar(nucleo: nucleo)
     }
 
     /// Lo anotado con el lapiz (aqui, en Windows o en Android) se ve encima.
@@ -223,7 +282,214 @@ final class VisorPlano: ObservableObject {
 
     func encuadrar() { vista?.encuadrar() }
 
-    // MARK: Anotar con el lapiz
+    // MARK: Imprimir y exportar
+
+    /// Las cotas y lo anotado, para el papel (imprimir y exportar).
+    func encimaParaPapel() -> EncimaPapel {
+        let p = datos?.plano
+        return EncimaPapel(cotas: anotado.cotas,
+                           medida: { d in p?.textoDeMedida(distancia: d) ?? String(format: "%.3f", d) },
+                           tinta: tinta, encaje: encaje)
+    }
+
+    /// Primero lo anotado, guardado y leido (va en el papel); luego `hacer`.
+    private func conLoAnotado(_ hacer: @escaping () -> Void) {
+        if anotador != nil { terminarDeAnotar(hacer) } else { hacer() }
+    }
+
+    /// **Imprimir los marcos** (`Ctrl P` de Windows): cada marco en su hoja
+    /// (sin marcos, lo que se ve), con la lamina y el membrete o sin marco.
+    /// Va en vectores por la hoja de imprimir del sistema.
+    func imprimir(conMembrete: Bool) {
+        conLoAnotado { [weak self] in
+            guard let self, let d = self.datos, let v = self.vista else { return }
+            let marcos = self.anotado.marcos.isEmpty ? [v.cajaVisible()] : self.anotado.marcos
+            let lamina = LaminaPlano(conMembrete: conMembrete, proyecto: CuentasLamina.proyecto(de: self.ruta),
+                                     titulo: (self.titulo as NSString).deletingPathExtension, autor: "",
+                                     fecha: CuentasLamina.hoy())
+            let impresora = UIPrintInteractionController.shared
+            let info = UIPrintInfo.printInfo()
+            info.jobName = self.titulo
+            info.outputType = .general
+            if let m = marcos.first { info.orientation = (m.x1 - m.x0) >= (m.y1 - m.y0) ? .landscape : .portrait }
+            impresora.printInfo = info
+            impresora.printPageRenderer = ImpresoraPlano(datos: d, visibles: self.visibles, marcos: marcos,
+                                                         encima: self.encimaParaPapel(), lamina: lamina)
+            _ = impresora.present(from: CGRect(x: v.bounds.maxX - 60, y: 60, width: 1, height: 1), in: v,
+                                  animated: true, completionHandler: nil)
+        }
+    }
+
+    /// Los formatos que este plano puede dar (el DXF, solo de un DWG).
+    var formatosDeExportar: [ExportarPlanoIPad.Formato] {
+        ExportarPlanoIPad.Formato.allCases.filter { $0 != .dxf || (datos?.plano.esDwg() ?? false) }
+    }
+
+    /// **Exportar el plano** (`Ctrl E` de Windows) en `formato`, con las
+    /// capas como se ven, las cotas, los marcos y lo anotado; sale la hoja
+    /// de compartir del sistema (Guardar en Archivos, AirDrop, Mail...).
+    func exportar(_ formato: ExportarPlanoIPad.Formato) {
+        conLoAnotado { [weak self] in self?.exportarYa(formato) }
+    }
+
+    private func exportarYa(_ formato: ExportarPlanoIPad.Formato) {
+        guard let d = datos, !preparando else { return }
+        let base = ExportarPlanoIPad.base(titulo)
+        let carpeta = ExportarPlanoIPad.carpetaTemporal()
+        let vista = self.vista
+        func listo(_ urls: [URL]) {
+            preparando = false
+            if urls.isEmpty {
+                try? FileManager.default.removeItem(at: carpeta)
+                CajetinesLienzo.avisar("Exportar", "No se pudo preparar el \(formato.rawValue.uppercased()).",
+                                       desde: vista ?? UIView())
+                return
+            }
+            ExportarPlanoIPad.compartir(urls, carpeta: carpeta, desde: vista)
+        }
+        preparando = true
+        let plano = d.plano
+        switch formato {
+        case .html:
+            let anotado = self.anotado, claro = !oscuro
+            let salida = carpeta.appendingPathComponent(base + ".html")
+            Task {
+                let ok = await Task.detached(priority: .userInitiated) { () -> Bool in
+                    guard let html = try? plano.paginaWeb(anotado: anotado, claro: claro) else { return false }
+                    return (try? Data(html.utf8).write(to: salida)) != nil
+                }.value
+                listo(ok ? [salida] : [])
+            }
+        case .pdf:
+            let salida = carpeta.appendingPathComponent(base + ".pdf")
+            let datos = ExportarPlanoIPad.pdf(d, visibles: visibles, marcos: anotado.marcos, util: d.resumen.cajaUtil,
+                                              encima: encimaParaPapel())
+            listo(datos.flatMap { (try? $0.write(to: salida)) != nil ? [salida] : nil } ?? [])
+        case .png, .jpg:
+            let jpg = formato == .jpg
+            let salida = carpeta.appendingPathComponent(base + (jpg ? ".jpg" : ".png"))
+            let img = ExportarPlanoIPad.imagen(d, visibles: visibles, region: d.resumen.cajaUtil, encima: encimaParaPapel())
+            let datos = img.flatMap { ExportarPlanoIPad.codificar($0, jpg: jpg) }
+            listo(datos.flatMap { (try? $0.write(to: salida)) != nil ? [salida] : nil } ?? [])
+        case .dxf:
+            let salida = carpeta.appendingPathComponent(base + ".dxf")
+            Task {
+                let ok = await Task.detached(priority: .userInitiated) { () -> Bool in
+                    (try? plano.exportarDxf(salida: salida.path)) != nil
+                }.value
+                listo(ok ? [salida] : [])
+            }
+        case .original:
+            let origen = URL(fileURLWithPath: ruta)
+            let salida = carpeta.appendingPathComponent(origen.lastPathComponent)
+            listo((try? FileManager.default.copyItem(at: origen, to: salida)) != nil ? [salida] : [])
+        }
+    }
+
+    // MARK: Buscar en los textos
+
+    /// Busca `consulta` en los textos del plano (la primera vez los lee:
+    /// fuera del hilo principal) y lleva al primero.
+    func buscar(_ consulta: String) {
+        guard let p = datos?.plano else { return }
+        let q = consulta.trimmingCharacters(in: .whitespacesAndNewlines)
+        turnoBusqueda += 1
+        let turno = turnoBusqueda
+        guard !q.isEmpty else {
+            hallados = []
+            hallado = nil
+            sinResultado = false
+            buscandoAhora = false
+            vista?.repintar()
+            return
+        }
+        buscandoAhora = true
+        Task {
+            let r = await Task.detached(priority: .userInitiated) { try? p.buscarTextos(consulta: q, max: 50) }.value
+            guard turno == self.turnoBusqueda else { return }
+            self.buscandoAhora = false
+            self.hallados = r ?? []
+            self.sinResultado = (r ?? []).isEmpty
+            if let h = self.hallados.first { self.mirar(h) } else { self.hallado = nil; self.vista?.repintar() }
+        }
+    }
+
+    /// Lleva la vista a un texto hallado y lo marca.
+    func mirar(_ h: TextoHallado) {
+        hallado = h
+        vista?.mirar(centroX: h.centroX, centroY: h.centroY, ancho: h.ancho)
+    }
+
+    /// El siguiente (o el anterior) de lo hallado.
+    func otroHallado(_ paso: Int) {
+        guard !hallados.isEmpty else { return }
+        let i = hallado.flatMap { h in hallados.firstIndex(of: h) } ?? -paso
+        mirar(hallados[((i + paso) % hallados.count + hallados.count) % hallados.count])
+    }
+
+    func cerrarBusqueda() {
+        buscando = false
+        turnoBusqueda += 1
+        hallados = []
+        hallado = nil
+        sinResultado = false
+        buscandoAhora = false
+        vista?.repintar()
+    }
+
+    // MARK: Letras («Aa»)
+
+    /// Añade letras (SHX, TTF, OTF, TTC) y vuelve a leer el plano con ellas.
+    func anadirLetras(_ urls: [URL]) {
+        guard let nucleo, !urls.isEmpty else { return }
+        // Lo elegido en Archivos puede estar fuera de la caja de la app: se
+        // copia mientras se tiene permiso para leerlo.
+        let carpeta = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pixpin-letras-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: carpeta, withIntermediateDirectories: true)
+        var rutas: [String] = []
+        for u in urls {
+            let permiso = u.startAccessingSecurityScopedResource()
+            defer { if permiso { u.stopAccessingSecurityScopedResource() } }
+            let destino = carpeta.appendingPathComponent(u.lastPathComponent)
+            if (try? FileManager.default.copyItem(at: u, to: destino)) != nil { rutas.append(destino.path) }
+        }
+        guard !rutas.isEmpty else { return }
+        Task {
+            let n = await Task.detached(priority: .userInitiated) { nucleo.anadirLetrasDePlanos(rutas: rutas) }.value
+            try? FileManager.default.removeItem(at: carpeta)
+            if n > 0 { self.releer() } else { self.error = nil; UINotificationFeedbackGenerator().notificationOccurred(.error) }
+        }
+    }
+
+    /// Quita las letras del usuario y vuelve a leer el plano.
+    func quitarLetras() {
+        guard let nucleo else { return }
+        Task {
+            let n = await Task.detached(priority: .userInitiated) { nucleo.quitarLetrasDePlanos() }.value
+            if n > 0 { self.releer() }
+        }
+    }
+
+    /// Cuantas letras puso el usuario.
+    var letrasMias: UInt32 { nucleo?.letrasDePlanos() ?? 0 }
+
+    // MARK: Marcadores con su vista
+
+    /// **Marcador aqui** (`Ctrl M` de Windows): el centro y lo que se ve.
+    func ponerMarcador() {
+        guard let v = vista, datos != nil else { return }
+        let c = v.camara
+        marcadores.poner(x: c.centroX, y: c.centroY, ancho: c.px * v.anchoPx, alto: c.px * v.altoPx)
+    }
+
+    /// Volver a un marcador: cabe todo lo que se veia.
+    func ir(a m: MarcadorDeVista) {
+        guard let v = vista, v.anchoPx > 0, v.altoPx > 0 else { return }
+        v.mirar(centroX: m.x, centroY: m.y, ancho: max(m.ancho, m.alto * v.anchoPx / v.altoPx))
+    }
+
+    // MARK: Anotar (las herramientas del lienzo)
 
     func alternarAnotar() {
         if anotador != nil { terminarDeAnotar() } else { empezarAnotar() }
@@ -233,53 +499,43 @@ final class VisorPlano: ObservableObject {
         guard let d = datos else { return }
         if modo != .mover { modo = .mover }
         do {
-            let a = try AnotadorPlanoIPad(plano: d.plano)
-            a.herramienta(herramientaTinta)
+            let a = try AnotadorPlanoIPad(plano: d.plano, nucleo: nucleo, titulo: titulo)
+            let m = a.modelo
+            m.alCerrar = { [weak self] in self?.terminarDeAnotar() }
+            // Deshacer y rehacer de la barra: el plano se pinta otra vez.
+            m.alDeshacer = { [weak self, weak a] in
+                a?.deshacer()
+                self?.vista?.repintar()
+            }
+            m.alRehacer = { [weak self, weak a] in
+                a?.rehacer()
+                self?.vista?.repintar()
+            }
             anotador = a
+            modeloAnotar = m
             anotando = true
-            puedeDeshacerTinta = a.puedeDeshacer
             vista?.alCambiarAnotar()
         } catch {
             NSLog("PixPin planos: no se puede anotar: \(error)")
         }
     }
 
-    func elegirTinta(_ h: HerramientaTintaPlano) {
-        herramientaTinta = h
-        anotador?.herramienta(h)
-    }
-
     /// El doble toque del Pencil: la goma, y otra vez lo de antes.
     func alternarGoma() {
-        if herramientaTinta == .borrador {
-            elegirTinta(antesDeLaGoma)
-        } else {
-            antesDeLaGoma = herramientaTinta
-            elegirTinta(.borrador)
-        }
-    }
-
-    private var antesDeLaGoma: HerramientaTintaPlano = .lapiz
-
-    func deshacerTinta() {
-        guard let a = anotador else { return }
-        a.deshacer()
-        puedeDeshacerTinta = a.puedeDeshacer
+        anotador?.modelo.alternarGoma()
         vista?.repintar()
-    }
-
-    /// Tras un trazo: se puede deshacer.
-    func alTrazar() {
-        puedeDeshacerTinta = anotador?.puedeDeshacer ?? false
     }
 
     /// Termina de anotar: guarda y vuelve a leer lo anotado (las cotas y los
     /// marcos pudieron cambiar con el lienzo).
-    func terminarDeAnotar() {
-        guard let a = anotador else { return }
+    func terminarDeAnotar(_ despues: (() -> Void)? = nil) {
+        guard let a = anotador else { despues?(); return }
         // Mientras se guarda, lo anotado sigue a la vista.
+        _ = a.editor.terminarTexto()
+        a.releer()
         tinta = a.leido
         anotador = nil
+        modeloAnotar = nil
         anotando = false
         vista?.alCambiarAnotar()
         Task {
@@ -289,6 +545,8 @@ final class VisorPlano: ObservableObject {
                 self.rehacerEtiquetas()
             }
             self.leerTinta()
+            self.vista?.repintar()
+            despues?()
         }
     }
 }
