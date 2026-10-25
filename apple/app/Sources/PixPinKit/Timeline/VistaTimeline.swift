@@ -37,7 +37,7 @@ public struct VistaTimeline: View {
                                                 pista: modelo.pestana == .lecciones ? "Buscar en las lecciones" : "Buscar en el timeline")) {
                 SegmentosCabecera(ModeloTimeline.Pestana.allCases.map { ($0, $0.rotulo) },
                                   eleccion: Binding(get: { modelo.pestana },
-                                                    set: { p in Task { await modelo.cambiar(a: p) } }))
+                                                    set: { p in _ = Task<Void, Never> { await modelo.cambiar(a: p) } }))
                 if modelo.pestana != .lecciones {
                     BotonCabecera(icono: "square.and.arrow.up", ayuda: "Exportar lo que se ve") { exportar() }
                         .disabled(exportando)
@@ -68,7 +68,7 @@ public struct VistaTimeline: View {
         .sheet(item: $detalle) { d in
             VistaDetalleMomento(modelo: modelo, lista: d.lista, indice: d.indice, foto: d.foto) { m in
                 detalle = nil
-                Task { await modelo.corregir(m) }
+                _ = Task<Void, Never> { await modelo.corregir(m) }
             }
         }
         .sheet(item: $exportado) { f in
@@ -79,10 +79,10 @@ public struct VistaTimeline: View {
             // ⌘1…4, como en Windows y el Mac.
             ZStack {
                 ForEach(ModeloTimeline.Pestana.allCases) { p in
-                    Button("") { Task { await modelo.cambiar(a: p) } }
+                    Button("") { _ = Task<Void, Never> { await modelo.cambiar(a: p) } }
                         .keyboardShortcut(KeyEquivalent(Character(String(p.rawValue))))
                 }
-                Button("") { Task { await modelo.deshacerBorrado() } }
+                Button("") { _ = Task<Void, Never> { await modelo.deshacerBorrado() } }
                     .keyboardShortcut("z")
                     .disabled(modelo.deshacer == nil)
             }
@@ -104,7 +104,7 @@ public struct VistaTimeline: View {
         case let .dia(iso):
             VStack(spacing: 0) {
                 HStack {
-                    Button { Task { await modelo.volverDelDia() } } label: {
+                    Button { _ = Task<Void, Never> { await modelo.volverDelDia() } } label: {
                         Label("Volver", systemImage: "chevron.left")
                     }
                     .foregroundStyle(Paleta.v2.acento)
@@ -145,7 +145,7 @@ public struct VistaTimeline: View {
     }
 
     private func deshacerBorrado() {
-        Task { await modelo.deshacerBorrado() }
+        _ = Task<Void, Never> { await modelo.deshacerBorrado() }
     }
 
     private func abrir(_ m: MomentoTimeline, _ foto: Int) {
@@ -229,7 +229,7 @@ struct ColumnaDias: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     fila(titulo: "Últimas 24 horas", detalle: nil, elegido: modelo.eleccion == .hoy) {
-                        Task {
+                        _ = Task<Void, Never> {
                             if modelo.pestana != .hoy { await modelo.cambiar(a: .hoy) } else { await modelo.elegir(.hoy) }
                         }
                     }
@@ -238,7 +238,7 @@ struct ColumnaDias: View {
                              detalle: "\(d.cuantos)",
                              elegido: modelo.eleccion == .dia(d.iso)) {
                             modelo.consulta = ""
-                            Task { await modelo.elegir(.dia(d.iso)) }
+                            _ = Task<Void, Never> { await modelo.elegir(.dia(d.iso)) }
                         }
                     }
                     if modelo.quedanDias {
@@ -342,7 +342,7 @@ struct ResultadosTimeline: View {
                     } header: {
                         Button {
                             modelo.consulta = ""
-                            Task { await modelo.elegir(.dia(dia.0)) }
+                            _ = Task<Void, Never> { await modelo.elegir(.dia(dia.0)) }
                         } label: {
                             Text(ModeloTimeline.rotulo(iso: dia.0).capitalizedPrimera)
                                 .font(.system(size: 13, weight: .semibold))
@@ -472,14 +472,14 @@ struct MenuMomento: View {
 
     var body: some View {
         Button { abrir(momento, 0) } label: { Label("Ver", systemImage: "eye") }
-        Button { Task { await modelo.alternarMomentos(momento) } } label: {
+        Button { _ = Task<Void, Never> { await modelo.alternarMomentos(momento) } } label: {
             Label(momento.enMomentos ? "Quitar de Momentos" : "Mandar a Momentos",
                   systemImage: momento.enMomentos ? "bookmark.slash" : "bookmark")
         }
-        Button { Task { await modelo.alternarLeccion(momento) } } label: {
+        Button { _ = Task<Void, Never> { await modelo.alternarLeccion(momento) } } label: {
             Label(momento.leccion != nil ? "Ya no es lección" : "Hacer lección", systemImage: "lightbulb")
         }
-        Button { Task { await modelo.corregir(momento) } } label: { Label("Corregir", systemImage: "pencil") }
+        Button { _ = Task<Void, Never> { await modelo.corregir(momento) } } label: { Label("Corregir", systemImage: "pencil") }
         Button { UIPasteboard.general.string = MenuMomento.texto(momento) } label: {
             Label("Copiar el texto", systemImage: "doc.on.doc")
         }
@@ -490,7 +490,7 @@ struct MenuMomento: View {
             ShareLink(items: fotos) { Label("Compartir las fotos…", systemImage: "square.and.arrow.up") }
         }
         Divider()
-        Button(role: .destructive) { Task { await modelo.borrar(momento) } } label: {
+        Button(role: .destructive) { _ = Task<Void, Never> { await modelo.borrar(momento) } } label: {
             Label("Borrar", systemImage: "trash")
         }
     }
@@ -558,7 +558,7 @@ struct CajaTimeline: View {
                     .background(Paleta.v2.tarjeta, in: RoundedRectangle(cornerRadius: 18))
                     .focused($foco)
                     .onSubmit(enviar)
-                Button { Task { await dictado.pulsar(modelo: modelo) } } label: {
+                Button { _ = Task<Void, Never> { await dictado.pulsar(modelo: modelo) } } label: {
                     Image(systemName: dictado.grabando ? "stop.circle.fill" : "mic")
                         .font(.system(size: 18))
                         .foregroundStyle(dictado.grabando ? Paleta.v2.rojo : Paleta.v2.gris)
@@ -585,12 +585,12 @@ struct CajaTimeline: View {
         .onChange(of: elegidas) { _, items in
             guard !items.isEmpty else { return }
             elegidas = []
-            Task { await traer(items) }
+            _ = Task<Void, Never> { await traer(items) }
         }
     }
 
     private func enviar() {
-        Task {
+        _ = Task<Void, Never> {
             if await modelo.enviar(audio: dictado.tomarPendiente()) { foco = true }
         }
     }
@@ -628,7 +628,7 @@ struct ArchivoTimeline: View {
                     }
                     HStack(alignment: .top, spacing: 16) {
                         Button {
-                            Task { await modelo.elegir(.dia(d.dia.iso)) }
+                            _ = Task<Void, Never> { await modelo.elegir(.dia(d.dia.iso)) }
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(String(d.dia.dia)).font(.system(size: 28, weight: .bold))
@@ -753,7 +753,7 @@ struct CalendarioTimeline: View {
             .contentShape(Circle())
             .onTapGesture {
                 guard d.cuantos > 0 else { return }
-                Task { await modelo.elegir(.dia(d.iso)) }
+                _ = Task<Void, Never> { await modelo.elegir(.dia(d.iso)) }
             }
             .onLongPressGesture {
                 if elegido { modelo.elegidos.remove(d.iso) } else { modelo.elegidos.insert(d.iso) }
@@ -837,11 +837,11 @@ struct VistaDetalleMomento: View {
                         Button("Cerrar") { cerrar() }
                     }
                     ToolbarItemGroup(placement: .primaryAction) {
-                        Button { Task { await modelo.alternarMomentos(m) } } label: {
+                        Button { _ = Task<Void, Never> { await modelo.alternarMomentos(m) } } label: {
                             Image(systemName: m.enMomentos ? "bookmark.fill" : "bookmark")
                         }
                         .accessibilityLabel(m.enMomentos ? "Quitar de Momentos" : "Mandar a Momentos")
-                        Button { Task { await modelo.alternarLeccion(m) } } label: {
+                        Button { _ = Task<Void, Never> { await modelo.alternarLeccion(m) } } label: {
                             Image(systemName: m.leccion != nil ? "lightbulb.fill" : "lightbulb")
                         }
                         .accessibilityLabel("Hacer lección")
@@ -854,7 +854,7 @@ struct VistaDetalleMomento: View {
                         }
                         Button(role: .destructive) {
                             cerrar()
-                            Task { await modelo.borrar(m) }
+                            _ = Task<Void, Never> { await modelo.borrar(m) }
                         } label: { Image(systemName: "trash") }
                             .accessibilityLabel("Borrar")
                     }
