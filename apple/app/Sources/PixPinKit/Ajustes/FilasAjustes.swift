@@ -13,9 +13,10 @@
 // - Captura, Atajos y Apps predeterminadas: iOS no deja capturar otras apps,
 //   ni atajos globales, ni ser la app de las fotos (⛔). Los dias que
 //   aguanta una captura si (la galeria), en General.
-// - Tareas (palabras de urgencia), Pinear (palabras magicas) y Lienzo (iman,
-//   suavizado y herramientas): el nucleo aun no los da a Swift (ni los usa
-//   el iPad); ver `docs/faltantes-ipad.md` §5.2.
+//
+// Tareas (palabras de urgencia), Pinear (palabras magicas) y Lienzo (iman,
+// suavizado y que herramientas salen y donde) van en `FilasOrganizar.swift`,
+// con su registro aparte del nucleo (`AjustesOrganizar`).
 
 import AVFoundation
 import PixPinCore
@@ -23,13 +24,16 @@ import SwiftUI
 
 /// Las secciones, en el orden de Windows (las que el iPad tiene).
 public enum SeccionAjustes: String, CaseIterable, Identifiable, Sendable {
-    case general, voz, asistente, sincro, apariencia, avanzado
+    case general, pinear, tareas, lienzo, voz, asistente, sincro, apariencia, avanzado
 
     public var id: String { rawValue }
 
     public var titulo: String {
         switch self {
         case .general: "General"
+        case .pinear: "Pinear"
+        case .tareas: "Tareas"
+        case .lienzo: "Lienzo y herramientas"
         case .voz: "Voz y transcripción"
         case .asistente: "Asistente"
         case .sincro: "Sincronizar"
@@ -41,6 +45,9 @@ public enum SeccionAjustes: String, CaseIterable, Identifiable, Sendable {
     public var subtitulo: String {
         switch self {
         case .general: "El idioma, qué hace PixPin con los PDF del chat y cuánto aguantan las capturas."
+        case .pinear: "Las palabras que se convierten en herramienta al pinearlas."
+        case .tareas: "Lo que se entiende al escribir una tarea."
+        case .lienzo: "El imán, el trazo a mano y qué herramientas salen en la barra."
         case .voz: "Con qué voz se leen los documentos en voz alta."
         case .asistente: "Quién contesta en el chat «Asistente» y qué puede hacer."
         case .sincro: "Cómo se encuentra este iPad con el PC, el Mac y el móvil."
@@ -52,6 +59,9 @@ public enum SeccionAjustes: String, CaseIterable, Identifiable, Sendable {
     public var icono: String {
         switch self {
         case .general: "gearshape"
+        case .pinear: "pin"
+        case .tareas: "checkmark.square"
+        case .lienzo: "scribble.variable"
         case .voz: "mic"
         case .asistente: "sparkles"
         case .sincro: "arrow.triangle.2.circlepath"
@@ -88,8 +98,11 @@ public struct FilaAjuste: Identifiable {
     public var restablecer: ((inout AjustesMac, AjustesMac) -> Void)?
     /// Lo mismo para lo que no es del TOML de `valores` (tema, PDF, voz).
     public var restablecerOtro: (@MainActor (ModeloAjustes) -> Void)?
+    /// La vuelve a fabrica dentro de un cambio de Tareas, Lienzo o Pinear
+    /// (`AjustesOrganizar`).
+    public var restablecerOrganizar: ((inout AjustesOrganizar, AjustesOrganizar) -> Void)?
 
-    public var restablecible: Bool { restablecer != nil || restablecerOtro != nil }
+    public var restablecible: Bool { restablecer != nil || restablecerOtro != nil || restablecerOrganizar != nil }
 }
 
 @MainActor
@@ -142,6 +155,9 @@ public enum FilasAjustes {
     public static func de(_ s: SeccionAjustes) -> [FilaAjuste] {
         switch s {
         case .general: return general
+        case .pinear: return pinear
+        case .tareas: return tareas
+        case .lienzo: return lienzo
         case .voz: return voz
         case .asistente: return asistente
         case .sincro: return sincro
@@ -227,6 +243,12 @@ public enum FilasAjustes {
             }
             filas.append(f)
         }
+        filas.append(opcion(.voz, "Notas de voz", "voz-segundo", "Segundo idioma de las notas de voz",
+                            "El dictado del iPad prueba también este idioma y se queda con lo que mejor entiende.",
+                            \.vozSegundoIdioma, [("Ninguno", ""), ("Inglés", "en"), ("Español", "es"), ("Portugués", "pt")]))
+        filas.append(opcion(.voz, "Notas de voz", "voz-modo", "Con dos idiomas",
+                            "Qué hacer con lo dicho en el segundo idioma.",
+                            \.vozModoDeIdiomas, [("Cada trozo como se dijo", "cada_uno"), ("Todo en el primero", "todo_en_uno")]))
         return filas
     }
 
@@ -344,6 +366,13 @@ public enum FilasAjustes {
         m.cambiar { a in
             for f in filas { f.restablecer?(&a, fabrica) }
         }
+        let deOrganizar = filas.filter { $0.restablecerOrganizar != nil && $0.cambiada(m) }
+        if !deOrganizar.isEmpty {
+            let fabricaOrganizar = m.fabricaOrganizar
+            m.cambiarOrganizar { a in
+                for f in deOrganizar { f.restablecerOrganizar?(&a, fabricaOrganizar) }
+            }
+        }
         for f in filas where f.cambiada(m) { f.restablecerOtro?(m) }
     }
 
@@ -352,6 +381,10 @@ public enum FilasAjustes {
         if let r = f.restablecer {
             let fabrica = m.fabrica
             m.cambiar { r(&$0, fabrica) }
+        }
+        if let r = f.restablecerOrganizar {
+            let fabrica = m.fabricaOrganizar
+            m.cambiarOrganizar { r(&$0, fabrica) }
         }
         f.restablecerOtro?(m)
     }

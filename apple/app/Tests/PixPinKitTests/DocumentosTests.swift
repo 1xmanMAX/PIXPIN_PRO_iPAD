@@ -13,8 +13,9 @@ final class DocumentosTests: XCTestCase {
         XCTAssertEqual(visor("clase.pptx"), .lector)
         XCTAssertEqual(visor("cuentas.xlsx"), .hoja)
         XCTAssertEqual(visor("datos.csv"), .hoja)
-        // Un libro suelto (sin mensaje) no tiene donde guardar sus tablas.
-        XCTAssertEqual(visor("cuentas.xlsx", chat: false), .vistaRapida)
+        // Un libro suelto (sin mensaje) se abre en la misma hoja (el
+        // archivo no cambia: lo editado sale como una copia).
+        XCTAssertEqual(visor("cuentas.xlsx", chat: false), .hoja)
         // El .xls antiguo no lo lee el nucleo.
         XCTAssertEqual(visor("viejo.xls"), .vistaRapida)
         XCTAssertEqual(visor("pagina.html"), .html)

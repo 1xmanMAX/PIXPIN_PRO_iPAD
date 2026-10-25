@@ -105,6 +105,15 @@ public final class ModeloAjustes: ObservableObject {
     public let fabrica: AjustesMac
     /// `[pdf]` de `pixpinmax.toml` (`nil` hasta `cargar`).
     @Published public private(set) var pdf: AjustesPdf?
+    /// Tareas, Lienzo y Pinear de `pixpinmax.toml` (`Nucleo.ajustesOrganizar`;
+    /// `nil` hasta `cargar`).
+    @Published public private(set) var organizar: AjustesOrganizar?
+    /// Los de fabrica de Tareas, Lienzo y Pinear.
+    public let fabricaOrganizar: AjustesOrganizar
+    /// En que sitio se eligen las herramientas de Ajustes → Lienzo (0 =
+    /// en todos; desde 1, los de `FilasAjustes.sitiosHerramientas`). Es por
+    /// donde se mira, no un ajuste: ni se guarda ni se deshace.
+    @Published public var sitioHerramientas = 0
     @Published public var tema: Tema {
         didSet {
             tema.guardar(defaults)
@@ -120,6 +129,7 @@ public final class ModeloAjustes: ObservableObject {
     public enum Paso: Equatable {
         case toml(AjustesMac)
         case pdf(AjustesPdf)
+        case organizar(AjustesOrganizar)
     }
 
     /// Cuantos pasos guarda «Deshacer» (los de Windows).
@@ -154,6 +164,7 @@ public final class ModeloAjustes: ObservableObject {
         self.defaults = defaults
         fabrica = nucleo.ajustesDeFabrica()
         valores = fabrica
+        fabricaOrganizar = nucleo.ajustesOrganizarDeFabrica()
         tema = Tema.guardado(defaults)
     }
 
@@ -169,13 +180,17 @@ public final class ModeloAjustes: ObservableObject {
     /// Lee el TOML y pasa la sincronizacion sola al `Sincronizador`.
     public func cargar() async {
         let nucleo = self.nucleo
-        let r = await Task.detached(priority: .utility) { () -> Result<(AjustesMac, AjustesPdf), Error> in
-            do { return .success((try nucleo.ajustes(), try nucleo.ajustesPdf())) } catch { return .failure(error) }
+        let r = await Task.detached(priority: .utility) { () -> Result<(AjustesMac, AjustesPdf, AjustesOrganizar), Error> in
+            do {
+                return .success((try nucleo.ajustes(), try nucleo.ajustesPdf(), try nucleo.ajustesOrganizar()))
+            } catch { return .failure(error) }
         }.value
         switch r {
-        case let .success((a, p)):
+        case let .success((a, p, o)):
             valores = a
             pdf = p
+            organizar = o
+            AjustesOrganizarIPad.poner(o)
             sincro?.automatica = a.sincroAutomatica
             error = nil
         case let .failure(e):
@@ -210,13 +225,46 @@ public final class ModeloAjustes: ObservableObject {
         switch paso {
         case let .toml(a): poner(a)
         case let .pdf(p): ponerPdf(p)
+        case let .organizar(o): ponerOrganizar(o)
+        }
+    }
+
+    /// Tareas, Lienzo y Pinear como estan (los de fabrica hasta `cargar`).
+    public var organizarActual: AjustesOrganizar { organizar ?? fabricaOrganizar }
+
+    /// **Cambia Tareas, Lienzo o Pinear** y lo guarda (en la cola de
+    /// guardados); lo de antes queda para «Deshacer». Al guardarse avisa
+    /// (`AjustesOrganizarIPad.cambiaron`) para que el lienzo lo lea.
+    public func cambiarOrganizar(_ cambio: (inout AjustesOrganizar) -> Void) {
+        let antes = organizarActual
+        var nuevo = antes
+        cambio(&nuevo)
+        guard nuevo != antes else { return }
+        apuntar(.organizar(antes))
+        ponerOrganizar(nuevo)
+    }
+
+    private func ponerOrganizar(_ nuevo: AjustesOrganizar) {
+        organizar = nuevo
+        let previo = ultimoGuardado
+        let nucleo = self.nucleo
+        ultimoGuardado = Task { [weak self] in
+            await previo?.value
+            let fallo = await Task.detached(priority: .utility) { () -> String? in
+                do { try nucleo.guardarAjustesOrganizar(nuevos: nuevo); return nil } catch { return ModeloAjustes.texto(de: error) }
+            }.value
+            self?.error = fallo.map { "No se pudo guardar: \($0)" }
+            if fallo == nil { AjustesOrganizarIPad.poner(nuevo) }
         }
     }
 
     public var sePuedeDeshacer: Bool { !historial.isEmpty }
 
     /// Si algo del TOML no esta como de fabrica.
-    public var hayCambios: Bool { valores != fabrica || (pdf ?? ModeloAjustes.pdfDeFabrica) != ModeloAjustes.pdfDeFabrica }
+    public var hayCambios: Bool {
+        valores != fabrica || (pdf ?? ModeloAjustes.pdfDeFabrica) != ModeloAjustes.pdfDeFabrica
+            || organizarActual != fabricaOrganizar
+    }
 
     /// Todo lo del TOML de esta pantalla a fabrica, en un paso de «Deshacer»
     /// (lo que el iPad no ensena, como la captura, se queda como estaba).

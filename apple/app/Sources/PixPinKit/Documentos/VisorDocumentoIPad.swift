@@ -8,12 +8,14 @@
 // - Un CSV o un TSV suelto (fuera de un chat): la tabla de solo ver
 //   (`TablaSueltaIPad`).
 // - Excel, OpenDocument y CSV de un chat: la hoja de calculo del nucleo
-//   (`HojaCalculoIPad`), que guarda lo editado como tablas del chat.
+//   (`HojaCalculoIPad`), que guarda lo editado como tablas del chat. Un
+//   Excel u OpenDocument suelto, la misma hoja (`LibroSueltoIPad`, con
+//   `Nucleo.abrirLibro`): se edita, pero el archivo no cambia (lo editado
+//   sale como una copia en Excel).
 // - HTML: `VisorHtmlIPad`. Markdown y texto: el editor de las notas, que
 //   escribe en su fichero (`VisorMarkdownIPad`).
-// - Lo demas (`.doc`, `.ppt`, `.xls`, RTF, un Excel suelto...): Vista
-//   Rapida (`VistaRapida` de `Raiz/`). Un `.xlsx` suelto necesita que el
-//   nucleo sepa abrir un libro por su ruta (hoy solo el de un mensaje).
+// - Lo demas (`.doc`, `.ppt`, `.xls`, RTF...): Vista Rapida (`VistaRapida`
+//   de `Raiz/`).
 //
 // Las firmas publicas (`VisorDocumentoIPad`, `EditorNotaIPad`,
 // `HojaCalculoIPad`) las usa `Raiz/RaizIPad.swift`: no se cambian.
@@ -41,7 +43,7 @@ public enum VisorDeDocumento: Equatable, Sendable {
         }
         if libros.contains(ext) {
             if deUnChat { return .hoja }
-            return ext == "csv" || ext == "tsv" ? .tablaSuelta : .vistaRapida
+            return ext == "csv" || ext == "tsv" ? .tablaSuelta : .hoja
         }
         switch ext {
         case "html", "htm", "xhtml": return .html
@@ -78,10 +80,10 @@ public struct VisorDocumentoIPad: View {
             if let chat, let mensaje {
                 HojaCalculoIPad(almacen: almacen, chat: chat, mensaje: mensaje, respaldo: url)
             } else {
-                VistaRapida(url: url)
+                LibroSueltoIPad(url: url, titulo: titulo, nucleo: almacen.nucleo)
             }
         case .html:
-            VisorHtmlIPad(url: url, titulo: titulo)
+            VisorHtmlIPad(url: url, titulo: titulo, nucleo: almacen.nucleo)
         case .texto:
             TextoSueltoIPad(url: url, titulo: titulo)
         case .vistaRapida:
@@ -140,6 +142,44 @@ private struct ReflujoOPaginadoIPad: View {
         } else {
             VisorReflujoIPad(url: url, titulo: titulo, nucleo: nucleo,
                              alPaginar: esWord ? { paginado = true } : nil)
+        }
+    }
+}
+
+/// **Un libro suelto** (un Excel u OpenDocument de la app Archivos, fuera de
+/// un chat): la misma hoja que los del chat, con su tinta, sus marcadores y
+/// sus graficos. Se edita, pero el archivo no cambia (como el visor de hojas
+/// de Windows); lo editado sale con «Compartir una copia en Excel». Si no se
+/// lee (un `.xls` renombrado, uno roto), Vista Rapida.
+struct LibroSueltoIPad: View {
+    let url: URL
+    let titulo: String
+    let nucleo: Nucleo
+    @State private var modelo: ModeloHojaIPad?
+    @State private var fallo = false
+
+    var body: some View {
+        Group {
+            if let modelo {
+                VistaHojaIPad(modelo: modelo, titulo: titulo, nucleo: nucleo, fichero: url)
+            } else if fallo {
+                VistaRapida(url: url)
+            } else {
+                VStack(spacing: 0) {
+                    BarraVisorIPad(tipo: "Hoja de cálculo", icono: "tablecells", titulo: titulo)
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+            }
+        }
+        .task {
+            guard modelo == nil else { return }
+            let nucleo = self.nucleo, ruta = url.path
+            let hecho = await Task.detached(priority: .userInitiated) { () -> HojaDeCalculo? in
+                try? nucleo.abrirLibro(ruta: ruta)
+            }.value
+            if let hecho { modelo = ModeloHojaIPad(hoja: hecho) } else { fallo = true }
         }
     }
 }

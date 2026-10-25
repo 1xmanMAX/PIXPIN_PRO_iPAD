@@ -58,7 +58,7 @@ struct GraficoHojaIPad: View {
 
     private var puntos: [PuntoGraficoHoja] {
         puntosDeGrafico(categorias: grafico.categorias,
-                        series: grafico.series.map { ($0.nombre, $0.valores) })
+                        series: grafico.series.map { (nombre: $0.nombre, valores: $0.valores) })
     }
 
     private var nombres: [String] {

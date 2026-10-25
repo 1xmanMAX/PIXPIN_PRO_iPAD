@@ -128,10 +128,61 @@ public final class ModeloEditorLienzo: ObservableObject {
             if ver != self.verOscuro { self.verOscuro = ver }
             self.vista?.cambioDeNoche()
         }
+        vigilarAjustes()
     }
 
     /// Lo que mira el modo noche comun.
     private var noche: AnyCancellable?
+
+    // MARK: Ajustes → Lienzo
+
+    /// **Las herramientas apagadas** en Ajustes → Lienzo para este sitio
+    /// (`[herramientas]`), por su id de la barra: no salen en la barra ni en
+    /// sus desplegables, ni se eligen con su letra.
+    @Published public private(set) var ocultas: Set<String> = []
+    /// **Que barra es** para Ajustes → Lienzo → «Herramientas en»: `lienzo`
+    /// (de fabrica), `lector` (la tinta de un documento), `pin` o
+    /// `pantalla` (la captura). Lo pone quien hospeda la barra.
+    public var sitioHerramientas = "lienzo" {
+        didSet { aplicarAjustes() }
+    }
+    /// Los mandos del suavizado «Natural» del trazo; `nil` es «Excalidraw»
+    /// (solo el `streamline` del motor).
+    public private(set) var suavizado: FiltroUnEuro.Mandos?
+    /// Lo que mira los cambios de Ajustes.
+    private var ajustesVigilados: AnyCancellable?
+
+    /// **Lee Ajustes → Lienzo** (el iman, el suavizado y las herramientas) y
+    /// se queda mirando sus cambios. Si nadie los ha leido aun, se leen
+    /// fuera del hilo principal.
+    func vigilarAjustes() {
+        ajustesVigilados = NotificationCenter.default.publisher(for: .pixpinCambiaronAjustesOrganizar)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.aplicarAjustes() }
+        if AjustesOrganizarIPad.vigentes != nil {
+            aplicarAjustes()
+        } else if let nucleo {
+            // Al leerse avisa, y el aviso los aplica.
+            _ = Task.detached(priority: .utility) { AjustesOrganizarIPad.cargar(nucleo: nucleo) }
+        }
+    }
+
+    /// Pone en el editor y en la barra lo de Ajustes → Lienzo.
+    func aplicarAjustes() {
+        guard let a = AjustesOrganizarIPad.vigentes else { return }
+        editor.ponerIman(activo: a.imanActivo, esquinas: a.imanEsquinas, medios: a.imanMedios,
+                         centros: a.imanCentros, radioPx: Float(a.imanRadioPx))
+        suavizado = a.suavizado == "natural"
+            ? FiltroUnEuro.Mandos(corteMinimo: a.tintaCorteMinimo ?? 1.0, beta: a.tintaBeta ?? 0.007)
+            : nil
+        let sitio = sitioHerramientas
+        var nuevas = Set(HerramientaLienzo.todas.map(\.id).filter { !AjustesOrganizarIPad.sale($0, en: sitio, con: a) })
+        if !AjustesOrganizarIPad.sale("figuras", en: sitio, con: a) { nuevas.insert("figuras") }
+        guard nuevas != ocultas else { return }
+        ocultas = nuevas
+        if let d = desplegado, d.miembros(sin: nuevas).isEmpty { desplegado = nil }
+        if nuevas.contains(herramienta) { elegir("seleccion") }
+    }
 
     /// **El papel que se ensena de noche** (`PAPEL` de `pixpin_render::oscuro`,
     /// el gris de la barra de los pines): con el modo noche puesto, un papel
@@ -154,6 +205,8 @@ public final class ModeloEditorLienzo: ObservableObject {
     public var alRehacer: (() -> Void)?
 
     public func elegir(_ nombre: String) {
+        // Apagada en Ajustes → Lienzo: no se coge (como `Mano::permitida`).
+        guard !ocultas.contains(nombre) else { return }
         // Otra herramienta: la zona vuelve a ser la copia en el lienzo.
         zonaAlChat = false
         alElegir?(nombre)

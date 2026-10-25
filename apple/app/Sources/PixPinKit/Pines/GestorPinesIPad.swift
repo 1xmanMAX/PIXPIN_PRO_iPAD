@@ -803,13 +803,18 @@ public final class GestorPinesIPad: ObservableObject {
         VistaTextoSacado.sacar(de: vista)
     }
 
-    /// Anotar: el editor de captura con la foto del pin; al acabar, la
-    /// anotada vuelve al mismo pin.
+    /// Anotar: el lienzo con todas sus herramientas sobre la foto del pin
+    /// (`Pines/AnotarPinLienzo.swift`); al acabar, la anotada vuelve al
+    /// mismo pin. Si el lienzo no se abre, el editor de captura.
     func anotar(_ pin: PinIPad) {
         guard let vista = pin.vista else { return avisarFalloPin() }
         let id = pin.id
-        CapturadorIPad.compartido.editar(vista, alAnotarPin: { [weak self] anotada in
+        AnotarPinConLienzo.abrir(vista, listo: { [weak self] anotada in
             self?.cambiarImagen(de: id, por: anotada)
+        }, sinLienzo: {
+            CapturadorIPad.compartido.editar(vista, alAnotarPin: { [weak self] anotada in
+                self?.cambiarImagen(de: id, por: anotada)
+            })
         })
     }
 

@@ -29,9 +29,12 @@ enum CarpetasChat {
     static let nombreDeSerie = "Cuaderno"
     static let pagina = "Página"
 
+    /// La palabra de `miniapp` de una carpeta (`"carpeta"`, la del nucleo).
+    static let palabra = carpetaMiniapp()
+
     /// Si un mensaje es una carpeta (`es_carpeta`).
     static func esCarpeta(_ m: MensajeChat) -> Bool {
-        m.clase == "MINIAPP" && m.miniapp == carpetaMiniapp()
+        m.clase == "MINIAPP" && m.miniapp == palabra
     }
 
     /// Sus paginas, en orden (vacio si el documento no se entiende).
@@ -92,12 +95,12 @@ enum CarpetasChat {
 
     /// El icono de una pagina sin miniatura (`icono_de`).
     static func icono(_ m: MensajeChat?) -> String {
-        switch m?.clase {
+        switch m?.clase ?? "" {
         case "DIBUJO": "scribble.variable"
         case "PAGINA": "book"
         case "IMAGEN": "photo"
         case "VOZ": "play.fill"
-        case "NOTA", nil: "square.and.pencil"
+        case "NOTA", "": "square.and.pencil"
         default: "doc"
         }
     }

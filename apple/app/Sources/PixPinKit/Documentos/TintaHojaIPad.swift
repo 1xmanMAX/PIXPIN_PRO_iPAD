@@ -318,7 +318,7 @@ final class ControladorTintaHoja: ObservableObject {
             return
         }
         guard let url, let enLibro else {
-            tintaDe = (indiceHoja, nil)
+            tintaDe = (hoja: indiceHoja, rejilla: nil)
             ponerRejilla(nil, columnas: columnas)
             return
         }
@@ -329,7 +329,7 @@ final class ControladorTintaHoja: ObservableObject {
                                 filas: UInt32(max(filas, 400)))
             }.value
             guard let self, self.indiceHoja == esta else { return }
-            self.tintaDe = (esta, r)
+            self.tintaDe = (hoja: esta, rejilla: r)
             self.ponerRejilla(r, columnas: self.hoja?.columnas ?? columnas)
         }
     }
@@ -660,19 +660,52 @@ struct MarcaRejillaHoja: UIViewRepresentable {
 
 // MARK: - El riel
 
-/// **El riel de la hoja**: el marcador y el lapiz (con sus herramientas al
-/// anotar) y los marcadores puestos.
+/// Lo que el riel de la tinta pide a quien lo monta (la hoja de calculo, la
+/// pagina web).
+@MainActor
+protocol RielDeTinta: AnyObject {
+    /// Si hay donde guardar la tinta (sin fichero, no hay lapiz).
+    var conLapiz: Bool { get }
+    /// Si se ponen marcadores.
+    var conMarcadores: Bool { get }
+    func alternarAnotar()
+    func elegir(_ h: String)
+    func ponerColor(_ c: ColorTinta)
+    func deshacer()
+    func rehacer()
+    func alternarDedo()
+    func ir(a m: MarcaDocumento)
+    func quitarMarca(_ m: MarcaDocumento)
+    func quitarMarcas()
+    /// Lo que se escribe bajo el emoticono de un marcador.
+    func rotulo(de m: MarcaDocumento) -> String
+}
+
+extension ControladorTintaHoja: RielDeTinta {
+    var conMarcadores: Bool { url != nil }
+
+    func rotulo(de m: MarcaDocumento) -> String {
+        let celda = celdaDeMarcaDeHoja(m)
+        return "\(letrasDeColumna(celda.columna))\(celda.fila + 1)"
+    }
+}
+
+/// **El riel de la tinta** (el de los PDF, `RielLectorIPad`, para la hoja de
+/// calculo y la pagina web): el marcador y el lapiz (con sus herramientas
+/// al anotar) y los marcadores puestos.
 struct RielHojaIPad: View {
-    let c: ControladorTintaHoja
+    let c: any RielDeTinta
     @ObservedObject var modelo: ModeloLectorIPad
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 10) {
             VStack(spacing: 2) {
-                BotonRielIPad(simbolo: "bookmark", ayuda: "Poner un marcador (⌘M)", encendido: modelo.poniendoMarca) {
-                    modelo.poniendoMarca.toggle()
+                if c.conMarcadores {
+                    BotonRielIPad(simbolo: "bookmark", ayuda: "Poner un marcador (⌘M)", encendido: modelo.poniendoMarca) {
+                        modelo.poniendoMarca.toggle()
+                    }
+                    .keyboardShortcut("m", modifiers: .command)
                 }
-                .keyboardShortcut("m", modifiers: .command)
                 if c.conLapiz {
                     BotonRielIPad(simbolo: "pencil.tip", ayuda: modelo.anotando ? "Dejar de anotar" : "Anotar",
                                   encendido: modelo.anotando) {
@@ -682,7 +715,7 @@ struct RielHojaIPad: View {
             }
             .modifier(FondoRielHoja())
             if modelo.anotando { herramientas }
-            if !modelo.marcas.isEmpty { marcadores }
+            if c.conMarcadores, !modelo.marcas.isEmpty { marcadores }
         }
         .fixedSize()
     }
@@ -727,11 +760,10 @@ struct RielHojaIPad: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 2) {
                 ForEach(modelo.marcas, id: \.id) { m in
-                    let celda = celdaDeMarcaDeHoja(m)
                     Button { c.ir(a: m) } label: {
                         VStack(spacing: 0) {
                             Text(m.emoji).font(.system(size: 18))
-                            Text("\(letrasDeColumna(celda.columna))\(celda.fila + 1)")
+                            Text(c.rotulo(de: m))
                                 .font(.system(size: 9).monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }

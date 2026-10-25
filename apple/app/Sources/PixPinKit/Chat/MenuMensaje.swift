@@ -534,6 +534,14 @@ struct MenuDeMensaje<Propias: View>: View {
             if ["DIBUJO", "PAGINA", "IMAGEN"].contains(m.clase) {
                 Button { c.imprimir(c.sobre(m)) } label: { Label("Imprimir…", systemImage: "printer") }
             }
+            if let pdf = c.fichero(m), pdf.pathExtension.lowercased() == "pdf" {
+                Button {
+                    ColaAligerar.compartida.aMano(pdf, nucleo: c.almacen.nucleo)
+                    c.avisar("Aligerando el PDF…")
+                } label: {
+                    Label("Aligerar el PDF", systemImage: "arrow.down.right.and.arrow.up.left")
+                }
+            }
             if m.recuerdaEn != nil {
                 Button { c.olvidar(m) } label: { Label("Quitar el recordatorio", systemImage: "alarm") }
             } else {
@@ -551,6 +559,8 @@ struct MenuDeMensaje<Propias: View>: View {
             if !m.esLeccion, m.clase != "ARCHIVO", let leccion = GanchosChat.hacerLeccion {
                 Button { leccion(c.chat, m, c.almacen) } label: { Label("Hacer lección", systemImage: "lightbulb") }
             }
+            // Mis figuras, carpetas de paginas y Anki (`MenuEstudio.swift`).
+            EntradasDeEstudio(m: m, c: c)
         }
 
         // ── «Más»: lo que se usa poco ──
@@ -567,6 +577,7 @@ struct MenuDeMensaje<Propias: View>: View {
                         Label("Guardar esto", systemImage: "bookmark")
                     }
                 }
+                EntradasDeEstudio(m: m, c: c, enMas: true)
                 let respuestas = c.respuestas(a: m)
                 if !respuestas.isEmpty {
                     Menu {

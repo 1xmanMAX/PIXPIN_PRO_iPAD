@@ -97,6 +97,41 @@ impl Nucleo {
     }
 }
 
+/// Las fotos de una nota para el editor nativo (`adjuntos`, el sitio y la
+/// ruta portatil de Windows y el movil).
+#[uniffi::export]
+impl Nucleo {
+    /// **Guarda una foto (o un fichero) de la nota** junto a ella y da la
+    /// ruta que se escribe en el Markdown (`![](ruta)`): en la carpeta del
+    /// proyecto (`notas/<hora>-<nombre>`, la que viaja) o, de un `.md`
+    /// suelto, en `adjuntos/` a su lado. Bloqueante.
+    pub fn adjuntar_a_nota(
+        &self,
+        destino: DestinoNota,
+        nombre: String,
+        bytes: Vec<u8>,
+    ) -> Result<String, ErrorNucleo> {
+        if let DestinoNota::Mensaje { chat, .. } = &destino {
+            crate::chats::validar_chat(chat)?;
+        }
+        Ok(super::adjuntos::adjuntar_bytes(
+            self.ruta(),
+            &destino,
+            &nombre,
+            &bytes,
+            crate::ahora_ms(),
+        )?)
+    }
+
+    /// **Donde esta en este equipo** lo que la nota nombra con `ruta` (una
+    /// foto `![](…)`), si esta.
+    pub fn ruta_en_la_nota(&self, destino: DestinoNota, ruta: String) -> Option<String> {
+        super::adjuntos::resolver(self.ruta(), &destino, &ruta)
+            .filter(|p| p.is_file())
+            .map(|p| p.display().to_string())
+    }
+}
+
 fn ahora() -> i64 {
     crate::ahora_ms()
 }
@@ -227,6 +262,28 @@ mod pruebas {
             })
             .is_err()
         );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn una_foto_de_un_md_suelto_va_a_su_lado_y_se_encuentra() {
+        let d = std::env::temp_dir().join(format!("pixpin-foto-nota-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let n = Nucleo::abrir(d.join("datos").display().to_string(), "iPad".into()).unwrap();
+        let md = d.join("nota.md");
+        std::fs::write(&md, "Hola").unwrap();
+        let destino = DestinoNota::Fichero {
+            ruta: md.display().to_string(),
+        };
+        let ruta = n
+            .adjuntar_a_nota(destino.clone(), "mi foto.png".into(), vec![1, 2, 3])
+            .unwrap();
+        assert!(ruta.starts_with("adjuntos/") && ruta.ends_with("-mi_foto.png"), "{ruta}");
+        let real = n.ruta_en_la_nota(destino.clone(), ruta).unwrap();
+        assert_eq!(std::fs::read(real).unwrap(), vec![1, 2, 3]);
+        // Caso negativo: lo que no esta no sale.
+        assert!(n.ruta_en_la_nota(destino, "adjuntos/no.png".into()).is_none());
         let _ = std::fs::remove_dir_all(&d);
     }
 }

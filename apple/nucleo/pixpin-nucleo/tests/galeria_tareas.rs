@@ -604,7 +604,7 @@ fn una_tarea_con_imagen_va_a_una_lista_de_un_proyecto() {
     let tmp = Temporal::nueva("tarea-imagen-lista");
     let n = tmp.nucleo();
     let obra = n.crear_chat("Obra".into()).unwrap();
-    let id = lista(&n, &tmp.0, &obra.id, "Pendientes", &[t("medir", false)]);
+    let id = lista(&n, &tmp.datos(), &obra.id, "Pendientes", &[t("medir", false)]);
     let foto = tmp.0.join("grieta.png");
     std::fs::write(&foto, b"\x89PNG de mentira").unwrap();
     let l = n

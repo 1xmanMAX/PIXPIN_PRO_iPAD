@@ -99,7 +99,14 @@ public struct VistaChat: View {
                          buscar: { buscador.abrir() }, elegir: { empezarAElegir() },
                          escala: $escala, avisar: { menu.avisar($0) },
                          biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil,
-                         informacion: { verInfo = true })
+                         informacion: { verInfo = true },
+                         nuevaCarpeta: { [almacen, chat] in
+                             _ = Task<Void, Never> { @MainActor in
+                                 guard let c = await AccionesCarpeta.crear(en: chat, con: nil, almacen: almacen) else { return }
+                                 VistaCarpeta.abrir(chat: chat, carpeta: c.id, almacen: almacen)
+                             }
+                         },
+                         figuras: { [almacen, chat] in VistaFiguras.abrir(almacen: almacen, chat: chat) })
             if ficha?.esAsistente == true {
                 CabeceraDelAsistente(almacen: almacen, chat: chat)
                     .background(Paleta.chat.cabecera)
@@ -421,6 +428,8 @@ public struct VistaChat: View {
             nav.abrir(.hoja(chat: chat, mensaje: m))
         case "MINIAPP" where BurbujaTareas.esTareas(m):
             nav.seccion = .tareas
+        case "MINIAPP" where BurbujaCarpeta.esCarpeta(m):
+            VistaCarpeta.abrir(chat: chat, carpeta: m.id, almacen: almacen)
         case "ARCHIVO":
             Task {
                 guard let url = await resolverFichero(m, chat, almacen),
@@ -778,6 +787,10 @@ struct CabeceraChat: View {
     var biblioteca: (() -> Void)?
     /// El panel Información (Todo, Fotos, Archivos, Voz...).
     var informacion: (() -> Void)?
+    /// «Carpeta de páginas» nueva y la galería de «Figuras» (Windows, 24 y
+    /// 26-oct; `Chat/CarpetasChat.swift`, `Chat/FigurasChat.swift`).
+    var nuevaCarpeta: (() -> Void)?
+    var figuras: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -830,6 +843,12 @@ struct CabeceraChat: View {
                     }
                     if let biblioteca {
                         Button(action: biblioteca) { Label("Biblioteca de audio", systemImage: "music.note.list") }
+                    }
+                    if let nuevaCarpeta {
+                        Button(action: nuevaCarpeta) { Label("Carpeta de páginas", systemImage: "book") }
+                    }
+                    if let figuras {
+                        Button(action: figuras) { Label("Figuras", systemImage: "square.on.square") }
                     }
                     Section("Tamaño del chat") {
                         Button { cambiar("+") } label: { Label("Más grande (⌘+)", systemImage: "plus.magnifyingglass") }

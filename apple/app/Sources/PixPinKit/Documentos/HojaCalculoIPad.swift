@@ -141,6 +141,17 @@ final class ModeloHojaIPad: ObservableObject {
 
     func ancho(_ c: Int) -> CGFloat { anchos[c] ?? 96 }
 
+    /// El ancho puesto a mano (pixeles, los de Windows), si lo hay.
+    func anchoPuesto(_ c: Int) -> CGFloat? { anchos[c] }
+
+    /// Donde empieza la columna `c` en el contenido de la rejilla (despues
+    /// de los numeros de las filas).
+    func izquierda(_ c: Int) -> CGFloat {
+        var x = ModeloHojaIPad.anchoNumeros
+        for k in 0..<max(min(c, columnas), 0) { x += ancho(k) }
+        return x
+    }
+
     /// Lo que se ensena: lo escrito y un margen para seguir escribiendo.
     private func recalcularTamano() {
         let t = hoja.tamano()
@@ -313,7 +324,9 @@ final class ModeloHojaIPad: ObservableObject {
         version += 1
         // La primera vez que se edita un libro: el archivo no cambia.
         if hoja.avisoAlEditar() {
-            aviso = "El archivo original no cambia: lo editado queda en el chat como tablas (el móvil las ve igual)."
+            aviso = hoja.esSuelta()
+                ? "El archivo original no cambia: comparte una copia con lo editado («Compartir una copia en Excel»)."
+                : "El archivo original no cambia: lo editado queda en el chat como tablas (el móvil las ve igual)."
         }
     }
 
@@ -384,7 +397,8 @@ public struct HojaCalculoIPad: View {
     public var body: some View {
         Group {
             if let modelo {
-                VistaHojaIPad(modelo: modelo, titulo: titulo, fichero: respaldo)
+                VistaHojaIPad(modelo: modelo, titulo: titulo, nucleo: almacen.nucleo,
+                              fichero: modelo.hoja.rutaOriginal().map { URL(fileURLWithPath: $0) } ?? respaldo)
             } else if error != nil, let respaldo {
                 VistaRapida(url: respaldo)
             } else {
@@ -420,10 +434,20 @@ public struct HojaCalculoIPad: View {
 struct VistaHojaIPad: View {
     @ObservedObject var modelo: ModeloHojaIPad
     let titulo: String
-    /// El libro que se ve (para «Fijar como pin»).
+    /// El libro que se ve (para «Fijar como pin», la tinta y los graficos).
     var fichero: URL?
     @FocusState private var escribiendo: Bool
     @ObservedObject private var noche = ModoNoche.compartido
+    /// La tinta, los marcadores y los graficos (`TintaHojaIPad.swift`).
+    @StateObject private var tinta: ControladorTintaHoja
+    @State private var compartiendo = false
+
+    init(modelo: ModeloHojaIPad, titulo: String, nucleo: Nucleo, fichero: URL?) {
+        self.modelo = modelo
+        self.titulo = titulo
+        self.fichero = fichero
+        _tinta = StateObject(wrappedValue: ControladorTintaHoja(url: fichero, nucleo: nucleo))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -442,6 +466,10 @@ struct VistaHojaIPad: View {
                 Button { modelo.copiar() } label: { Image(systemName: "doc.on.doc") }
                     .keyboardShortcut("c", modifiers: .command)
                     .help("Copiar (⌘C)")
+                Button { compartirCopia() } label: { Image(systemName: "square.and.arrow.up") }
+                    .disabled(compartiendo)
+                    .help("Compartir una copia en Excel")
+                    .accessibilityLabel("Compartir una copia en Excel")
             }
             barraDeFormulas
             if modelo.editando { formatos }
@@ -454,16 +482,68 @@ struct VistaHojaIPad: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
             }
             Divider()
-            RejillaHojaIPad(modelo: modelo) {
+            RejillaHojaIPad(modelo: modelo, tinta: tinta) {
                 if modelo.editando { escribiendo = true }
+            }
+            .overlay { CapaTintaHojaVista(controlador: tinta).allowsHitTesting(false) }
+            .overlay(alignment: .topTrailing) {
+                RielHojaIPad(c: tinta, modelo: tinta.modelo)
+                    .padding(.top, 34)
+                    .padding(.trailing, 12)
+            }
+            .overlay(alignment: .bottom) {
+                if tinta.modelo.poniendoMarca {
+                    TiraEmojisMarca { e in tinta.ponerMarca(e) } cerrar: { tinta.modelo.poniendoMarca = false }
+                        .padding(.bottom, 24)
+                }
             }
             if modelo.nombres.count > 1 { pestanas }
         }
         .background(Color(uiColor: .systemBackground).ignoresSafeArea())
         .modifier(NocheDelVisor(activo: noche.activo))
-        .onDisappear { modelo.cerrar() }
+        .onAppear {
+            tinta.hoja = modelo
+            tinta.cambioDeHoja()
+        }
+        .onChange(of: modelo.activa) { _, _ in tinta.cambioDeHoja() }
+        .onChange(of: modelo.version) { _, _ in tinta.cambioDeAnchos() }
+        .onDisappear {
+            modelo.cerrar()
+            tinta.guardarYa()
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             modelo.cerrar()
+            tinta.guardarYa()
+        }
+    }
+
+    /// **Una copia del libro en Excel** con lo editado (los valores ya
+    /// calculados, el formato y los anchos), por la hoja del sistema.
+    private func compartirCopia() {
+        if modelo.editando { modelo.confirmar(bajar: false) }
+        compartiendo = true
+        let hoja = modelo.hoja
+        let nombre = ((fichero?.deletingPathExtension().lastPathComponent).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (titulo as NSString).deletingPathExtension)
+            .replacingOccurrences(of: "/", with: "-")
+        let vista = tinta.capa
+        _ = Task<Void, Never> {
+            let url = await Task.detached(priority: .userInitiated) { () -> URL? in
+                guard let datos = try? hoja.comoXlsx() else { return nil }
+                let dir = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("hoja-\(UUID().uuidString)", isDirectory: true)
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let u = dir.appendingPathComponent("\(nombre.isEmpty ? "Hoja" : nombre).xlsx")
+                return (try? datos.write(to: u, options: .atomic)) != nil ? u : nil
+            }.value
+            compartiendo = false
+            guard let url else {
+                modelo.aviso = "No se pudo preparar la copia en Excel."
+                return
+            }
+            SalidaDocumentoIPad.compartir([url], desde: vista) {
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
         }
     }
 
@@ -617,6 +697,8 @@ struct VistaHojaIPad: View {
 /// arriba (fijas al desplazar) y los numeros de las filas a la izquierda.
 struct RejillaHojaIPad: View {
     @ObservedObject var modelo: ModeloHojaIPad
+    /// La tinta y los graficos de encima (`TintaHojaIPad.swift`).
+    var tinta: ControladorTintaHoja?
     /// Un toque en la celda que ya estaba elegida.
     let alRetocar: () -> Void
 
@@ -630,6 +712,12 @@ struct RejillaHojaIPad: View {
                 } header: {
                     cabecera
                 }
+            }
+            .background(alignment: .topLeading) {
+                if let tinta { MarcaRejillaHoja(controlador: tinta) }
+            }
+            .overlay(alignment: .topLeading) {
+                if let tinta { GraficosDeLaHoja(tinta: tinta) }
             }
         }
     }
