@@ -85,6 +85,11 @@ public final class DelegadoAppIPad: NSObject, UIApplicationDelegate {
             let tipo = item.type
             MainActor.assumeIsolated { _ = AccionesRapidas.hacer(tipo) }
         }
+        // La pantalla externa (proyector) la monta la vista del orador por su
+        // cuenta: sin el delegado de las ventanas.
+        if sesion.role == .windowExternalDisplayNonInteractive {
+            return UISceneConfiguration(name: "Pantalla externa", sessionRole: sesion.role)
+        }
         let c = UISceneConfiguration(name: sesion.configuration.name, sessionRole: sesion.role)
         c.delegateClass = DelegadoEscenaIPad.self
         return c
