@@ -80,6 +80,7 @@ final class PedidosIPadPurasTests: XCTestCase {
         XCTAssertEqual(HacerPedidos.nombreNormal("  Plano_Cása "), "plano casa")
     }
 
+    @MainActor
     func testPosponerLeccionYTitulo() {
         XCTAssertEqual(HacerPedidos.minutosDePosponer(nil), CentroAvisos.posponerMinutos)
         XCTAssertEqual(HacerPedidos.minutosDePosponer(0), 1)
