@@ -40,6 +40,7 @@ enum AnotadorPantallaIPad {
                 return avisarFalloPin()
             }
             let modelo = ModeloEditorLienzo(editor: editor, titulo: "Pantalla anotada", fondo: fondo)
+            modelo.sitioHerramientas = "pantalla"
             modelo.elegir("lapiz")
             let hecho = ArribaUIKit.presentar(estilo: .fullScreen) { cerrar in
                 VistaAnotarConLienzo(modelo: modelo, titulo: "Anotar la pantalla", icono: "pencil.tip.crop.circle",

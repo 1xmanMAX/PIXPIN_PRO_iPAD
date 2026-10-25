@@ -33,6 +33,7 @@ enum AnotarPinConLienzo {
                 return sinLienzo()
             }
             let modelo = ModeloEditorLienzo(editor: editor, titulo: "Anotar el pin", fondo: fondo)
+            modelo.sitioHerramientas = "pin"
             modelo.elegir("flecha")
             func limpiar() {
                 _ = Task.detached(priority: .utility) { try? FileManager.default.removeItem(at: carpeta) }

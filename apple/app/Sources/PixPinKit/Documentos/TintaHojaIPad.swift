@@ -245,6 +245,7 @@ final class ControladorTintaHoja: ObservableObject {
                     (hojasDelLibro(ruta: ruta), graficosDelLibro(ruta: ruta))
                 }.value
                 guard let self else { return }
+                self.libroLeido = true
                 self.nombresDelLibro = nombres
                 self.todosLosGraficos = graficos
                 self.cambioDeHoja()
@@ -254,6 +255,8 @@ final class ControladorTintaHoja: ObservableObject {
     }
 
     private var todosLosGraficos: [GraficoHoja] = []
+    /// Ya se miraron las hojas y los graficos del libro.
+    private var libroLeido = false
 
     var conLapiz: Bool { url != nil }
 
@@ -318,6 +321,13 @@ final class ControladorTintaHoja: ObservableObject {
             return
         }
         guard let url, let enLibro else {
+            // Aun no se sabe que hojas tiene el libro: sin rejilla (no se
+            // anota en unidades que no son).
+            if url != nil, !libroLeido {
+                rejilla = nil
+                capa.setNeedsDisplay()
+                return
+            }
             tintaDe = (hoja: indiceHoja, rejilla: nil)
             ponerRejilla(nil, columnas: columnas)
             return
@@ -349,7 +359,7 @@ final class ControladorTintaHoja: ObservableObject {
             ah = CGFloat(t.altoDefecto)
         } else {
             var x: [CGFloat] = [0]
-            for c in 0..<columnas { x.append(x[c] + h.anchoPuesto(c).map { CGFloat($0) } ?? 88) }
+            for c in 0..<columnas { x.append(x[c] + (h.anchoPuesto(c) ?? 88)) }
             tx = x
             ty = [0]
             aw = 88
