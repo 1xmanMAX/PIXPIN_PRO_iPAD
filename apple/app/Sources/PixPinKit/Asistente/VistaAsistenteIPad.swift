@@ -220,7 +220,7 @@ public struct VistaAsistenteIPad: View {
     private var vacia: some View {
         VStack(alignment: .leading, spacing: 12) {
             if modelo.motor?.faltaClave == true {
-                if case let .nube(nombre, _) = modelo.motor {
+                if case let .nube(nombre, _)? = modelo.motor {
                     Text("Falta la clave de \(nombre). Se guarda cifrada en el Llavero de este iPad y no sale de él.")
                         .foregroundStyle(.secondary)
                 } else {
