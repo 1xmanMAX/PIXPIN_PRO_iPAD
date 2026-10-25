@@ -226,6 +226,12 @@ struct ListaProyectos<Menu: View>: View {
     @State private var filtro = ""
     @State private var creando = false
     @State private var nuevo = ""
+    /// El «+» pregunta primero: chat normal o compartido (Windows e3f1d60).
+    @State private var eligiendoTipo = false
+    @State private var nuevoCompartido = false
+    /// «No se pudo compartir el chat nuevo…», un rato.
+    @State private var aviso: String?
+    @ObservedObject private var chapas = ChapasDeCompartidos.compartidas
     @State private var verArchivados = false
     /// «Elegir varios»: los marcados (para compartirlos o borrarlos juntos).
     @State private var marcando = false
@@ -333,8 +339,21 @@ struct ListaProyectos<Menu: View>: View {
         .fondoCosmos(Paleta.proyectos.lista.ignoresSafeArea())
         .overlay(alignment: .bottomTrailing) {
             if !marcando {
-                BotonProyectoNuevo { creando = true }
+                BotonProyectoNuevo { eligiendoTipo = true }
                     .padding(16)
+                    // Primero dos opciones (Windows e3f1d60, el usuario: «que
+                    // primero salgan dos opciones»): normal o compartido con
+                    // otras personas; despues, su nombre.
+                    .popover(isPresented: $eligiendoTipo, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            OpcionChatNuevo(simbolo: "folder", titulo: TextosCompartido.normal,
+                                            detalle: TextosCompartido.normalDetalle) { pedirNombre(compartido: false) }
+                            OpcionChatNuevo(simbolo: "person.2", titulo: TextosCompartido.compartido,
+                                            detalle: TextosCompartido.compartidoDetalle) { pedirNombre(compartido: true) }
+                        }
+                        .padding(8)
+                        .presentationCompactAdaptation(.popover)
+                    }
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -355,7 +374,14 @@ struct ListaProyectos<Menu: View>: View {
                     .navigationBarTitleDisplayMode(.inline)
             }
         }
-        .alert("Proyecto nuevo", isPresented: $creando) {
+        .overlay(alignment: .bottom) {
+            if let aviso { AvisoDelChat(texto: aviso).padding(.bottom, 90) }
+        }
+        .animation(.easeOut(duration: 0.15), value: aviso)
+        // La chapa de compartido: al cambiar la lista (un chat nuevo, uno
+        // que llego al entrar en un compartido) se vuelve a mirar.
+        .onReceive(almacen.$chats) { _ in chapas.releer(almacen.nucleo) }
+        .alert(nuevoCompartido ? TextosCompartido.compartido : "Proyecto nuevo", isPresented: $creando) {
             TextField("Nombre", text: $nuevo)
             Button("Cancelar", role: .cancel) { nuevo = "" }
             Button("Crear", action: crear)
@@ -373,7 +399,8 @@ struct ListaProyectos<Menu: View>: View {
                     .padding(.leading, 10)
                     .opacity(sePuedeMarcar(chat) ? 1 : 0.3)
             }
-            FilaProyecto(chat: chat, elegida: !marcando && chat.id == elegido, logo: logos.logo(chat.id))
+            FilaProyecto(chat: chat, elegida: !marcando && chat.id == elegido, logo: logos.logo(chat.id),
+                         compartido: chapas.personas[chat.id] != nil)
         }
         .id(chat.id)
         .contentShape(Rectangle())
@@ -454,16 +481,66 @@ struct ListaProyectos<Menu: View>: View {
         }
     }
 
+    /// Elegido normal o compartido: se cierra el globo y se pide el nombre.
+    private func pedirNombre(compartido: Bool) {
+        nuevoCompartido = compartido
+        eligiendoTipo = false
+        // El aviso del nombre, cuando el globo ya se fue.
+        _ = Task<Void, Never> {
+            try? await Task.sleep(for: .milliseconds(350))
+            creando = true
+        }
+    }
+
     private func crear() {
         let nombre = nuevo.trimmingCharacters(in: .whitespaces)
         nuevo = ""
         guard !nombre.isEmpty else { return }
+        if nuevoCompartido {
+            _ = Task<Void, Never> { await crearCompartido(nombre) }
+            return
+        }
         let almacen = self.almacen
         Task {
             let antes = Set(almacen.chats.map(\.id))
             await almacen.crearChat(nombre: nombre)
             // El nuevo, abierto (como Windows al crearlo).
             if let f = almacen.chats.first(where: { !antes.contains($0.id) }) { elegido = f.id }
+        }
+    }
+}
+
+extension ListaProyectos {
+    /// **Chat compartido**: nace en `compartidos.json` conmigo dentro, se
+    /// abre y «Chats compartidos» (en Aparatos) ya invita a el (el codigo y
+    /// el QR), como Windows al ponerle nombre. Si no se pudo compartir queda
+    /// normal y se dice.
+    func crearCompartido(_ nombre: String) async {
+        let nucleo = almacen.nucleo
+        do {
+            let r = try await Task.detached(priority: .userInitiated) {
+                try nucleo.crearChatCompartido(nombre: nombre)
+            }.value
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+            await almacen.cargarChats()
+            elegido = r.ficha.id
+            chapas.releer(nucleo)
+            if r.compartido {
+                PeticionDeInvitar.compartida.ficha = r.ficha.id
+                Navegacion.compartida.seccion = .aparatos
+            } else {
+                avisar(TextosCompartido.nuevoError)
+            }
+        } catch {
+            avisar(textoDeError(error))
+        }
+    }
+
+    func avisar(_ texto: String) {
+        aviso = texto
+        _ = Task<Void, Never> {
+            try? await Task.sleep(for: .seconds(4))
+            if aviso == texto { aviso = nil }
         }
     }
 }
@@ -548,6 +625,8 @@ struct FilaProyecto: View {
     let elegida: Bool
     /// La imagen de logo, si tiene (`LogoProyecto.swift`).
     var logo: UIImage?
+    /// Un chat compartido con otras personas lleva su chapa verde.
+    var compartido = false
 
     /// La segunda linea: la ultima del chat, sin la sintaxis de la nota
     /// (`# `, `**`, `- [ ]`) ni caracteres de control; si no hay, las hojas.
@@ -562,6 +641,11 @@ struct FilaProyecto: View {
     var body: some View {
         HStack(spacing: 12) {
             AvatarProyecto(chat: chat, logo: logo, lado: 46)
+                .overlay(alignment: .bottomTrailing) {
+                    if compartido {
+                        ChapaCompartido(avatar: 46, aro: elegida ? Paleta.proyectos.filaElegida : Paleta.proyectos.lista)
+                    }
+                }
             VStack(alignment: .leading, spacing: 5) {
                 Text(chat.nombre)
                     .font(.system(size: 15, weight: .semibold))

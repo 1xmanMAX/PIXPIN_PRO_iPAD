@@ -157,3 +157,17 @@ Windows `cad5e20` (`mezcla_audio.rs`, `motor_video.rs`, `pixpin-proyecto/clase.r
 `pixpin-ui/conversacion.rs`). Conflictos en Rust: `lib.rs` (los modulos de los dos) y la
 prueba del orden de la ficha (la del Mac). El motor de video no se usa en el iPad (no deja
 grabar la pantalla de otras apps). Ninguna funcion nueva del nucleo hecha aqui.
+Luego, el Mac `62fe093` (6 commits sobre `383811e`): al sincronizar se juntan marcadores,
+paginas de carpetas y figuras sin perder nada (reglas 7.1-7.3 de Windows, `pixpin-sincro`
+`fusion.rs`/`disco.rs`/`protocolo.rs` tal cual del Mac, con su prueba contra el movil
+`pixpin-proyecto/tests/sincronizar_con_el_movil.rs`, 40 pruebas que pasan; `pixpin-sincro` y
+`pixpin-proyecto` quedan identicos al Mac), los chats compartidos como conversacion
+(`conversacion.rs`; en el iPad `Chat/ConversacionCompartida.swift`, el lado de cada burbuja
+en `Chat/VistaChat.swift`, la chapa en la lista y la cabecera, y el «+» que pregunta normal o
+compartido y abre «Chats compartidos» en Aparatos), grabar clase en dos modos y «Estudiar la
+clase» (`estudiar_clase.rs`; en el iPad `VozVentanas/EstudiarClase.swift` a pantalla completa,
+y en `GrabarClase.swift` el selector con «Pantalla y sonido» apagado, que el iPad no deja), y
+la ventana de Figuras que se relee al sincronizar (en el iPad ya lo hacia por
+`.pixpinTrajoCambios`). `VisorClase` («Ver con las capturas») desaparece, como en el Mac.
+Conflictos: `lib.rs` (los modulos de los dos) y tres de Swift (`MenuMensaje`, `Compartidos`,
+`VistasVoz`). Ninguna funcion nueva del nucleo hecha aqui.

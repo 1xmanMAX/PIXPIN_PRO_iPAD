@@ -436,6 +436,8 @@ struct VistaFiguras: View {
                 if let aviso = modelo.aviso { AvisoDelChat(texto: aviso).padding(.bottom, 24) }
             }
         }
+        // Las figuras guardadas en otro aparato (`figuras.json`, que la
+        // sincronizacion junta figura a figura, regla 7.3; el Mac ba99979).
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
             modelo.releer()
         }

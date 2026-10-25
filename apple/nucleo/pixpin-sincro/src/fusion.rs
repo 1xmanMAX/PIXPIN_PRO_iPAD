@@ -118,6 +118,17 @@ fn juntar(
     if s == b {
         return m.cloned();
     }
+    // **Las marcas y los marcadores de una nota de voz**, uno por
+    // milisegundo (25-oct-2026): se juntan por su minuto, a tres bandas. Sin
+    // esto, un marcador puesto en el movil y otro en el PC antes de
+    // sincronizar eran un choque de la lista entera y uno se perdia.
+    if let Some(k) = clave.filter(|k| POR_MILISEGUNDO.contains(k))
+        && let Some(l) = por_milisegundo(b, m, s, gana_mio, c, cuenta)
+    {
+        // `marcadores` sin ninguno no se escribe (`clase.rs`); `marcas` es
+        // del esquema de Kotlin y va siempre, aunque sea `[]`.
+        return (!l.is_empty() || k == "marcas").then_some(Json::Lista(l));
+    }
     // Cambiado en los dos, y distinto.
     let (Some(m), Some(s)) = (m, s) else {
         // Borrado en uno y cambiado en el otro: se queda lo cambiado.
@@ -145,6 +156,16 @@ fn juntar(
     if clave == Some("texto")
         && let (Json::Cadena(tm), Json::Cadena(ts)) = (m, s)
         && let Some(junta) = tabla_junta(b, tm, ts, gana_mio, c, cuenta)
+    {
+        return Some(Json::Cadena(junta));
+    }
+    // **Una carpeta de paginas se junta pagina a pagina** (25-oct-2026): su
+    // documento va en el `texto` de un mensaje `MINIAPP` «carpeta» en una
+    // sola linea; por parrafos, anadir una pagina en cada aparato era un
+    // choque y una de las dos se perdia.
+    if clave == Some("texto")
+        && let (Json::Cadena(tm), Json::Cadena(ts)) = (m, s)
+        && let Some(junta) = carpeta_junta(b, tm, ts, gana_mio, c, cuenta)
     {
         return Some(Json::Cadena(junta));
     }
@@ -188,6 +209,121 @@ fn tabla_junta(
     let s = como_tabla(suyo)?;
     let base = b.and_then(Json::como_cadena).and_then(como_tabla);
     Some(Json::Objeto(objeto(base.as_ref(), &m, &s, gana_mio, c, cuenta)).a_texto())
+}
+
+/// El documento de una carpeta de paginas
+/// (`pixpin_proyecto::carpeta_de_paginas::Carpeta`) en un texto, o `None` si
+/// no lo es: un objeto con `formato` y la lista `paginas`, cada una con su
+/// `id`.
+fn como_carpeta(texto: &str) -> Option<Objeto> {
+    let t = texto.trim_start();
+    if !t.starts_with('{') || !t.contains("\"paginas\"") || !t.contains("\"formato\"") {
+        return None;
+    }
+    match Json::analizar(texto).ok()? {
+        Json::Objeto(o)
+            if matches!(o.obtener("formato"), Some(Json::Literal(_)))
+                && matches!(o.obtener("paginas"), Some(Json::Lista(l)) if con_ids(l)) =>
+        {
+            Some(o)
+        }
+        _ => None,
+    }
+}
+
+/// Dos carpetas de paginas juntas pagina a pagina (por su `id`), en JSON
+/// compacto. `None` si alguna no es una carpeta: entonces va por parrafos.
+fn carpeta_junta(
+    b: Option<&Json>,
+    mio: &str,
+    suyo: &str,
+    gana_mio: bool,
+    c: &Criterio,
+    cuenta: &mut Cuenta,
+) -> Option<String> {
+    let m = como_carpeta(mio)?;
+    let s = como_carpeta(suyo)?;
+    // Una carpeta recien creada nace con el texto vacio o `{}`: es una base
+    // sin paginas, no «nunca se acordo nada».
+    let base = b.and_then(Json::como_cadena).map(|t| {
+        como_carpeta(t).unwrap_or_else(|| {
+            let mut o = Objeto::nuevo();
+            o.poner("paginas", Json::Lista(Vec::new()));
+            o
+        })
+    });
+    Some(Json::Objeto(objeto(base.as_ref(), &m, &s, gana_mio, c, cuenta)).a_texto())
+}
+
+/// Las claves de un mensaje que son listas de cosas puestas en un
+/// milisegundo del audio: `marcas` (`[ms]`, del esquema de Kotlin) y
+/// `marcadores` (`[{ms, texto}]`, de `pixpin_proyecto::clase`).
+pub const POR_MILISEGUNDO: [&str; 2] = ["marcas", "marcadores"];
+
+/// El milisegundo de una marca (`1500`) o de un marcador (`{"ms":1500,…}`).
+fn ms_de(e: &Json) -> Option<i64> {
+    match e {
+        Json::Literal(_) => numero(Some(e)),
+        Json::Objeto(o) => numero(o.obtener("ms")),
+        _ => None,
+    }
+}
+
+/// Una lista de marcas o marcadores por milisegundo, a tres bandas. Lo que
+/// falta cuenta como una lista vacia (asi se quitan todos los marcadores).
+/// `None` si algo no tiene la forma (entonces decide la regla general).
+fn por_milisegundo(
+    b: Option<&Json>,
+    m: Option<&Json>,
+    s: Option<&Json>,
+    gana: bool,
+    c: &Criterio,
+    cuenta: &mut Cuenta,
+) -> Option<Vec<Json>> {
+    use std::collections::BTreeMap;
+    let mapa = |l: Option<&Json>| -> Option<BTreeMap<i64, Json>> {
+        let Some(l) = l else {
+            return Some(BTreeMap::new());
+        };
+        let mut salida = BTreeMap::new();
+        for e in l.como_lista()? {
+            salida.insert(ms_de(e)?, e.clone());
+        }
+        Some(salida)
+    };
+    let (en_b, en_m, en_s) = (mapa(b)?, mapa(m)?, mapa(s)?);
+    let sin_base = b.is_none();
+    let claves: std::collections::BTreeSet<i64> = en_m.keys().chain(en_s.keys()).copied().collect();
+    let mut salida = Vec::new();
+    for k in claves {
+        let (eb, em, es) = (en_b.get(&k), en_m.get(&k), en_s.get(&k));
+        // Sin base no se sabe que se quito: se queda todo lo de los dos.
+        let junto = if sin_base && (em.is_none() || es.is_none()) {
+            em.or(es).cloned()
+        } else {
+            juntar(eb, em, es, gana, None, c, cuenta)
+        };
+        salida.extend(junto);
+    }
+    Some(salida)
+}
+
+/// **La biblioteca de figuras** (`pins/draw/figuras.json`, una lista de
+/// `{id, nombre, elementos, propia}`) cambiada en los dos aparatos: se juntan
+/// figura a figura por su `id`, y dentro de una figura cambiada en los dos,
+/// pieza a pieza. No hay base (es un archivo, no un texto de la
+/// sincronizacion), asi que lo que solo esta en un lado se queda: una
+/// figura guardada en el movil y otra en el PC antes de sincronizar no se
+/// pierden. `None` si alguna no es una lista de figuras con `id`.
+pub fn biblioteca(mio: &str, suyo: &str, c: &Criterio) -> Option<String> {
+    let lista = |t: &str| match Json::analizar(t).ok()? {
+        Json::Lista(l) if con_ids(&l) => Some(l),
+        _ => None,
+    };
+    let (m, s) = (lista(mio)?, lista(suyo)?);
+    let mut cuenta = Cuenta::default();
+    let l = lista_con_ids(None, &m, &s, c.mio_mas_nuevo, c, &mut cuenta);
+    Some(Json::Lista(l).a_texto())
 }
 
 /// Un objeto, clave por clave. Si lleva su propia hora (`updated` en una
@@ -829,6 +965,146 @@ mod pruebas {
             r##"{{"elements":[{}],"backgroundColor":"#fff"}}"##,
             figuras.join(",")
         ))
+    }
+
+    /// Las claves de un mensaje juntado, en texto.
+    fn en(e: &Json, k: &str) -> String {
+        e.como_objeto()
+            .unwrap()
+            .obtener(k)
+            .map_or("-".into(), Json::a_texto)
+    }
+
+    #[test]
+    fn un_marcador_en_cada_aparato_quedan_los_dos_en_orden_y_quitar_uno_viaja() {
+        // La nota de voz de una clase: el PC pone uno al minuto 1 y el movil
+        // otro al 3 desde la misma base (el del segundo 10).
+        let base = j(r#"{"id":"v","marcadores":[{"ms":10000,"texto":"a"}],"marcas":[5]}"#);
+        let mio = j(
+            r#"{"id":"v","marcadores":[{"ms":10000,"texto":"a"},{"ms":60000,"texto":"pc"}],"marcas":[5,7]}"#,
+        );
+        let suyo = j(
+            r#"{"id":"v","marcadores":[{"ms":10000,"texto":"a"},{"ms":180000,"texto":"movil"}],"marcas":[5,9]}"#,
+        );
+        let r = junto(Some(&base), &mio, &suyo);
+        assert_eq!(
+            en(&r, "marcadores"),
+            r#"[{"ms":10000,"texto":"a"},{"ms":60000,"texto":"pc"},{"ms":180000,"texto":"movil"}]"#
+        );
+        assert_eq!(en(&r, "marcas"), "[5,7,9]");
+        // Quitado en uno (el del segundo 10) y anadido otro en el otro: el
+        // quitado se va, el anadido entra.
+        let mio = j(r#"{"id":"v","marcadores":[],"marcas":[]}"#);
+        let r = junto(Some(&base), &mio, &suyo);
+        assert_eq!(en(&r, "marcadores"), r#"[{"ms":180000,"texto":"movil"}]"#);
+        assert_eq!(en(&r, "marcas"), "[9]");
+        // Caso negativo: quitarlos todos en los dos lados quita la clave
+        // `marcadores` (como `clase.rs`), y `marcas` se queda en `[]`.
+        let r = junto(
+            Some(&base),
+            &j(r#"{"id":"v","marcas":[],"x":1}"#),
+            &j(r#"{"id":"v","marcas":[],"x":2}"#),
+        );
+        assert_eq!(en(&r, "marcadores"), "-");
+        assert_eq!(en(&r, "marcas"), "[]");
+    }
+
+    #[test]
+    fn la_misma_nota_del_mismo_minuto_cambiada_en_los_dos_gana_una_sin_duplicar() {
+        let base = j(r#"{"marcadores":[{"ms":1,"texto":"a"}]}"#);
+        let mio = j(r#"{"marcadores":[{"ms":1,"texto":"pc"}]}"#);
+        let suyo = j(r#"{"marcadores":[{"ms":1,"texto":"movil"}]}"#);
+        let r = junto(Some(&base), &mio, &suyo);
+        assert_eq!(en(&r, "marcadores"), r#"[{"ms":1,"texto":"pc"}]"#);
+        // Caso negativo: una lista que no es de marcadores (sin `ms`) sigue
+        // la regla general, entera.
+        let r = junto(
+            None,
+            &j(r#"{"marcadores":[{"x":1}]}"#),
+            &j(r#"{"marcadores":[{"x":2}]}"#),
+        );
+        assert_eq!(en(&r, "marcadores"), r#"[{"x":1}]"#);
+    }
+
+    #[test]
+    fn una_pagina_anadida_a_la_carpeta_en_cada_aparato_quedan_las_dos() {
+        let carpeta = |paginas: &[&str]| {
+            let p: Vec<String> = paginas
+                .iter()
+                .map(|id| format!(r#"{{"id":"{id}","titulo":"Día {id}"}}"#))
+                .collect();
+            Json::cadena(format!(r#"{{"formato":1,"paginas":[{}]}}"#, p.join(",")))
+        };
+        let mensaje = |texto: Json| {
+            let mut o = Objeto::nuevo();
+            o.poner("miniapp", Json::cadena("carpeta"));
+            o.poner("texto", texto);
+            Json::Objeto(o)
+        };
+        let base = mensaje(carpeta(&["1"]));
+        let r = junto(
+            Some(&base),
+            &mensaje(carpeta(&["1", "2"])),
+            &mensaje(carpeta(&["1", "3"])),
+        );
+        let texto = r.como_objeto().unwrap().obtener("texto").unwrap();
+        let doc = j(texto.como_cadena().unwrap());
+        let ids: Vec<String> = doc
+            .como_objeto()
+            .unwrap()
+            .obtener("paginas")
+            .unwrap()
+            .como_lista()
+            .unwrap()
+            .iter()
+            .map(|p| id_de(p).unwrap().to_string())
+            .collect();
+        assert_eq!(ids, ["1", "2", "3"]);
+        // La carpeta recien creada (texto vacio) cuenta como sin paginas.
+        let r = junto(
+            Some(&mensaje(Json::cadena(""))),
+            &mensaje(carpeta(&["2"])),
+            &mensaje(carpeta(&["3"])),
+        );
+        let t = r.como_objeto().unwrap().obtener("texto").unwrap().a_texto();
+        assert!(t.contains(r#"\"2\""#) && t.contains(r#"\"3\""#), "{t}");
+        // Caso negativo: un texto que no es una carpeta sigue por parrafos.
+        let r = junto(
+            Some(&mensaje(Json::cadena("a"))),
+            &mensaje(Json::cadena("a\nb")),
+            &mensaje(Json::cadena("c\na")),
+        );
+        assert_eq!(
+            r.como_objeto()
+                .unwrap()
+                .obtener("texto")
+                .unwrap()
+                .como_cadena(),
+            Some("c\na\nb")
+        );
+    }
+
+    #[test]
+    fn la_biblioteca_de_figuras_guardada_en_los_dos_no_pierde_ninguna() {
+        let fig = |id: &str, nombre: &str| {
+            format!(
+                r#"{{"id":"{id}","nombre":"{nombre}","elementos":[{}],"propia":true}}"#,
+                f(&format!("{id}-pieza"))
+            )
+        };
+        let aqui = format!("[{},{}]", fig("serie-1", "Norte"), fig("pc", "Sello PC"));
+        let alli = format!(
+            "[{},{}]",
+            fig("serie-1", "Norte"),
+            fig("movil", "Sello movil")
+        );
+        let junta = biblioteca(&aqui, &alli, &Criterio::default()).unwrap();
+        let l = j(&junta);
+        let ids: Vec<&str> = l.como_lista().unwrap().iter().filter_map(id_de).collect();
+        assert_eq!(ids, ["serie-1", "pc", "movil"]);
+        // Caso negativo: algo que no es una lista de figuras no se junta.
+        assert_eq!(biblioteca("{}", &alli, &Criterio::default()), None);
+        assert_eq!(biblioteca(&aqui, "no es json", &Criterio::default()), None);
     }
 
     #[test]

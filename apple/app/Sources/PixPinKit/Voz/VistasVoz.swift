@@ -67,6 +67,19 @@ struct BurbujaVoz: View {
                     .disabled(transcribiendo)
                     .accessibilityLabel(mensaje.transcripcion?.isEmpty == false ? "Volver a pasar a texto" : "Pasar a texto")
                 }
+                // Una clase lleva al lado la pastilla de estudiarla (Windows
+                // ce6c058): el video o la captura del minuto, el texto y las
+                // capturas, que se siguen.
+                if let clase = ClaseEnElChat.deUnaClase(mensaje, chat: chat, nucleo: almacen.nucleo) {
+                    Button {
+                        EstudiarClase.abrir(chat: chat, mensaje: clase.voz, ms: clase.ms, almacen: almacen)
+                    } label: {
+                        Image(systemName: "book").font(.system(size: 15))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Estudiar la clase")
+                }
             }
             texto
         }

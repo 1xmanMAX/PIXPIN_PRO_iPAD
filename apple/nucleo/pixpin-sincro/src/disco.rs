@@ -728,6 +728,19 @@ pub fn es_texto(rel: &str) -> bool {
         || (rel.starts_with("tablas/") && rel.ends_with(".json"))
 }
 
+/// **La biblioteca de figuras** (`BibliotecaStore.kt` del movil,
+/// `biblioteca_figuras.rs` del PC): donde la tienen los dos, senalada por el
+/// mensaje `auto-figuras` del chat «Asistente».
+pub const BIBLIOTECA_DE_FIGURAS: &str = "pins/draw/figuras.json";
+
+/// Si `rel` es la biblioteca de figuras. Para el cable sigue siendo un
+/// archivo binario (no es [es_texto]); solo cambia que, si cambio en los dos
+/// aparatos, se junta figura a figura en vez de quedarse la ultima
+/// (`fusion::biblioteca`).
+pub fn es_biblioteca_de_figuras(rel: &str) -> bool {
+    rel == BIBLIOTECA_DE_FIGURAS
+}
+
 /// **Lo que llega de una leccion aprendida, junto con lo de aqui** (mejora
 /// del PC, 3-oct-2026). En el movil un `.leccion` es un archivo mas y gana
 /// el tocado mas tarde; aqui, si el de este equipo tiene algo que lo que

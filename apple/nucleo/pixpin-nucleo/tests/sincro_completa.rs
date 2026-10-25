@@ -412,6 +412,55 @@ fn un_chat_compartido_se_invita_se_entra_y_se_sincroniza_con_su_valla() {
     let p = ana.ultimos_mensajes(tesis.id.clone(), 10).unwrap();
     assert!(p.mensajes.iter().any(|m| m.texto == "comentario de Beto"));
 
+    // Como conversacion (Windows b89c058): lo mio a la derecha y lo de Beto
+    // a la izquierda con su nombre; desde Beto, al reves.
+    let autorias = |p: &pixpin_nucleo::chats::PaginaMensajes| -> Vec<_> {
+        p.mensajes
+            .iter()
+            .map(|m| pixpin_nucleo::conversacion::AutoriaDeMensaje {
+                id: m.id.clone(),
+                cuando: m.cuando,
+                aparato: m.aparato.clone(),
+            })
+            .collect()
+    };
+    let lado = |c: &pixpin_nucleo::conversacion::ConversacionCompartida,
+                p: &pixpin_nucleo::chats::PaginaMensajes,
+                texto: &str| {
+        let i = p.mensajes.iter().position(|m| m.texto == texto).unwrap();
+        (c.lados[i].mio, c.lados[i].nombre.clone())
+    };
+    let c = ana
+        .conversacion_del_chat(tesis.id.clone(), autorias(&p), 0)
+        .unwrap()
+        .expect("compartido");
+    assert_eq!(c.personas, 2);
+    assert_eq!(lado(&c, &p, "capitulo 1"), (true, None));
+    assert_eq!(
+        lado(&c, &p, "comentario de Beto"),
+        (false, Some("Beto".into()))
+    );
+    let pb = beto.ultimos_mensajes(suya.id.clone(), 10).unwrap();
+    let cb = beto
+        .conversacion_del_chat(suya.id.clone(), autorias(&pb), 0)
+        .unwrap()
+        .expect("compartido tambien para Beto");
+    assert_eq!(lado(&cb, &pb, "capitulo 1"), (false, Some("Ana".into())));
+    assert_eq!(lado(&cb, &pb, "comentario de Beto"), (true, None));
+    // La chapa de la lista; el chat privado es normal y no la lleva.
+    let chapas = ana.chapas_de_compartidos().unwrap();
+    assert_eq!(chapas.len(), 1);
+    assert_eq!(
+        (chapas[0].ficha.as_str(), chapas[0].personas),
+        (tesis.id.as_str(), 2)
+    );
+    let pp = ana.ultimos_mensajes(privado.id.clone(), 10).unwrap();
+    assert!(
+        ana.conversacion_del_chat(privado.id.clone(), autorias(&pp), 0)
+            .unwrap()
+            .is_none()
+    );
+
     // Ana (la que lo creo) quita a Beto; Beto ya no puede quitar a nadie.
     let beto_id = beto.aparato().unwrap().id;
     let c = ana
@@ -430,6 +479,55 @@ fn un_chat_compartido_se_invita_se_entra_y_se_sincroniza_con_su_valla() {
             .is_err()
     );
     escucha.cerrar();
+}
+
+#[test]
+fn el_mas_de_la_lista_crea_un_chat_compartido_conmigo_dentro() {
+    let t = Temporal::nueva("nuevo-compartido");
+    let mac = t.nucleo("Mac");
+    // Sin ningun chat compartido, nada lleva chapa ni lados.
+    assert!(mac.chapas_de_compartidos().unwrap().is_empty());
+    let normal = mac.crear_chat("Normal".into()).unwrap();
+    assert!(
+        mac.conversacion_del_chat(normal.id.clone(), vec![], 0)
+            .unwrap()
+            .is_none()
+    );
+    let nuevo = mac.crear_chat_compartido("Tesis".into()).unwrap();
+    assert!(nuevo.compartido);
+    let f = nuevo.ficha;
+    let c = mac
+        .chat_compartido(f.id.clone())
+        .unwrap()
+        .expect("nace compartido");
+    assert!(c.estoy_dentro);
+    assert_eq!(c.nombre, "Tesis");
+    assert_eq!(c.personas.len(), 1);
+    let chapas = mac.chapas_de_compartidos().unwrap();
+    assert_eq!(chapas.len(), 1);
+    assert_eq!(
+        (chapas[0].ficha.clone(), chapas[0].personas),
+        (f.id.clone(), 1)
+    );
+    // Lo que escribo yo es mio, a la derecha.
+    let m = mac
+        .escribir_nota(f.id.clone(), "hola".into(), None)
+        .unwrap();
+    let v = mac
+        .conversacion_del_chat(
+            f.id.clone(),
+            vec![pixpin_nucleo::conversacion::AutoriaDeMensaje {
+                id: m.id.clone(),
+                cuando: m.cuando,
+                aparato: m.aparato.clone(),
+            }],
+            0,
+        )
+        .unwrap()
+        .unwrap();
+    assert!(m.aparato.is_some());
+    assert!(v.lados[0].mio);
+    assert_eq!(v.lados[0].nombre, None);
 }
 
 #[test]

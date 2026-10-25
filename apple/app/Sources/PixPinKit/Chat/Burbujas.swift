@@ -35,8 +35,12 @@ struct BurbujaChat: View {
     /// Lo buscado en el chat, para resaltarlo en las notas.
     @Environment(\.agujaDelChat) private var aguja
     @Environment(\.escalaChat) private var escala
+    /// De otra persona en un chat compartido (`Chat/ConversacionCompartida.swift`).
+    @Environment(\.burbujaDeOtro) private var deOtro
 
-    private var delAsistente: Bool { MenuMensaje.esDelAsistente(mensaje) }
+    /// Con el color de las burbujas de los demas: el asistente, o otra
+    /// persona en un chat compartido.
+    private var delAsistente: Bool { deOtro || MenuMensaje.esDelAsistente(mensaje) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4 * escala) {

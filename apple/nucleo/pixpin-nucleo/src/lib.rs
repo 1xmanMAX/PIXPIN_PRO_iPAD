@@ -66,6 +66,7 @@ pub mod chats;
 pub mod clase;
 pub mod compartidos;
 pub mod compartir;
+pub mod conversacion;
 pub mod copias;
 pub mod diapositivas;
 pub mod documentos;
@@ -78,6 +79,9 @@ pub mod editor_herramientas;
 pub mod editor_imagenes;
 pub mod editor_marcos;
 pub mod editor_tapado;
+/// Grabar clase en dos modos y la ventana «Estudiar la clase» (Windows
+/// 3af2647 y ce6c058).
+pub mod estudiar_clase;
 pub mod galeria_figuras;
 pub mod grafito_plano;
 // Editar una tabla dibujada con su cajetin (iPad, 25-oct).
@@ -100,13 +104,13 @@ pub mod magia;
 pub mod fusionar_paginas;
 // La zona al chat como sublienzo y el salto por su enlace (iPad, 25-oct).
 pub mod marcas_lienzo;
-pub mod zona_al_chat;
 /// La mezcla y el tratamiento del sonido del motor de audio de Windows
 /// (38204cb): microfono y sonido del Mac por bloques.
 pub mod mezcla_audio;
 /// El motor de video de la clase sin nada del Mac (Windows bea497b):
 /// perfiles, cadena de caidas, ritmo variable y reloj.
 pub mod motor_video;
+pub mod zona_al_chat;
 // El horario de clases que llama (Windows, 17-oct).
 // Google Calendar, solo para ver (Windows, 18-oct).
 pub mod calendario_google;
@@ -161,6 +165,10 @@ pub use editor_estilo::{
 pub use envio::{
     ArchivoLlegado, AvisoEnvio, CodigoDeEnvio, DondeLlego, EnvioSuelto, FinEnvio, FinRecibir,
     FrenteMac, PuertaEnvio, PuertaRecibir, RecibidoEnvio,
+};
+pub use estudiar_clase::{
+    CapturaParaEstudiar, ClaseParaEstudiar, EnUnaClase, FilaDeClase, LineaDeClase, ModoDeGrabar,
+    SenalDeClase,
 };
 pub use galeria::{CapturaBorrada, CapturaCaducada, CapturaGaleria, PaginaGaleria};
 pub use lecciones::{

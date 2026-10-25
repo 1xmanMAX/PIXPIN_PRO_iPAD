@@ -30,6 +30,9 @@ public struct VistaChat: View {
     @StateObject private var menu: ChatAbierto
     /// La lupa del chat (`Chat/BuscarEnChat.swift`).
     @StateObject private var buscador: BuscadorDelChat
+    /// Compartido, el lado de cada burbuja (`Chat/ConversacionCompartida.swift`).
+    @StateObject private var conversacion: ConversacionDelChat
+    @ObservedObject private var chapas = ChapasDeCompartidos.compartidas
     /// La escala del chat, en por ciento (`Chat/EscalaChat.swift`).
     @AppStorage(EscalaChat.clave) private var escala = EscalaChat.porDefecto
     @State private var borrador = ""
@@ -62,6 +65,7 @@ public struct VistaChat: View {
         self.alVolver = alVolver
         _menu = StateObject(wrappedValue: ChatAbierto(chat: chat, almacen: almacen))
         _buscador = StateObject(wrappedValue: BuscadorDelChat(chat: chat, nucleo: almacen.nucleo))
+        _conversacion = StateObject(wrappedValue: ConversacionDelChat(chat: chat, nucleo: almacen.nucleo))
     }
 
     /// La escala como factor.
@@ -95,7 +99,7 @@ public struct VistaChat: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            CabeceraChat(ficha: ficha, buscando: buscador.abierto, alVolver: alVolver,
+            CabeceraChat(ficha: ficha, personas: chapas.personas[chat], buscando: buscador.abierto, alVolver: alVolver,
                          buscar: { buscador.abrir() }, elegir: { empezarAElegir() },
                          escala: $escala, avisar: { menu.avisar($0) },
                          biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil,
@@ -129,6 +133,10 @@ public struct VistaChat: View {
             await almacen.abrir(chat: chat)
         }
         .onReceive(nav.$saltoAMensaje) { _ in _ = atenderSalto() }
+        // Compartido, de quien es cada burbuja: al cambiar lo que se ve o
+        // quien esta dentro (Windows b89c058).
+        .task(id: filas.map(\.id)) { conversacion.releer(filas) }
+        .onChange(of: chapas.personas[chat]) { _, _ in conversacion.releer(filas) }
         // Lo que trae otro aparato al sincronizar: se relee (si no se esta
         // en un salto, que se perderia).
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
@@ -311,6 +319,10 @@ public struct VistaChat: View {
     private func fila(_ m: MensajeChat) -> some View {
         let elegida = menu.eleccion.ids.contains(m.id)
         let marcada = m.id == destacado || m.id == elegidoEnBusqueda
+        // Compartido: lo mio a la derecha, lo de los demas a la izquierda
+        // (`Chat/ConversacionCompartida.swift`); un chat normal, como siempre.
+        let lado = conversacion.lados[m.id]
+        let mia = lado?.mio == true
         return HStack(alignment: .center, spacing: 8) {
             if !menu.eleccion.vacia {
                 Image(systemName: elegida ? "checkmark.circle.fill" : "circle")
@@ -318,6 +330,7 @@ public struct VistaChat: View {
                     .foregroundStyle(elegida ? Paleta.chat.enviar : Color.white.opacity(0.8))
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
+            if mia { Spacer(minLength: EnSuLado.margenContrario(f)) }
             BurbujaChat(mensaje: m, chat: chat, almacen: almacen,
                         citado: citado(por: m), irACita: { ir(a: m.respondeA ?? "") })
                 .overlay {
@@ -332,8 +345,9 @@ public struct VistaChat: View {
                 // Llevarla a otra app (Split View, Slide Over): su fichero,
                 // la foto con lo anotado, el lienzo en PNG o el texto.
                 .onDrag { ArrastrarBurbuja.proveedor(m, chat: chat, almacen: almacen) }
-                .frame(maxWidth: 560 * f, alignment: .leading)
-            Spacer(minLength: 0)
+                .modifier(EnSuLado(lado: lado, f: f))
+                .frame(maxWidth: 560 * f, alignment: mia ? .trailing : .leading)
+            if !mia { Spacer(minLength: lado == nil ? 0 : EnSuLado.margenContrario(f)) }
         }
         .padding(.vertical, 1)
         .background {
@@ -361,13 +375,8 @@ public struct VistaChat: View {
                 Label(m.transcripcion?.isEmpty == false ? "Volver a pasar a texto" : "Pasar a texto",
                       systemImage: "captions.bubble")
             }
-            // Una clase grabada: el texto junto a sus capturas (la
-            // pantalla de la letra de Windows).
-            if !ClaseEnElChat.capturas(m, chat: chat, nucleo: almacen.nucleo).isEmpty {
-                Button { VisorClase.abrir(m, chat: chat, almacen: almacen) } label: {
-                    Label("Ver con las capturas", systemImage: "photo.on.rectangle")
-                }
-            }
+            // Una clase grabada: «Estudiar la clase» lo pone el menu comun
+            // (`MenuDeMensaje`), tambien en sus capturas y su video.
         case "DIBUJO":
             Button { abrir(m) } label: { Label("Abrir en lienzo", systemImage: "pencil.and.scribble") }
         case "TABLA":
@@ -811,6 +820,9 @@ public struct VistaChat: View {
 /// el menu.
 struct CabeceraChat: View {
     let ficha: FichaChat?
+    /// Compartido: cuantas personas (la chapa verde y «Compartido · N
+    /// personas» delante, lo primero que hay que saber antes de escribir).
+    var personas: UInt32?
     let buscando: Bool
     var alVolver: (() -> Void)?
     let buscar: () -> Void
@@ -848,6 +860,9 @@ struct CabeceraChat: View {
                     .foregroundStyle(Paleta.chat.carpetaIcono)
                     .frame(width: 30, height: 30)
                     .background(Paleta.chat.carpeta, in: Circle())
+                    .overlay(alignment: .bottomTrailing) {
+                        if personas != nil { ChapaCompartido(avatar: 30, aro: Paleta.chat.pildora) }
+                    }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(ficha?.nombre ?? "")
                         .font(.system(size: 15, weight: .medium))
@@ -916,7 +931,8 @@ struct CabeceraChat: View {
     private var subtitulo: String {
         guard let ficha else { return "" }
         if ficha.esAsistente { return "Asistente" }
-        return ficha.hojas == 1 ? "1 hoja" : "\(ficha.hojas) hojas"
+        let hojas = ficha.hojas == 1 ? "1 hoja" : "\(ficha.hojas) hojas"
+        return personas.map { "\(TextosCompartido.chapa($0)) · \(hojas)" } ?? hojas
     }
 
     private func cambiar(_ tecla: String) {

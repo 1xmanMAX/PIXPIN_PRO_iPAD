@@ -14,11 +14,20 @@
 // 3. **Guardar**: `Nucleo.guardarClase` deja en el chat lo mismo que
 //    Windows y el Mac: la nota de voz `Clase 24-10 18h05.m4a` y cada foto
 //    detras como captura con su minuto, enlazadas (`capturas` y
-//    `enGrabacion`), asi que sincroniza tal cual y se ve con sus capturas
-//    («Ver con las capturas») en los demas aparatos. El video de la pantalla
-//    de Windows y el Mac no se puede en el iPad (no deja grabar otras apps).
+//    `enGrabacion`), asi que sincroniza tal cual y se estudia con sus
+//    capturas («Estudiar la clase») en los demas aparatos.
 // 4. **Pasar a texto**, con el dictado del iPad; «Dejarlo sin texto» lo
 //    corta (luego se puede pedir con «Pasar a texto» en la nota).
+// 5. **«Abrir para estudiar»** (o ↩): la clase en su pantalla
+//    (`EstudiarClase`: el texto, las capturas y los marcadores, que se
+//    siguen), como Windows ce6c058.
+//
+// **Los dos modos** de Windows y el Mac (ce6c058: «Pantalla y sonido» y
+// «Audio y capturas») salen arriba en Preparar, pero en el iPad solo se
+// puede el segundo: ⛔ no deja grabar la pantalla de otras apps. «Pantalla y
+// sonido» se ve apagado y, tocado, dice como hacerlo con el iPad (la
+// grabacion de pantalla del Centro de control, y el video al chat). El modo
+// que se recuerda (`Nucleo.modoDeGrabar`) no se toca desde aqui.
 //
 // El sonido pasa por **el motor de audio de Windows** (38204cb y 06f842c,
 // `MicrofonoConMezcla` de `Voz/MezclaVoz.swift`, como el Mac): remuestreo a
@@ -78,6 +87,8 @@ final class ModeloClase: ObservableObject {
     @Published private(set) var abriendo = false
     @Published var camara = false
     @Published var deFotos: [PhotosPickerItem] = []
+    /// Lo que se graba: en el iPad, siempre el audio con capturas (fotos).
+    let modo: ModoDeGrabar = .capturas
     let aviso = AvisoCorto()
     let almacen: Almacen
     private let mic = MicrofonoSuelto()
@@ -119,6 +130,14 @@ final class ModeloClase: ObservableObject {
             }
             abriendo = false
         }
+    }
+
+    /// Uno de los dos modos del selector de arriba: el de la pantalla no se
+    /// puede en el iPad y se dice como hacerlo.
+    func elegir(_ m: ModoDeGrabar) {
+        guard fase == .preparar, m != modo else { return }
+        aviso.decir("El iPad no deja grabar la pantalla de otras apps: usa «Grabar pantalla» del Centro de control y manda el vídeo al chat",
+                    segundos: 5)
     }
 
     func pausa() {
@@ -245,6 +264,18 @@ final class ModeloClase: ObservableObject {
         fase = .lista(titulo: "Guardada en «\(proyecto)»", detalle: GrabarClase.resumen(fotos: fotos, conTexto: conTexto))
     }
 
+    /// **«Abrir para estudiar»**: la clase recien guardada en su pantalla, y
+    /// la ventanita se va.
+    func estudiar() {
+        guard let g = guardadaEn else { return }
+        let almacen = self.almacen
+        cerrar?()
+        _ = Task<Void, Never> {
+            try? await Task.sleep(for: .milliseconds(400))
+            EstudiarClase.abrir(chat: g.chat, mensaje: g.mensaje, ms: 0, almacen: almacen)
+        }
+    }
+
     /// Ir a la nota en el chat.
     func verEnElChat() {
         guard let g = guardadaEn else {
@@ -271,7 +302,15 @@ final class ModeloClase: ObservableObject {
         case .space:
             pausa()
         case .return:
-            if fase == .preparar { empezar() } else if fase == .grabando { terminar() } else { return false }
+            if fase == .preparar {
+                empezar()
+            } else if fase == .grabando {
+                terminar()
+            } else if case .lista = fase, guardadaEn != nil {
+                estudiar()
+            } else {
+                return false
+            }
         default:
             return false
         }
@@ -323,6 +362,7 @@ struct VistaClase: View {
             Text("Grabar clase o reunión").font(.system(size: 26)).foregroundStyle(ColoresVoz.texto).padding(.top, 20)
             Text("Graba el audio y pon fotos en su minuto")
                 .font(.system(size: 15)).foregroundStyle(ColoresVoz.apagado).padding(.top, 10)
+            selectorDeModo.padding(.top, 20)
             VStack(alignment: .leading, spacing: 10) {
                 Label("Micrófono", systemImage: "mic.fill").font(.system(size: 17)).foregroundStyle(ColoresVoz.texto)
                 Text("El iPad no deja grabar el sonido de otras apps (Meet, Zoom…): pon el altavoz cerca. Sigue grabando con la pantalla bloqueada.")
@@ -332,7 +372,7 @@ struct VistaClase: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(ColoresVoz.cristal, in: RoundedRectangle(cornerRadius: 12))
-            .padding(.top, 24)
+            .padding(.top, 14)
             SwiftUI.Menu {
                 ForEach(m.proyectos, id: \.id) { p in
                     Button { m.destino = p.id } label: {
@@ -360,6 +400,35 @@ struct VistaClase: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: 680)
+    }
+
+    /// **El selector de modo**: dos mitades, la elegida en azul. «Pantalla
+    /// y sonido», apagada: el iPad no deja.
+    private var selectorDeModo: some View {
+        HStack(spacing: 0) {
+            mitadDelModo(.pantalla, "video", "Pantalla y sonido")
+            mitadDelModo(.capturas, "photo", "Audio y capturas")
+        }
+        .padding(3)
+        .frame(height: 44)
+        .background(ColoresVoz.cristal, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func mitadDelModo(_ modo: ModoDeGrabar, _ simbolo: String, _ rotulo: String) -> some View {
+        let elegido = m.modo == modo
+        return Button { m.elegir(modo) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: simbolo).font(.system(size: 14))
+                Text(rotulo).font(.system(size: 15)).lineLimit(1)
+            }
+            .foregroundStyle(elegido ? Color.white : ColoresVoz.apagado)
+            .opacity(elegido ? 1 : 0.6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(elegido ? ColoresVoz.azul : Color.clear, in: RoundedRectangle(cornerRadius: 9))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(elegido ? .isSelected : [])
     }
 
     private var grabando: some View {
@@ -415,11 +484,17 @@ struct VistaClase: View {
             Text(titulo).font(.system(size: 22)).foregroundStyle(ColoresVoz.texto)
             Text(detalle).font(.system(size: 15)).foregroundStyle(ColoresVoz.apagado)
                 .multilineTextAlignment(.center).frame(maxWidth: 520)
+            // Con la nota guardada, «Abrir para estudiar» delante: es lo
+            // siguiente que se suele querer hacer (↩).
+            if m.guardadaEn != nil {
+                BotonVentanita("Abrir para estudiar", color: ColoresVoz.azul, ancho: 260, alto: 52) { m.estudiar() }
+                    .padding(.top, 8)
+            }
             HStack(spacing: 12) {
                 BotonVentanita("Ver en el chat", ancho: 180) { m.verEnElChat() }
-                BotonVentanita("Listo", color: ColoresVoz.azul, ancho: 140) { m.cerrar?() }
+                BotonVentanita("Listo", ancho: 140) { m.cerrar?() }
             }
-            .padding(.top, 8)
+            .padding(.top, m.guardadaEn != nil ? 0 : 8)
         }
         .padding(24)
     }

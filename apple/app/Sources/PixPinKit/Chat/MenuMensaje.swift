@@ -531,6 +531,15 @@ struct MenuDeMensaje<Propias: View>: View {
             }
             .disabled(c.otrosChats.isEmpty)
             Button { c.compartir(c.sobre(m)) } label: { Label("Compartir…", systemImage: "square.and.arrow.up") }
+            // Una clase grabada (su nota, sus capturas o su video): estudiarla en
+            // su ventana, con el texto y las capturas al lado (Windows ce6c058).
+            if let clase = ClaseEnElChat.deUnaClase(m, chat: c.chat, nucleo: c.almacen.nucleo) {
+                Button {
+                    EstudiarClase.abrir(chat: c.chat, mensaje: clase.voz, ms: clase.ms, almacen: c.almacen)
+                } label: {
+                    Label("Estudiar la clase", systemImage: "book")
+                }
+            }
             if ["DIBUJO", "PAGINA", "IMAGEN"].contains(m.clase) {
                 Button { c.imprimir(c.sobre(m)) } label: { Label("Imprimir…", systemImage: "printer") }
             }

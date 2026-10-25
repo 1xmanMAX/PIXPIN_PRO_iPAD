@@ -129,10 +129,7 @@ pub fn capturas_de(m: &Mensaje) -> Vec<(i64, String)> {
 /// La captura que toca en `posicion_ms`: la ultima hecha antes (o en ese
 /// mismo momento). Antes de la primera, la primera: algo hay que ensenar.
 pub fn captura_en(tiempos: &[i64], posicion_ms: i64) -> Option<usize> {
-    if tiempos.is_empty() {
-        return None;
-    }
-    Some(tiempos.iter().rposition(|ms| *ms <= posicion_ms).unwrap_or(0))
+    pixpin_proyecto::clase::ultimo_antes(tiempos, posicion_ms)
 }
 
 /// **La captura del minuto que suena** entre las de una clase (`tiempos`,

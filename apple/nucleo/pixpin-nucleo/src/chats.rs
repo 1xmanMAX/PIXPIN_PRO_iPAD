@@ -122,6 +122,10 @@ pub struct MensajeChat {
     pub recibido_de: Option<String>,
     /// El lienzo donde dibujo el asistente al contestar (`lienzoIa`).
     pub lienzo_ia: Option<String>,
+    /// El codigo corto (`K7Q2`) del aparato donde nacio (`aparato`): en un
+    /// chat compartido dice de quien es ([`crate::conversacion`]).
+    #[uniffi(default = None)]
+    pub aparato: Option<String>,
 }
 
 /// Una pagina de mensajes, del mas antiguo al mas nuevo.
@@ -175,6 +179,7 @@ impl From<Mensaje> for MensajeChat {
             viene_de_dibujo: viene_de_dibujo.flatten(),
             recibido_de: crate::burbujas::recibido_de(&m),
             lienzo_ia: crate::burbujas::lienzo_ia(&m),
+            aparato: crate::conversacion::aparato_corto(&m),
             en_buzon: m.en_buzon,
             recuerda_en: hora_de_recordar(&m),
             se_puede_renombrar: se_puede_renombrar(&m),

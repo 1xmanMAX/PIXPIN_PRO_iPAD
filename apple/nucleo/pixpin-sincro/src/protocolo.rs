@@ -2173,6 +2173,17 @@ impl<'a, D: Disco + ?Sized, F: Read + Write> Sesion<'a, D, F> {
                 {
                     self.fusionar_leccion(rel, suyo, acordado, avance, hecho)
                 }
+                // La biblioteca de figuras cambiada en los dos se junta
+                // figura a figura (25-oct-2026): guardar una en el movil y
+                // otra en el PC antes de sincronizar ya no pierde ninguna.
+                Paso::Fusionar(_)
+                    if disco::es_biblioteca_de_figuras(rel) && mio.is_some() && suyo.is_some() =>
+                {
+                    let tm = mio.map_or(0, |a| a.tocado);
+                    let ts = suyo.map_or(0, |a| a.tocado);
+                    let mio_mas_nuevo = tm >= ts - self.desfase;
+                    self.fusionar_biblioteca(rel, suyo, acordado, mio_mas_nuevo, avance, hecho)
+                }
                 // Un PDF o una foto no se juntan: se queda la version tocada
                 // mas tarde (la otra sigue en la copia).
                 Paso::Fusionar(_) => {
@@ -2356,6 +2367,38 @@ impl<'a, D: Disco + ?Sized, F: Read + Write> Sesion<'a, D, F> {
         };
         let aqui = std::fs::read_to_string(d.ruta(&chat, rel)).unwrap_or_default();
         let junta = pixpin_lecciones::fusion::en_choque(&aqui, &de_alli).unwrap_or(de_alli);
+        d.escribir_texto(&chat, rel, &junta)?;
+        self.mandar_archivo(rel, suyo, acordado, avance, hecho)
+    }
+
+    /// **La biblioteca de figuras cambiada en los dos**: se trae la suya, se
+    /// junta con la de aqui ([fusion::biblioteca]) y la union va de vuelta,
+    /// para que los dos queden iguales. Si alguna no se entiende, gana la
+    /// tocada mas tarde, como cualquier archivo.
+    fn fusionar_biblioteca(
+        &mut self,
+        rel: &str,
+        suyo: Option<&ArchivoInfo>,
+        acordado: Option<&str>,
+        mio_mas_nuevo: bool,
+        avance: &mut dyn FnMut(u64),
+        hecho: &mut Hecho,
+    ) -> Resultado<Option<String>> {
+        let d = self.disco;
+        let chat = self.chat_de_la_vuelta.clone();
+        let Some(de_alli) = self.traer_entero(rel)? else {
+            return Ok(None);
+        };
+        let aqui = std::fs::read_to_string(d.ruta(&chat, rel)).unwrap_or_default();
+        let criterio = Criterio {
+            mio_mas_nuevo,
+            desfase: self.desfase,
+        };
+        let junta = match fusion::biblioteca(&aqui, &de_alli, &criterio) {
+            Some(j) => j,
+            None if mio_mas_nuevo => aqui,
+            None => de_alli,
+        };
         d.escribir_texto(&chat, rel, &junta)?;
         self.mandar_archivo(rel, suyo, acordado, avance, hecho)
     }

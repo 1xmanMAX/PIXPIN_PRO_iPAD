@@ -60,6 +60,11 @@ struct CuerpoSincro: View {
     @State private var verQR = false
     @State private var creando = false
     @State private var copiado = false
+    /// Lo abierto dentro de Aparatos (Envío, Chats compartidos).
+    @State private var camino: [DestinoSincro] = []
+    /// Un chat recien nacido compartido: se abre «Chats compartidos», que
+    /// ya invita a el (`Chat/ConversacionCompartida.swift`).
+    @ObservedObject private var peticionInvitar = PeticionDeInvitar.compartida
 
     init(almacen: Almacen, sincro: Sincronizador) {
         _almacen = ObservedObject(wrappedValue: almacen)
@@ -71,7 +76,7 @@ struct CuerpoSincro: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $camino) {
             Group {
                 if permiso.estado == .sinExplicar {
                     PantallaRedLocal(permiso: permiso)
@@ -104,6 +109,10 @@ struct CuerpoSincro: View {
         }
         // Los del grupo que Bonjour no ensena, en su direccion recordada; y
         // si el sistema sigue dejando la red local.
+        .onReceive(peticionInvitar.$ficha) { ficha in
+            guard ficha != nil, camino.last != .compartidos else { return }
+            camino.append(.compartidos)
+        }
         .onAppear {
             sincro.mirarRecordadas()
             if permiso.estado != .sinExplicar { permiso.mirar() }
