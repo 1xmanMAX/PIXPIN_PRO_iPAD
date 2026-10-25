@@ -31,7 +31,7 @@ public struct VistaChat: View {
     /// La lupa del chat (`Chat/BuscarEnChat.swift`).
     @StateObject private var buscador: BuscadorDelChat
     /// Compartido, el lado de cada burbuja (`Chat/ConversacionCompartida.swift`).
-    @StateObject private var conversacion: ConversacionDelChat
+    @StateObject private var compartida: ConversacionDelChat
     @ObservedObject private var chapas = ChapasDeCompartidos.compartidas
     /// La escala del chat, en por ciento (`Chat/EscalaChat.swift`).
     @AppStorage(EscalaChat.clave) private var escala = EscalaChat.porDefecto
@@ -65,7 +65,7 @@ public struct VistaChat: View {
         self.alVolver = alVolver
         _menu = StateObject(wrappedValue: ChatAbierto(chat: chat, almacen: almacen))
         _buscador = StateObject(wrappedValue: BuscadorDelChat(chat: chat, nucleo: almacen.nucleo))
-        _conversacion = StateObject(wrappedValue: ConversacionDelChat(chat: chat, nucleo: almacen.nucleo))
+        _compartida = StateObject(wrappedValue: ConversacionDelChat(chat: chat, nucleo: almacen.nucleo))
     }
 
     /// La escala como factor.
@@ -97,22 +97,28 @@ public struct VistaChat: View {
 
     private var idsCargados: [String] { cargados.map(\.id) }
 
+    /// La cabecera (aparte: junta en `body` es demasiado para el compilador).
+    private var cabecera: some View {
+        let biblioteca: (() -> Void)? = ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil
+        return CabeceraChat(ficha: ficha, personas: chapas.personas[chat], buscando: buscador.abierto, alVolver: alVolver,
+                     buscar: { buscador.abrir() }, elegir: { empezarAElegir() },
+                     escala: $escala, avisar: { menu.avisar($0) },
+                     biblioteca: biblioteca,
+                     informacion: { verInfo = true },
+                     nuevaCarpeta: { [almacen, chat, menu] in
+                         // Como el Mac: nace con el nombre listo para
+                         // escribirlo («Cuaderno» no dice nada).
+                         _ = Task<Void, Never> { @MainActor in
+                             guard let c = await AccionesCarpeta.crear(en: chat, con: nil, almacen: almacen) else { return }
+                             menu.escritura = .renombrar(c)
+                         }
+                     },
+                     figuras: { [almacen, chat] in VistaFiguras.abrir(almacen: almacen, chat: chat) })
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            CabeceraChat(ficha: ficha, personas: chapas.personas[chat], buscando: buscador.abierto, alVolver: alVolver,
-                         buscar: { buscador.abrir() }, elegir: { empezarAElegir() },
-                         escala: $escala, avisar: { menu.avisar($0) },
-                         biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil,
-                         informacion: { verInfo = true },
-                         nuevaCarpeta: { [almacen, chat, menu] in
-                             // Como el Mac: nace con el nombre listo para
-                             // escribirlo («Cuaderno» no dice nada).
-                             _ = Task<Void, Never> { @MainActor in
-                                 guard let c = await AccionesCarpeta.crear(en: chat, con: nil, almacen: almacen) else { return }
-                                 menu.escritura = .renombrar(c)
-                             }
-                         },
-                         figuras: { [almacen, chat] in VistaFiguras.abrir(almacen: almacen, chat: chat) })
+            cabecera
             if ficha?.esAsistente == true {
                 CabeceraDelAsistente(almacen: almacen, chat: chat)
                     .background(Paleta.chat.cabecera)
@@ -135,8 +141,8 @@ public struct VistaChat: View {
         .onReceive(nav.$saltoAMensaje) { _ in _ = atenderSalto() }
         // Compartido, de quien es cada burbuja: al cambiar lo que se ve o
         // quien esta dentro (Windows b89c058).
-        .task(id: filas.map(\.id)) { conversacion.releer(filas) }
-        .onChange(of: chapas.personas[chat]) { _, _ in conversacion.releer(filas) }
+        .task(id: filas.map(\.id)) { compartida.releer(filas) }
+        .onChange(of: chapas.personas[chat]) { _, _ in compartida.releer(filas) }
         // Lo que trae otro aparato al sincronizar: se relee (si no se esta
         // en un salto, que se perderia).
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
@@ -321,7 +327,7 @@ public struct VistaChat: View {
         let marcada = m.id == destacado || m.id == elegidoEnBusqueda
         // Compartido: lo mio a la derecha, lo de los demas a la izquierda
         // (`Chat/ConversacionCompartida.swift`); un chat normal, como siempre.
-        let lado = conversacion.lados[m.id]
+        let lado = compartida.lados[m.id]
         let mia = lado?.mio == true
         return HStack(alignment: .center, spacing: 8) {
             if !menu.eleccion.vacia {
