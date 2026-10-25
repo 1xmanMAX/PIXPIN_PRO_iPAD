@@ -121,6 +121,28 @@ public final class ReproductorVoz: NSObject, ObservableObject {
         cargar(primera, arrancar: true)
     }
 
+    /// **A la cola** (la biblioteca, «Escuchar después»): detras de lo que
+    /// espera. Sin nada cargado, suena ya.
+    public func encolar(_ p: Pista) {
+        guard actual != nil else {
+            cargar(p, arrancar: true)
+            return
+        }
+        guard p.id != actual, !cola.contains(where: { $0.id == p.id }) else { return }
+        cola.append(p)
+    }
+
+    /// Quita de la cola lo que esperaba (no lo que suena).
+    public func quitarDeLaCola(_ id: String) {
+        cola.removeAll { $0.id == id }
+    }
+
+    /// Pasa ya a lo siguiente de la cola (lo de ahora se deja).
+    public func siguiente() {
+        guard !cola.isEmpty else { return }
+        cargar(cola.removeFirst(), arrancar: true)
+    }
+
     /// Carga un audio y, si se pide, arranca. Suelta lo de antes. `false` si
     /// el fichero no se puede abrir (no queda una barra apuntando a nada).
     @discardableResult

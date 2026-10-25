@@ -42,6 +42,18 @@ enum MenuMensaje {
     /// (`chats::ETIQUETAS` del nucleo).
     static let etiquetas = ["\u{2B50}", "\u{2705}", "\u{23F3}", "\u{1F4A1}", "\u{1F4B0}", "\u{1F4CD}"]
 
+    /// Las del nucleo (`Nucleo.etiquetasDeMensaje`, el orden de verdad), una
+    /// vez; si no da ninguna, las de arriba.
+    @MainActor private static var delNucleo: [String]?
+
+    @MainActor static func etiquetas(de nucleo: Nucleo) -> [String] {
+        if let hechas = delNucleo { return hechas }
+        let leidas = nucleo.etiquetasDeMensaje()
+        let v = leidas.isEmpty ? etiquetas : leidas
+        delNucleo = v
+        return v
+    }
+
     /// Si lo escribio el asistente (su codigo acaba en `·IA`, como Windows).
     static func esDelAsistente(_ m: MensajeChat) -> Bool {
         m.codigoChat?.hasSuffix("·IA") ?? false
@@ -466,7 +478,7 @@ struct MenuDeMensaje<Propias: View>: View {
     var body: some View {
         // ── La fila de etiquetas ──
         ControlGroup {
-            ForEach(MenuMensaje.etiquetas, id: \.self) { e in
+            ForEach(MenuMensaje.etiquetas(de: c.almacen.nucleo), id: \.self) { e in
                 Button { c.etiquetar(m, e) } label: {
                     Text(m.emoji == e ? "\(e)✓" : e)
                 }

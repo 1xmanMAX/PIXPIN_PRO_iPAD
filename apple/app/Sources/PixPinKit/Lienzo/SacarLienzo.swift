@@ -336,6 +336,47 @@ extension ModeloEditorLienzo {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
+    /// El dibujo (o lo elegido) pintado, para fijarlo como pin.
+    func imagenParaPin() -> CGImage? {
+        _ = editor.terminarTexto()
+        let que: QueExportar = editor.cuantosElegidos() > 0 ? .seleccion : .todo
+        return editor.hojasParaExportar(que: que).first.flatMap { imagen(de: $0) }
+    }
+
+    // MARK: La zona, al chat
+
+    /// **La foto de una zona, al chat del lienzo** (`zona_al_chat.rs` de
+    /// Windows): entra como una foto, con «Viene de» en su descripcion.
+    /// Lo que Windows y el movil hacen ademas (el sublienzo de la foto como
+    /// hoja del proyecto y la marca con enlace en el lienzo de origen) pide
+    /// al nucleo una llamada que aun no tiene.
+    func mandarZonaAlChat(_ png: Data) {
+        guard let chat, let nucleo, let vista else { return }
+        let carpeta = carpetaTemporal()
+        let nombre = SacarLienzo.nombre("Zona de \(titulo)", 0, de: 1, extension: "png")
+        let url = carpeta.appendingPathComponent(nombre)
+        let descripcion = "Viene de: Lienzo «\(titulo)»"
+        Task { [weak self] in
+            let hecho = await Task.detached(priority: .userInitiated) { () -> Bool in
+                defer { try? FileManager.default.removeItem(at: carpeta) }
+                guard (try? png.write(to: url, options: .atomic)) != nil,
+                      let m = try? nucleo.adjuntar(chat: chat, rutaOrigen: url.path, nombre: nombre) else { return false }
+                _ = try? nucleo.cambiarMensaje(chat: chat, id: m.id, cambio: .descripcion(texto: descripcion))
+                return true
+            }.value
+            guard self != nil else { return }
+            if hecho {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                // El chat se vuelve a leer (como cuando llegan cambios) y la
+                // sincronizacion cuenta su calma desde aqui.
+                NotificationCenter.default.post(name: .pixpinTrajoCambios, object: nil)
+                NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+            } else {
+                CajetinesLienzo.avisar("Zona al chat", "No se pudo mandar la zona al chat.", desde: vista)
+            }
+        }
+    }
+
     // MARK: Imprimir
 
     /// **Imprimir…** (⌘P): un PDF vectorial con una hoja por pagina: lo

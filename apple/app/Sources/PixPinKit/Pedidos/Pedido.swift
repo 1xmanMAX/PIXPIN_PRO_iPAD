@@ -124,6 +124,8 @@ public struct Pedido: Equatable, Sendable, CustomStringConvertible {
         "conservar_captura", "borrar_captura", "copiar_imagen", "quitar_tarea", "corregir_tarea",
         "borrar_lista", "enviar_al_movil", "sincronizar", "asistente", "automatizacion",
         "tabla_nueva", "posponer", "pines", "timeline", "leer_en_voz", "ocr", "herramienta",
+        // 17-oct: fotos y texto a un lienzo por su nombre, apilados.
+        "al_lienzo",
     ]
 
     public var accion: String

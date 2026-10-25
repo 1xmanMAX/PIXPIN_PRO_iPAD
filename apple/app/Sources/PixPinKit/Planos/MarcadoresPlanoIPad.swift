@@ -309,7 +309,7 @@ final class CapaTintaMarcador3DIPad: UIView, UIKeyInput, UIPencilInteractionDele
         ctx.saveGState()
         ctx.scaleBy(x: z, y: z)
         ctx.translateBy(x: -o.x, y: -o.y)
-        let imagen = modelo?.imagenes(escala: z * contentScaleFactor) ?? { _ in nil }
+        let imagen: (UInt64) -> CGImage? = modelo?.imagenes(escala: z * contentScaleFactor) ?? { _ in nil }
         PintorLienzo(lienzo: lienzo, imagen: imagen)
             .pintar(en: ctx, limites: CGRect(x: o.x, y: o.y, width: bounds.width / z, height: bounds.height / z))
         ctx.restoreGState()

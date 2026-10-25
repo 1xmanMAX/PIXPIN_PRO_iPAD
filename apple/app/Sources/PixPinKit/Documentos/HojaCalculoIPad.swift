@@ -384,7 +384,7 @@ public struct HojaCalculoIPad: View {
     public var body: some View {
         Group {
             if let modelo {
-                VistaHojaIPad(modelo: modelo, titulo: titulo)
+                VistaHojaIPad(modelo: modelo, titulo: titulo, fichero: respaldo)
             } else if error != nil, let respaldo {
                 VistaRapida(url: respaldo)
             } else {
@@ -420,12 +420,17 @@ public struct HojaCalculoIPad: View {
 struct VistaHojaIPad: View {
     @ObservedObject var modelo: ModeloHojaIPad
     let titulo: String
+    /// El libro que se ve (para «Fijar como pin»).
+    var fichero: URL?
     @FocusState private var escribiendo: Bool
     @ObservedObject private var noche = ModoNoche.compartido
 
     var body: some View {
         VStack(spacing: 0) {
-            BarraVisorIPad(tipo: "Hoja de cálculo", icono: "tablecells", titulo: titulo) {
+            BarraVisorIPad(tipo: "Hoja de cálculo", icono: "tablecells", titulo: titulo, alFijar: {
+                if let u = fichero, GestorPinesIPad.compartido.pinear(url: u) { return }
+                GestorPinesIPad.compartido.pinearLoQueSeVe()
+            }) {
                 Button {
                     if modelo.editando { modelo.confirmar(bajar: false) }
                     modelo.editando.toggle()

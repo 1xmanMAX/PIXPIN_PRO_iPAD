@@ -7,7 +7,16 @@
 #
 # - `AppPixPin`: la app (iPadOS 18+), con `PixPinKit` del paquete local
 #   `../app` y el nucleo de Rust `PixPinCore` (`../PixPinCore`).
+# - `CompartirPixPin`: la extension de Compartir (mandar fotos, PDF,
+#   enlaces, texto y ficheros a un proyecto desde cualquier app);
+# - `WidgetsPixPin`: los widgets (ultimas capturas, tareas de hoy);
 # - `PixPinKitTests`: las pruebas, en el simulador del iPad.
+#
+# Las extensiones no llevan PixPinKit ni el nucleo: hablan con la app por el
+# buzon del App Group `group.io.github.1xmanmax.pixpin`
+# (`Sistema/BuzonCompartido.swift`, que compilan tambien ellas). Los tres
+# llevan ese grupo en sus entitlements (`Soporte/*.entitlements`); sin
+# firmar (la CI) no hay grupo y la extension lo dice, pero todo compila.
 name: PixPin
 options:
   bundleIdPrefix: io.github.1xmanmax
@@ -47,18 +56,58 @@ targets:
         product: PixPinKit
       - package: PixPinCore
         product: PixPinCore
+      # Las extensiones van dentro de la app (`PlugIns/`).
+      - target: CompartirPixPin
+        embed: true
+      - target: WidgetsPixPin
+        embed: true
     settings:
       base:
         PRODUCT_NAME: PixPin
         PRODUCT_MODULE_NAME: PixPinIPadApp
         PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin
         INFOPLIST_FILE: Soporte/App-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Soporte/App.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
     scheme:
       testTargets:
         - PixPinKitTests
+  CompartirPixPin:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Compartir
+      # El buzon que comparte con la app (solo Foundation).
+      - path: ../app/Sources/PixPinKit/Sistema/BuzonCompartido.swift
+    settings:
+      base:
+        PRODUCT_NAME: CompartirPixPin
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin.compartir
+        INFOPLIST_FILE: Soporte/Compartir-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Soporte/Compartir.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+  WidgetsPixPin:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+      - path: ../app/Sources/PixPinKit/Sistema/BuzonCompartido.swift
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    settings:
+      base:
+        PRODUCT_NAME: WidgetsPixPin
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.1xmanmax.pixpin.widgets
+        INFOPLIST_FILE: Soporte/Widgets-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Soporte/Widgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
   PixPinKitTests:
     type: bundle.unit-test
     platform: iOS

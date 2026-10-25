@@ -1525,7 +1525,11 @@ private struct CuerpoLectorIPad: View {
     }
 
     private var barra: some View {
-        BarraVisorIPad(tipo: tipo, icono: icono, titulo: modelo.titulo) {
+        BarraVisorIPad(tipo: tipo, icono: icono, titulo: modelo.titulo, alFijar: {
+            if let doc = c.vistaPDF.document {
+                _ = GestorPinesIPad.compartido.pinear(documentoPdf: doc, pagina: c.modelo.pagina)
+            }
+        }) {
             Button { c.buscar() } label: { Image(systemName: "magnifyingglass") }
                 .keyboardShortcut("f", modifiers: .command)
                 .help("Buscar (⌘F)")

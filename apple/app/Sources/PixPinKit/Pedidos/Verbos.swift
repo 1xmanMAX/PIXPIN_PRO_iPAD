@@ -130,6 +130,9 @@ public enum Verbos {
              opciones: ["proyecto", "nombre"], porEnlace: true) { e in
             uno("lienzo_nuevo", ["nombre": .t(e.textoO("nombre")), "proyecto": e.proyecto])
         },
+        Fila(nombres: ["al-lienzo", "a-lienzo"], uso: "al-lienzo <nombre> [texto] [imagen…] [--proyecto P]",
+             ayuda: "Manda el texto y las imagenes al lienzo de ese nombre, apilados en una columna libre (si no existe, lo crea; si esta abierto, entra en vivo). Con espacios en el nombre: --lienzo \"Plano casa\".",
+             opciones: ["proyecto", "lienzo", "texto"], porEnlace: true, armar: armarAlLienzo),
         Fila(nombres: ["lista"], uso: "lista [titulo] [--proyecto P]", ayuda: "Crea una lista de tareas nueva.",
              opciones: ["proyecto", "titulo"], porEnlace: true) { e in
             // «Tareas», como `Atajos.LISTA` de Android cuando no dice titulo.
@@ -351,6 +354,32 @@ public enum Verbos {
         if !fotos.isEmpty { campos["imagenes"] = .textos(fotos) }
         if !otros.isEmpty { campos["archivos"] = .textos(otros) }
         return uno("chat", campos)
+    }
+
+    /// `al-lienzo <nombre> [texto] [imagen…]`: el nombre es el primer suelto
+    /// (o `--lienzo`); lo demas, como en `chat` (`armar_al_lienzo`).
+    static func armarAlLienzo(_ e: Entrada) throws -> Orden {
+        var resto = e
+        let nombre: String
+        if let n = e.campo("lienzo") {
+            nombre = n
+        } else {
+            guard let primero = e.sueltos.first?.trimmingCharacters(in: .whitespacesAndNewlines), !primero.isEmpty else {
+                throw FalloOrden.noSeEntiende("al-lienzo: falta el nombre del lienzo")
+            }
+            nombre = primero
+            resto.sueltos = Array(e.sueltos.dropFirst())
+        }
+        let (texto, ficheros) = resto.textoYFicheros()
+        if texto.isEmpty && ficheros.isEmpty {
+            throw FalloOrden.noSeEntiende("al-lienzo: falta el texto o alguna imagen")
+        }
+        if let f = ficheros.first(where: { !esImagen($0) }) {
+            throw FalloOrden.noSeEntiende("al-lienzo: un lienzo solo recibe imagenes y texto (\(f))")
+        }
+        var campos: [String: ValorPedido] = ["lienzo": .texto(nombre), "texto": .texto(texto), "proyecto": e.proyecto]
+        if !ficheros.isEmpty { campos["imagenes"] = .textos(ficheros) }
+        return uno("al_lienzo", campos)
     }
 
     static func armarProyecto(_ e: Entrada) throws -> Orden {

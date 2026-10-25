@@ -17,6 +17,11 @@
 //   y en **dos rondas** con tres aparatos o mas. Cada vuelta es una llamada
 //   al nucleo en una `Task.detached` con prioridad `.utility` (§4bis.3).
 // - **Sin ruido**: lo automatico solo avisa de un fallo al tercero seguido.
+// - **Las personas de los chats compartidos** (iPad, como Windows y el
+//   movil; el Mac aun no): con su propio reloj, sondeo cada minuto y una
+//   vuelta con cada una que conteste, solo con los chats comunes. Sin grupo
+//   pero con chats compartidos tambien se escucha y se anuncia
+//   (`anuncioDePresencia`).
 //
 // - **Donde esta cada uno** (A3, `al_dia.rs` de Windows): lo que da la
 //   sonda de un aparato visto en Bonjour se apunta en
@@ -960,9 +965,9 @@ public final class Sincronizador: ObservableObject {
         // Con otra vuelta en marcha se vuelve a mirar al acabar (y, por si
         // acaso, cada segundo: nunca girando en vacio).
         if enMarcha { ms = max(ms, 1_000) }
-        let espera = max(ms, 20)
+        let dormir = max(ms, 20)
         esperaPersonas = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(espera))
+            try? await Task.sleep(for: .milliseconds(dormir))
             guard !Task.isCancelled else { return }
             self?.latidoPersonas()
         }

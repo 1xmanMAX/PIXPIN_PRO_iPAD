@@ -93,7 +93,8 @@ public struct VistaChat: View {
         VStack(spacing: 0) {
             CabeceraChat(ficha: ficha, buscando: buscador.abierto, alVolver: alVolver,
                          buscar: { buscador.abrir() }, elegir: { empezarAElegir() },
-                         escala: $escala, avisar: { menu.avisar($0) })
+                         escala: $escala, avisar: { menu.avisar($0) },
+                         biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil)
             if ficha?.esAsistente == true {
                 CabeceraDelAsistente(almacen: almacen, chat: chat)
                     .background(Paleta.chat.cabecera)
@@ -749,6 +750,8 @@ struct CabeceraChat: View {
     let elegir: () -> Void
     @Binding var escala: Int
     let avisar: (String) -> Void
+    /// «Biblioteca de audio» (sale en «Mensajes guardados», como Windows).
+    var biblioteca: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -796,6 +799,9 @@ struct CabeceraChat: View {
                 Menu {
                     Button(action: buscar) { Label("Buscar en el chat", systemImage: "magnifyingglass") }
                     Button(action: elegir) { Label("Elegir varios", systemImage: "checkmark.circle") }
+                    if let biblioteca {
+                        Button(action: biblioteca) { Label("Biblioteca de audio", systemImage: "music.note.list") }
+                    }
                     Section("Tamaño del chat") {
                         Button { cambiar("+") } label: { Label("Más grande (⌘+)", systemImage: "plus.magnifyingglass") }
                         Button { cambiar("-") } label: { Label("Más pequeño (⌘−)", systemImage: "minus.magnifyingglass") }

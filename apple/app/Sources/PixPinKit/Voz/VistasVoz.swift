@@ -176,7 +176,25 @@ struct BarraReproductor: View {
                         .padding(.leading, 4)
                     TiempoReproductor()
                     if !r.cola.isEmpty {
-                        Text("+\(r.cola.count)").font(.caption2).foregroundStyle(.secondary)
+                        // La cola: lo que espera, para saltar a ello o quitarlo.
+                        Menu {
+                            Button { r.siguiente() } label: { Label("Siguiente", systemImage: "forward.end.fill") }
+                            Section("En la cola") {
+                                ForEach(r.cola, id: \.id) { p in
+                                    Button(role: .destructive) { r.quitarDeLaCola(p.id) } label: {
+                                        Label(p.titulo.isEmpty ? p.url.lastPathComponent : p.titulo,
+                                              systemImage: "minus.circle")
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text("+\(r.cola.count)")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: 34, minHeight: 34)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("La cola: \(r.cola.count)")
                     }
                     if conCerrar { boton("xmark", "Cerrar") { r.parar() } }
                 }

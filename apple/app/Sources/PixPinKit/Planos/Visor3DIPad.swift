@@ -1020,7 +1020,8 @@ public struct Visor3DIPad: View {
             if let m = visor.modeloAnotar {
                 BarrasLienzoEncima(modelo: m, arriba: 58) { visor.vista?.tinta.setNeedsDisplay() }
             }
-            BarraVisorIPad(tipo: "Modelo 3D", icono: "cube", titulo: titulo) { botones }
+            BarraVisorIPad(tipo: "Modelo 3D", icono: "cube", titulo: titulo,
+                           alFijar: { GestorPinesIPad.compartido.pinearLoQueSeVe() }) { botones }
             if visor.verPanel && visor.datos != nil {
                 PanelFlotantePlano(alto: 520) { panel }
             }

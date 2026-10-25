@@ -65,6 +65,10 @@ struct BurbujaChat: View {
             Text(textoResaltado(mensaje.texto, aguja: aguja))
                 .tint(Paleta.chat.enviar)
                 .fixedSize(horizontal: false, vertical: true)
+            // Con una direccion web, su tarjeta (`Chat/TarjetaEnlace.swift`).
+            if let enlace = TarjetasDeEnlace.primerEnlace(mensaje.texto) {
+                TarjetaEnlace(url: enlace)
+            }
         // «TABLA» siempre es tabla; una «MINIAPP» solo si lo que trae lo es.
         case "TABLA":
             BurbujaTablaChat(mensaje: mensaje)

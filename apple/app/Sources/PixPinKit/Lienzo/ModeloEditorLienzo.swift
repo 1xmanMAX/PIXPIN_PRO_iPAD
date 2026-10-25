@@ -51,6 +51,10 @@ public final class ModeloEditorLienzo: ObservableObject {
     @Published public var pidiendoImagen = false
     /// El panel de estilo escondido a mano (apretar el Apple Pencil).
     @Published public var panelEscondido = false
+    /// **La zona va al chat** («Zona al chat» del grupo de elegir): lo que
+    /// se recorte con la zona no se queda como copia en el lienzo, va al chat
+    /// del lienzo como una foto (`zona_al_chat.rs` de Windows).
+    @Published public var zonaAlChat = false
     /// **«Dibujar con el dedo»** (el de Notas): el dedo pinta aunque se use
     /// el Apple Pencil, y la vista se mueve con dos dedos. Apagado (de
     /// fabrica), desde que llega el Pencil el dedo mueve la vista y la palma
@@ -150,6 +154,8 @@ public final class ModeloEditorLienzo: ObservableObject {
     public var alRehacer: (() -> Void)?
 
     public func elegir(_ nombre: String) {
+        // Otra herramienta: la zona vuelve a ser la copia en el lienzo.
+        zonaAlChat = false
         alElegir?(nombre)
         do {
             let antes = herramienta

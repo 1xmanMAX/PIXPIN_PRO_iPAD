@@ -29,7 +29,7 @@ Varias zonas dejaron un gancho (`static var …: ((…) -> Void)?`) para que otr
 | `GanchosAlmacen.alEntrarPdf` (`Almacen.swift:45`) | **Aligerar el PDF al entrar**: el ajuste existe (`Ajustes/VistaAjustesIPad.swift:124`) pero no hace nada | Una zona de Documentos (falta `AligerarPdf.swift`, ver §3), con `aligerarEnSuSitio` |
 | `GanchosAjustes.alConectar` (`Ajustes/ModeloAjustes.swift:97`) | Google Calendar conectado no llega al horario ni a los avisos | `Recordatorios/Vigia.swift` (eventos del calendario) |
 | `ManosDelAsistente.exportador` (`Asistente/ManosDocumentos.swift:21`) | La herramienta «exportar» del asistente siempre dice «aún no se puede en el iPad» | `Compartir/` (falta la hoja de compartir, ver §1) |
-| `GanchosSincro.alLlegar` (`Sincro/Sincronizador.swift:927`) | Lo que llega con «Enviar a…» de otro aparato entra sin aviso | `Avisos/CentroAvisos.swift` o `Pedidos/CuadrosIPad.swift` |
+| ✅ `GanchosSincro.alLlegar` (`Sincro/Sincronizador.swift`) | Hecho: sin gancho, `Sincro/AvisoDeLlegada.swift` avisa con `CentroAvisos` (en la app si está delante; notificación local si está en el fondo). El gancho sigue para quien quiera cambiarlo | — |
 | `PaqueteDeLaApp: AppIntentsPackage` (comentado en `Pedidos/IntencionesIPad.swift:14`) | La app no declara el paquete de intenciones: Siri, Atajos y Spotlight pueden no ver las de PixPinKit | `Sources/PixPin/PixPinApp.swift` (lo común: avisar) |
 
 ---
@@ -161,24 +161,57 @@ Varias zonas dejaron un gancho (`static var …: ((…) -> Void)?`) para que otr
 | Función (Windows) | Windows | Mac | Estado iPad | Debería ir en | Nota |
 |---|---|---|---|---|---|
 | Sincronizar con la app cerrada | `sincronizar/automatica.rs` | — | ⛔ / 🟡 | `Sincro/SincroDeFondo.swift` | iOS cierra la red. Alternativa hecha: `BGAppRefreshTask` (cuando iOS quiera) |
-| **Chats compartidos sin grupo**: escuchar y anunciarse igual | `sincronizar/compartidos_ui.rs` | `Sincro/Compartidos.swift` | 🟡 | `Sincro/Sincronizador.swift` (presencia) | `hayChatsCompartidos` sin usar: sin grupo, el iPad no abre la puerta aunque esté en un chat compartido |
-| Aviso de lo que llega con «Enviar a…» | `sincronizar/` | `Sincro/EnviarA.swift` | 🟡 | ver §0 (`GanchosSincro.alLlegar`) | |
-| Direcciones recordadas (ver y olvidar) | `sincronizar.rs` | `Sincro/VistaSincro.swift` | 🟡 | `Sincro/VistaSincroIPad.swift` | `direccionesRecordadas` sin usar |
-| Estado del reloj de sincronizar (con quién, fallos seguidos) | `sincronizar/automatica.rs` | — | 🟡 | `Sincro/VistaSincroIPad.swift` | `RelojSincro.conQuien`, `fallosSeguidos` sin usar |
-| Grupo, código, QR, unirse, «¿Qué sincronizar?», Lo mío manda, copias, papelera, enviar/recibir por código, Enviar a…, compartidos | `sincronizar/` | `Sincro/` | ✅ | — | `recibirEnvio` sin usar porque se usa `recibirEnvioPreguntando` (bien) |
+| ✅ **Chats compartidos sin grupo**: escuchar y anunciarse igual | `sincronizar/compartidos_ui.rs` | `Sincro/Compartidos.swift` | ✅ | `Sincro/Sincronizador.swift` | Ya lo hacía `anuncioDePresencia` (con grupo o con chats compartidos); ahora `hayCompartidos` lo enseña en Aparatos, salir del último chat compartido cierra la puerta (`refrescar`) y la sincronización manual con una persona prueba también su dirección recordada y la apunta |
+| ✅ **Sincronizar sola con las personas de los chats compartidos** | `sincronizar/automatica.rs` (`personas_a_llamar`, `con_personas`) | — (el Mac no lo tiene) | ✅ | `Sincro/Sincronizador.swift` | Su propio `RelojSincro`, sondeo cada minuto (dirección recordada y, si no, su anuncio de Bonjour por `id`), una vuelta por persona con los chats comunes, nunca a la par que el grupo. `personasALlamar` con pruebas |
+| ✅ Aviso de lo que llega con «Enviar a…» | `sincronizar/` | `Sincro/EnviarA.swift` | ✅ | `Sincro/AvisoDeLlegada.swift` | Ventanita de avisos con sonido, o notificación local en el fondo |
+| ✅ Volver a primer plano | — | — | ✅ | `Sincro/Sincronizador.swift` (`parar`) | Al pararse se olvida quién contestaba (salvo los de hace < 2 min) y se vuelven a probar las direcciones recordadas: al volver hay vuelta con quien esté |
+| ✅ Direcciones recordadas (ver y probar) | `sincronizar.rs` | `Sincro/VistaSincro.swift` | 🟡 | `Sincro/VistaSincroIPad.swift` | Se ven con su nombre y «Probar». **Olvidar** una necesita el núcleo: `Nucleo::olvidar_direccion(id) -> bool` (quitar su línea de `sincro/direcciones.txt`) |
+| ✅ Estado del reloj de sincronizar (con quién, fallos seguidos) | `sincronizar/automatica.rs` | — | ✅ | `Sincro/VistaSincroIPad.swift` | «Sincronizando sola con …» (grupo y personas) y los fallos seguidos |
+| ✅ Enviar fotos de **Fotos** | — | — | ✅ | `Sincro/EnviarA.swift` | Todo «Enviar…» pregunta «Fotos y vídeos» o «Archivos» (`PhotosPicker`, HEIC→JPEG con `.compatible`) |
+| Grupo, código, QR, unirse, «¿Qué sincronizar?», Lo mío manda, copias, papelera, enviar/recibir por código, Enviar a…, compartidos | `sincronizar/` | `Sincro/` | ✅ | — | Revisado contra el Mac fichero a fichero: igual salvo lo de iOS. `recibirEnvio` sin usar porque se usa `recibirEnvioPreguntando` (bien) |
 
 ### 5.2 Ajustes
 
 | Función (Windows) | Windows | Mac | Estado iPad | Debería ir en | Nota |
 |---|---|---|---|---|---|
-| Sección **Tareas** (palabras de urgencia) | `ventana_ajustes.rs` (`Seccion::Tareas`) | `Ajustes/FilasAjustes.swift` | ❌ | `Ajustes/VistaAjustesIPad.swift` | |
-| Sección **Voz** (voz, velocidad, voces de Microsoft) | `ventana_ajustes.rs` (`Seccion::Voz`) | `Ajustes/FilasAjustes.swift` | ❌ | `Ajustes/VistaAjustesIPad.swift` | |
-| Sección **Lienzo** (qué herramientas y dónde) | `ventana_ajustes.rs` (`Seccion::Lienzo`) | — | ❌ | `Ajustes/VistaAjustesIPad.swift` | |
-| Sección **Pinear** (cómo nace un pin) | `ventana_ajustes.rs` (`Seccion::Pinear`) | `Ajustes/FilasAjustes.swift` | ❌ | `Ajustes/VistaAjustesIPad.swift` | |
-| **Buscador** de ajustes y «Restablecer sección» | `ventana_ajustes.rs` | `Ajustes/VistaAjustes.swift` | 🟡 | `Ajustes/VistaAjustesIPad.swift` | Hay «restablecer todo» y punto de cambiado; falta `.searchable` y por sección |
+| ✅ **Buscador** de ajustes y «Restablecer sección» | `ventana_ajustes.rs` | `Ajustes/VistaAjustes.swift` | ✅ | `Ajustes/FilasAjustes.swift`, `Ajustes/VistaAjustesIPad.swift` | Filas como datos (como el Mac): `.searchable` sin tildes en todas las secciones, «Restablecer <sección>» en un paso de «Deshacer», el punto azul y «Volver al valor de fábrica» al mantener pulsado. Con pruebas |
+| ✅ Sección **Voz** | `ventana_ajustes.rs` (`Seccion::Voz`) | `Ajustes/FilasAjustes.swift` | ✅ | `Ajustes/FilasAjustes.swift` | Voces de Microsoft (sí/no) y la voz del iPad de cada idioma con «Escuchar». El segundo idioma de las notas de voz no sale: el dictado del iPad no lo usa. La velocidad no se guarda en ningún sitio (la lleva el lector, zona Voz) |
+| ✅ Sección **Asistente** | `ventana_ajustes.rs` (`Seccion::Asistente`) | `Ajustes/FilasAjustes.swift` | ✅ | `Ajustes/FilasAjustes.swift` | Motor, claves de la nube (la hoja del asistente), pensar, respaldo, documentos a la nube, ver lo dicho y las conexiones |
+| 🟡 «Conectar…» de las conexiones (Google) | `asistente/conexiones.rs` | `Ajustes/FilaConexion.swift` | 🟡 | `Ajustes/FilaConexion.swift` | Hecha la hoja `ASWebAuthenticationSession` (`SesionWebConexion`, `AbridorDeConexion`). **Falta el núcleo**: `ia_conectar` abre con `open` (no existe en iOS). Hace falta `ia_conectar_con(servicio_id, abrir: Box<dyn AbrirNavegador>)` (ver abajo); mientras, sale un aviso claro |
+| ❌ Sección **Tareas** (palabras de urgencia) | `ventana_ajustes.rs` (`Seccion::Tareas`) | — | ❌ | `Ajustes/FilasAjustes.swift` | **Falta el núcleo**: `AjustesMac` no trae `[tareas] urgente`/`muy_urgente` (y `tareas.rs` del núcleo usa las de fábrica). Ver abajo |
+| ❌ Sección **Lienzo** (imán, suavizado, qué herramientas y dónde) | `ventana_ajustes.rs` (`Seccion::Lienzo`) | — | ❌ | `Ajustes/FilasAjustes.swift` + zona Lienzo | **Falta el núcleo** (`[enganche]`, `[tinta] suavizado`, `[herramientas]`) y que la barra del lienzo del iPad lo lea |
+| ❌ Sección **Pinear** (palabras mágicas) | `ventana_ajustes.rs` (`Seccion::Pinear`) | — | ❌ | `Ajustes/FilasAjustes.swift` + zona Pines | **Falta el núcleo** (`[pinear]`, `pixpin_pin::magia`) y que el iPad pinee por palabra mágica |
 | Atajos (teclas) | `ventana_ajustes.rs` (`Seccion::Atajos`) | `Ajustes/Atajos.swift`, `GestorAtajos.swift` | ⛔ | — | Sin atajos globales en iOS; los de dentro de la app ya van con ⌘ |
-| Captura, Apps predeterminadas | `ventana_ajustes.rs` | `Ajustes/FilasAjustes.swift` | ⛔ | — | |
+| Captura, Apps predeterminadas | `ventana_ajustes.rs` | `Ajustes/FilasAjustes.swift` | ⛔ | — | Los días de la galería sí, en General |
 | Tema Cosmos (el del móvil) | `tema_cosmos.rs`, `cielo.rs` | — | ❌ | `Ajustes/ModeloAjustes.swift` (`Tema`) | Poco usado |
+
+**Lo que pide al núcleo (`apple/nucleo`, llevarlo también al Mac):**
+
+1. Conectar desde iOS, en `pixpin-nucleo/src/asistente/conexiones.rs`:
+   ```rust
+   /// Quien abre la pagina de permiso (iPad: `ASWebAuthenticationSession`).
+   #[uniffi::export(callback_interface)]
+   pub trait AbrirNavegador: Send + Sync {
+       fn abrir(&self, url: String) -> bool;
+   }
+
+   /// Como `ia_conectar`, pero la pagina la abre Swift.
+   #[uniffi::export]
+   pub fn ia_conectar_con(servicio_id: String, abrir: Box<dyn AbrirNavegador>) -> Result<String, ErrorNucleo> {
+       let s = servicio(&servicio_id)?;
+       let parar = Arc::new(AtomicBool::new(false));
+       if let Some(antes) = ESPERA.lock().unwrap_or_else(|e| e.into_inner()).replace(parar.clone()) {
+           antes.store(true, Ordering::SeqCst);
+       }
+       let abrir = |url: &str| -> Result<(), String> {
+           if abrir.abrir(url.to_string()) { Ok(()) } else { Err("no se pudo abrir la página de permiso".into()) }
+       };
+       conexiones::conectar_en(s, &s.extremos(), &carpeta(), &abrir, &parar, conexiones::oauth::ESPERA).map_err(mal)
+   }
+   ```
+   En Swift: `final class AbridorDeConexion: AbrirNavegador` y en `FilaConexion.conectar` `iaConectarCon(servicioId: id, abrir: AbridorDeConexion())`.
+2. Olvidar una dirección: `Nucleo::olvidar_direccion(&self, id: String) -> Result<bool, ErrorNucleo>` (reescribe `sincro/direcciones.txt` sin esa línea).
+3. Tareas, Lienzo y Pinear: un registro aparte para no tocar `AjustesMac` del Mac, p. ej. `AjustesOrganizar { tareas_urgente: Vec<String>, tareas_muy_urgente: Vec<String>, iman_activo, iman_esquinas, iman_medios, iman_centros: bool, iman_radio_px: u32, suavizado: String, herramientas_apagadas: Vec<String>, palabras_magicas: Option<String> }` con `ajustes_organizar()`, `ajustes_organizar_de_fabrica()` y `guardar_ajustes_organizar(nuevos)` (`guardar_conservando`, como `guardar_ajustes`); y que `tareas.rs` del núcleo use `a.tareas` al leer la urgencia de una frase.
 
 ---
 

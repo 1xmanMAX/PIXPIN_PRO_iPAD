@@ -115,14 +115,20 @@ final class AnotadorPlanoIPad {
     @discardableResult
     func deshacer() -> Bool {
         let hecho = editor.deshacer()
-        if hecho { trasCambio() }
+        if hecho {
+            trasCambio()
+            releer()
+        }
         return hecho
     }
 
     @discardableResult
     func rehacer() -> Bool {
         let hecho = editor.rehacer()
-        if hecho { trasCambio() }
+        if hecho {
+            trasCambio()
+            releer()
+        }
         return hecho
     }
 

@@ -516,6 +516,9 @@ struct EditorTextoIPad: View {
     let icono: String
     @ObservedObject var modelo: ModeloTextoNota
     var tituloFijo: String?
+    /// El fichero que se ve (un `.md` suelto): «Fijar como pin» lo fija; sin
+    /// el (la nota del chat), se fija lo que se ve.
+    var fichero: URL?
     let alCerrar: () -> Void
     @ObservedObject private var noche = ModoNoche.compartido
     @EnvironmentObject private var nav: Navegacion
@@ -523,6 +526,10 @@ struct EditorTextoIPad: View {
     var body: some View {
         VStack(spacing: 0) {
             BarraVisorIPad(tipo: tipo, icono: icono, titulo: tituloFijo ?? modelo.titulo,
+                           alFijar: {
+                               if let u = fichero, GestorPinesIPad.compartido.pinear(url: u) { return }
+                               GestorPinesIPad.compartido.pinearLoQueSeVe()
+                           },
                            alCerrar: {
                                modelo.guardarYa()
                                alCerrar()
@@ -619,7 +626,7 @@ struct VisorMarkdownIPad: View {
     var body: some View {
         EditorTextoIPad(tipo: modelo.markdown ? "Markdown" : "Texto",
                         icono: modelo.markdown ? "doc.plaintext" : "doc.text",
-                        modelo: modelo, tituloFijo: titulo, alCerrar: {})
+                        modelo: modelo, tituloFijo: titulo, fichero: url, alCerrar: {})
             .overlay(alignment: .bottom) {
                 if let error {
                     Text(error).font(.callout).padding(8)

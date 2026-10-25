@@ -94,6 +94,9 @@ public struct HerramientaLienzo: Identifiable, Equatable {
         // La bolita, junto al lazo: las dos eligen sin marquesina.
         .init("bolita", "Bolita", .selectAll, grupo: .elegir),
         .init("zona", "Zona (copia recortada)", .crop, tecla: "z", grupo: .elegir),
+        // La zona que va al chat del proyecto como una foto (`zona_al_chat.rs`
+        // de Windows, el interruptor «Al chat»).
+        .init("zona_chat", "Zona al chat", .shareIos, grupo: .elegir, accion: true),
         .init("lapiz", "Lápiz", .freedraw, tecla: "l"),
         .init("grafito", "Grafito", .grafito, tecla: "p", grupo: .trazar),
         .init("resaltador", "Resaltador", .penMode, tecla: "r", grupo: .trazar),

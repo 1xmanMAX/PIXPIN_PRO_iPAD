@@ -100,7 +100,9 @@ struct VisorHtmlIPad: View {
             WebHtmlIPad(controlador: c, noche: noche.activo)
                 .ignoresSafeArea(edges: .bottom)
                 .padding(.top, 58)
-            BarraVisorIPad(tipo: "HTML", icono: "globe", titulo: titulo) {
+            BarraVisorIPad(tipo: "HTML", icono: "globe", titulo: titulo, alFijar: {
+                if !GestorPinesIPad.compartido.pinear(url: url) { GestorPinesIPad.compartido.pinearLoQueSeVe() }
+            }) {
                 Button { c.buscar() } label: { Image(systemName: "magnifyingglass") }
                     .keyboardShortcut("f", modifiers: .command)
                     .help("Buscar (⌘F)")

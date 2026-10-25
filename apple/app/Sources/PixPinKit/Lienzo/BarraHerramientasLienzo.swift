@@ -117,6 +117,10 @@ extension ModeloEditorLienzo {
     func hacer(_ accion: String) {
         switch accion {
         case "imagen": meterImagen()
+        case "zona_chat":
+            // La zona puesta, y lo que recorte va al chat.
+            elegir("zona")
+            zonaAlChat = chat != nil && nucleo != nil
         case "compartir": compartir()
         case "imprimir": imprimir()
         default: break

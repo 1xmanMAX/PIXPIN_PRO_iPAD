@@ -62,7 +62,8 @@ public struct EditorLienzoIPad: View {
             case let .listo(modelo):
                 EditorLienzoVistaIPad(modelo: modelo)
             }
-            BarraVisorIPad(tipo: "Lienzo", icono: "scribble.variable", titulo: carga.titulo ?? tituloDePartida) {
+            BarraVisorIPad(tipo: "Lienzo", icono: "scribble.variable", titulo: carga.titulo ?? tituloDePartida,
+                           alFijar: fijarComoPin) {
                 if case let .listo(modelo) = carga.estado {
                     Button { modelo.vista?.encajar() } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -83,6 +84,16 @@ public struct EditorLienzoIPad: View {
         }
         .onDisappear { carga.cerrar() }
         .onAppear { if case let .listo(modelo) = carga.estado { modelo.editor.alFrente() } }
+    }
+
+    /// **Fijar como pin**: el dibujo (o lo elegido) pintado, flotando en la
+    /// capa de pines; sin nada dibujado, lo que se ve.
+    private func fijarComoPin() {
+        guard case let .listo(modelo) = carga.estado, let img = modelo.imagenParaPin() else {
+            GestorPinesIPad.compartido.pinearLoQueSeVe()
+            return
+        }
+        GestorPinesIPad.compartido.pinear(imagen: img)
     }
 
     private var tituloDePartida: String {

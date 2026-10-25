@@ -346,7 +346,7 @@ final class VisorPlano: ObservableObject {
             if urls.isEmpty {
                 try? FileManager.default.removeItem(at: carpeta)
                 CajetinesLienzo.avisar("Exportar", "No se pudo preparar el \(formato.rawValue.uppercased()).",
-                                       desde: vista ?? UIView())
+                                       desde: (vista as UIView?) ?? UIView())
                 return
             }
             ExportarPlanoIPad.compartir(urls, carpeta: carpeta, desde: vista)
@@ -1333,7 +1333,8 @@ public struct VisorPlanoIPad: View {
                 BarrasLienzoEncima(modelo: m, arriba: 58) { visor.vista?.repintar() }
             }
             VStack(spacing: 8) {
-                BarraVisorIPad(tipo: "Plano", icono: "square.grid.3x3", titulo: titulo) { botones }
+                BarraVisorIPad(tipo: "Plano", icono: "square.grid.3x3", titulo: titulo,
+                               alFijar: { GestorPinesIPad.compartido.pinearLoQueSeVe() }) { botones }
                 if visor.anotando {
                     // Las barras del lienzo van debajo (`BarrasLienzoEncima`).
                     Color.clear.frame(height: 56)

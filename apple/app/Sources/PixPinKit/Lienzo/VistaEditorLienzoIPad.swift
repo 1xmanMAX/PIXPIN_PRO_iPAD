@@ -436,8 +436,15 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
                                              tapados: modelo.tapados, version: editor.version(),
                                              fotos: { [weak self] in self?.modelo.foto($0) }),
               let redonda = PintorDeHojas.enRedondo(img, papelDeNoche: modelo.papelOscuro),
-              let png = PintorDeHojas.png(redonda),
-              let foto = try? editor.ponerCopiaDeZona(png: png, x0: Float(caja.minX), y0: Float(caja.minY),
+              let png = PintorDeHojas.png(redonda) else {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
+        if modelo.zonaAlChat {
+            modelo.mandarZonaAlChat(png)
+            return
+        }
+        guard let foto = try? editor.ponerCopiaDeZona(png: png, x0: Float(caja.minX), y0: Float(caja.minY),
                                                       x1: Float(caja.maxX), y1: Float(caja.maxY), zoom: Float(zoom))
         else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)

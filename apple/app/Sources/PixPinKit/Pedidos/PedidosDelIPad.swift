@@ -100,7 +100,7 @@ extension HacerPedidos {
         let ultima = await Task.detached {
             try? nucleo.galeria(desde: 0, cuantos: 1, dias: 0, desfaseMs: desfase).capturas.first
         }.value
-        guard let ultima = ultima.flatMap({ $0 }) else { return avisar("Todavía no hay ninguna captura.") }
+        guard let ultima else { return avisar("Todavía no hay ninguna captura.") }
         pinear(url: URL(fileURLWithPath: ultima.ruta))
     }
 
@@ -163,7 +163,7 @@ extension HacerPedidos {
         guard let c = await chat(p["proyecto"]), let aChat = await chat(p["a_proyecto"]) else { return }
         let desfase = desfaseLocalMs()
         enum Fin: Sendable { case hecho(String, String), sinTarea, cambio, fallo(String) }
-        let fin: Fin = await Task.detached {
+        let fin = await Task.detached { () -> Fin in
             do {
                 let doc = try nucleo.documentoMiniapp(chat: c, mensaje: codigo)
                 guard let t = miniTareasLeer(documento: doc, desfaseMs: desfase).first(where: { $0.indice == UInt32(indice) })
@@ -425,8 +425,9 @@ extension HacerPedidos {
             _ = editor.puntero(fase: .pulsar, x: x, y: y, presion: nil, modificadores: 0, zoom: 1)
             _ = editor.puntero(fase: .soltar, x: x, y: y, presion: nil, modificadores: 0, zoom: 1)
             if editor.teclear(texto: texto) {
+                // Lo de abajo del texto: el renglon donde acaba el cursor.
+                let abajo = editor.cajaDelCursor().map { max($0.y1, y) } ?? (y + 40)
                 _ = editor.terminarTexto()
-                let abajo = editor.caja().map { max($0.y1, y) } ?? y
                 y = abajo + hueco
             }
         }
@@ -490,7 +491,7 @@ extension HacerPedidos {
                 if desde >= pagina.total { break }
             }
             guard let (m, exacto) = lienzoPorNombre(buscado, en: todos) else { continue }
-            if let b = mejor, (b.exacto, b.m.cuando) >= (exacto, m.cuando) { continue }
+            if let b = mejor, b.exacto && !exacto || (b.exacto == exacto && b.m.cuando >= m.cuando) { continue }
             mejor = (c, m, exacto)
         }
         return mejor.map { ($0.chat, $0.m) }
@@ -551,7 +552,9 @@ extension HacerPedidos {
         let antes = Set(ia.preguntas.keys)
         // Lo que pregunte, en la tarjeta (y en la burbuja del chat).
         let vigia = ia.$preguntas.sink { preguntas in
-            guard let (nota, pregunta) = preguntas.first(where: { !antes.contains($0.key) }) else { return }
+            guard let par = preguntas.first(where: { !antes.contains($0.key) }) else { return }
+            let nota = par.key
+            let pregunta = par.value
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     tarjeta.cambiar("Necesito tu permiso: " + pregunta.texto, botones: [
@@ -587,6 +590,7 @@ extension HacerPedidos {
 }
 
 /// El delegado de la caja de soltar.
+@MainActor
 final class DelegadoSoltar: NSObject, UIDocumentPickerDelegate {
     let alElegir: @MainActor ([URL]) -> Void
 
@@ -595,13 +599,11 @@ final class DelegadoSoltar: NSObject, UIDocumentPickerDelegate {
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        MainActor.assumeIsolated {
-            alElegir(urls)
-            EstadoPedidosIPad.soltar = nil
-        }
+        alElegir(urls)
+        EstadoPedidosIPad.soltar = nil
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        MainActor.assumeIsolated { EstadoPedidosIPad.soltar = nil }
+        EstadoPedidosIPad.soltar = nil
     }
 }

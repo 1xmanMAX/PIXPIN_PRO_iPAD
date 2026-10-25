@@ -1424,7 +1424,11 @@ private struct CuerpoReflujoIPad: View {
             VistaDesplazarReflujo(c: c).ignoresSafeArea(edges: .bottom)
             VStack(spacing: 8) {
                 BarraVisorIPad(tipo: esLibro ? "Libro" : "Word", icono: esLibro ? "book" : "doc.text",
-                               titulo: modelo.nombre) { botones }
+                               titulo: modelo.nombre, alFijar: {
+                                   if !GestorPinesIPad.compartido.pinear(url: c.url) {
+                                       GestorPinesIPad.compartido.pinearLoQueSeVe()
+                                   }
+                               }) { botones }
                 if modelo.buscando { cajaBuscar }
                 if let nota = modelo.nota {
                     Text(nota).font(.system(size: 14))

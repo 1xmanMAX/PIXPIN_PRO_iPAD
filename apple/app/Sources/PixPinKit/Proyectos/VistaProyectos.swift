@@ -204,6 +204,9 @@ struct ListaProyectos<Menu: View>: View {
                 Menu {
                     Button { empezarAMarcar(nil) } label: { Label("Elegir varios", systemImage: "checkmark.circle") }
                     Button { verBorrados = true } label: { Label("Proyectos borrados…", systemImage: "trash.slash") }
+                    Button { BibliotecaAudio.abrir(almacen: almacen) } label: {
+                        Label("Biblioteca de audio", systemImage: "music.note.list")
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .semibold))
