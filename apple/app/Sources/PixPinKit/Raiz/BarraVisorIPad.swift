@@ -62,6 +62,8 @@ public struct BarraVisorIPad<Botones: View>: View {
             Spacer(minLength: 8)
             botones
             Divider().frame(height: 22)
+            // «Abrir en otra ventana» (solo en la principal, con Stage Manager).
+            BotonOtraVentana()
             Button { noche.activo.toggle() } label: {
                 Image(systemName: noche.activo ? "sun.max" : "moon")
             }

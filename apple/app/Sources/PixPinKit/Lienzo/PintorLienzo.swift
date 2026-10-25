@@ -8,8 +8,11 @@
 // vista cachea.
 //
 // Se puede usar fuera del hilo principal (las miniaturas del chat): no toca
-// nada de la interfaz, solo `UIFont` y el dibujo de cadenas, que en UIKit son
-// seguros en cualquier hilo.
+// nada de la interfaz, solo `UIFont`, Core Text y el dibujo de cadenas, que
+// en UIKit son seguros en cualquier hilo.
+//
+// Las letras: las ocho del lienzo van dentro de la app y se pintan con su
+// interlineado fijo (`LetrasLienzo.swift`).
 
 import CoreGraphics
 import PixPinCore
@@ -94,6 +97,12 @@ public struct PintorLienzo {
                 ctx.setFillColor(color.cg)
                 ctx.fillPath(using: .evenOdd)
             case let .texto(texto, origen, tam, anchoMax, familia, negrita, cursiva, color):
+                // Las ocho letras del lienzo, renglon a renglon con su
+                // interlineado, como Windows (`LetrasLienzo`).
+                if LetrasLienzo.pintar(texto, origen: origen, tam: tam, anchoMax: anchoMax, familia: familia,
+                                       negrita: negrita, cursiva: cursiva, color: color.cg, en: ctx) {
+                    continue
+                }
                 let atributos = PintorLienzo.atributos(tam: tam, familia: familia, negrita: negrita,
                                                        cursiva: cursiva, color: color)
                 let ancho = anchoMax > 0 && anchoMax < 1e6 ? anchoMax : .greatestFiniteMagnitude
@@ -152,14 +161,9 @@ public struct PintorLienzo {
 
     static func atributos(tam: CGFloat, familia: String, negrita: Bool, cursiva: Bool,
                           color: ColorLienzo) -> [NSAttributedString.Key: Any] {
-        var fuente = UIFont(name: familia, size: tam) ?? UIFont.systemFont(ofSize: tam)
-        var rasgos: UIFontDescriptor.SymbolicTraits = []
-        if negrita { rasgos.insert(.traitBold) }
-        if cursiva { rasgos.insert(.traitItalic) }
-        if !rasgos.isEmpty, let d = fuente.fontDescriptor.withSymbolicTraits(rasgos) {
-            fuente = UIFont(descriptor: d, size: tam)
-        }
-        return [.font: fuente, .foregroundColor: UIColor(cgColor: color.cg)]
+        // La letra de verdad (las del lienzo van dentro de la app) o la del
+        // sistema, con su cara.
+        LetrasLienzo.atributos(familia: familia, tam: tam, negrita: negrita, cursiva: cursiva, color: color.cg)
     }
 }
 

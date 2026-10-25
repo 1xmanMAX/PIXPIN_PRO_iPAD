@@ -359,29 +359,79 @@ final class ChatAbierto: ObservableObject {
         }
     }
 
-    /// «Compartir…»: la hoja del sistema con el fichero de cada mensaje (la
-    /// foto, el PDF, la voz) o su texto (`compartir_mensajes` de Windows).
+    /// «Compartir…»: **la hoja de compartir con formatos** (HTML, PDF, PNG,
+    /// JPG, SVG, el original, el `.pixpin` del proyecto...), la de Windows
+    /// (`compartir_mensajes`), con lo que diga cada mensaje
+    /// (`Compartir/HojaCompartirIPad.swift`).
     func compartir(_ ids: [String]) {
         let mensajes = cargados.filter { ids.contains($0.id) }
         guard !mensajes.isEmpty else { return }
-        let almacen = self.almacen
-        let chat = self.chat
-        Task {
-            var cosas: [Any] = []
-            for m in mensajes {
-                if let u = await resolverFichero(m, chat, almacen), FileManager.default.fileExists(atPath: u.path) {
-                    cosas.append(u)
-                } else {
-                    let t = m.texto.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !t.isEmpty, m.clase != "MINIAPP" { cosas.append(t) }
-                }
-            }
-            guard !cosas.isEmpty else {
-                avisar("No hay nada que compartir en este iPad")
-                return
-            }
-            compartiendo = CosasACompartir(cosas: cosas)
+        let titulo = almacen.chats.first { $0.id == chat }?.nombre ?? "PixPin"
+        HojaCompartir.abrir(.mensajes(chat: chat, titulo: titulo, mensajes), almacen: almacen)
+        if ids.count > 1 { eleccion.vaciar() }
+    }
+
+    /// «Imprimir…»: las paginas del mensaje (un lienzo y sus marcos, la foto
+    /// con lo anotado, las hojas de un PDF), cada una en su hoja.
+    func imprimir(_ ids: [String]) {
+        let mensajes = cargados.filter { ids.contains($0.id) }
+        guard !mensajes.isEmpty else { return }
+        let titulo = almacen.chats.first { $0.id == chat }?.nombre ?? "PixPin"
+        HojaCompartir.imprimir(.mensajes(chat: chat, titulo: titulo, mensajes), almacen: almacen)
+    }
+
+    // MARK: Escuchar
+
+    /// Lo que se lee en voz alta de un mensaje: el texto de una nota (sin la
+    /// sintaxis), lo dicho en una nota de voz o la descripcion de una foto o
+    /// un archivo. `nil` si no hay nada que leer.
+    nonisolated static func textoParaEscuchar(_ m: MensajeChat) -> String? {
+        let crudo: String
+        switch m.clase {
+        case "MINIAPP", "TABLA", "PROYECTO", "CROQUIS":
+            return nil
+        case "VOZ":
+            crudo = m.transcripcion ?? ""
+        default:
+            crudo = m.texto
         }
+        let limpio = crudo.trimmingCharacters(in: .whitespacesAndNewlines)
+        return limpio.isEmpty ? nil : limpio
+    }
+
+    /// El texto en parrafos: una linea, un parrafo (sin las vacias).
+    nonisolated static func parrafosParaEscuchar(_ texto: String) -> [String] {
+        texto.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// La clave de un mensaje en la voz de la app (lo que suena).
+    func claveDeEscuchar(_ m: MensajeChat) -> String { "chat:\(chat)#\(m.id)" }
+
+    /// **«Escuchar»**: el mensaje en voz alta con la voz de la app
+    /// (`leer_en_voz.rs` de Windows), con la barra de escuchar encima de la
+    /// caja. Otra vez sobre el que suena, pausa o sigue.
+    func escuchar(_ m: MensajeChat) {
+        guard let crudo = ChatAbierto.textoParaEscuchar(m) else { return }
+        let voz = LeerEnVoz.compartida
+        let clave = claveDeEscuchar(m)
+        if voz.suena(clave) {
+            voz.alternar()
+            return
+        }
+        let texto = m.clase == "NOTA" ? String(textoConFormato(crudo).characters) : crudo
+        let parrafos = ChatAbierto.parrafosParaEscuchar(texto)
+        guard !parrafos.isEmpty else { return }
+        let idioma = VozAlta.idiomaParaLeer(muestra: texto, lang: "", delEquipo: VozAlta.idiomaDeLaApp)
+        let titulo = m.nombre.isEmpty ? String(m.resumen.prefix(60)) : m.nombre
+        let doc = LeerEnVoz.Documento(clave: clave, titulo: titulo.isEmpty ? "Mensaje" : titulo,
+                                      parrafos: parrafos, idioma: idioma)
+        guard voz.arrancar(doc, lector: nil) else {
+            avisar("Este iPad no tiene una voz para leerlo")
+            return
+        }
+        voz.leer(desde: 0)
     }
 
     /// «Ver comentarios»: los que le responden.
@@ -444,6 +494,12 @@ struct MenuDeMensaje<Propias: View>: View {
                     Navegacion.compartida.abrir(.nota(chat: c.chat, mensaje: m))
                 } label: { Label("Abrir en el editor de notas", systemImage: "square.and.pencil") }
             }
+            if ChatAbierto.textoParaEscuchar(m) != nil {
+                Button { c.escuchar(m) } label: {
+                    Label(LeerEnVoz.compartida.suena(c.claveDeEscuchar(m)) ? "Pausar o seguir" : "Escuchar",
+                          systemImage: "speaker.wave.2")
+                }
+            }
             propias
         }
 
@@ -460,6 +516,9 @@ struct MenuDeMensaje<Propias: View>: View {
             }
             .disabled(c.otrosChats.isEmpty)
             Button { c.compartir(c.sobre(m)) } label: { Label("Compartir…", systemImage: "square.and.arrow.up") }
+            if ["DIBUJO", "PAGINA", "IMAGEN"].contains(m.clase) {
+                Button { c.imprimir(c.sobre(m)) } label: { Label("Imprimir…", systemImage: "printer") }
+            }
             if m.recuerdaEn != nil {
                 Button { c.olvidar(m) } label: { Label("Quitar el recordatorio", systemImage: "alarm") }
             } else {

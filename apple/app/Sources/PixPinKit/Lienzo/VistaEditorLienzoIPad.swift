@@ -17,8 +17,13 @@
 //   el usuario tenga puesto en Ajustes); apretarlo esconde el panel.
 // - Pasar el Pencil por encima (iPad con hover) o el puntero del trackpad:
 //   un puntito donde caeria la tinta (el circulo de la goma).
+// - «Dibujar con el dedo» (el boton de la mano de la barra del visor, como
+//   en Notas): el dedo pinta aunque haya Pencil, y la vista se mueve con dos.
 // - Deshacer con dos dedos, rehacer con tres (como Procreate y Notas), y los
 //   botones de la barra (⌘Z, ⇧⌘Z).
+// - Doble toque en un texto con la flecha puesta: se escribe en el (una
+//   celda de una tabla dibujada, un rotulo), como en Excalidraw; al
+//   terminar se vuelve a la flecha.
 // - El texto: el teclado del iPad (`UIKeyInput`) mientras se escribe.
 //
 // Rendimiento (§4bis del plan): una llamada al puente por muestra; pintar
@@ -47,8 +52,9 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     private var leido: LienzoLeido?
     private var clave: (version: UInt64, x: CGFloat, y: CGFloat, zoom: CGFloat, w: CGFloat, h: CGFloat)?
     private var versionVista: UInt64 = 0
-    /// Los colores ya adaptados al papel oscuro.
+    /// Los colores ya adaptados al papel oscuro, y a cual.
     private var coloresOscuros: [ColorLienzo: ColorLienzo] = [:]
+    private var papelDeLaCache: ColorLienzo?
     private var encajada = false
 
     // El toque que pinta y como.
@@ -73,10 +79,17 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     private let arrastre = UIPanGestureRecognizer()
     private let dosDedos = UITapGestureRecognizer()
     private let tresDedos = UITapGestureRecognizer()
+    private let dobleToque = UITapGestureRecognizer()
     private let encima = UIHoverGestureRecognizer()
+    /// Se esta escribiendo un texto abierto con el doble toque: al
+    /// terminarlo se vuelve a la flecha.
+    private var volverALaFlecha = false
 
-    /// El dedo pinta: no hay Pencil a la vista y el sistema no pide solo Pencil.
-    var dedoPinta: Bool { !(pencilVisto || UIPencilInteraction.prefersPencilOnlyDrawing) }
+    /// El dedo pinta: «Dibujar con el dedo» puesto, o no hay Pencil a la
+    /// vista y el sistema no pide solo Pencil.
+    var dedoPinta: Bool {
+        modelo.dedoPintaSiempre || !(pencilVisto || UIPencilInteraction.prefersPencilOnlyDrawing)
+    }
 
     public init(modelo: ModeloEditorLienzo) {
         self.modelo = modelo
@@ -86,7 +99,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         isOpaque = true
         contentMode = .redraw
         clipsToBounds = true
-        backgroundColor = .white
+        backgroundColor = modelo.papelDeVista.map { UIColor(cgColor: $0.cg) } ?? .white
         reloj.alPararse = { [weak self] in
             // Vence en la cola principal (`RelojFormaRapida.conDispatch`).
             MainActor.assumeIsolated { self?.alPararse() }
@@ -119,6 +132,14 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         dosDedos.addTarget(self, action: #selector(alTocarConDos(_:)))
         tresDedos.addTarget(self, action: #selector(alTocarConTres(_:)))
         encima.addTarget(self, action: #selector(alFlotar(_:)))
+        dobleToque.addTarget(self, action: #selector(alTocarDosVeces(_:)))
+        dobleToque.numberOfTapsRequired = 2
+        dobleToque.allowedTouchTypes = directo + [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        // Los toques siguen llegando al lienzo (el primero ya elige el texto).
+        dobleToque.cancelsTouchesInView = false
+        dobleToque.delaysTouchesEnded = false
+        dobleToque.delegate = self
+        addGestureRecognizer(dobleToque)
         dosDedos.numberOfTouchesRequired = 2
         tresDedos.numberOfTouchesRequired = 3
         arrastre.maximumNumberOfTouches = 2
@@ -144,7 +165,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     }
 
     /// Sin Pencil el dedo pinta y se mueve con dos; con Pencil, con uno.
-    private func ajustarArrastre() {
+    func ajustarArrastre() {
         arrastre.minimumNumberOfTouches = dedoPinta ? 2 : 1
     }
 
@@ -177,7 +198,16 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     /// Lo dibujado entero en la vista (o el origen al 100 % si esta vacio).
     /// `margenArriba`: lo que tapan las barras flotantes.
     public func encajar() {
-        guard let caja = editor.caja() else {
+        // Con fondo, se mira el fondo entero (`encuadre_inicial`).
+        let conFondo = modelo.fondo.map { f -> CajaLienzo in
+            let dibujo = editor.caja().map {
+                CGRect(x: CGFloat($0.x0), y: CGFloat($0.y0), width: CGFloat($0.x1 - $0.x0), height: CGFloat($0.y1 - $0.y0))
+            }
+            let c = f.caja.union(dibujo ?? f.caja).insetBy(dx: -FondoLienzo.margenEncuadre + 40,
+                                                         dy: -FondoLienzo.margenEncuadre + 40)
+            return CajaLienzo(x0: Float(c.minX), y0: Float(c.minY), x1: Float(c.maxX), y1: Float(c.maxY))
+        }
+        guard let caja = conFondo ?? editor.caja() else {
             origen = CGPoint(x: 0, y: -VistaEditorLienzoIPad.margenArriba)
             zoom = 1
             setNeedsDisplay()
@@ -213,19 +243,28 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
             clave = (version, origen.x, origen.y, zoom, w, h)
         }
         versionVista = version
-        ctx.setFillColor(leido?.fondo.cg ?? CGColor(gray: 1, alpha: 1))
+        // De noche (el modo noche comun), el papel claro se ve oscuro.
+        let deNoche = modelo.papelDeVista
+        ctx.setFillColor(deNoche?.cg ?? leido?.fondo.cg ?? CGColor(gray: 1, alpha: 1))
         ctx.fill(rect)
         guard var leido else { return }
+        if let deNoche { leido.fondo = deNoche }
         // Papel oscuro: la tinta adaptada para que se lea (el negro de la
         // letra pasa a claro), como `contraste::adaptar` de Windows.
         let p = leido.fondo
         if 0.299 * p.r + 0.587 * p.g + 0.114 * p.b < 0.5 {
+            if p != papelDeLaCache {
+                coloresOscuros = [:]
+                papelDeLaCache = p
+            }
             leido = leido.sobrePapel(p, cache: &coloresOscuros)
         }
         ctx.saveGState()
         ctx.scaleBy(x: zoom, y: zoom)
         ctx.translateBy(x: -origen.x, y: -origen.y)
         let visible = CGRect(x: origen.x, y: origen.y, width: w / zoom, height: h / zoom)
+        // El fondo fijo (la pagina, la foto), debajo de todo.
+        if let fondo = modelo.fondo, fondo.caja.intersects(visible) { fondo.pintar(en: ctx) }
         let escala = zoom * traitCollection.displayScale
         PintorLienzo(lienzo: leido, imagen: modelo.imagenes(escala: escala)).pintar(en: ctx, limites: visible)
         if let raya = rayaDeCalibrar {
@@ -326,12 +365,24 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         super.removeFromSuperview()
     }
 
+    /// El modo noche comun cambio: el papel se pinta otra vez.
+    func cambioDeNoche() {
+        clave = nil
+        backgroundColor = modelo.papelDeVista.map { UIColor(cgColor: $0.cg) } ?? .white
+        setNeedsDisplay()
+    }
+
     /// Tras algo que pudo cambiar el dibujo: repinta si cambio la version y
     /// avisa al modelo (guardar, la barra).
     func trasCambio(version: UInt64? = nil) {
         let v = version ?? editor.version()
         if v != versionVista {
             setNeedsDisplay()
+        }
+        if volverALaFlecha, !editor.escribiendo() || modelo.herramienta != "texto" {
+            // El texto del doble toque se termino: a la flecha otra vez.
+            volverALaFlecha = false
+            if modelo.herramienta == "texto" { modelo.elegir("seleccion") }
         }
         // Lo elegido o el texto pudieron cambiar: la barra lo ensena.
         modelo.refrescarBarra()
@@ -443,6 +494,13 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         prediccion = []
         flotando = nil
         if modelo.desplegado != nil { modelo.desplegado = nil }
+        if volverALaFlecha, editor.escribiendo() {
+            // Un toque fuera del texto del doble toque lo termina y sigue con
+            // la flecha (con el texto en la mano naceria otro texto).
+            volverALaFlecha = false
+            _ = editor.terminarTexto()
+            modelo.elegir("seleccion")
+        }
         // Un toque fuera del texto lo termina (lo hace el motor al pulsar).
         let v = mandar(.pulsar, t, evento)
         trasCambio(version: v)
@@ -590,6 +648,23 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         modelo.rehacer()
     }
 
+    /// **Doble toque con la flecha**: escribir en el texto de debajo (o en
+    /// uno nuevo ahi, como Excalidraw), con la herramienta de texto, que
+    /// abre el que haya bajo el punto.
+    @objc private func alTocarDosVeces(_ g: UITapGestureRecognizer) {
+        guard g.state == .ended, modelo.herramienta == "seleccion", !editor.escribiendo() else { return }
+        if toque != nil { cancelarTrazo() }
+        let p = alMundo(g.location(in: self))
+        modelo.elegir("texto")
+        guard modelo.herramienta == "texto" else { return }
+        _ = editor.puntero(fase: .pulsar, x: Float(p.x), y: Float(p.y), presion: nil, modificadores: 0,
+                           zoom: Float(zoom))
+        let v = editor.puntero(fase: .soltar, x: Float(p.x), y: Float(p.y), presion: nil, modificadores: 0,
+                               zoom: Float(zoom))
+        volverALaFlecha = editor.escribiendo()
+        trasCambio(version: v)
+    }
+
     @objc private func alFlotar(_ g: UIHoverGestureRecognizer) {
         switch g.state {
         case .began, .changed:
@@ -603,6 +678,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
     override public func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         // Con el Pencil apoyado, la palma no mueve la vista.
         if g === encima { return true }
+        if g === dobleToque { return true }
         return !(toque != nil && toqueEsPencil)
     }
 
@@ -613,8 +689,10 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
 
     public func gestureRecognizer(_ g: UIGestureRecognizer,
                                   shouldRecognizeSimultaneouslyWith otro: UIGestureRecognizer) -> Bool {
-        // Pellizcar y mover a la vez, con los mismos dos dedos.
-        (g === pellizco && otro === arrastre) || (g === arrastre && otro === pellizco)
+        // Pellizcar y mover a la vez, con los mismos dos dedos; el doble
+        // toque, con lo que sea.
+        g === dobleToque || otro === dobleToque
+            || (g === pellizco && otro === arrastre) || (g === arrastre && otro === pellizco)
     }
 
     // MARK: Doble toque y apretar el Pencil

@@ -128,7 +128,7 @@ public enum LetrasLienzo {
         let d = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute: nombre] as CFDictionary)
         var base = CTFontCreateWithFontDescriptor(d, tam, nil)
         if (CTFontCopyFamilyName(base) as String).caseInsensitiveCompare(nombre) != .orderedSame {
-            base = UIFont.systemFont(ofSize: tam) as CTFont
+            base = CTFontCreateUIFontForLanguage(.system, tam, nil) ?? CTFontCreateWithName("Helvetica" as CFString, tam, nil)
         }
         var pedidos: CTFontSymbolicTraits = []
         if negrita { pedidos.insert(.traitBold) }
@@ -167,7 +167,9 @@ public enum LetrasLienzo {
     static func atributos(familia: String, tam: CGFloat, negrita: Bool, cursiva: Bool,
                           color: CGColor) -> [NSAttributedString.Key: Any] {
         let c = cara(familia: familia, tam: tam, negrita: negrita, cursiva: cursiva)
-        var a: [NSAttributedString.Key: Any] = [.font: c.fuente as UIFont, .foregroundColor: UIColor(cgColor: color)]
+        // `CTFont` y `UIFont` son la misma cosa (puente sin coste).
+        let fuente = unsafeBitCast(c.fuente, to: UIFont.self)
+        var a: [NSAttributedString.Key: Any] = [.font: fuente, .foregroundColor: UIColor(cgColor: color)]
         if c.falsaNegrita {
             a[.strokeWidth] = grosorFalsaNegrita
             a[.strokeColor] = UIColor(cgColor: color)

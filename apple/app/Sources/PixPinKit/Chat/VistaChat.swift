@@ -47,6 +47,10 @@ public struct VistaChat: View {
     @State private var fotos: [PhotosPickerItem] = []
     @State private var importando = false
     @State private var camara = false
+    /// Las fotos elegidas, en el cuadro de enviar con su descripcion.
+    @State private var porEnviar: LoteDeFotos?
+    /// Elegir un proyecto o una pagina de un proyecto para adjuntar.
+    @State private var eligiendoProyecto: Bool?
 
     public init(almacen: Almacen, chat: String, alVolver: (() -> Void)? = nil) {
         self.almacen = almacen
@@ -120,7 +124,10 @@ public struct VistaChat: View {
         .onChange(of: almacen.mensajes[chat]?.count) { _, _ in
             menu.eleccion.quedarse(con: Set(idsCargados))
         }
-        .onAppear { menu.irA = { id in ir(a: id) } }
+        .onAppear {
+            menu.irA = { id in ir(a: id) }
+            CompartirDelIPad.activar()
+        }
         // Describir, cambiar el nombre o la hora de avisar.
         .sheet(item: $menu.escritura) { e in
             HojaEscritura(escritura: e, guardar: { menu.guardar(e, $0) },
@@ -144,6 +151,8 @@ public struct VistaChat: View {
         .animation(.easeOut(duration: 0.15), value: menu.aviso)
         // Soltar ficheros o fotos en el chat los adjunta (se copian).
         .onDrop(of: EntradaDeFicheros.tipos, isTargeted: $soltando) { proveedores in
+            // Una burbuja de PixPin soltada aqui mismo no se adjunta otra vez.
+            if ArrastrarBurbuja.esDeUnaBurbuja(proveedores) { return false }
             let (chat, almacen) = (self.chat, self.almacen)
             Task { @MainActor in await EntradaDeFicheros.soltar(proveedores, en: chat, almacen: almacen) }
             return true
@@ -166,6 +175,23 @@ public struct VistaChat: View {
         .fileImporter(isPresented: $importando, allowedContentTypes: [.item], allowsMultipleSelection: true) { r in
             guard case let .success(urls) = r, !urls.isEmpty else { return }
             adjuntarDeArchivos(urls)
+        }
+        .sheet(item: $porEnviar) { lote in
+            HojaEnviarFotos(lote: lote, proyecto: ficha?.nombre ?? "") { fotos, descripcion in
+                let (chat, almacen) = (self.chat, self.almacen)
+                Task { await almacen.enviar(fotos: fotos, descripcion: descripcion, en: chat) }
+            }
+        }
+        .sheet(isPresented: Binding(get: { eligiendoProyecto != nil }, set: { if !$0 { eligiendoProyecto = nil } })) {
+            HojaElegirProyecto(almacen: almacen, chat: chat, conPaginas: eligiendoProyecto == true,
+                               alElegirProyecto: { p in
+                                   let (chat, almacen) = (self.chat, self.almacen)
+                                   Task { await almacen.adjuntar(proyecto: p.id, en: chat) }
+                               },
+                               alElegirPagina: { p, pagina in
+                                   let (chat, almacen) = (self.chat, self.almacen)
+                                   Task { await almacen.adjuntar(pagina: pagina, de: p.id, en: chat) }
+                               })
         }
         .fullScreenCover(isPresented: $camara) {
             CamaraChat(alHacer: { foto in
@@ -247,6 +273,8 @@ public struct VistaChat: View {
         }
         // Lo que suena, encima de la caja de escribir (D3).
         BarraReproductor().padding(.horizontal, MedidasIsla.margenX).padding(.top, 4)
+        // Lo que se esta escuchando en voz alta («Escuchar» de un mensaje).
+        BarraEscucharSuelta().padding(.horizontal, MedidasIsla.margenX).padding(.top, 4)
         IslaDeEscribir(borrador: $borrador, chat: chat, almacen: almacen, foco: focoCaja,
                        enviar: enviar, escaparVacio: escaparVacio,
                        pegarAdjuntos: { EntradaDeFicheros.pegar(en: chat, almacen: almacen) },
@@ -277,6 +305,9 @@ public struct VistaChat: View {
                 .contextMenu {
                     MenuDeMensaje(m: m, c: menu) { propias(m) }
                 }
+                // Llevarla a otra app (Split View, Slide Over): su fichero,
+                // la foto con lo anotado, el lienzo en PNG o el texto.
+                .onDrag { ArrastrarBurbuja.proveedor(m, chat: chat, almacen: almacen) }
                 .frame(maxWidth: 560 * f, alignment: .leading)
             Spacer(minLength: 0)
         }
@@ -611,6 +642,18 @@ public struct VistaChat: View {
             crear { nucleo in try nucleo.crearTabla(chat: chat, nombre: "Tabla") } despues: { m in
                 nav.abrir(.hoja(chat: chat, mensaje: m))
             }
+        case .proyecto:
+            eligiendoProyecto = false
+        case .pagina:
+            eligiendoProyecto = true
+        case let .mini(miniapp):
+            crear { nucleo in
+                try nucleo.crearMiniapp(chat: chat, miniapp: miniapp, titulo: DocumentoMini.nombre(miniapp),
+                                        moneda: Locale.current.currency?.identifier ?? "EUR")
+            } despues: { m in
+                // Viva en un pin, como el panel flotante de Windows.
+                GestorPinesIPad.compartido.pinearMiniapp(chat: chat, mensaje: m.id, miniapp: miniapp, documento: m.texto)
+            }
         case let .pegar(proveedores):
             Task { await EntradaDeFicheros.soltar(proveedores, en: chat, almacen: almacen) }
         }
@@ -639,14 +682,12 @@ public struct VistaChat: View {
     /// Lo elegido en Fotos: los bytes tal cual (HEIC pasa a PNG, como
     /// Windows y Android lo entienden), uno a uno.
     private func adjuntarFotos(_ elegidas: [PhotosPickerItem]) {
-        let (almacen, chat) = (self.almacen, self.chat)
+        // Antes de meterlas, el cuadro con sus miniaturas y la descripcion
+        // (`envio.rs` de Windows): se reordenan, se quitan o se anaden.
         Task {
-            for item in elegidas {
-                guard let datos = try? await item.loadTransferable(type: Data.self) else { continue }
-                let tipo = item.supportedContentTypes.first
-                let ext = tipo?.preferredFilenameExtension ?? "jpg"
-                await almacen.adjuntar(datos: datos, formato: ext, en: chat)
-            }
+            let fotos = await OrdenDeEnvio.leer(elegidas)
+            guard !fotos.isEmpty else { return }
+            porEnviar = LoteDeFotos(fotos: fotos)
         }
     }
 

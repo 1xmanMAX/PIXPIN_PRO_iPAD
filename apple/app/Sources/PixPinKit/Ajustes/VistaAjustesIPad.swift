@@ -1,11 +1,13 @@
-// **Ajustes** del iPad: lo de `pixpinmax.toml` que vale en todos los
-// sistemas (con los mismos textos y rangos que `ventana_ajustes.rs` de
-// Windows y `FilasAjustes.swift` del Mac), el tema, el nombre de este iPad,
-// las conexiones del asistente, la carpeta de datos y la version.
+// **Ajustes** del iPad, como la ventana de Ajustes de Windows
+// (`ventana_ajustes.rs`) y la del Mac (`VistaAjustes.swift`): las secciones
+// con sus filas (`FilasAjustes`, datos), el **buscador** («Buscar un
+// ajuste…», en todas las secciones a la vez), **«Restablecer <sección>»**,
+// el punto azul de lo que no esta como de fabrica y «Deshacer» (⌘Z, hasta
+// 100 pasos). Arriba, el nombre de este iPad.
 //
 // Lo de Windows y el Mac que aqui no sale: la captura de pantalla (iOS no
 // deja capturar otras apps), los atajos globales, «Abrir al iniciar sesion»
-// y lo del motor del asistente (lo lleva su propia pantalla).
+// y las apps predeterminadas.
 //
 // Cada cambio se guarda al momento (en la cola del `ModeloAjustes`, el mismo
 // que usa Aparatos) y se puede deshacer.
@@ -25,6 +27,7 @@ public struct VistaAjustesIPad: View {
 
     public var body: some View {
         CuerpoAjustes(modelo: ModeloAjustes.compartido(nucleo: almacen.nucleo, sincro: sincro), sincro: sincro)
+            .onAppear { FilasAjustes.almacen = almacen }
     }
 }
 
@@ -32,6 +35,11 @@ struct CuerpoAjustes: View {
     @ObservedObject var modelo: ModeloAjustes
     let sincro: Sincronizador?
     @State private var restableciendo = false
+    /// La seccion que se va a restablecer (lo pregunta antes).
+    @State private var aRestablecer: SeccionAjustes?
+    @State private var busqueda = ""
+
+    private var buscando: Bool { !busqueda.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -41,18 +49,21 @@ struct CuerpoAjustes: View {
                         Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     }
                 }
-                if let sincro { SeccionNombreAjustes(sincro: sincro) }
-                general
-                galeria
-                pdf
-                sincronizar
-                apariencia
-                conexiones
-                avanzado
+                if buscando {
+                    resultados
+                } else {
+                    if let sincro { SeccionNombreAjustes(sincro: sincro) }
+                    ForEach(SeccionAjustes.allCases) { s in seccion(s) }
+                    Section {
+                        Text("● = distinto del valor de fábrica.").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
             .formStyle(.grouped)
             .disabled(!modelo.cargado)
             .navigationTitle("Ajustes")
+            .searchable(text: $busqueda, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Buscar un ajuste…")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
@@ -63,8 +74,13 @@ struct CuerpoAjustes: View {
                     .keyboardShortcut("z", modifiers: .command)
                     .disabled(!modelo.sePuedeDeshacer)
                     Menu {
+                        ForEach(SeccionAjustes.allCases) { s in
+                            Button("Restablecer \(s.titulo)") { aRestablecer = s }
+                                .disabled(!FilasAjustes.hayCambios(en: s, modelo))
+                        }
+                        Divider()
                         Button("Restablecer todo a fábrica", role: .destructive) { restableciendo = true }
-                            .disabled(!modelo.hayCambios)
+                            .disabled(!SeccionAjustes.allCases.contains { FilasAjustes.hayCambios(en: $0, modelo) })
                     } label: {
                         Label("Más", systemImage: "ellipsis.circle")
                     }
@@ -72,170 +88,179 @@ struct CuerpoAjustes: View {
             }
             .confirmationDialog("¿Volver a los valores de fábrica?", isPresented: $restableciendo,
                                 titleVisibility: .visible) {
-                Button("Restablecer", role: .destructive) { modelo.restablecer() }
+                Button("Restablecer", role: .destructive) {
+                    for s in SeccionAjustes.allCases { FilasAjustes.restablecer(s, modelo) }
+                }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("Lo de esta pantalla vuelve a como viene PixPin. Se puede deshacer.")
+                Text("Todo lo de esta pantalla vuelve a como viene PixPin. Se puede deshacer.")
+            }
+            .confirmationDialog(aRestablecer.map { "¿Restablecer \($0.titulo)?" } ?? "",
+                                isPresented: Binding(get: { aRestablecer != nil },
+                                                     set: { if !$0 { aRestablecer = nil } }),
+                                titleVisibility: .visible, presenting: aRestablecer) { s in
+                Button("Restablecer \(s.titulo)", role: .destructive) { FilasAjustes.restablecer(s, modelo) }
+                Button("Cancelar", role: .cancel) {}
+            } message: { _ in
+                Text("Lo de esta sección vuelve a como viene PixPin. Se puede deshacer.")
             }
         }
-        .task { if !modelo.cargado { await modelo.cargar() } }
+        // Se relee al entrar: el asistente y Aparatos tambien escriben el TOML.
+        .task { await modelo.cargar() }
     }
 
     // MARK: Secciones
 
-    private var general: some View {
-        Section {
-            Picker(selection: enlace(\.idioma)) {
-                Text("El del iPad").tag("sistema")
-                Text("Español").tag("es")
-                Text("English").tag("en")
-            } label: {
-                TituloAjuste("Idioma", "Vale desde el próximo arranque. Lo comparte con PixPin para Windows.",
-                       cambiado: modelo.valores.idioma != modelo.fabrica.idioma)
-            }
-        } header: {
-            Text("General")
-        }
-    }
-
-    private var galeria: some View {
-        Section {
-            Stepper(value: Binding(get: { modelo.diasCaducidad }, set: { modelo.fijar(diasCaducidad: $0) }),
-                    in: 0 ... 90) {
-                HStack {
-                    TituloAjuste("Días hasta borrar",
-                           "Pasado el plazo, las capturas de la galería se van a la Papelera, salvo las conservadas.",
-                           cambiado: modelo.valores.diasCaducidad != modelo.fabrica.diasCaducidad)
-                    Spacer()
-                    Text(Self.dias(modelo.diasCaducidad)).monospacedDigit().foregroundStyle(.secondary)
-                }
-            }
-        } header: {
-            Text("Galería")
-        }
-    }
-
-    private var pdf: some View {
-        let actual = modelo.pdf ?? ModeloAjustes.pdfDeFabrica
-        let fabrica = ModeloAjustes.pdfDeFabrica
-        let niveles: [(String, NivelAligerar)] = [("Exacto", .sinPerdida), ("Medio", .equilibrado),
-                                                   ("Chico", .pequeno), ("Máx.", .extremo)]
-        return Section {
-            Toggle(isOn: Binding(get: { actual.aligerarAlEntrar },
-                                 set: { v in modelo.cambiarPdf { $0.aligerarAlEntrar = v } })) {
-                TituloAjuste("Aligerar los PDF al meterlos en un chat", "Después de meterlo al chat, en segundo plano.",
-                       cambiado: actual.aligerarAlEntrar != fabrica.aligerarAlEntrar)
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                TituloAjuste("Cuánto se aligera",
-                       "Al entrar solo se usan Exacto y Medio; Chico y Máx. quedan para «Aligerar el PDF» a mano.",
-                       cambiado: actual.nivel != fabrica.nivel)
-                Picker("Cuánto se aligera", selection: Binding(
-                    get: { niveles.firstIndex { $0.1 == actual.nivel } ?? 1 },
-                    set: { i in modelo.cambiarPdf { $0.nivel = niveles[i].1 } })) {
-                    ForEach(niveles.indices, id: \.self) { i in Text(niveles[i].0).tag(i) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-        } header: {
-            Text("Documentos PDF")
-        }
-    }
-
-    private var sincronizar: some View {
-        Section {
-            Toggle(isOn: enlace(\.sincroPresencia)) {
-                TituloAjuste("Dejarse encontrar",
-                       "Tus otros aparatos ven este iPad en cuanto abren Sincronizar. Apagado no se abre ninguna puerta en la red.",
-                       cambiado: modelo.valores.sincroPresencia != modelo.fabrica.sincroPresencia)
-            }
-            Toggle(isOn: enlace(\.sincroAutomatica)) {
-                TituloAjuste("Sincronizar sola con los aparatos del grupo",
-                       "Al aparecer un aparato del grupo en la Wi‑Fi, 30 s después de un cambio y cada 10 min, mientras PixPin está abierto. Se pausa en modo de bajo consumo.",
-                       cambiado: modelo.valores.sincroAutomatica != modelo.fabrica.sincroAutomatica)
-            }
-            Toggle(isOn: enlace(\.sincroLoMioManda)) {
-                TituloAjuste("Lo mío manda",
-                       "Al sincronizar, lo de este iPad se impone: del otro lado solo llega lo que aquí no existe. Es como empieza el interruptor de «¿Qué sincronizar?».",
-                       cambiado: modelo.valores.sincroLoMioManda != modelo.fabrica.sincroLoMioManda)
-            }
-        } header: {
-            Text("Sincronizar")
-        } footer: {
-            Text("Se guarda en pixpinmax.toml, el mismo archivo de ajustes que PixPin para Windows.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    private var apariencia: some View {
-        Section {
-            Picker(selection: $modelo.tema) {
-                ForEach(Tema.allCases) { t in Text(t.nombre).tag(t) }
-            } label: {
-                TituloAjuste("Aspecto", "Claro, oscuro o como el iPad. Es de este iPad: no va en el archivo de ajustes.",
-                       cambiado: modelo.tema != .sistema)
-            }
-            .pickerStyle(.menu)
-        } header: {
-            Text("Apariencia")
-        }
-    }
-
-    @ViewBuilder private var conexiones: some View {
-        let lista = iaConexiones()
-        if !lista.isEmpty {
+    /// Una seccion: sus grupos en orden, con el titulo y «Restablecer» arriba.
+    @ViewBuilder private func seccion(_ s: SeccionAjustes) -> some View {
+        let filas = FilasAjustes.de(s)
+        let grupos = gruposEnOrden(filas)
+        ForEach(Array(grupos.enumerated()), id: \.offset) { i, g in
             Section {
-                ForEach(lista, id: \.id) { c in
-                    VStack(alignment: .leading, spacing: 8) {
-                        TituloAjuste("Conectar \(c.nombre)",
-                               "El asistente de la nube podrá buscar, leer y bajar tus archivos (y subir, preguntando). Crea el ID de cliente en \(c.consola).",
-                               cambiado: false)
-                        FilaConexion(id: c.id)
+                ForEach(filas.filter { $0.grupo == g }) { f in FilaAjusteIPad(fila: f, modelo: modelo) }
+            } header: {
+                if i == 0 {
+                    CabeceraSeccionAjustes(seccion: s, hayCambios: FilasAjustes.hayCambios(en: s, modelo)) {
+                        aRestablecer = s
                     }
-                    .padding(.vertical, 4)
+                } else {
+                    Text(g)
+                }
+            } footer: {
+                if s == .sincro, i == grupos.count - 1 {
+                    Text("Se guarda en pixpinmax.toml, el mismo archivo de ajustes que PixPin para Windows.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// «Resultados para «x»»: las filas de todas las secciones que hablan de
+    /// eso, con su seccion delante.
+    @ViewBuilder private var resultados: some View {
+        let lista = FilasAjustes.buscar(busqueda)
+        if lista.isEmpty {
+            Section {
+                Text("Ningún ajuste habla de «\(busqueda)». Prueba con otra palabra.")
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Section {
+                ForEach(lista) { f in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(f.seccion.titulo) › \(f.grupo)").font(.caption2).foregroundStyle(.secondary)
+                        FilaAjusteIPad(fila: f, modelo: modelo)
+                    }
                 }
             } header: {
-                Text("Conexiones del asistente")
+                Text("Resultados para «\(busqueda)»")
+            } footer: {
+                Text(lista.count == 1 ? "1 ajuste encontrado en todas las secciones."
+                    : "\(lista.count) ajustes encontrados en todas las secciones.")
             }
         }
     }
 
-    private var avanzado: some View {
-        Section {
-            LabeledContent("Carpeta de datos") {
-                Text(modelo.carpetaDatos.path)
-                    .font(.caption.monospaced())
-                    .multilineTextAlignment(.trailing)
-                    .textSelection(.enabled)
+    private func gruposEnOrden(_ filas: [FilaAjuste]) -> [String] {
+        var v: [String] = []
+        for f in filas where !v.contains(f.grupo) { v.append(f.grupo) }
+        return v
+    }
+}
+
+/// La cabecera de una seccion: icono, titulo, lo que hay dentro y
+/// «Restablecer» si algo no esta como de fabrica.
+private struct CabeceraSeccionAjustes: View {
+    let seccion: SeccionAjustes
+    let hayCambios: Bool
+    let restablecer: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Label(seccion.titulo, systemImage: seccion.icono)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if hayCambios {
+                    Button("Restablecer \(seccion.titulo)", action: restablecer)
+                        .font(.caption)
+                        .buttonStyle(.borderless)
+                }
             }
-            LabeledContent("Archivo de ajustes") {
-                Text((modelo.ficheroAjustes as NSString).lastPathComponent)
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
+            Text(seccion.subtitulo).font(.caption).foregroundStyle(.secondary)
+                .textCase(nil)
+        }
+        .textCase(nil)
+        .padding(.top, 8)
+    }
+}
+
+/// Una fila: el control de su clase con el titulo, la explicacion y el
+/// punto azul. Mantener pulsado: «Volver al valor de fábrica».
+struct FilaAjusteIPad: View {
+    let fila: FilaAjuste
+    @ObservedObject var modelo: ModeloAjustes
+
+    private var titulo: TituloAjuste {
+        TituloAjuste(fila.titulo, fila.ayuda, cambiado: fila.restablecible && fila.cambiada(modelo))
+    }
+
+    var body: some View {
+        control
+            .contextMenu {
+                if fila.restablecible, fila.cambiada(modelo) {
+                    Button("Volver al valor de fábrica") { FilasAjustes.restablecer(fila, modelo) }
+                }
             }
-            LabeledContent("Versión", value: ModeloAjustes.version)
-        } header: {
-            Text("Avanzado")
-        } footer: {
-            Text("Proyectos, capturas, sincronización y el archivo de ajustes viven dentro de PixPin en este iPad, con la misma estructura que en Windows.")
-                .font(.caption).foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder private var control: some View {
+        switch fila.control {
+        case let .interruptor(get, set):
+            Toggle(isOn: Binding(get: { get(modelo) }, set: { set(modelo, $0) })) { titulo }
+        case let .opcion(opciones, get, set):
+            let enlace = Binding(get: { get(modelo) }, set: { set(modelo, $0) })
+            if opciones.count <= 4, opciones.allSatisfy({ $0.count <= 12 }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    titulo
+                    Picker(fila.titulo, selection: enlace) {
+                        ForEach(opciones.indices, id: \.self) { i in Text(opciones[i]).tag(i) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+            } else {
+                Picker(selection: enlace) {
+                    ForEach(opciones.indices, id: \.self) { i in Text(opciones[i]).tag(i) }
+                } label: {
+                    titulo
+                }
+                .pickerStyle(.menu)
+            }
+        case let .numero(rango, paso, texto, get, set):
+            Stepper(value: Binding(get: { get(modelo) }, set: { set(modelo, $0) }), in: rango, step: paso) {
+                HStack {
+                    titulo
+                    Spacer()
+                    Text(texto(get(modelo))).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+        case let .vista(hacer):
+            VStack(alignment: .leading, spacing: 8) {
+                if !fila.titulo.isEmpty { titulo }
+                hacer(modelo)
+            }
+            .padding(.vertical, 2)
+        case .nada:
+            titulo
         }
     }
-
-    // MARK: Piezas
-
-    /// Un valor del TOML como `Binding`: cada cambio se guarda.
-    private func enlace<V: Equatable>(_ kp: WritableKeyPath<AjustesMac, V>) -> Binding<V> {
-        Binding(get: { modelo.valores[keyPath: kp] }, set: { v in modelo.cambiar { $0[keyPath: kp] = v } })
-    }
-
-    nonisolated static func dias(_ n: Int) -> String { n == 0 ? "Nunca" : n == 1 ? "1 día" : "\(n) días" }
 }
 
 /// El titulo de una fila con su explicacion debajo y el punto azul de
 /// Windows si no esta como de fabrica.
-private struct TituloAjuste: View {
+struct TituloAjuste: View {
     let titulo: String
     let ayuda: String
     let cambiado: Bool

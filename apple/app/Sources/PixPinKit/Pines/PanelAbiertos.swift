@@ -127,6 +127,11 @@ struct MenuNuevoPin<Etiqueta: View>: View {
             } label: {
                 Label("Pegar como pin", systemImage: "doc.on.clipboard")
             }
+            if GestorPinesIPad.compartido.hayUltimoCerrado {
+                Button { GestorPinesIPad.compartido.devolverUltimoCerrado() } label: {
+                    Label("Devolver el último pin cerrado", systemImage: "arrow.uturn.backward")
+                }
+            }
         } label: {
             etiqueta()
         }
@@ -202,6 +207,14 @@ struct VistaPinesAbiertos: View {
                     Text("Ocultar todos").frame(maxWidth: .infinity).padding(.vertical, 10)
                         .background(Paleta.v2.cajaElegida, in: RoundedRectangle(cornerRadius: 10))
                 }
+                if gestor.ultimoCerrado != nil, !gestor.puedeDeshacer {
+                    Button { gestor.devolverUltimoCerrado() } label: {
+                        Label("Devolver el último pin cerrado", systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Paleta.v2.linea))
+                    }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                }
                 if gestor.puedeDeshacer {
                     Button { gestor.deshacerCerrarTodos() } label: {
                         Text("Deshacer «Cerrar todos»").frame(maxWidth: .infinity).padding(.vertical, 10)
@@ -269,7 +282,7 @@ struct BurbujasPines: View {
 
     var body: some View {
         let minimizados = gestor.pines.filter { $0.minimizado && !$0.oculto }
-        if !gestor.pines.isEmpty || gestor.puedeDeshacer {
+        if !gestor.pines.isEmpty || gestor.puedeDeshacer || gestor.ultimoCerrado != nil {
             VStack(spacing: 10) {
                 Button { gestor.panelAbierto.toggle() } label: {
                     ZStack(alignment: .topTrailing) {
@@ -350,6 +363,11 @@ public struct BotonPinesAbiertos: View {
                 if !GestorPinesIPad.compartido.pinearDesdePortapapeles() { avisarFalloPin() }
             } label: {
                 Label("Pegar como pin", systemImage: "doc.on.clipboard")
+            }
+            if gestor.hayUltimoCerrado {
+                Button { gestor.devolverUltimoCerrado() } label: {
+                    Label("Devolver el último pin cerrado", systemImage: "arrow.uturn.backward")
+                }
             }
         }
         .help("Pines abiertos")

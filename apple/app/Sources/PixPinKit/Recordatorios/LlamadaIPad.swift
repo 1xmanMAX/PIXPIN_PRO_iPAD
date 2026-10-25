@@ -469,9 +469,19 @@ extension Llamada {
     /// notificacion: el usuario ya dijo que si).
     @MainActor
     static func sonar(_ l: LlamadaSecreta, nucleo: Nucleo, detalle: String = "", texto: String? = nil,
-                      contestada: Bool = false) {
+                      contestada: Bool = false, intentos: Int = 0) {
         let clave = l.chat + "\u{0}" + l.mensaje
-        guard sonando[clave] == nil, let escena = ArribaUIKit.escena() else { return }
+        guard sonando[clave] == nil else { return }
+        guard let escena = ArribaUIKit.escena() else {
+            // Al arrancar aun no hay escena: se espera un poco (lo que vencio
+            // con la app cerrada suena al abrirla).
+            guard intentos < 30 else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                Llamada.sonar(l, nucleo: nucleo, detalle: detalle, texto: texto, contestada: contestada, intentos: intentos + 1)
+            }
+            return
+        }
         let m = ModeloLlamada(l, nucleo: nucleo, detalle: detalle, texto: texto)
         let v = UIWindow(windowScene: escena)
         v.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 2)

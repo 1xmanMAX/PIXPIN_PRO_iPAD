@@ -171,6 +171,60 @@ final class AnotadorPlanoIPad {
     }
 }
 
+// MARK: - Las barras del lienzo encima de un visor
+
+/// **Las barras del lienzo sobre un visor** (el plano, un marcador 3D): la
+/// de herramientas centrada arriba, bajo la barra del visor, el panel de
+/// estilo a la izquierda y los desplegables de los grupos. `alCambiar` se
+/// llama cuando algo de la barra pudo cambiar el dibujo (otro estilo para
+/// lo elegido, otra herramienta): el visor lo vuelve a pintar.
+struct BarrasLienzoEncima: View {
+    @ObservedObject var modelo: ModeloEditorLienzo
+    /// Lo que ocupa arriba la barra comun del visor.
+    var arriba: CGFloat = 58
+    var alCambiar: () -> Void = {}
+
+    var body: some View {
+        GeometryReader { geo in
+            let botones = BotonBarraLienzo.barra
+            let corte = BotonBarraLienzo.cortePara(ancho: geo.size.width - 2 * MedidasBarraLienzo.distanciaBorde,
+                                                   en: botones)
+            let filas: CGFloat = corte < botones.count ? 2 : 1
+            ZStack(alignment: .top) {
+                if modelo.desplegado != nil {
+                    // Un toque fuera del desplegable lo cierra.
+                    Color.black.opacity(0.001)
+                        .onTapGesture { modelo.desplegado = nil }
+                }
+                BarraHerramientasLienzo(modelo: modelo, botones: botones, corte: corte)
+                    .padding(.top, arriba)
+                    .padding(.horizontal, MedidasBarraLienzo.distanciaBorde)
+                if !modelo.panelEscondido,
+                   modelo.hayElegidos || !HerramientaLienzo.sinEstilo.contains(modelo.herramienta) {
+                    PanelEstiloLienzo(modelo: modelo)
+                        .padding(.leading, MedidasBarraLienzo.distanciaBorde)
+                        .padding(.top, arriba + MedidasBarraLienzo.yPanel - MedidasBarraLienzo.distanciaBorde
+                            + (filas - 1) * (MedidasBarraLienzo.lado + MedidasBarraLienzo.relleno))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                if let error = modelo.error {
+                    Text(error).font(.caption).foregroundStyle(.red).lineLimit(2)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+        .overlayPreferenceValue(AnclasGruposLienzo.self) { anclas in
+            MenuGrupoLienzo(modelo: modelo, anclas: anclas)
+        }
+        .onReceive(modelo.objectWillChange) { _ in
+            // Tras el cambio (objectWillChange llega antes).
+            DispatchQueue.main.async { alCambiar() }
+        }
+    }
+}
+
 // MARK: - Pintar lo anotado
 
 /// **Pinta la capa del plano** (un `LienzoLeido`) en un `CGContext` con la y

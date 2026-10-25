@@ -63,6 +63,7 @@ public final class TarjetaFlotante: ObservableObject, Identifiable {
     var alCerrar: (@MainActor () -> Void)?
     fileprivate weak var capa: AvisoFlotante?
     private var tanda = 0
+    private var toques = 0
     public private(set) var cerrada = false
 
     init(titulo: String, texto: String, botones: [BotonAviso], acabado: Bool, dura: TimeInterval) {
@@ -137,11 +138,11 @@ public final class TarjetaFlotante: ObservableObject, Identifiable {
     /// entero desde el ultimo toque).
     func tocar() {
         encima = true
-        tanda += 1
-        let mia = tanda
+        toques += 1
+        let mia = toques
         DispatchQueue.main.asyncAfter(deadline: .now() + dura) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.tanda == mia else { return }
+                guard let self, self.toques == mia else { return }
                 self.encima = false
             }
         }

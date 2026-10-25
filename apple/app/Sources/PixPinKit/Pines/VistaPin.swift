@@ -63,6 +63,10 @@ struct VistaPinIPad: View {
                 }
             }
             .position(x: pin.centro.x + arrastre.width, y: pin.centro.y + arrastre.height)
+            // Un arrastre cancelado (sin `onEnded`) no deja guias colgadas.
+            .onChange(of: arrastre == .zero) { _, quieto in
+                if quieto { gestor.quitarGuias() }
+            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(pin.fila.nombre)
     }

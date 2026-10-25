@@ -53,10 +53,25 @@ public struct VistaTareas: View {
             Cabecera("Tareas", subtitulo: subtitulo,
                      buscador: BuscadorCabecera($modelo.busqueda, pista: "Buscar: texto o #etiqueta")) {
                 SegmentosCabecera(Vista.allCases.map { ($0, $0.rawValue) }, eleccion: $vista)
+                BotonCabecera(icono: "calendar", rotulo: "Horario", ayuda: "Horario de clases") {
+                    HorarioIPad.abrir(nucleo: modelo.nucleoParaLeer)
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
                 BotonCabecera(icono: "arrow.clockwise", ayuda: "Releer (⌘R)") { Task { await modelo.cargar() } }
                     .keyboardShortcut("r")
             }
             caja
+            if let vista = ComoQuedaraTarea.vista(nueva) {
+                // Mientras se escribe, como quedara (lo entiende el nucleo).
+                Text(vista)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Paleta.v2.gris)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 46).padding(.trailing, 16).padding(.bottom, 8)
+                    .background(Paleta.v2.fondo)
+                    .accessibilityLabel("Quedará así: \(vista)")
+            }
             Paleta.v2.linea.frame(height: 1)
             Group {
                 switch vista {
@@ -173,7 +188,8 @@ public struct VistaTareas: View {
             quitarEtiqueta: { e in Task { await modelo.editar(t, a: ModeloTareas.sinEtiqueta(t.tarea.texto, e)) } },
             borrar: { Task { await modelo.borrar(t) } },
             mover: { l in Task { await modelo.mover(t, a: l) } },
-            verEnChat: { Navegacion.compartida.irAlChat(t.lista.chat, mensaje: t.lista.mensaje) }
+            verEnChat: { Navegacion.compartida.irAlChat(t.lista.chat, mensaje: t.lista.mensaje) },
+            pinear: { PinesDeTareasIPad.compartidos.abrir(t, nucleo: modelo.nucleoParaLeer) }
         )
     }
 
@@ -334,6 +350,8 @@ struct AccionesTarea {
     var borrar: () -> Void = {}
     var mover: (ListaTareas) -> Void = { _ in }
     var verEnChat: () -> Void = {}
+    /// «📌 Fijar como pin»: la tarea sola, encima de todo.
+    var pinear: () -> Void = {}
 }
 
 /// Una tarea: su casilla, el texto con sus chapitas (prioridad y
@@ -448,6 +466,9 @@ struct FilaTarea: View {
                     }
                 }
             } label: { Label("Mover a…", systemImage: "arrow.right.square") }
+        }
+        if !t.tarea.hecha {
+            Button { acciones.pinear() } label: { Label("Fijar como pin", systemImage: "pin") }
         }
         Button { acciones.verEnChat() } label: { Label("Ver en el chat", systemImage: "bubble.left.and.bubble.right") }
         Button { UIPasteboard.general.string = m.titulo } label: { Label("Copiar", systemImage: "doc.on.doc") }
@@ -614,5 +635,35 @@ struct HojaFecha: View {
             }
         }
         .onAppear { cuando = max(inicial, Date().addingTimeInterval(60)) }
+    }
+}
+
+// MARK: - Como quedara
+
+/// **Mientras se escribe una tarea, como quedara** («Urgente · #casa · ⏰
+/// 18:00»): lo que guardaria el nucleo (`tareaEntendida`) leido con sus
+/// marcas, como lo enseña Windows bajo la caja de apuntar.
+enum ComoQuedaraTarea {
+    /// `nil` si no hay nada que enseñar (vacio, o se queda tal cual).
+    static func vista(_ escrito: String, ahora: Date = Date()) -> String? {
+        let t = escrito.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return nil }
+        let d = desfaseLocalMs(ahora)
+        let m = marcasDeTarea(texto: tareaEntendida(texto: t, desfaseMs: d), desfaseMs: d)
+        return vista(titulo: m.titulo, urgencia: m.urgencia, etiquetas: m.etiquetas,
+                     hora: m.horaMs.map { AtajosDeHora.legible(fechaDeLocales($0), ahora: ahora) },
+                     escrito: t)
+    }
+
+    /// Lo mismo con las marcas ya leidas (lo puro, para las pruebas).
+    static func vista(titulo: String, urgencia: String?, etiquetas: [String], hora: String?, escrito: String) -> String? {
+        var partes: [String] = []
+        if let u = urgencia { partes.append(u == "muy_urgente" ? "Muy urgente" : "Urgente") }
+        partes.append(contentsOf: etiquetas.map { "#\($0)" })
+        if let hora { partes.append("⏰ \(hora)") }
+        // Sin marcas que entender no se dice nada: se ve en la caja.
+        guard !partes.isEmpty else { return nil }
+        let limpio = titulo.trimmingCharacters(in: .whitespaces)
+        return ([limpio.isEmpty ? escrito : limpio] + partes).joined(separator: " · ")
     }
 }

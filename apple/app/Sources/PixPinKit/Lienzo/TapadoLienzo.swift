@@ -2,8 +2,9 @@
 // del lienzo en cualquier `CGContext` (un mapa de bits, lo que se comparte o
 // se imprime, la foto de una zona).
 //
-// Port del `TapadoLienzo.swift` del Mac (sin el fondo fijo, que en el iPad
-// aun no hay): Rust pone en el plano, en su sitio del orden de pintado, una
+// Port del `TapadoLienzo.swift` del Mac, con el fondo fijo
+// (`FondoLienzo.swift`), que tambien se ve dentro de una lupa y debajo de lo
+// que se comparte: Rust pone en el plano, en su sitio del orden de pintado, una
 // imagen con un `id_objeto` que no es de ninguna foto (`editor_tapado.rs`),
 // y esta clase la resuelve: pide a Rust lo de dentro (`contenidoDeTapado`) y
 // lo pinta con el mismo `PintorLienzo`:
@@ -27,6 +28,8 @@ final class PintorDeTapados {
     private let editor: EditorLienzo
     /// Las fotos del lienzo, para lo que se ve dentro.
     private let fotos: (UInt64) -> CGImage?
+    /// El fondo fijo, que tambien se ve agrandado dentro de una lupa.
+    var fondo: FondoLienzo?
     private var hechos: [UInt64: (version: UInt64, lado: Int, imagen: CGImage)] = [:]
 
     /// El lado mas largo de lo pintado dentro de una lupa.
@@ -46,7 +49,7 @@ final class PintorDeTapados {
         let lado = max(1, Int((escala * 4).rounded()))
         if let h = hechos[id], h.version == version, h.lado == lado { return h.imagen }
         guard let c = editor.contenidoDeTapado(idObjeto: id),
-              let img = PintorDeTapados.pintar(c, escala: escala, fotos: fotos) else {
+              let img = PintorDeTapados.pintar(c, escala: escala, fotos: fotos, fondo: fondo) else {
             hechos[id] = nil
             return nil
         }
@@ -57,7 +60,7 @@ final class PintorDeTapados {
 
     /// Pinta lo de dentro de `c` (ver `ContenidoTapado` en Rust).
     static func pintar(_ c: ContenidoTapado, escala: CGFloat,
-                       fotos: @escaping (UInt64) -> CGImage?) -> CGImage? {
+                       fotos: @escaping (UInt64) -> CGImage?, fondo: FondoLienzo? = nil) -> CGImage? {
         guard c.ancho > 0, c.alto > 0, let leido = try? leerLienzo(c.plano) else { return nil }
         let ancho = CGFloat(c.ancho), alto = CGFloat(c.alto)
         let pintor = PintorLienzo(lienzo: leido, imagen: fotos)
@@ -71,6 +74,7 @@ final class PintorDeTapados {
             chico.translateBy(x: -CGFloat(c.x), y: -CGFloat(c.y))
             chico.setFillColor(leido.fondo.cg)
             chico.fill(CGRect(x: CGFloat(c.x), y: CGFloat(c.y), width: ancho, height: alto))
+            fondo?.pintar(en: chico)
             let mundo = CGRect(x: CGFloat(c.x), y: CGFloat(c.y), width: ancho, height: alto)
             pintor.pintar(en: chico, limites: mundo)
             guard let cuadros = chico.makeImage() else { return nil }
@@ -108,6 +112,7 @@ final class PintorDeTapados {
         ctx.translateBy(x: cristal.midX, y: cristal.midY)
         ctx.scaleBy(x: a, y: a)
         ctx.translateBy(x: -CGFloat(c.focoX), y: -CGFloat(c.focoY))
+        fondo?.pintar(en: ctx)
         let mirado = CGRect(x: CGFloat(c.focoX) - ancho / a / 2, y: CGFloat(c.focoY) - alto / a / 2,
                             width: ancho / a, height: alto / a)
         pintor.pintar(en: ctx, limites: mirado)
@@ -125,6 +130,7 @@ enum PintorDeHojas {
     static func pintar(_ plano: LienzoPlano, caja: CGRect, en ctx: CGContext, destino: CGRect,
                        transparente: Bool, tapados: PintorDeTapados?, version: UInt64,
                        fotos: @escaping (UInt64) -> CGImage?) {
+        let fondo = tapados?.fondo
         guard caja.width > 0, caja.height > 0, let leido = try? leerLienzo(plano) else { return }
         ctx.saveGState()
         ctx.clip(to: destino)
@@ -136,6 +142,7 @@ enum PintorDeHojas {
         ctx.translateBy(x: destino.midX - caja.midX * k, y: destino.midY - caja.midY * k)
         ctx.scaleBy(x: k, y: k)
         let escala = max(2, k)
+        fondo?.pintar(en: ctx)
         PintorLienzo(lienzo: leido) { id in
             // La foto primero: su id puede tener los bits del mosaico.
             if let f = fotos(id) { return f }

@@ -245,12 +245,19 @@ enum AccionAdjuntar: Hashable {
     case foto, archivo, lienzo, nota, tareas, tabla, camara
     /// Lo que llega de «Pegar» (el boton del sistema, que no pide permiso).
     case pegar([NSItemProvider])
+    /// «Proyecto entero» (la puerta `PROYECTO`) y «Página de un proyecto».
+    case proyecto, pagina
+    /// Una mini-app viva (contador, ruleta, gastos, relojes): nace en el
+    /// chat y se abre en un pin.
+    case mini(String)
 
     static func == (a: AccionAdjuntar, b: AccionAdjuntar) -> Bool {
         switch (a, b) {
         case (.foto, .foto), (.archivo, .archivo), (.lienzo, .lienzo), (.nota, .nota),
-             (.tareas, .tareas), (.tabla, .tabla), (.camara, .camara): true
+             (.tareas, .tareas), (.tabla, .tabla), (.camara, .camara), (.proyecto, .proyecto),
+             (.pagina, .pagina): true
         case let (.pegar(x), .pegar(y)): x == y
+        case let (.mini(x), .mini(y)): x == y
         default: false
         }
     }
@@ -265,6 +272,9 @@ enum AccionAdjuntar: Hashable {
         case .tabla: h.combine(5)
         case .camara: h.combine(6)
         case let .pegar(p): h.combine(7); h.combine(p.count)
+        case .proyecto: h.combine(8)
+        case .pagina: h.combine(9)
+        case let .mini(m): h.combine(10); h.combine(m)
         }
     }
 }
@@ -281,6 +291,19 @@ struct HojaAdjuntarChat: View {
         (.tareas, "Lista de tareas", "checklist", 0x1E7A4A),
         (.tabla, "Tabla", "tablecells.fill", 0x4B49C8),
         (.camara, "Cámara", "camera.fill", 0xC93C35),
+    ]
+
+    /// Lo que se usa menos, en chips debajo (como Windows): el proyecto, sus
+    /// paginas y las mini-apps vivas.
+    private static let chips: [(AccionAdjuntar, String, String)] = [
+        (.proyecto, "Proyecto entero", "folder"),
+        (.pagina, "Página de un proyecto", "doc.richtext"),
+        (.mini("contador"), "Contador", "plus.forwardslash.minus"),
+        (.mini("ruleta"), "Ruleta", "circle.dashed"),
+        (.mini("gastos"), "Gastos", "eurosign.circle"),
+        (.mini("cronometro"), "Cronómetro", "stopwatch"),
+        (.mini("temporizador"), "Temporizador", "timer"),
+        (.mini("alarma"), "Alarma", "alarm"),
     ]
 
     var body: some View {
@@ -306,6 +329,24 @@ struct HojaAdjuntarChat: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(accion == .camara && !UIImagePickerController.isSourceTypeAvailable(.camera))
+                }
+            }
+            Divider()
+            Text("Más").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 6, alignment: .leading)],
+                      alignment: .leading, spacing: 6) {
+                ForEach(Self.chips.indices, id: \.self) { i in
+                    let (accion, rotulo, simbolo) = Self.chips[i]
+                    Button { elegir(accion) } label: {
+                        Label(rotulo, systemImage: simbolo)
+                            .font(.system(size: 13))
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(height: 32)
+                            .background(Color.primary.opacity(0.07), in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             Divider()

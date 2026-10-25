@@ -29,6 +29,7 @@ import MetalKit
 import PixPinCore
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Que hacen el dedo y el lapiz en el visor.
 public enum ModoVisorPlano: String, CaseIterable, Sendable {
@@ -1296,14 +1297,17 @@ struct LienzoMetalPlano: UIViewRepresentable {
 }
 
 /// **El visor de un plano** (DWG, DXF...) a pantalla completa: la barra
-/// comun arriba (mover, medir, marcos, anotar, ver entero, capas), el plano
-/// en Metal y las capas en un panel flotante.
+/// comun arriba (mover, medir, marcos, anotar, ver entero, buscar, capas y
+/// el menu: imprimir, exportar, marcador, letras, 3D), el plano en Metal y
+/// las capas en un panel flotante.
 public struct VisorPlanoIPad: View {
     let url: URL
     let titulo: String
     let nucleo: Nucleo
     @StateObject private var visor: VisorPlano
     @ObservedObject private var noche = ModoNoche.compartido
+    @State private var consulta = ""
+    @FocusState private var enBuscador: Bool
 
     public init(url: URL, titulo: String, nucleo: Nucleo) {
         self.url = url
@@ -1316,22 +1320,36 @@ public struct VisorPlanoIPad: View {
         ZStack(alignment: .top) {
             Color(white: noche.activo ? 0.15 : 0.98).ignoresSafeArea()
             contenido.ignoresSafeArea()
+            if let m = visor.modeloAnotar {
+                BarrasLienzoEncima(modelo: m, arriba: 58) { visor.vista?.repintar() }
+            }
             VStack(spacing: 8) {
                 BarraVisorIPad(tipo: "Plano", icono: "square.grid.3x3", titulo: titulo) { botones }
-                if visor.anotando { HerramientasTintaPlano(visor: visor) }
+                if visor.anotando {
+                    // Las barras del lienzo van debajo (`BarrasLienzoEncima`).
+                    Color.clear.frame(height: 56)
+                }
+                if visor.buscando { buscador }
+                if visor.avisoCivil { avisoCivil }
+                if !visor.faltan.isEmpty && !visor.anotando { avisoLetras }
                 if !visor.medida.isEmpty { etiquetaDeMedida }
                 Spacer(minLength: 0)
-                if visor.datos != nil && (!visor.anotado.marcos.isEmpty || visor.modo == .marco) {
-                    fichasDeMarcos.frame(maxWidth: .infinity, alignment: .leading).padding(14)
-                }
+                if visor.datos != nil { abajo.frame(maxWidth: .infinity, alignment: .leading).padding(14) }
             }
             if visor.verCapas && visor.datos != nil {
                 PanelFlotantePlano(alto: min(420, 60 + CGFloat(visor.capas.count) * 44)) { panelCapas }
+            }
+            if visor.preparando {
+                ProgressView("Preparando…")
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .onAppear { visor.cargar(nucleo: nucleo) }
         .onDisappear { if visor.anotando { visor.terminarDeAnotar() } }
         .onChange(of: noche.activo) { _, _ in visor.vista?.repintar() }
+        .sheet(isPresented: $visor.verLetras) { LetrasDelPlanoIPad(visor: visor) }
     }
 
     @ViewBuilder private var botones: some View {
@@ -1341,26 +1359,60 @@ public struct VisorPlanoIPad: View {
                 .help("Mover")
             Button { visor.modo = visor.modo == .medir ? .mover : .medir } label: { Image(systemName: "ruler") }
                 .foregroundStyle(visor.modo == .medir ? Paleta.v2.acento : Color.primary)
-                .keyboardShortcut("m", modifiers: [])
+                .keyboardShortcut(tecla("m"))
                 .help("Medir (M)")
             Button { visor.modo = visor.modo == .marco ? .mover : .marco } label: { Image(systemName: "rectangle.dashed") }
                 .foregroundStyle(visor.modo == .marco ? Paleta.v2.acento : Color.primary)
-                .keyboardShortcut("i", modifiers: [])
+                .keyboardShortcut(tecla("i"))
                 .help("Marcos para imprimir (I)")
             Button { visor.alternarAnotar() } label: { Image(systemName: "pencil.tip.crop.circle") }
                 .foregroundStyle(visor.anotando ? Paleta.v2.acento : Color.primary)
-                .keyboardShortcut("a", modifiers: [])
-                .help("Anotar con el lápiz (A)")
+                .keyboardShortcut(tecla("a"))
+                .help(visor.anotando ? "Terminar de anotar" : "Anotar (A)")
             Button { visor.encuadrar() } label: { Image(systemName: "viewfinder") }
-                .keyboardShortcut("f", modifiers: [])
+                .keyboardShortcut(tecla("f"))
                 .help("Ver el plano entero (F)")
+            Button {
+                if visor.buscando { visor.cerrarBusqueda() } else { visor.buscando = true; enBuscador = true }
+            } label: { Image(systemName: "magnifyingglass") }
+                .foregroundStyle(visor.buscando ? Paleta.v2.acento : Color.primary)
+                .keyboardShortcut("f", modifiers: .command)
+                .help("Buscar en los textos (⌘F)")
+            Button { visor.verLetras = true } label: {
+                Text("Aa").font(.system(size: 15, weight: .semibold))
+                    .overlay(alignment: .topTrailing) {
+                        if !visor.faltan.isEmpty { Circle().fill(Color.orange).frame(width: 7, height: 7).offset(x: 4, y: -2) }
+                    }
+            }
+            .keyboardShortcut(tecla("l"))
+            .help(visor.faltan.isEmpty ? "Letras del plano (L)" : "Faltan \(visor.faltan.count) letras (L)")
             Button { visor.verCapas.toggle() } label: { Image(systemName: "square.3.layers.3d") }
                 .foregroundStyle(visor.verCapas ? Paleta.v2.acento : Color.primary)
                 .help("Capas")
             Menu {
+                Section {
+                    Button { visor.imprimir(conMembrete: true) } label: {
+                        Label("Imprimir con marco y membrete…", systemImage: "printer")
+                    }
+                    .keyboardShortcut("p", modifiers: .command)
+                    Button { visor.imprimir(conMembrete: false) } label: {
+                        Label("Imprimir sin marco…", systemImage: "printer.dotmatrix")
+                    }
+                }
+                Menu {
+                    ForEach(visor.formatosDeExportar) { f in
+                        Button { visor.exportar(f) } label: { Label(f.nombre, systemImage: f.simbolo) }
+                    }
+                } label: { Label("Exportar (HTML, PDF, PNG, DXF…)", systemImage: "square.and.arrow.up") }
+                Button { visor.exportar(.pdf) } label: { Label("Exportar en PDF", systemImage: "doc.richtext") }
+                    .keyboardShortcut("e", modifiers: .command)
+                Divider()
+                Button { visor.ponerMarcador() } label: { Label("Marcador aquí", systemImage: "bookmark") }
+                    .keyboardShortcut("m", modifiers: .command)
                 Button { Navegacion.compartida.abrir(.modelo3d(url: url, titulo: titulo)) } label: {
                     Label("Ver en 3D", systemImage: "cube")
                 }
+                .keyboardShortcut(tecla("3"))
                 Divider()
                 Button(role: .destructive) { visor.borrarCotas() } label: { Label("Borrar las cotas", systemImage: "ruler") }
                     .disabled(visor.anotado.cotas.isEmpty)
@@ -1371,6 +1423,78 @@ public struct VisorPlanoIPad: View {
             } label: { Image(systemName: "ellipsis.circle") }
         }
         .disabled(visor.datos == nil)
+    }
+
+    /// Una tecla sola (sin ⌘) como atajo, salvo anotando: entonces las
+    /// letras son del texto que se escribe.
+    private func tecla(_ k: KeyEquivalent) -> KeyboardShortcut? {
+        visor.anotando || visor.buscando ? nil : KeyboardShortcut(k, modifiers: [])
+    }
+
+    /// El buscador de textos: el campo, cuantos, anterior y siguiente.
+    private var buscador: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Buscar en el plano", text: $consulta)
+                .textFieldStyle(.plain)
+                .focused($enBuscador)
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onSubmit { visor.buscar(consulta) }
+                .frame(minWidth: 180, maxWidth: 280)
+            if visor.buscandoAhora {
+                ProgressView().controlSize(.small)
+            } else if visor.sinResultado {
+                Text("No está").font(.callout).foregroundStyle(.secondary)
+            } else if !visor.hallados.isEmpty {
+                let i = visor.hallado.flatMap { h in visor.hallados.firstIndex(of: h) }.map { $0 + 1 } ?? 0
+                Text("\(i) de \(visor.hallados.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                Button { visor.otroHallado(-1) } label: { Image(systemName: "chevron.up") }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                Button { visor.otroHallado(1) } label: { Image(systemName: "chevron.down") }
+                    .keyboardShortcut("g", modifiers: .command)
+                if let h = visor.hallado {
+                    Text(h.texto).font(.callout).lineLimit(1).frame(maxWidth: 220, alignment: .leading)
+                }
+            }
+            Button { visor.cerrarBusqueda() } label: { Image(systemName: "xmark.circle.fill") }
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.separator.opacity(0.5)))
+    }
+
+    /// Los objetos de Civil 3D sin su dibujo (`PROXYGRAPHICS = 0`).
+    private var avisoCivil: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Text(visor.textoAvisoCivil).font(.callout).lineLimit(3)
+            Button { visor.avisoCivil = false } label: { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 640)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// Faltan letras: «Faltan n letras del plano: pulsa Aa arriba para añadirlas».
+    private var avisoLetras: some View {
+        Button { visor.verLetras = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "textformat").foregroundStyle(.orange)
+                Text("Faltan \(visor.faltan.count) letras del plano: pulsa Aa arriba para añadirlas")
+                    .font(.callout).foregroundStyle(.primary).lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// La medida de la regla (o la ayuda del modo), con deshacer y guardar.
@@ -1392,6 +1516,25 @@ public struct VisorPlanoIPad: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
         .background(.regularMaterial, in: Capsule())
+    }
+
+    /// Abajo a la izquierda: los marcos para imprimir (azules, con imprimir
+    /// al lado) y los marcadores con su vista (redondos).
+    private var abajo: some View {
+        HStack(spacing: 6) {
+            if !visor.anotado.marcos.isEmpty || visor.modo == .marco {
+                fichasDeMarcos
+                if !visor.anotado.marcos.isEmpty {
+                    Button { visor.imprimir(conMembrete: true) } label: {
+                        Image(systemName: "printer").frame(width: 34, height: 34)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Imprimir los marcos (⌘P)")
+                }
+            }
+            MarcadoresDelPlano(visor: visor, marcadores: visor.marcadores)
+        }
     }
 
     private var fichasDeMarcos: some View {
@@ -1449,30 +1592,74 @@ public struct VisorPlanoIPad: View {
     }
 }
 
-/// Las herramientas del lapiz sobre el plano: lapiz, resaltador, goma,
-/// deshacer y «Listo».
-struct HerramientasTintaPlano: View {
+/// Los marcadores del plano: un redondel numerado por marcador, que lleva a
+/// su vista (mantener pulsado: quitarlo).
+struct MarcadoresDelPlano: View {
     @ObservedObject var visor: VisorPlano
+    @ObservedObject var marcadores: MarcadoresDeVista
 
     var body: some View {
-        HStack(spacing: 14) {
-            ForEach(HerramientaTintaPlano.allCases) { h in
-                Button { visor.elegirTinta(h) } label: { Image(systemName: h.simbolo) }
-                    .foregroundStyle(visor.herramientaTinta == h ? Paleta.v2.acento : Color.primary)
-                    .help(h.titulo)
+        HStack(spacing: 6) {
+            ForEach(Array(marcadores.lista.enumerated()), id: \.element.id) { i, m in
+                Button { visor.ir(a: m) } label: {
+                    Text("\(i + 1)").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(Color(white: 0.12, opacity: 0.7)))
+                }
+                .buttonStyle(.plain)
+                .help("Marcador \(i + 1)")
+                .contextMenu { Button("Quitar", role: .destructive) { marcadores.quitar(m) } }
             }
-            Divider().frame(height: 20)
-            Button { visor.deshacerTinta() } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(!visor.puedeDeshacerTinta)
-                .keyboardShortcut("z", modifiers: .command)
-                .help("Deshacer")
-            Button("Listo") { visor.alternarAnotar() }.fontWeight(.semibold)
         }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.separator.opacity(0.5)))
+    }
+}
+
+/// **Las letras del plano** («Aa», `L` de Windows y Android): las que el
+/// plano pide y no estan, y añadir o quitar las del usuario (SHX, TTF, OTF,
+/// TTC). Las que se añaden mandan sobre las del iPad y las de PixPin.
+struct LetrasDelPlanoIPad: View {
+    @ObservedObject var visor: VisorPlano
+    @Environment(\.dismiss) private var cerrar
+    @State private var eligiendo = false
+
+    /// Lo que se deja elegir en Archivos.
+    static var tipos: [UTType] {
+        ["shx", "ttf", "otf", "ttc"].compactMap { UTType(filenameExtension: $0) } + [.font]
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if visor.faltan.isEmpty {
+                        Text("No falta ninguna letra que el plano diga por su nombre.")
+                    } else {
+                        Text("Este plano pide letras que no están; sus textos salen con otras parecidas y pueden no caber en sus recuadros:")
+                        ForEach(visor.faltan, id: \.self) { Text($0).font(.body.monospaced()) }
+                    }
+                }
+                Section {
+                    Text("Las SHX suelen estar en la carpeta Fonts de AutoCAD o junto al plano que te pasaron; las TrueType, en Archivos. Las que añadas aquí mandan sobre las del iPad y las de PixPin.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Añadir letras (SHX, TTF, OTF, TTC)…") { eligiendo = true }
+                    Button("Quitar las mías (\(visor.letrasMias))", role: .destructive) {
+                        visor.quitarLetras()
+                        cerrar()
+                    }
+                    .disabled(visor.letrasMias == 0)
+                }
+            }
+            .navigationTitle("Letras del plano")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { cerrar() } } }
+            .fileImporter(isPresented: $eligiendo, allowedContentTypes: LetrasDelPlanoIPad.tipos,
+                          allowsMultipleSelection: true) { r in
+                if case let .success(urls) = r, !urls.isEmpty {
+                    visor.anadirLetras(urls)
+                    cerrar()
+                }
+            }
+        }
     }
 }
 

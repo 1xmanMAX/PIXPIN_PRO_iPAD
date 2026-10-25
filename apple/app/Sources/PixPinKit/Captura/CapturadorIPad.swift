@@ -10,7 +10,11 @@
 //   pedir permiso a la fototeca), una o varias.
 // - **Pegar**: la imagen del portapapeles.
 // - **Capturar PixPin**: la ventana de la propia app
-//   (`UIGraphicsImageRenderer` + `drawHierarchy`), con sus pines.
+//   (`UIGraphicsImageRenderer` + `drawHierarchy`), con sus pines; tambien
+//   con cuenta atras de 3 s (la captura con retardo de Windows), para
+//   dejar abierto un menu o una hoja.
+// - **Grabar PixPin**: un video de la propia app con ReplayKit
+//   (`GrabadorIPad`), que va a la galeria de capturas.
 //
 // Cada una acaba en el editor de captura a pantalla completa
 // (`EditorCapturaIPad`): anotar y luego Copiar, Pinear, Al chat, Texto o
@@ -33,7 +37,7 @@ public final class CapturadorIPad: ObservableObject {
 
     /// De donde sale la captura.
     public enum Fuente: String, CaseIterable, Identifiable, Sendable {
-        case camara, escaner, fotos, pegar, app
+        case camara, escaner, fotos, pegar, app, appConRetardo, grabar
 
         public var id: String { rawValue }
 
@@ -44,6 +48,8 @@ public final class CapturadorIPad: ObservableObject {
             case .fotos: "Desde Fotos"
             case .pegar: "Pegar"
             case .app: "Capturar PixPin"
+            case .appConRetardo: "Capturar PixPin en 3 s"
+            case .grabar: "Grabar PixPin"
             }
         }
 
@@ -54,6 +60,8 @@ public final class CapturadorIPad: ObservableObject {
             case .fotos: "photo.on.rectangle"
             case .pegar: "doc.on.clipboard"
             case .app: "rectangle.dashed"
+            case .appConRetardo: "timer"
+            case .grabar: "record.circle"
             }
         }
 
@@ -63,8 +71,9 @@ public final class CapturadorIPad: ObservableObject {
             switch self {
             case .camara: UIImagePickerController.isSourceTypeAvailable(.camera)
             case .escaner: VNDocumentCameraViewController.isSupported
-            case .fotos, .app: true
+            case .fotos, .app, .appConRetardo: true
             case .pegar: UIPasteboard.general.hasImages
+            case .grabar: GrabadorIPad.compartido.disponible
             }
         }
     }
@@ -76,6 +85,13 @@ public final class CapturadorIPad: ObservableObject {
     /// carpeta; esto es para quien quiera enterarse, como las
     /// automatizaciones «al capturar»).
     public var alGuardar: ((URL) -> Void)?
+
+    /// Los segundos que faltan de la cuenta atras (nil: sin cuenta). La
+    /// pinta la capa de pines.
+    @Published public private(set) var cuentaAtras: Int?
+    private var tareaCuenta: Task<Void, Never>?
+    /// Los segundos de «Capturar PixPin en 3 s» (`cuenta_atras.rs`).
+    public static let segundosRetardo = 3
 
     /// Las fotos que esperan su turno en el editor (varias paginas del
     /// escaner o varias de Fotos).
@@ -136,21 +152,55 @@ public final class CapturadorIPad: ObservableObject {
             editar(foto)
         case .app:
             capturarApp()
+        case .appConRetardo:
+            capturarAppConRetardo()
+        case .grabar:
+            GrabadorIPad.compartido.alternar()
+        }
+    }
+
+    /// «Capturar PixPin» tras una cuenta atras (para dejar abierto un menu).
+    /// Otra vez durante la cuenta, la cancela.
+    public func capturarAppConRetardo(segundos: Int = CapturadorIPad.segundosRetardo) {
+        if tareaCuenta != nil {
+            tareaCuenta?.cancel()
+            tareaCuenta = nil
+            cuentaAtras = nil
+            return
+        }
+        tareaCuenta = Task { [weak self] in
+            for n in stride(from: max(segundos, 1), through: 1, by: -1) {
+                self?.cuentaAtras = n
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+            }
+            guard let self else { return }
+            self.cuentaAtras = nil
+            self.tareaCuenta = nil
+            // Que se vaya el numero antes de fotografiar.
+            try? await Task.sleep(for: .milliseconds(120))
+            self.capturarApp(despuesDePintar: true)
         }
     }
 
     /// La ventana de PixPin tal como se ve (con sus pines).
-    public func capturarApp() {
-        guard let ventana = ArribaUIKit.ventana() else { return avisarFalloPin() }
-        let formato = UIGraphicsImageRendererFormat()
-        formato.scale = ventana.screen.scale
-        formato.opaque = true
-        let foto = UIGraphicsImageRenderer(bounds: ventana.bounds, format: formato).image { _ in
-            ventana.drawHierarchy(in: ventana.bounds, afterScreenUpdates: false)
-        }
+    public func capturarApp(despuesDePintar: Bool = false) {
+        guard let foto = fotoDeLaApp(despuesDePintar: despuesDePintar) else { return avisarFalloPin() }
         // Un destello, como la captura del sistema.
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         editar(foto)
+    }
+
+    /// La foto de la ventana de PixPin tal como se ve (nil sin ventana).
+    public func fotoDeLaApp(despuesDePintar: Bool = false) -> UIImage? {
+        guard let ventana = ArribaUIKit.ventana() else { return nil }
+        let formato = UIGraphicsImageRendererFormat()
+        formato.scale = ventana.screen.scale
+        formato.opaque = true
+        return UIGraphicsImageRenderer(bounds: ventana.bounds, format: formato).image { _ in
+            ventana.drawHierarchy(in: ventana.bounds, afterScreenUpdates: despuesDePintar)
+        }
     }
 
     /// Abre el editor con una foto de UIKit.

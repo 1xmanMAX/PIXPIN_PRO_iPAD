@@ -1,3 +1,14 @@
+Las letras del lienzo en el iPad (apple/xcode/App/Fuentes)
+==========================================================
+
+Las mismas familias que Windows (abajo, sus licencias), en .ttf (lo que iOS registra
+sin dudas): Excalifont, Lilita One, Comic Shanns, Work Sans, Fraunces y
+Caveat Medium son las .ttf de PixPin Android (app/src/main/res/font); Caveat
+Bold sale del caveat-700.woff2 de Windows; Nunito Regular (peso 500, el de
+Windows) y Bold (800) son cortes fijos de la Nunito variable de Android,
+renombrados a la familia «Nunito» (fontTools). Courier New ya viene con iOS.
+Van en la clave UIAppFonts del Info.plist.
+
 Letras incrustadas en pixpin-render (crates/pixpin-render/letras)
 =================================================================
 

@@ -5,13 +5,15 @@
 // guardado.
 //
 // Port del `ModeloEditorLienzo` del Mac (`Lienzo/EditorLienzoView.swift`)
-// sin AppKit ni el fondo fijo.
+// sin AppKit, con el fondo fijo (`FondoLienzo.swift`) y el papel que sigue
+// el modo noche comun de los visores (`ModoNoche`).
 //
 // Rendimiento (§4bis del plan):
 // - guardar va solo, 1 s despues del ultimo cambio, en una cola de fondo
 //   (`.utility`): nada de escribir JSON en el hilo principal;
 // - al irse la app al fondo se guarda ya, con un rato pedido a iOS.
 
+import Combine
 import Foundation
 import PixPinCore
 import SwiftUI
@@ -49,18 +51,39 @@ public final class ModeloEditorLienzo: ObservableObject {
     @Published public var pidiendoImagen = false
     /// El panel de estilo escondido a mano (apretar el Apple Pencil).
     @Published public var panelEscondido = false
+    /// **«Dibujar con el dedo»** (el de Notas): el dedo pinta aunque se use
+    /// el Apple Pencil, y la vista se mueve con dos dedos. Apagado (de
+    /// fabrica), desde que llega el Pencil el dedo mueve la vista y la palma
+    /// no pinta. Se recuerda en este iPad (es del aparato, no del dibujo).
+    @Published public var dedoPintaSiempre: Bool = ModeloEditorLienzo.dedoRecordado {
+        didSet {
+            UserDefaults.standard.set(dedoPintaSiempre, forKey: ModeloEditorLienzo.claveDedo)
+            vista?.ajustarArrastre()
+        }
+    }
+    nonisolated static let claveDedo = "pixpin.lienzo.dedoPinta"
+    nonisolated static var dedoRecordado: Bool { UserDefaults.standard.bool(forKey: claveDedo) }
     /// El papel es oscuro: la barra va con el tema oscuro de Excalidraw,
     /// como en Windows (`tema_barra`).
     public let papelOscuro: Bool
+    /// **Se ve de noche**: el papel es oscuro o el modo noche comun de los
+    /// visores esta puesto (la barra va con el tema oscuro).
+    @Published public private(set) var verOscuro: Bool
+    /// El fondo fijo (una foto, una pagina de PDF), si lo hay.
+    public let fondo: FondoLienzo?
+    /// El chat del lienzo, si es de un chat (el `.pixpin` de compartir).
+    public let chat: String?
     /// El nucleo, para la biblioteca de figuras (`nil` en un lienzo suelto
     /// de las pruebas).
     public let nucleo: Nucleo?
     /// El nombre del lienzo, para los ficheros que se comparten.
     public let titulo: String
     /// Lo que ensenan dentro los mosaicos y las lupas (`TapadoLienzo.swift`).
-    private(set) lazy var tapados: PintorDeTapados = PintorDeTapados(editor: editor) { [weak self] id in
-        self?.foto(id)
-    }
+    private(set) lazy var tapados: PintorDeTapados = {
+        let t = PintorDeTapados(editor: editor) { [weak self] id in self?.foto(id) }
+        t.fondo = fondo
+        return t
+    }()
 
     /// La vista que pinta (la pone ella al nacer).
     weak var vista: VistaEditorLienzoIPad?
@@ -76,18 +99,47 @@ public final class ModeloEditorLienzo: ObservableObject {
     private var anterior: String?
 
     public init(editor: EditorLienzo, referencia: String? = nil, fotos: [UInt64: URL] = [:],
-                nucleo: Nucleo? = nil, titulo: String = "Lienzo") {
+                nucleo: Nucleo? = nil, titulo: String = "Lienzo", fondo: FondoLienzo? = nil,
+                chat: String? = nil) {
         self.editor = editor
         self.referencia = referencia
         self.fotos = fotos
         self.nucleo = nucleo
         self.titulo = titulo
+        self.fondo = fondo
+        self.chat = chat
+        // El papel del motor mide lo que el fondo: entra en lo exportado.
+        if let fondo { editor.ponerPapel(ancho: Float(fondo.tamano.width), alto: Float(fondo.tamano.height), png: nil) }
         herramienta = editor.herramientaActual()
         cambiosVistos = editor.cambios()
         puedeDeshacer = editor.puedeDeshacer()
         estilo = editor.estilo()
         let papel = (try? leerLienzo(editor.planoDeVista(x: 0, y: 0, zoom: 1, anchoPx: 1, altoPx: 1)))?.fondo
-        papelOscuro = papel.map { 0.299 * $0.r + 0.587 * $0.g + 0.114 * $0.b < 0.5 } ?? false
+        let oscuro = papel.map { 0.299 * $0.r + 0.587 * $0.g + 0.114 * $0.b < 0.5 } ?? false
+        papelOscuro = oscuro
+        verOscuro = oscuro || ModoNoche.compartido.activo
+        noche = ModoNoche.compartido.$activo.dropFirst().sink { [weak self] activo in
+            guard let self else { return }
+            let ver = self.papelOscuro || activo
+            if ver != self.verOscuro { self.verOscuro = ver }
+            self.vista?.cambioDeNoche()
+        }
+    }
+
+    /// Lo que mira el modo noche comun.
+    private var noche: AnyCancellable?
+
+    /// **El papel que se ensena de noche** (`PAPEL` de `pixpin_render::oscuro`,
+    /// el gris de la barra de los pines): con el modo noche puesto, un papel
+    /// claro se ve de este gris y la tinta se adapta para leerse, como en
+    /// los lectores. Solo se ve: lo guardado y lo exportado siguen con su
+    /// papel. Con un fondo fijo (una pagina, una foto) no: la tinta adaptada
+    /// no se leeria encima de la hoja blanca.
+    static let papelDeNoche = ColorLienzo(r: 0x1F / 255, g: 0x1F / 255, b: 0x22 / 255, a: 1)
+
+    /// El papel con el que se pinta ahora la vista, si no es el suyo.
+    var papelDeVista: ColorLienzo? {
+        ModoNoche.compartido.activo && !papelOscuro && fondo == nil ? Self.papelDeNoche : nil
     }
 
     /// **Para quien usa esta barra con otros editores** (la tinta de un

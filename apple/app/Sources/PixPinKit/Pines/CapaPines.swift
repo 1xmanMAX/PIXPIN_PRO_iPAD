@@ -30,6 +30,7 @@ public struct CapaPines: View {
     @ObservedObject private var avisos = AvisosMini.compartido
     @ObservedObject private var pila = PilaCapturasIPad.compartida
     @ObservedObject private var capturador = CapturadorIPad.compartido
+    @ObservedObject private var grabador = GrabadorIPad.compartido
     /// Dentro del visor (una presentacion a pantalla completa).
     @Environment(\.isPresented) private var presentada
 
@@ -81,11 +82,15 @@ public struct CapaPines: View {
                             .frame(width: geo.size.width, height: geo.size.height, alignment: .trailing)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
+                    BotonPararGrabacion(grabador: grabador)
+                        .padding(.top, 12)
+                        .frame(width: geo.size.width, alignment: .top)
                     VistaAvisoSonando(avisos: avisos)
                         .frame(width: geo.size.width, alignment: .top)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .opacity(gestor.sinCapa ? 0 : 1)
             .animation(.snappy, value: gestor.panelAbierto)
             .animation(.snappy, value: pila.visible)
             .onAppear {

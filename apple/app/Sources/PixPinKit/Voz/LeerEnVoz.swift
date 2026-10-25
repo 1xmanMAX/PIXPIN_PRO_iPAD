@@ -527,3 +527,16 @@ struct BarraEscuchar: View {
         .accessibilityLabel(ayuda)
     }
 }
+
+/// **La barra de escuchar suelta**, para lo que se lee sin un lector abierto
+/// que pinte la suya (un mensaje del chat, «Escuchar»): sale mientras hay
+/// algo que leer y nadie la pinta.
+struct BarraEscucharSuelta: View {
+    @ObservedObject private var voz = LeerEnVoz.compartida
+
+    var body: some View {
+        if voz.vivo, !voz.conLector {
+            BarraEscuchar(voz: voz, clave: { voz.clave ?? "" }, conTitulo: true)
+        }
+    }
+}

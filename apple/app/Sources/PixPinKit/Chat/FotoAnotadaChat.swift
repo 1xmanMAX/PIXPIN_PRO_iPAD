@@ -48,6 +48,14 @@ final class FotosAnotadas {
     }()
     private var enCurso: [String: Task<CGImage?, Never>] = [:]
     private var turno: [String: Int] = [:]
+    /// Si la foto de cada lienzo (chat y lienzo) resulto anotada, a
+    /// cualquier tamano (para arrastrar la burbuja con lo dibujado).
+    private var anotadas: [String: Bool] = [:]
+
+    /// Si la foto de `m` esta anotada; `nil` si aun no se sabe.
+    func estaAnotada(_ m: MensajeChat, chat: String) -> Bool? {
+        anotadas[chat + "\u{0}" + lienzoDeLaFoto(m)]
+    }
 
     private static func clave(_ chat: String, _ lienzo: String, _ lado: Int) -> String {
         chat + "\u{0}" + lienzo + "\u{0}\(lado)"
@@ -57,11 +65,13 @@ final class FotosAnotadas {
     func olvidar(chat: String, lienzo: String) {
         for (k, _) in enCurso where k.hasPrefix(chat + "\u{0}" + lienzo + "\u{0}") { enCurso[k] = nil }
         for k in turno.keys where k.hasPrefix(chat + "\u{0}" + lienzo + "\u{0}") { turno[k, default: 0] += 1 }
+        anotadas[chat + "\u{0}" + lienzo] = nil
         // La cache no se recorre: se olvida todo (son pocas y se rehacen).
         cache.removeAllObjects()
     }
 
     func olvidarTodo() {
+        anotadas.removeAll()
         cache.removeAllObjects()
         enCurso.removeAll()
         for k in turno.keys { turno[k, default: 0] += 1 }
@@ -88,6 +98,7 @@ final class FotosAnotadas {
         let hecha = await t.value
         if turno[k, default: 0] == mio {
             enCurso[k] = nil
+            anotadas[chat + "\u{0}" + lienzo] = hecha != nil
             cache.setObject(Caja(hecha), forKey: k as NSString, cost: hecha.map { $0.bytesPerRow * $0.height } ?? 64)
         }
         return hecha

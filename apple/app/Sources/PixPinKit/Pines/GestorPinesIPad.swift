@@ -364,7 +364,7 @@ public final class GestorPinesIPad: ObservableObject {
             return pinear(pdf: url)
         case .video, .audio:
             let audio = tipo == .audio
-            let tam = audio ? CGSize(width: 360, height: 90) : CGSize(width: 480, height: 270)
+            let tam = audio ? CGSize(width: 360, height: 112) : CGSize(width: 480, height: 270)
             abrir(.video(AVPlayer(url: url), fichero: url, soloAudio: audio), tamano: tam, para: .archivo(url))
         }
         return true
@@ -382,6 +382,44 @@ public final class GestorPinesIPad: ObservableObject {
         guardarPagina(pin)
         refrescar()
         return true
+    }
+
+    /// Pinea un PDF ya abierto (el del lector, que puede venir de un Word o
+    /// un EPUB convertido) por su pagina `pagina`, con todas las demas. Si
+    /// el PDF es un fichero, vuelve al arrancar; si solo esta en memoria, no.
+    @discardableResult
+    public func pinear(documentoPdf documento: PDFDocument, pagina: Int = 0) -> Bool {
+        guard documento.pageCount > 0 else { return false }
+        let paginas = PaginasPdfPin(actual: pagina, total: documento.pageCount)
+        guard let imagen = Self.pagina(documento, paginas.actual, lado: ladoPin) else { return false }
+        let fichero = documento.documentURL.flatMap { url in
+            url.isFileURL && TipoContenido.de(url) == .pdf && FileManager.default.fileExists(atPath: url.path) ? url : nil
+        }
+        let pin = abrirImagen(imagen, pixeles: nil, fichero: fichero, para: fichero.map { ParaAlmacen.archivo($0) } ?? ParaAlmacen.nada)
+        pin.hacerPdf(documento, paginas: paginas)
+        guardarPagina(pin)
+        refrescar()
+        return true
+    }
+
+    /// Mientras se fotografia lo que se ve, la capa no se pinta.
+    @Published private(set) var sinCapa = false
+
+    /// «Fijar como pin» de un visor sin fichero que pinear (un dibujo, un
+    /// plano, una pagina web): una foto de lo que se ve en la ventana, sin
+    /// los pines de encima.
+    public func pinearLoQueSeVe() {
+        guard !sinCapa else { return }
+        sinCapa = true
+        Task { [weak self] in
+            // Que se pinte una vez sin la capa.
+            try? await Task.sleep(for: .milliseconds(80))
+            guard let self else { return }
+            let foto = CapturadorIPad.compartido.fotoDeLaApp(despuesDePintar: true)
+            self.sinCapa = false
+            guard let foto else { return avisarFalloPin() }
+            self.pinear(imagen: foto)
+        }
     }
 
     /// Pinea una pagina de un PDF como foto suelta (sin las demas): para un

@@ -109,6 +109,10 @@ public final class Navegacion: ObservableObject {
 
     public func abrir(_ visor: Visor) { self.visor = visor }
 
+    /// Abre `visor` en una ventana suya (Stage Manager), o aqui si iPadOS no
+    /// deja varias ventanas (`Sistema/VentanasDeVisor.swift`).
+    public func abrirEnOtraVentana(_ visor: Visor) { VentanasDeVisor.abrir(visor) }
+
     public func cerrarVisor() { visor = nil }
 
     /// Abrir un chat (y, si se da, ir a un mensaje): pasa a Proyectos.

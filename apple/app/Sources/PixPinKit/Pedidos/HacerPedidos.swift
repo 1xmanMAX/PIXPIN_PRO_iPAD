@@ -20,8 +20,8 @@ import UniformTypeIdentifiers
 public final class HacerPedidos {
     public static let compartidos = HacerPedidos()
 
-    private weak var almacen: Almacen?
-    private weak var sincro: Sincronizador?
+    private(set) weak var almacen: Almacen?
+    private(set) weak var sincro: Sincronizador?
     /// El asistente de los pedidos (sin ventana; la respuesta va al aviso).
     private var asistente: ModeloAsistente?
     /// Lo que llego antes de que la app registrara lo suyo (un enlace que
@@ -153,6 +153,7 @@ public final class HacerPedidos {
         return pedidos.map { p in
             var p = p
             if p["proyecto"] != nil { p["proyecto"] = uno(p["proyecto"]) }
+            if p["a_proyecto"] != nil { p["a_proyecto"] = uno(p["a_proyecto"]) }
             if var que = p["que"]?.objeto, que["proyecto"] != nil {
                 que["proyecto"] = uno(que["proyecto"])
                 p["que"] = .objeto(que)
@@ -163,7 +164,7 @@ public final class HacerPedidos {
 
     /// El id del chat de un pedido: el `proyecto` o, nulo, «Mensajes
     /// guardados». `nil` (y se dice) si no hay datos o no existe.
-    private func chat(_ v: ValorPedido?) async -> String? {
+    func chat(_ v: ValorPedido?) async -> String? {
         guard let almacen else {
             avisar("No se pudo abrir la carpeta de datos de PixPin.")
             return nil
@@ -181,7 +182,7 @@ public final class HacerPedidos {
         return try? await Task.detached { try nucleo.chatGuardados().id }.value
     }
 
-    private func nombre(de chat: String) -> String {
+    func nombre(de chat: String) -> String {
         almacen?.chats.first { $0.id == chat }?.nombre ?? "Mensajes guardados"
     }
 
@@ -210,11 +211,8 @@ public final class HacerPedidos {
                 ir(.proyectos)
             }
         case "ventana": ventana(cual: p.texto("cual") ?? "")
-        case "capturar":
-            // iOS no deja capturar otras apps: la galeria (fotos, camara,
-            // escaner) es lo mas cercano.
-            ir(.galeria)
-            avisar("En el iPad no se puede capturar la pantalla de otras apps: añade una foto, usa la cámara o el escáner desde la Galería.")
+        case "capturar": capturar(p.texto("modo"))
+        case "al_lienzo": await alLienzo(p)
         case "chat": await escribir(p)
         case "nota_nueva": await notaNueva(p)
         case "lienzo_nuevo": await lienzoNuevo(p)
@@ -223,14 +221,18 @@ public final class HacerPedidos {
         case "anadir_tarea": await anadirTarea(p)
         case "marcar_tarea", "quitar_tarea", "corregir_tarea": await cambiarTarea(p)
         case "borrar_lista": await borrarLista(p)
-        case "grabar":
-            guard let c = await chat(p["proyecto"]) else { return }
-            nav.cerrarVisor()
-            nav.irAlChat(c)
-            avisar("Pulsa el micrófono de la caja del chat para grabar la nota de voz.")
-        case "pinear", "pinear_ultima", "pines", "iconos", "soltar":
-            avisar("Los pines del iPad viven dentro de PixPin: fíjalos desde el visor con «Fijar como pin».")
+        case "mover_tarea": await moverTarea(p)
+        case "posponer": await posponer(p)
+        case "grabar": await grabar(p)
+        case "pinear": await pinear(p)
+        case "pinear_ultima": await pinearUltima()
+        case "pines": pines(p.texto("operacion") ?? "")
+        // Los iconos de extension son del Explorador de Windows: aqui no hay
+        // nada que pintar (y no se dice nada: lo pide el lanzador solo).
+        case "iconos": break
+        case "soltar": await soltar(p)
         case "conservar_captura": await conservar(p)
+        case "borrar_captura": await borrarCaptura(p)
         case "copiar_imagen": copiarImagen(p)
         case "reproducir":
             guard let r = p.texto("ruta"), FileManager.default.fileExists(atPath: r) else {
@@ -238,14 +240,11 @@ public final class HacerPedidos {
             }
             let url = URL(fileURLWithPath: r)
             nav.abrir(.medio(url: url, titulo: p.texto("titulo") ?? url.lastPathComponent))
-        case "lecciones", "leccion_nueva":
-            ir(.lecciones)
-            if p.accion == "leccion_nueva", p.texto("texto") != nil {
-                avisar("La ficha de una lección nueva aún no se abre desde fuera en el iPad: escríbela en Lecciones.")
-            }
+        case "lecciones": ir(.lecciones)
+        case "leccion_nueva": await leccionNueva(p)
         case "sincronizar": await sincronizar(p)
         case "enviar_al_movil": await alMovil(p)
-        case "asistente": await preguntar(p)
+        case "asistente": await preguntarEnSuChat(p)
         case "automatizacion": await automatizacion(p)
         case "timeline": await timeline(p)
         case "leer_en_voz": leer(p)
@@ -257,7 +256,7 @@ public final class HacerPedidos {
     }
 
     /// Pasa a una seccion de la barra lateral (cerrando el visor que tape).
-    private func ir(_ s: Seccion) {
+    func ir(_ s: Seccion) {
         Navegacion.compartida.cerrarVisor()
         Navegacion.compartida.seccion = s
     }
@@ -305,25 +304,40 @@ public final class HacerPedidos {
             nav.abrir(.nota(chat: c, mensaje: m))
         case "fichero":
             guard let r = que["ruta"]?.texto else { return }
-            abrir(fichero: URL(fileURLWithPath: r))
+            abrir(fichero: URL(fileURLWithPath: r), en: IrEnElLector.peticion(de: que))
         default:
             avisar("«abrir» no conoce «\(tipo)».")
         }
     }
 
-    /// Como «Abrir con PixPin»: cada fichero con su visor.
+    /// Como «Abrir con PixPin»: cada fichero con su visor. Con pagina,
+    /// texto o zona, el visor va alli (`IrEnElLector`); si ya estaba
+    /// abierto, no se abre otro: lo lleva el abierto.
     @discardableResult
-    func abrir(fichero url: URL) -> Bool {
+    func abrir(fichero url: URL, en peticion: IrEnElLector.Peticion = IrEnElLector.Peticion()) -> Bool {
         guard FileManager.default.fileExists(atPath: url.path) else {
             avisar("No existe «\(url.path)».")
             return false
         }
+        IrEnElLector.pedir(peticion, para: url)
+        if peticion.algo, HacerPedidos.estaAbierto(url) { return true }
         Navegacion.compartida.abrirFichero(url)
         return true
     }
 
+    /// Si el visor de delante es el de `url`.
+    static func estaAbierto(_ url: URL) -> Bool {
+        let ruta = url.standardizedFileURL.path
+        switch Navegacion.compartida.visor {
+        case let .documento(u, _, _, _)?, let .plano(u, _)?, let .modelo3d(u, _)?:
+            return u.standardizedFileURL.path == ruta
+        default:
+            return false
+        }
+    }
+
     /// Un mensaje por su id: la pagina donde esta, cargada.
-    private func mensaje(_ id: String, en chat: String) async -> MensajeChat? {
+    func mensaje(_ id: String, en chat: String) async -> MensajeChat? {
         guard let almacen else { return nil }
         if let m = almacen.mensajes[chat]?.first(where: { $0.id == id }) { return m }
         let nucleo = almacen.nucleo
@@ -349,7 +363,7 @@ public final class HacerPedidos {
 
     /// Las rutas de un campo (`imagenes`, `archivos`), las que existen; si
     /// falta alguna, nada (y se dice), como Windows.
-    private func ficheros(_ p: Pedido, _ campos: [String]) -> [URL]? {
+    func ficheros(_ p: Pedido, _ campos: [String]) -> [URL]? {
         let rutas = campos.flatMap { p[$0]?.lista?.compactMap(\.texto) ?? [] }
         var urls: [URL] = []
         for r in rutas {
@@ -409,7 +423,7 @@ public final class HacerPedidos {
 
     /// Lo recien hecho, al final de lo cargado (o la ultima pagina si se
     /// veia una del medio).
-    private func alFinal(_ m: MensajeChat, en c: String) {
+    func alFinal(_ m: MensajeChat, en c: String) {
         guard let almacen else { return }
         if almacen.mensajes[c] != nil, !almacen.quedanPosteriores(chat: c) {
             almacen.anadir([m], en: c)
@@ -454,22 +468,31 @@ public final class HacerPedidos {
     private func anadirTarea(_ p: Pedido) async {
         guard let almacen else { return avisar("No se pudo abrir la carpeta de datos de PixPin.") }
         let texto = HacerPedidos.sinFichas(p.texto("texto") ?? "")
-        if p["imagenes"]?.lista?.isEmpty == false {
-            avisar("Las tareas con imágenes aún no se apuntan desde fuera en el iPad: va solo el texto.")
-        }
         guard !texto.isEmpty else { return }
         let nucleo = almacen.nucleo
         let desfase = desfaseLocalMs()
         let codigo = p.texto("codigo")
+        let conImagenes = p["imagenes"]?.lista?.isEmpty == false
         if codigo == nil, p["proyecto"] == nil {
+            // Al Inbox, con sus imagenes (las fichas `[img NN]` las pone el
+            // nucleo en su sitio).
+            guard let fotos = ficheros(p, ["imagenes"]) else { return }
+            let rutas = fotos.map(\.path)
+            let crudo = p.texto("texto") ?? texto
             do {
-                let lista = try await Task.detached { try nucleo.apuntarTarea(texto: texto, desfaseMs: desfase) }.value
+                let lista = try await Task.detached {
+                    rutas.isEmpty ? try nucleo.apuntarTarea(texto: texto, desfaseMs: desfase)
+                        : try nucleo.apuntarTareaConImagenes(texto: crudo, imagenes: rutas, desfaseMs: desfase)
+                }.value
                 avisoDeTareas(lista.chat)
                 avisar("Apuntado en el Inbox: «\(texto)».")
             } catch {
                 avisar("No se pudo apuntar la tarea: \(textoDeError(error))")
             }
             return
+        }
+        if conImagenes {
+            avisar("En una lista de un proyecto la tarea va sin sus imágenes (en el Inbox sí van).")
         }
         guard let c = await chat(p["proyecto"]) else { return }
         var lista = codigo
@@ -539,7 +562,7 @@ public final class HacerPedidos {
         }
     }
 
-    private func avisoDeTareas(_ chat: String) {
+    func avisoDeTareas(_ chat: String) {
         NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
         NotificationCenter.default.post(name: .pixpinTareasCambiadas, object: chat)
     }

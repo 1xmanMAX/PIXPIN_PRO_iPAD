@@ -10,6 +10,7 @@
 // fuera de la caja de arena con permiso solo mientras se usan, asi que se
 // copian antes a una carpeta temporal propia y el nucleo lee esas copias.
 
+import PhotosUI
 import PixPinCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -110,18 +111,100 @@ public func copiarParaEnviar(_ urls: [URL]) async -> [URL] {
 }
 
 extension View {
-    /// El selector de Archivos para elegir **varios archivos** y mandarlos:
-    /// `alElegir` recibe ya las copias propias (`copiarParaEnviar`).
+    /// **Elegir que mandar**: primero «¿De dónde?» (Fotos o Archivos) y
+    /// luego su selector, para elegir **varios** y mandarlos. `alElegir`
+    /// recibe ya las copias propias (`copiarParaEnviar`, `copiarDeFotos`).
     func elegirArchivosParaEnviar(_ abierto: Binding<Bool>,
                                   alElegir: @escaping @MainActor ([URL]) -> Void) -> some View {
-        fileImporter(isPresented: abierto, allowedContentTypes: [.item], allowsMultipleSelection: true) { r in
-            guard case let .success(urls) = r, !urls.isEmpty else { return }
-            Task { @MainActor in
-                let copias = await copiarParaEnviar(urls)
-                if !copias.isEmpty { alElegir(copias) }
+        modifier(ElegirParaEnviar(abierto: abierto, alElegir: alElegir))
+    }
+}
+
+/// El dialogo «¿De dónde?» con el selector de Fotos (la fototeca del iPad,
+/// en lugar de la captura de Windows) y el de Archivos.
+private struct ElegirParaEnviar: ViewModifier {
+    @Binding var abierto: Bool
+    let alElegir: @MainActor ([URL]) -> Void
+    @State private var archivos = false
+    @State private var fotos = false
+    @State private var elegidas: [PhotosPickerItem] = []
+    @State private var copiando = false
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog("¿Qué quieres enviar?", isPresented: $abierto, titleVisibility: .visible) {
+                Button("Fotos y vídeos") { abrir { fotos = true } }
+                Button("Archivos") { abrir { archivos = true } }
+                Button("Cancelar", role: .cancel) {}
             }
+            .fileImporter(isPresented: $archivos, allowedContentTypes: [.item], allowsMultipleSelection: true) { r in
+                guard case let .success(urls) = r, !urls.isEmpty else { return }
+                Task { @MainActor in
+                    let copias = await copiarParaEnviar(urls)
+                    if !copias.isEmpty { alElegir(copias) }
+                }
+            }
+            // `.compatible`: las HEIC salen como JPEG y los HEVC como H.264,
+            // que el PC y el movil abren sin mas.
+            .photosPicker(isPresented: $fotos, selection: $elegidas, maxSelectionCount: 50,
+                          selectionBehavior: .ordered, matching: .any(of: [.images, .videos]),
+                          preferredItemEncoding: .compatible)
+            .onChange(of: elegidas) { _, items in
+                guard !items.isEmpty, !copiando else { return }
+                copiando = true
+                elegidas = []
+                Task { @MainActor in
+                    let copias = await copiarDeFotos(items)
+                    copiando = false
+                    if !copias.isEmpty { alElegir(copias) }
+                }
+            }
+    }
+
+    /// Abre el selector cuando el dialogo ya se cerro (dos presentaciones
+    /// seguidas en el mismo toque se pisan).
+    private func abrir(_ f: @escaping @MainActor () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            f()
         }
     }
+}
+
+/// Una foto o un video de Fotos, ya copiado a una carpeta propia.
+struct FotoParaEnviar: Transferable, Sendable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { r in try FotoParaEnviar(copiando: r.file) }
+        FileRepresentation(importedContentType: .image) { r in try FotoParaEnviar(copiando: r.file) }
+    }
+
+    /// El fichero que da Fotos solo vale dentro del cierre: se copia ya, con
+    /// su nombre, a una carpeta propia.
+    init(copiando origen: URL) throws {
+        let fm = FileManager.default
+        let carpeta = fm.temporaryDirectory
+            .appendingPathComponent("pixpin-enviar-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: carpeta, withIntermediateDirectories: true)
+        let destino = carpeta.appendingPathComponent(origen.lastPathComponent)
+        try fm.copyItem(at: origen, to: destino)
+        url = destino
+    }
+}
+
+/// **Copia lo elegido en Fotos** (en su orden); lo que no se pueda leer se
+/// salta.
+func copiarDeFotos(_ items: [PhotosPickerItem]) async -> [URL] {
+    var urls: [URL] = []
+    for item in items {
+        do {
+            if let f = try await item.loadTransferable(type: FotoParaEnviar.self) { urls.append(f.url) }
+        } catch {
+            NSLog("PixPin: no se pudo leer una foto para enviarla: %@", "\(error)")
+        }
+    }
+    return urls
 }
 
 /// **El menu «Enviar a…»**: los aparatos del grupo que hay en la Wi-Fi; al

@@ -91,7 +91,7 @@ public enum AbrirFicheroDeFuera {
     /// Lo de siempre: al chat y a su visor.
     private static func adjuntarYAbrir(_ url: URL, en chat: String, almacen: Almacen) async {
         guard let hecho = await adjuntar(url, en: chat, almacen: almacen) else { return }
-            let (m, destino) = hecho
+        let (m, destino) = hecho
         Navegacion.compartida.abrirFichero(destino, titulo: m.nombre, chat: chat, mensaje: m)
     }
 

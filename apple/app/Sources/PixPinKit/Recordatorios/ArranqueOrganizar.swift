@@ -39,6 +39,8 @@ public enum ArranqueOrganizar {
             // Los dias de caducidad, del nucleo (los mismos de Windows).
             Task.detached(priority: .utility) { _ = AjusteCaducidad.leer(nucleo) }
             Recordatorios.compartido.vigilar(nucleo: nucleo)
+            // Los pines de tarea que estaban fuera vuelven.
+            PinesDeTareasIPad.compartidos.restaurar(nucleo: nucleo)
             let b = BarrenderoCapturas(nucleo: nucleo)
             b.arrancar()
             barrendero = b
