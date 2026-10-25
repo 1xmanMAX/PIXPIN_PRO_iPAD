@@ -118,6 +118,12 @@ enum FigurasChat {
             switch r {
             case let .success(m):
                 await almacen.alFinal(m, en: chat)
+                // Se trae ese chat (`ir_a` de Windows) y, si mientras se
+                // elegia se paso a otra seccion, se vuelve a el (Windows
+                // bd8ac36, `FigurasDelChat.ventanasDelChat` del Mac): si no,
+                // la figura entraria sin que se viera.
+                Navegacion.compartida.saltoAMensaje = nil
+                Navegacion.compartida.irAlChat(chat)
                 empezar?("Mejora la figura «\(nombre)»: ")
             case .failure:
                 avisar("No se pudo: mira el registro de PixPin")

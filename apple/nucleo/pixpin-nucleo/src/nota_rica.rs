@@ -12,16 +12,17 @@
 //!
 //! Rendimiento: una llamada por nota (todos sus bloques y fotos juntos); la
 //! ruta de cada enlace se resuelve una vez y la medida de cada foto se lee
-//! una vez por fecha del fichero, como en Windows (`RUTAS`, `MEDIDAS`).
+//! una vez por fecha del fichero, y el disco se vuelve a mirar como mucho
+//! cada 3 s, como en Windows (`RUTAS`, `SABIDO`).
 //!
 //! Tambien lo de escribirla: una foto pegada con texto ya escrito va a
-//! `notas/` del proyecto y su renglon `![](notas/…)` a lo escrito; al
+//! `notas/` del proyecto y su renglon `![foto N](notas/…)` a lo escrito; al
 //! enviar, esas rutas pasan a la portatil ([`Nucleo::escribir_nota`]).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use pixpin_proyecto::{almacen, vista};
 use pixpin_ui::nota_rica as nr;
@@ -264,37 +265,93 @@ fn rutas() -> &'static Mutex<Rutas> {
     R.get_or_init(Default::default)
 }
 
-/// Lo que mide cada foto, por fichero y con su fecha: se lee la cabecera
-/// una vez y no en cada burbuja (Windows, `MEDIDAS`).
-type Medidas = HashMap<PathBuf, (Option<SystemTime>, Option<(u32, u32)>)>;
-fn medidas() -> &'static Mutex<Medidas> {
-    static M: OnceLock<Mutex<Medidas>> = OnceLock::new();
+/// Cada cuanto se vuelve a mirar en el disco una foto de una nota: si esta
+/// y si cambio (Windows 6f2d95a, `MIRAR_CADA`). Pintar un chat largo
+/// preguntaria al disco por cada foto de cada nota en cada burbuja; asi, una
+/// vez cada tanto, y una foto que llega con la sincronizacion se ve en la
+/// siguiente busqueda despues de esto.
+const MIRAR_CADA: Duration = Duration::from_secs(3);
+
+/// Lo sabido de una foto de una nota: cuando se miro, su fecha (`None` si
+/// no esta) y lo que mide (`None` si no se pudo leer su cabecera).
+#[derive(Clone, Copy)]
+struct Sabido {
+    visto: Instant,
+    fecha: Option<SystemTime>,
+    medida: Option<(u32, u32)>,
+}
+
+/// Lo sabido de cada foto de las notas, por fichero: la cabecera se lee
+/// una vez (y otra si cambia su fecha), no en cada burbuja (Windows,
+/// `SABIDO`).
+fn sabidos() -> &'static Mutex<HashMap<PathBuf, Sabido>> {
+    static M: OnceLock<Mutex<HashMap<PathBuf, Sabido>>> = OnceLock::new();
     M.get_or_init(Default::default)
+}
+
+/// Lo que se sabe de `ruta`, mirando el disco solo si hace mas de
+/// [`MIRAR_CADA`] que no se miraba.
+fn sabido(ruta: &Path) -> Sabido {
+    let ahora = Instant::now();
+    let antes = sabidos()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(ruta)
+        .copied();
+    if let Some(s) = antes
+        && ahora.duration_since(s.visto) < MIRAR_CADA
+    {
+        return s;
+    }
+    let fecha = std::fs::metadata(ruta)
+        .ok()
+        .filter(std::fs::Metadata::is_file)
+        .map(|m| m.modified().unwrap_or(std::time::UNIX_EPOCH));
+    let medida = match antes {
+        Some(a) if a.fecha == fecha => a.medida,
+        _ if fecha.is_none() => None,
+        // Solo la cabecera: lo que mide, girado segun su EXIF.
+        _ => pixpin_codec::imagen::medidas(ruta).ok(),
+    };
+    let s = Sabido {
+        visto: ahora,
+        fecha,
+        medida,
+    };
+    sabidos()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(ruta.to_path_buf(), s);
+    s
 }
 
 /// Ancho / alto de una foto, o cero si no se sabe.
 fn proporcion(ruta: &Path) -> f32 {
-    let fecha = std::fs::metadata(ruta).and_then(|m| m.modified()).ok();
-    let mut m = medidas().lock().unwrap_or_else(|e| e.into_inner());
-    let medida = match m.get(ruta) {
-        Some((f, medida)) if *f == fecha => *medida,
-        _ => {
-            let medida = pixpin_codec::imagen::medidas(ruta).ok();
-            m.insert(ruta.to_path_buf(), (fecha, medida));
-            medida
-        }
-    };
-    match medida {
+    match sabido(ruta).medida {
         Some((w, h)) if w > 0 && h > 0 => w as f32 / h as f32,
         _ => 0.0,
     }
 }
 
+/// Si el enlace de una foto es una ruta de red (`\\equipo\carpeta\x.png`,
+/// `//equipo/…`): la nota puede llegar de otro aparato y solo con pintarla
+/// se llamaria a ese equipo (Windows le daria las credenciales del usuario;
+/// el Mac montaria lo que pida). Nunca se abre (Windows 6f2d95a).
+fn es_ruta_de_red(enlace: &str) -> bool {
+    let enlace = enlace.trim();
+    enlace.starts_with("\\\\") || enlace.starts_with("//")
+}
+
 impl Nucleo {
     /// El fichero de este aparato al que lleva el enlace de una foto de la
     /// nota, solo si esta. La resolucion es la de los adjuntos.
+    /// Nunca una ruta de red ([`es_ruta_de_red`]) ni una relativa que se
+    /// salga del proyecto con `..` (eso ya lo niega `resolver`).
     fn ruta_de_foto(&self, chat: &str, enlace: &str) -> Option<PathBuf> {
         let enlace = enlace.trim();
+        if es_ruta_de_red(enlace) {
+            return None;
+        }
         let clave = (self.ruta().to_path_buf(), chat.to_string(), enlace.to_string());
         let r = {
             let mut rutas = rutas().lock().unwrap_or_else(|e| e.into_inner());
@@ -307,7 +364,7 @@ impl Nucleo {
                 }
             }
         };
-        r.filter(|p| p.is_file())
+        r.filter(|p| sabido(p).fecha.is_some())
     }
 }
 
@@ -337,13 +394,17 @@ impl Nucleo {
     /// **Una foto pegada con texto ya escrito va dentro de lo escrito**
     /// (`fotos_al_borrador` de Windows): se guarda en `notas/<ms>-<nombre>`
     /// del proyecto (donde guarda las suyas el editor de notas) y devuelve
-    /// su renglon `![](notas/…)`, que Swift mete donde esta la rayita. Al
-    /// enviar, [`Nucleo::escribir_nota`] lo pasa a la ruta portatil.
+    /// su renglon `![foto N](notas/…)`, que Swift mete donde esta la rayita. Al
+    /// enviar, [`Nucleo::escribir_nota`] lo pasa a la ruta portatil. Las
+    /// fotos se numeran detras de las que ya lleve `escrito` (`![foto 2](…)`,
+    /// como Windows); `orden` es su puesto entre las que se pegan juntas.
     pub fn foto_a_la_nota(
         &self,
         chat: String,
         nombre: String,
         datos: Vec<u8>,
+        escrito: String,
+        orden: u32,
     ) -> Result<String, ErrorNucleo> {
         validar_chat(&chat)?;
         let carpeta = almacen::carpeta(self.ruta(), &chat).join("notas");
@@ -362,7 +423,8 @@ impl Nucleo {
             crate::notas::adjuntos::nombre_limpio(&nombre)
         );
         pixpin_sincro::disco::escribir_atomico(&carpeta.join(&fichero), &datos)?;
-        Ok(nr::renglon_de_foto(&fichero))
+        let ya = nr::imagenes(&nr::bloques(&escrito)).count();
+        Ok(nr::renglon_de_foto(&fichero, ya + orden as usize + 1))
     }
 }
 
@@ -456,5 +518,22 @@ mod pruebas {
             renglones_en_su_sitio("hola\n".into(), "\nfin".into(), vec!["x".into()]),
             "x"
         );
+    }
+
+    #[test]
+    fn lo_revisado_en_windows_6f2d95a() {
+        // Una nota llana con blancos al final de renglon o `\r\n` sigue
+        // llana; un escape si cambia lo que se ve.
+        assert_eq!(bloques_de_nota("hola  \r\nque tal\t\r\nadios"), None);
+        assert!(bloques_de_nota(r"5 \* 3").is_some());
+        // Lo que va en `codigo` es texto, no una foto.
+        let b = bloques_de_nota("se pone `![](foto.png)` asi").unwrap();
+        assert!(b.iter().all(|x| !matches!(x, BloqueDeNota::Album { .. })), "{b:?}");
+        // Un `**` sin cerrar se queda como se escribio.
+        let b = bloques_de_nota("**abierto y **cerrado**").unwrap();
+        assert!(matches!(&b[0], BloqueDeNota::Texto { texto, .. } if texto == "**abierto y cerrado"));
+        // Las rutas de red, fuera.
+        assert!(es_ruta_de_red(r"\\equipo\c\x.png") && es_ruta_de_red("//equipo/x.png"));
+        assert!(!es_ruta_de_red("/Users/max/x.png") && !es_ruta_de_red("notas/x.png"));
     }
 }

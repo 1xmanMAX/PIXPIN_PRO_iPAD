@@ -44,6 +44,8 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
 
     public private(set) var origen = CGPoint.zero
     public private(set) var zoom: CGFloat = 1
+    /// Los topes del aumento; el vuelo a una marca encaja su vista con los
+    /// mismos (`ZOOM_MINIMO_DEL_EDITOR` en `marcas_lienzo.rs`, Windows 64af3c3).
     static let zoomMinimo: CGFloat = 0.05
     static let zoomMaximo: CGFloat = 30
 

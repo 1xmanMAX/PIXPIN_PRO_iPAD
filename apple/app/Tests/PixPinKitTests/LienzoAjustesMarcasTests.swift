@@ -50,6 +50,7 @@ final class LienzoAjustesMarcasTests: XCTestCase {
         XCTAssertEqual(AjustesOrganizarIPad.nombreEnToml("flecha_libre"), "flecha-libre")
         XCTAssertEqual(AjustesOrganizarIPad.nombreEnToml("zona_chat"), "zona")
         XCTAssertNil(AjustesOrganizarIPad.nombreEnToml("seleccion"), "la flecha no se apaga")
+        XCTAssertNil(AjustesOrganizarIPad.nombreEnToml("marco"), "el marco es del riel, no de [herramientas]")
         // Todas las de la barra tienen nombre del TOML (o son la flecha).
         let nombres = Set(nombresDeHerramientas())
         for h in HerramientaLienzo.todas {

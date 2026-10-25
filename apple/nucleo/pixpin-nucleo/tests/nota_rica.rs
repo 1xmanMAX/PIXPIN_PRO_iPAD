@@ -51,10 +51,11 @@ fn una_foto_pegada_viaja_con_la_nota_y_se_ve_en_su_sitio() {
 
     // Pegar con texto escrito: el fichero en `notas/` y su renglon corto.
     let renglon = n
-        .foto_a_la_nota(chat.clone(), "pegado-1761400000000.png".into(), png(40, 20))
+        .foto_a_la_nota(chat.clone(), "pegado-1761400000000.png".into(), png(40, 20), "![](notas/a.png)".into(), 0)
         .unwrap();
-    assert!(renglon.starts_with("![](notas/") && renglon.ends_with("-pegado.png)"), "{renglon}");
-    let fichero = renglon.trim_start_matches("![](notas/").trim_end_matches(')');
+    // La segunda foto de lo escrito (ya llevaba una), con su numero delante.
+    assert!(renglon.starts_with("![foto 2](notas/") && renglon.ends_with("-pegado.png)"), "{renglon}");
+    let fichero = renglon.trim_start_matches("![foto 2](notas/").trim_end_matches(')');
     let carpeta = almacen::carpeta(&PathBuf::from(n.raiz()), &chat);
     assert!(carpeta.join("notas").join(fichero).is_file());
 
@@ -110,4 +111,40 @@ fn una_foto_que_no_esta_no_tiene_ruta_y_una_nota_llana_no_es_rica() {
     // Una nota sin fotos pegadas no cambia al enviarse.
     let m = n.escribir_nota(chat, "mira [esto](https://x.es)".into(), None).unwrap();
     assert_eq!(m.texto, "mira [esto](https://x.es)");
+}
+
+#[test]
+fn una_ruta_con_parentesis_se_ve_y_una_de_red_o_con_puntos_nunca() {
+    // Windows 6f2d95a: la ruta va hasta el `)` que empareja el `(`.
+    let t = Temporal::nueva("rutas");
+    let n = t.nucleo("Mac");
+    let chat = n.crear_chat("Obra".into()).unwrap().id;
+    let carpeta = almacen::carpeta(&PathBuf::from(n.raiz()), &chat).join("notas").join("Fotos (2)");
+    std::fs::create_dir_all(&carpeta).unwrap();
+    let foto = carpeta.join("obra 1.png");
+    std::fs::write(&foto, png(30, 30)).unwrap();
+    let rica = n
+        .nota_rica(chat.clone(), "**mira**\n![](notas/Fotos (2)/obra 1.png) y sigue".into())
+        .unwrap()
+        .unwrap();
+    let BloqueDeNota::Album { fotos } = &rica.bloques[1] else {
+        panic!("{:?}", rica.bloques)
+    };
+    assert_eq!(fotos[0].ruta.as_deref(), Some(foto.display().to_string().as_str()));
+    assert!((fotos[0].proporcion - 1.0).abs() < 0.001);
+    assert!(matches!(&rica.bloques[2], BloqueDeNota::Texto { texto, .. } if texto == "y sigue"));
+
+    // Caso negativo: una ruta de red o una que sale del proyecto con `..`
+    // no se abre nunca, aunque el fichero exista.
+    for enlace in [
+        r"\\equipo\carpeta\x.png".to_string(),
+        "//equipo/notas/Fotos (2)/obra 1.png".to_string(),
+        "notas/../notas/Fotos (2)/obra 1.png".to_string(),
+    ] {
+        let rica = n.nota_rica(chat.clone(), format!("![]({enlace})")).unwrap().unwrap();
+        let BloqueDeNota::Album { fotos } = &rica.bloques[0] else {
+            panic!("{:?}", rica.bloques)
+        };
+        assert_eq!(fotos[0].ruta, None, "{enlace}");
+    }
 }

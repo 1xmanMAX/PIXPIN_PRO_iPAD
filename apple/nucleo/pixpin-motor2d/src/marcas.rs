@@ -239,10 +239,19 @@ impl VistaDeMarca {
     /// `alto_px`: todo lo que se veia, centrado, con el aumento que lo hace
     /// caber (y entre [`ZOOM_MINIMO`] y [`ZOOM_MAXIMO`]).
     pub fn camara(&self, ancho_px: f32, alto_px: f32) -> Camara {
+        self.camara_entre(ancho_px, alto_px, ZOOM_MINIMO, ZOOM_MAXIMO)
+    }
+
+    /// Como [`Self::camara`], con el aumento entre `minimo` y `maximo`: los
+    /// topes de quien la usa. El editor no deja la rueda por debajo de su
+    /// 0,1 (el de Excalidraw); una camara que llegara mas lejos haria que la
+    /// primera muesca de alejar acercase de golpe hasta ese 0,1.
+    pub fn camara_entre(&self, ancho_px: f32, alto_px: f32, minimo: f32, maximo: f32) -> Camara {
         let (w, h) = (ancho_px.max(1.0) as f64, alto_px.max(1.0) as f64);
+        let (minimo, maximo) = (minimo.max(1e-6) as f64, maximo.max(minimo.max(1e-6)) as f64);
         let zoom = (w / self.ancho.max(1e-9))
             .min(h / self.alto.max(1e-9))
-            .clamp(ZOOM_MINIMO as f64, ZOOM_MAXIMO as f64);
+            .clamp(minimo, maximo);
         Camara {
             x: (self.x - w / (2.0 * zoom)) as f32,
             y: (self.y - h / (2.0 * zoom)) as f32,
@@ -370,32 +379,60 @@ impl Vuelo {
         };
         let avance = 1.0 - (-VELOCIDAD_VUELO * dt).exp();
         let (w, h) = self.hueco;
-        let centro = |c: &Camara| (c.x + w / (2.0 * c.zoom), c.y + h / (2.0 * c.zoom));
-        let (ax, ay) = centro(camara);
-        let (bx, by) = centro(&self.destino);
-        let zoom = if camara.zoom > 0.0 && camara.zoom.is_finite() {
-            camara.zoom * (self.destino.zoom / camara.zoom).powf(avance)
-        } else {
-            self.destino.zoom
-        };
-        let (cx, cy) = (ax + (bx - ax) * avance, ay + (by - ay) * avance);
-        camara.zoom = zoom;
-        camara.x = cx - w / (2.0 * zoom);
-        camara.y = cy - h / (2.0 * zoom);
-        // Lo que falta, en pixeles: el centro, y cuanto se mueve el borde del
-        // hueco por el aumento que queda.
         let borde = if w.max(h) > 0.0 {
             w.max(h) / 2.0
         } else {
             500.0
         };
-        let falta = (bx - cx).hypot(by - cy) * zoom + (self.destino.zoom / zoom).ln().abs() * borde;
+        let zoom = if camara.zoom > 0.0 && camara.zoom.is_finite() {
+            camara.zoom * (self.destino.zoom / camara.zoom).powf(avance)
+        } else {
+            self.destino.zoom
+        };
+        let resto_de_zoom = (self.destino.zoom / zoom).ln().abs();
+        if resto_de_zoom * borde < LLEGADA_PX {
+            // Con el aumento ya llegado se persigue la esquina, que es lo
+            // mismo que el centro y no pasa por `w / zoom` en cada paso: ida
+            // y vuelta, ese redondeo deshacia lo avanzado.
+            camara.zoom = self.destino.zoom;
+            camara.x = acercar(camara.x, self.destino.x, avance);
+            camara.y = acercar(camara.y, self.destino.y, avance);
+        } else {
+            let centro = |c: &Camara| (c.x + w / (2.0 * c.zoom), c.y + h / (2.0 * c.zoom));
+            let (ax, ay) = centro(camara);
+            let (bx, by) = centro(&self.destino);
+            let (cx, cy) = (ax + (bx - ax) * avance, ay + (by - ay) * avance);
+            camara.zoom = zoom;
+            camara.x = cx - w / (2.0 * zoom);
+            camara.y = cy - h / (2.0 * zoom);
+        }
+        // Lo que falta, en pixeles: la esquina (con el aumento de llegada es
+        // lo mismo que el centro), y cuanto se mueve el borde del hueco por
+        // el aumento que queda.
+        let falta = (self.destino.x - camara.x).hypot(self.destino.y - camara.y) * camara.zoom
+            + (self.destino.zoom / camara.zoom).ln().abs() * borde;
         if !falta.is_finite() || falta < LLEGADA_PX {
             *camara = self.destino;
             return false;
         }
         true
     }
+}
+
+/// Un paso de `a` hacia `b` (la fraccion `t` de lo que falta) que **avanza
+/// siempre**: lejos del origen (un plano en milimetros, coordenadas de
+/// millones) y muy acercado, lo que falta por `t` es menos que el redondeo
+/// de f32, la suma se queda donde estaba y el viaje no acabaria nunca —el
+/// bucle pidiendo un fotograma cada 8 ms—. Entonces se da el paso mas
+/// pequeno que cabe, sin pasarse.
+fn acercar(a: f32, b: f32, t: f32) -> f32 {
+    let c = a + (b - a) * t;
+    if c != a || a == b || !c.is_finite() {
+        return c;
+    }
+    let paso = (a.abs() * f32::EPSILON).max(f32::MIN_POSITIVE);
+    let d = a + (b - a).signum() * paso;
+    if (b - d) * (b - a) <= 0.0 { b } else { d }
 }
 
 #[cfg(test)]
@@ -601,6 +638,17 @@ mod pruebas {
             ..v
         };
         assert_eq!(diminuta.camara(800.0, 600.0).zoom, ZOOM_MAXIMO);
+        // Con los topes de quien mira: una vista enorme no baja de su minimo,
+        // y sigue centrada.
+        let enorme = VistaDeMarca {
+            ancho: 100_000.0,
+            alto: 40_000.0,
+            ..v
+        };
+        let c = enorme.camara_entre(800.0, 600.0, 0.1, 30.0);
+        assert_eq!(c.zoom, 0.1);
+        let centro = c.a_mundo(Punto2::nuevo(400.0, 300.0));
+        assert!((centro.x - 500.0).abs() < 1e-2 && (centro.y - 200.0).abs() < 1e-2);
     }
 
     #[test]
@@ -668,6 +716,55 @@ mod pruebas {
         mismo.avanzar(&mut d, 1.0 / 60.0);
         assert_eq!(d.zoom, 1.0);
         assert!(d.x > 0.0 && d.x < 10.0);
+    }
+
+    #[test]
+    fn lejos_del_origen_y_muy_acercado_el_vuelo_tambien_aterriza() {
+        // Un plano en milimetros: coordenadas de millones, con el aumento al
+        // maximo. Ahi el redondeo de f32 (0,06 de mundo, casi dos pixeles)
+        // deja la exponencial clavada a unos pixeles del destino, y el viaje
+        // no acabaria nunca: el bucle pidiendo un fotograma cada 8 ms.
+        let (w, h) = (1600.0, 900.0);
+        for (desde, destino) in [
+            (
+                Camara {
+                    x: 2_000_000.0,
+                    y: -1_500_000.0,
+                    zoom: ZOOM_MAXIMO,
+                },
+                Camara {
+                    x: 2_003_000.5,
+                    y: -1_499_000.5,
+                    zoom: ZOOM_MAXIMO,
+                },
+            ),
+            (
+                Camara {
+                    x: 2_000_000.0,
+                    y: -1_500_000.0,
+                    zoom: 1.0,
+                },
+                VistaDeMarca {
+                    x: 2_003_000.5,
+                    y: -1_499_000.5,
+                    ancho: 50.0,
+                    alto: 28.125,
+                }
+                .camara(w, h),
+            ),
+        ] {
+            for v in [Vuelo::hacia(destino), Vuelo::hacia_en(destino, w, h)] {
+                for dt in [1.0 / 240.0, 1.0 / 144.0, 1.0 / 60.0] {
+                    let mut c = desde;
+                    let mut pasos = 0;
+                    while v.avanzar(&mut c, dt) {
+                        pasos += 1;
+                        assert!(pasos < 2_000, "no aterriza: {c:?} hacia {destino:?}");
+                    }
+                    assert_eq!(c, destino);
+                }
+            }
+        }
     }
 
     #[test]

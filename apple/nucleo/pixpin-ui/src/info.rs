@@ -1,513 +1,47 @@
-//! La pantalla de informacion de un proyecto: lo que sale al pulsar su
-//! nombre en la cabecera.
+//! La ficha de un chat: lo que sale al pulsar su nombre en la cabecera.
 //!
 //! Geometria pura, como `chat` e `historial`. Las medidas salen del analisis
-//! de Telegram Desktop; **de ahi solo medidas y tecnicas, nunca su codigo,
-//! que es GPL-3.0.**
+//! del panel de «medios compartidos» de Telegram Desktop; **de ahi solo
+//! medidas y tecnicas, nunca su codigo, que es GPL-3.0.**
 //!
 //! Las SECCIONES, en cambio, viven en `pixpin_proyecto::cuaderno::Seccion`:
 //! las de PixPin Android (todo, fotos, archivos, voz, dibujos, fijados y
 //! buzon) y, desde el 25-oct-2026, videos y enlaces, como Telegram. La
 //! disposicion es la suya; lo que se lista es lo nuestro.
 //!
-//! Hoy la ficha del chat es la **isla** (`isla_en`, [`Isla`], `previa`, al
-//! final): la capa y la columna de antes quedan para quien las use.
+//! La ficha es la **isla** ([`isla_en`], [`Isla`]): una tarjeta flotante con
+//! su cabecera (avatar, nombre, lupa y aspa), la tira de pestanas y el
+//! contenido ([`Lista`]), o la previa de una cosa ([`previa`]). Quien pinta
+//! y quien reparte los clics usan estas mismas cuentas.
 //!
-//! Tres decisiones que no son evidentes:
+//! Decisiones que no son evidentes (la pasada del 25-oct-2026, el usuario:
+//! «funciona pero no funciona bien y no se ve bien»):
 //!
-//! - **La pildora de la pestana activa NO es una rayita.** En Telegram es una
-//!   pildora rellena que se desliza Y cambia de ancho entre pestana y
-//!   pestana. Una rayita es mas facil y se ve distinto.
-//! - **La cuadricula se centra.** Se calcula cuantas columnas caben con la
-//!   celda minima, se reparte el sobrante entre ellas y el margen se recalcula
-//!   para centrarla. Sin eso sobra un pico a la derecha que canta.
-//! - **Las celdas son cuadradas.** Una foto apaisada y una vertical ocupan lo
-//!   mismo; es lo que hace que una cuadricula se lea de un vistazo.
+//! - **Las medidas no dependen del tamano de la ventana**: la cabecera, las
+//!   pestanas, las filas y los botones miden siempre lo mismo (por el DPI,
+//!   claro). Lo unico que cambia con el ancho es cuantas columnas tiene la
+//!   rejilla, de tres a cinco, como Telegram.
+//! - **Las pestanas son texto con una rayita de color debajo**, en una sola
+//!   fila que nunca parte ni recorta un rotulo: si no caben, la tira se
+//!   desplaza (rueda) y la activa siempre se ve. Si sobran, el sitio se
+//!   reparte entre todas, que llenan la tira.
+//! - **La rejilla va de borde a borde con 2 px entre fotos** y celdas
+//!   cuadradas: una foto apaisada y una vertical ocupan lo mismo.
+//! - **Lo de cada mes va bajo su rotulo** («octubre de 2026»), en la rejilla
+//!   y en las filas: es como se busca algo en un chat largo.
 
 use pixpin_geom::{Punto, Rect};
 
 /// Medidas en pixeles logicos (al 100 %).
-/// La columna de informacion, a la derecha del todo.
-pub const ANCHO_MINIMO: u32 = 292;
-pub const ANCHO_MAXIMO: u32 = 392;
-/// Por debajo de este ancho de ventana no cabe como columna y se ensena a
-/// pantalla completa, tapando la conversacion.
-pub const ANCHO_TRES_COLUMNAS: u32 = 932;
-/// La cabecera del panel, con su boton de volver.
-pub const CABECERA: u32 = 54;
-pub const VOLVER_ANCHO: u32 = 60;
-pub const TITULO_TAM: f32 = 14.0;
-
-/// Como CAPA FLOTANTE: un recuadro redondeado centrado sobre la
-/// conversacion, con velo detras. Es lo que se ve en Telegram cuando la
-/// ventana no da para tres columnas, y es la forma que se copia aqui.
-pub const CAPA_ANCHO_MINIMO: u32 = 324;
-pub const CAPA_ANCHO_DESEADO: u32 = 392;
-/// Lo que se le deja a cada lado. Si la ventana no da ni para el minimo mas
-/// estos margenes, la capa pasa a pantalla completa.
-pub const CAPA_MARGEN: u32 = 48;
-/// Arriba y abajo el margen no es fijo: es la veinticuatroava parte del alto,
-/// sujeta entre estos dos. En una ventana baja la capa casi la llena; en una
-/// alta no se estira hasta parecer una columna.
-pub const CAPA_MARGEN_ARRIBA_MINIMO: u32 = 20;
-pub const CAPA_MARGEN_ARRIBA_MAXIMO: u32 = 40;
-pub const CAPA_RADIO: u32 = 8;
-/// La cabecera de la capa es un poco mas alta que la de la columna.
-pub const CAPA_CABECERA: u32 = 56;
-/// El titulo y su subtitulo, cuando lleva los dos.
-pub const CAPA_TITULO_X: u32 = 16;
-pub const CAPA_TITULO_Y: u32 = 8;
-pub const CAPA_SUBTITULO_Y: u32 = 28;
-pub const CAPA_TITULO_TAM: f32 = 14.0;
-pub const CAPA_SUBTITULO_TAM: f32 = 13.0;
-/// Los dos botones de la derecha. El aspa es de 48 y la lupa de 56: no es un
-/// descuido, es lo que mide cada uno en Telegram.
-pub const CAPA_BOTON_CERRAR: u32 = 48;
-pub const CAPA_BOTON_BUSCAR: u32 = 56;
+///
 /// Lo alta que es la caja de buscar dentro de la cabecera, y la letra que
-/// lleva. La misma que el buscador de la lista de proyectos: es la misma
-/// clase de caja y desigualarlas solo se notaria para mal.
+/// lleva. La misma que el buscador de la lista de chats: es la misma clase
+/// de caja y desigualarlas solo se notaria para mal.
 pub const BUSCAR_ALTO: u32 = 32;
 pub const BUSCAR_TAM: f32 = 13.0;
 pub const BUSCAR_TEXTO_X: u32 = 12;
 
-/// La ficha de arriba: avatar grande, nombre y estado.
-pub const FICHA_ALTO: u32 = 108;
-pub const FICHA_AVATAR: u32 = 72;
-pub const FICHA_AVATAR_X: u32 = 19;
-pub const FICHA_AVATAR_Y: u32 = 18;
-pub const FICHA_TEXTO_X: u32 = 109;
-pub const FICHA_NOMBRE_Y: u32 = 32;
-pub const FICHA_ESTADO_Y: u32 = 58;
-pub const FICHA_NOMBRE_TAM: f32 = 16.0;
-pub const FICHA_ESTADO_TAM: f32 = 13.0;
-
-/// La tira de pestanas: 48 de alto, con una «isla» de 36 dentro.
-pub const TIRA_ALTO: u32 = 48;
-pub const TIRA_MARGEN_X: u32 = 8;
-pub const TIRA_MARGEN_Y: u32 = 6;
-/// Lo que se separa la pildora del borde de la isla.
-pub const PILDORA_HUECO: u32 = 4;
-/// Relleno a cada lado del texto de una pestana.
-pub const PESTANA_RELLENO: u32 = 16;
-pub const PESTANA_TAM: f32 = 13.0;
-/// Lo que tarda la pildora en deslizarse de una pestana a otra.
-pub const PILDORA_MS: u32 = 200;
-
-/// La cuadricula de fotos.
-pub const CELDA_MINIMA: u32 = 82;
-pub const CELDA_HUECO: u32 = 2;
-pub const REJILLA_MARGEN: u32 = 3;
-
-/// Las filas de archivo: miniatura de 70 con 3 de aire arriba y abajo.
-pub const ARCHIVO_ALTO: u32 = 77;
-pub const ARCHIVO_MINIATURA: u32 = 70;
-pub const ARCHIVO_MARGEN_X: u32 = 14;
-pub const ARCHIVO_NOMBRE_Y: u32 = 7;
-pub const ARCHIVO_ESTADO_Y: u32 = 24;
-pub const ARCHIVO_FECHA_Y: u32 = 49;
-pub const ARCHIVO_NOMBRE_TAM: f32 = 13.0;
-pub const ARCHIVO_ESTADO_TAM: f32 = 13.0;
-
-/// Como queda repartido el panel.
-///
-/// Que secciones hay y como se llaman vive en `pixpin_proyecto::cuaderno`:
-/// son del dominio, no de la interfaz. Aqui solo se reparten rectangulos.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Disposicion {
-    /// Todo el panel.
-    pub panel: Rect,
-    pub cabecera: Rect,
-    /// El boton de volver, dentro de la cabecera.
-    pub volver: Rect,
-    pub ficha: Rect,
-    /// La tira de pestanas entera.
-    pub tira: Rect,
-    /// La «isla» de dentro de la tira, que es lo que lleva fondo. Va CENTRADA
-    /// y solo tan ancha como sus pestanas: una isla a todo lo ancho con las
-    /// pestanas apretadas a la izquierda se ve distinta.
-    pub isla: Rect,
-    /// Lo que queda debajo para el contenido.
-    pub contenido: Rect,
-    /// El panel ocupa la ventana entera porque no cabia como columna.
-    pub pantalla_completa: bool,
-}
-
-/// El ancho que le toca al panel en una ventana de `ancho_ventana`.
-pub fn ancho_panel(ancho_ventana: u32, escala_por_cien: u32) -> u32 {
-    let e = |v: u32| v * escala_por_cien / 100;
-    if ancho_ventana < e(ANCHO_TRES_COLUMNAS) {
-        // No cabe de columna: se lo queda todo. Mejor eso que una columna de
-        // cien pixeles donde no se lee nada.
-        return ancho_ventana;
-    }
-    e(ANCHO_MINIMO).max(e(ANCHO_MAXIMO).min(ancho_ventana / 3))
-}
-
-/// Donde cae la capa flotante dentro de la ventana.
-///
-/// Se centra, con su ancho deseado si cabe y sus margenes a los lados. En una
-/// ventana pequena no cabe ni el minimo con margenes: entonces se lo queda
-/// todo, que es lo que hace Telegram en vez de encoger hasta lo ilegible.
-pub fn capa_en(ventana: Rect, escala_por_cien: u32) -> (Rect, bool) {
-    let e = |v: u32| v * escala_por_cien / 100;
-    let minimo_con_margenes = e(CAPA_ANCHO_MINIMO) + 2 * e(CAPA_MARGEN);
-    if ventana.ancho < minimo_con_margenes {
-        return (ventana, true);
-    }
-    let ancho = e(CAPA_ANCHO_DESEADO).min(ventana.ancho - 2 * e(CAPA_MARGEN));
-    // Alta pero no pegada a los bordes: se le deja el mismo aire arriba y
-    // abajo que a los lados.
-    // Arriba y abajo, la veinticuatroava parte del alto, sujeta entre 20 y 40.
-    let margen =
-        (ventana.alto / 24).clamp(e(CAPA_MARGEN_ARRIBA_MINIMO), e(CAPA_MARGEN_ARRIBA_MAXIMO));
-    let alto = ventana.alto.saturating_sub(2 * margen).max(1);
-    (
-        Rect {
-            x: ventana.x + (ventana.ancho as i32 - ancho as i32) / 2,
-            y: ventana.y + (ventana.alto as i32 - alto as i32) / 2,
-            ancho,
-            alto,
-        },
-        false,
-    )
-}
-
-impl Disposicion {
-    /// Reparte el panel como CAPA: cabecera con titulo y subtitulo, dos
-    /// botones a la derecha, la isla de pestanas y el contenido.
-    ///
-    /// La diferencia con la columna no es solo el sitio: aqui no hay flecha
-    /// de volver a la izquierda —se cierra con el aspa— y la cabecera es un
-    /// poco mas alta porque lleva dos lineas.
-    pub fn capa(caja: Rect, escala_por_cien: u32) -> Disposicion {
-        let e = |v: u32| v * escala_por_cien / 100;
-        let cabecera = Rect {
-            alto: e(CAPA_CABECERA).min(caja.alto),
-            ..caja
-        };
-        let tira = Rect {
-            x: caja.x,
-            y: cabecera.abajo(),
-            ancho: caja.ancho,
-            alto: e(TIRA_ALTO).min(caja.alto.saturating_sub(cabecera.alto)),
-        };
-        let isla = Rect {
-            x: tira.x + e(TIRA_MARGEN_X) as i32,
-            y: tira.y + e(TIRA_MARGEN_Y) as i32,
-            ancho: tira.ancho.saturating_sub(2 * e(TIRA_MARGEN_X)),
-            alto: tira.alto.saturating_sub(2 * e(TIRA_MARGEN_Y)),
-        };
-        let arriba = tira.abajo();
-        Disposicion {
-            panel: caja,
-            cabecera,
-            // En la capa el aspa hace de «volver»: cierra.
-            volver: Rect {
-                x: cabecera.derecha() - e(CAPA_BOTON_CERRAR) as i32,
-                y: cabecera.y,
-                ancho: e(CAPA_BOTON_CERRAR).min(cabecera.ancho),
-                alto: cabecera.alto,
-            },
-            // La capa no tiene ficha: el nombre ya esta en la cabecera.
-            ficha: Rect {
-                x: caja.x,
-                y: cabecera.abajo(),
-                ancho: caja.ancho,
-                alto: 0,
-            },
-            tira,
-            isla,
-            contenido: Rect {
-                x: caja.x,
-                y: arriba,
-                ancho: caja.ancho,
-                alto: (caja.abajo() - arriba).max(0) as u32,
-            },
-            pantalla_completa: false,
-        }
-    }
-
-    /// El boton de la lupa, a la izquierda del aspa.
-    pub fn buscar(&self, escala_por_cien: u32) -> Rect {
-        let e = |v: u32| v * escala_por_cien / 100;
-        Rect {
-            x: self.volver.x - e(CAPA_BOTON_BUSCAR) as i32,
-            y: self.cabecera.y,
-            ancho: e(CAPA_BOTON_BUSCAR),
-            alto: self.cabecera.alto,
-        }
-    }
-
-    /// La caja de escribir lo que se busca, cuando la lupa esta encendida.
-    ///
-    /// Ocupa el sitio del titulo, entre el margen izquierdo y la lupa: es lo
-    /// que hace Telegram, y tiene sentido porque mientras se busca el titulo
-    /// no dice nada que no se sepa ya.
-    pub fn caja_buscar(&self, escala_por_cien: u32) -> Rect {
-        let e = |v: u32| v * escala_por_cien / 100;
-        let margen = e(CAPA_TITULO_X) as i32;
-        let x = self.cabecera.x + margen;
-        let derecha = self.buscar(escala_por_cien).x - margen;
-        let alto = e(BUSCAR_ALTO).min(self.cabecera.alto);
-        Rect {
-            x,
-            y: self.cabecera.y + (self.cabecera.alto as i32 - alto as i32) / 2,
-            ancho: (derecha - x).max(0) as u32,
-            alto,
-        }
-    }
-
-    /// Reparte el panel dentro de `hueco`, que es la columna de la derecha o
-    /// la ventana entera.
-    pub fn calcular(hueco: Rect, pantalla_completa: bool, escala_por_cien: u32) -> Disposicion {
-        let e = |v: u32| v * escala_por_cien / 100;
-        let cabecera = Rect {
-            alto: e(CABECERA).min(hueco.alto),
-            ..hueco
-        };
-        let ficha = Rect {
-            x: hueco.x,
-            y: cabecera.abajo(),
-            ancho: hueco.ancho,
-            alto: e(FICHA_ALTO).min(hueco.alto.saturating_sub(cabecera.alto)),
-        };
-        let tira = Rect {
-            x: hueco.x,
-            y: ficha.abajo(),
-            ancho: hueco.ancho,
-            alto: e(TIRA_ALTO).min(hueco.alto.saturating_sub(cabecera.alto + ficha.alto)),
-        };
-        let isla = Rect {
-            x: tira.x + e(TIRA_MARGEN_X) as i32,
-            y: tira.y + e(TIRA_MARGEN_Y) as i32,
-            ancho: tira.ancho.saturating_sub(2 * e(TIRA_MARGEN_X)),
-            alto: tira.alto.saturating_sub(2 * e(TIRA_MARGEN_Y)),
-        };
-        let arriba = tira.abajo();
-        Disposicion {
-            panel: hueco,
-            cabecera,
-            volver: Rect {
-                x: cabecera.x,
-                y: cabecera.y,
-                ancho: e(VOLVER_ANCHO).min(cabecera.ancho),
-                alto: cabecera.alto,
-            },
-            ficha,
-            tira,
-            isla,
-            contenido: Rect {
-                x: hueco.x,
-                y: arriba,
-                ancho: hueco.ancho,
-                alto: (hueco.abajo() - arriba).max(0) as u32,
-            },
-            pantalla_completa,
-        }
-    }
-
-    /// Donde cae cada pestana dentro de la isla, en el mismo orden que se le
-    /// pasan los anchos de texto (que los mide quien pinta).
-    ///
-    /// Si no caben todas, se reparte el hueco a partes iguales: es preferible
-    /// apretarlas a que la ultima se salga.
-    pub fn pestanas(&self, anchos_de_texto: &[f32], escala_por_cien: u32) -> Vec<Rect> {
-        let e = |v: u32| v * escala_por_cien / 100;
-        if anchos_de_texto.is_empty() || self.isla.ancho == 0 {
-            return Vec::new();
-        }
-        let relleno = 2.0 * e(PESTANA_RELLENO) as f32;
-        let naturales: Vec<f32> = anchos_de_texto.iter().map(|w| w + relleno).collect();
-        let total: f32 = naturales.iter().sum();
-        let cabe = total <= self.isla.ancho as f32;
-
-        let mut x = self.isla.x as f32;
-        naturales
-            .iter()
-            .map(|natural| {
-                let ancho = if cabe {
-                    *natural
-                } else {
-                    self.isla.ancho as f32 / naturales.len() as f32
-                };
-                let r = Rect {
-                    x: x.round() as i32,
-                    y: self.isla.y,
-                    ancho: ancho.round().max(0.0) as u32,
-                    alto: self.isla.alto,
-                };
-                x += ancho;
-                r
-            })
-            .collect()
-    }
-
-    /// La pildora de la pestana activa: su rectangulo, ya encogido.
-    /// La pildora de la pestana activa: su rectangulo, encogido por los
-    /// CUATRO lados, no solo arriba y abajo. Asi queda del ancho del texto mas
-    /// su relleno menos los dos retranqueos, que es como se ve en Telegram.
-    pub fn pildora(&self, pestana: Rect, escala_por_cien: u32) -> Rect {
-        let e = |v: u32| v * escala_por_cien / 100;
-        let hueco = e(PILDORA_HUECO);
-        Rect {
-            x: pestana.x + hueco as i32,
-            y: pestana.y + hueco as i32,
-            ancho: pestana.ancho.saturating_sub(2 * hueco),
-            alto: pestana.alto.saturating_sub(2 * hueco),
-        }
-    }
-
-    /// Que pestana hay bajo el punto.
-    pub fn pestana_en(&self, p: Punto, pestanas: &[Rect]) -> Option<usize> {
-        pestanas.iter().position(|r| r.contiene(p))
-    }
-}
-
-/// Como queda la cuadricula de fotos en un ancho dado.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rejilla {
-    pub columnas: u32,
-    /// El lado de una celda: son cuadradas.
-    pub lado: u32,
-    /// Donde empieza la primera columna, ya centrada.
-    pub margen: u32,
-    /// Lo que se deja entre dos celdas, ya escalado.
-    pub hueco: u32,
-}
-
-/// Reparte el ancho en columnas cuadradas.
-pub fn rejilla(ancho: u32, escala_por_cien: u32) -> Rejilla {
-    rejilla_con(
-        ancho,
-        CELDA_MINIMA,
-        CELDA_HUECO,
-        REJILLA_MARGEN,
-        escala_por_cien,
-    )
-}
-
-/// Reparte el ancho en columnas cuadradas de al menos `minima` de lado, con
-/// `hueco` entre ellas y `margen` a cada lado (logicos, sin escalar).
-pub fn rejilla_con(
-    ancho: u32,
-    minima: u32,
-    hueco: u32,
-    margen: u32,
-    escala_por_cien: u32,
-) -> Rejilla {
-    let e = |v: u32| v * escala_por_cien / 100;
-    let hueco = e(hueco);
-    let minima = e(minima).max(1);
-    let util = ancho.saturating_sub(2 * e(margen));
-    // Cuantas caben, contando que entre dos hay un hueco.
-    let columnas = ((util + hueco) / (minima + hueco)).max(1);
-    let lado = ((util + hueco) / columnas).saturating_sub(hueco).max(1);
-    let ocupa = columnas * lado + (columnas - 1) * hueco;
-    Rejilla {
-        columnas,
-        lado,
-        margen: ancho.saturating_sub(ocupa) / 2,
-        hueco,
-    }
-}
-
-impl Rejilla {
-    /// La celda numero `indice`, con el desplazamiento ya restado.
-    pub fn celda(&self, indice: usize, area: Rect, scroll: i32, _escala_por_cien: u32) -> Rect {
-        let hueco = self.hueco;
-        let fila = indice as u32 / self.columnas;
-        let columna = indice as u32 % self.columnas;
-        Rect {
-            x: area.x + self.margen as i32 + (columna * (self.lado + hueco)) as i32,
-            y: area.y + (fila * (self.lado + hueco)) as i32 - scroll,
-            ancho: self.lado,
-            alto: self.lado,
-        }
-    }
-
-    /// Lo que ocupa todo junto.
-    pub fn alto_total(&self, cuantas: usize, _escala_por_cien: u32) -> u32 {
-        if cuantas == 0 {
-            return 0;
-        }
-        let hueco = self.hueco;
-        let filas = cuantas.div_ceil(self.columnas as usize) as u32;
-        filas * self.lado + (filas - 1) * hueco
-    }
-
-    /// Que celdas se ven, para pintar solo esas.
-    pub fn visibles(
-        &self,
-        area: Rect,
-        cuantas: usize,
-        scroll: i32,
-        _escala_por_cien: u32,
-    ) -> (usize, usize) {
-        let hueco = self.hueco;
-        let paso = (self.lado + hueco).max(1) as i32;
-        let primera_fila = (scroll / paso).max(0) as usize;
-        let filas_que_caben = (area.alto as i32 / paso + 2) as usize;
-        let primera = primera_fila * self.columnas as usize;
-        let cuantas_ver = filas_que_caben * self.columnas as usize;
-        (
-            primera.min(cuantas),
-            cuantas_ver.min(cuantas.saturating_sub(primera)),
-        )
-    }
-}
-
-/// La fila de un archivo, con su miniatura y sus tres lineas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FilaArchivo {
-    pub fila: Rect,
-    pub miniatura: Rect,
-    pub nombre: Punto,
-    pub estado: Punto,
-    pub fecha: Punto,
-    pub ancho_texto: u32,
-}
-
-/// Coloca lo de dentro de una fila de archivo.
-pub fn fila_archivo(fila: Rect, escala_por_cien: u32) -> FilaArchivo {
-    let e = |v: u32| v * escala_por_cien / 100;
-    let miniatura = e(ARCHIVO_MINIATURA);
-    let x = fila.x + e(ARCHIVO_MARGEN_X) as i32;
-    let texto_x = x + miniatura as i32 + e(ARCHIVO_MARGEN_X) as i32;
-    let derecha = fila.derecha() - e(ARCHIVO_MARGEN_X) as i32;
-    FilaArchivo {
-        fila,
-        miniatura: Rect {
-            x,
-            y: fila.y + e(3) as i32,
-            ancho: miniatura,
-            alto: miniatura,
-        },
-        nombre: Punto {
-            x: texto_x,
-            y: fila.y + e(ARCHIVO_NOMBRE_Y) as i32,
-        },
-        estado: Punto {
-            x: texto_x,
-            y: fila.y + e(ARCHIVO_ESTADO_Y) as i32,
-        },
-        fecha: Punto {
-            x: texto_x,
-            y: fila.y + e(ARCHIVO_FECHA_Y) as i32,
-        },
-        ancho_texto: (derecha - texto_x).max(0) as u32,
-    }
-}
-
-// --- La isla de la ficha del chat (25-oct-2026) -----------------------------
-//
-// El usuario: «cuando hago click en la cabecera del chat me sale Galeria,
-// Archivos, Voz… su ui es mala. Mira Telegram: es una isla flotante que
-// muestra fotos, videos, archivos, enlaces… muy bien presentado, y hacer
-// click dentro no debe salir de esa zona». Es la misma capa con velo, pero
-// mas ancha y que se adapta a la ventana: la rejilla pone mas columnas de
-// miniaturas cuanto mas sitio hay, y lo que se pulsa dentro se ve DENTRO
-// (`Previa`), con su flecha de volver a la rejilla.
+// --- La isla ------------------------------------------------------------------
 
 /// Lo estrecha y lo ancha que puede ser la isla.
 pub const ISLA_ANCHO_MINIMO: u32 = 360;
@@ -518,41 +52,53 @@ pub const ISLA_FRACCION: u32 = 58;
 pub const ISLA_ALTO_MAXIMO: u32 = 860;
 /// Lo que se deja como minimo a los lados, y arriba y abajo.
 pub const ISLA_MARGEN_X: u32 = 32;
-pub const ISLA_MARGEN_Y: u32 = 28;
+pub const ISLA_MARGEN_Y: u32 = 24;
 pub const ISLA_RADIO: u32 = 16;
-/// La cabecera: el avatar del chat, su nombre y lo que tiene; la lupa y el
-/// aspa a la derecha.
-pub const ISLA_CABECERA: u32 = 68;
-pub const ISLA_AVATAR: u32 = 42;
-pub const ISLA_AVATAR_X: u32 = 16;
-pub const ISLA_BOTON: u32 = 40;
+/// El aire de la tarjeta por dentro, a los lados (la rejilla no lo lleva:
+/// va de borde a borde).
+pub const ISLA_RELLENO: u32 = 16;
+/// La cabecera: el avatar redondo, el nombre y lo que tiene; la lupa y el
+/// aspa a la derecha, botones redondos de 32.
+pub const ISLA_CABECERA: u32 = 64;
+pub const ISLA_AVATAR: u32 = 40;
+pub const ISLA_BOTON: u32 = 32;
+pub const ISLA_BOTON_HUECO: u32 = 4;
 pub const ISLA_TITULO_TAM: f32 = 15.0;
 pub const ISLA_SUBTITULO_TAM: f32 = 12.5;
-/// La tira de pestanas, un selector segmentado.
-pub const ISLA_TIRA: u32 = 48;
-pub const ISLA_TIRA_MARGEN_X: u32 = 12;
-pub const ISLA_TIRA_MARGEN_Y: u32 = 6;
-/// El relleno de cada pestana, y lo minimo que se le deja si no caben.
+/// La tira de pestanas: texto con la rayita de color debajo.
+pub const ISLA_TIRA: u32 = 44;
 pub const ISLA_PESTANA_RELLENO: u32 = 14;
-pub const ISLA_PESTANA_RELLENO_MINIMO: u32 = 6;
-pub const ISLA_PESTANA_TAM: f32 = 13.0;
-/// La rejilla: miniaturas cuadradas de al menos esto, con su hueco.
-pub const ISLA_CELDA_MINIMA: u32 = 112;
-pub const ISLA_CELDA_HUECO: u32 = 4;
-pub const ISLA_MARGEN: u32 = 12;
-/// Las filas de archivos, enlaces y voz.
-pub const ISLA_FILA: u32 = 62;
+pub const ISLA_PESTANA_TAM: f32 = 13.5;
+pub const ISLA_SUBRAYADO: u32 = 3;
+/// La rejilla: de tres a cinco columnas de al menos esto, con 2 entre ellas.
+pub const ISLA_CELDA_MINIMA: u32 = 120;
+pub const ISLA_CELDA_HUECO: u32 = 2;
+pub const ISLA_COLUMNAS_MINIMO: u32 = 3;
+pub const ISLA_COLUMNAS_MAXIMO: u32 = 5;
+/// El rotulo de cada mes.
+pub const ISLA_MES: u32 = 36;
+pub const ISLA_MES_TAM: f32 = 13.0;
+/// Las filas: archivos, voz y lo demas en dos lineas; los enlaces en tres.
+pub const ISLA_FILA: u32 = 60;
+pub const ISLA_FILA_ENLACE: u32 = 72;
 pub const ISLA_FILA_MINIATURA: u32 = 44;
-/// La previa de una cosa: las flechas de los lados y el pie con sus botones.
+/// Lo que se deja debajo de todo, para que lo ultimo no toque el borde.
+pub const ISLA_PIE_DE_LISTA: u32 = 8;
+/// La barra de desplazamiento, encima del contenido.
+pub const ISLA_BARRA: u32 = 4;
+pub const ISLA_BARRA_MINIMA: u32 = 28;
+/// La previa: las flechas, encima de la cosa a los lados.
 pub const ISLA_FLECHA: u32 = 40;
-pub const ISLA_PIE: u32 = 64;
-pub const ISLA_BOTON_PIE: u32 = 40;
-pub const ISLA_BOTON_PIE_ANCHO: u32 = 150;
+pub const ISLA_PREVIA_MARGEN: u32 = 12;
+
+fn e(v: u32, escala_por_cien: u32) -> u32 {
+    v * escala_por_cien / 100
+}
 
 /// Donde cae la isla dentro de la ventana, y si se lo queda todo porque la
 /// ventana no da ni para la mas estrecha con sus margenes.
 pub fn isla_en(ventana: Rect, escala_por_cien: u32) -> (Rect, bool) {
-    let e = |v: u32| v * escala_por_cien / 100;
+    let e = |v: u32| e(v, escala_por_cien);
     if ventana.ancho < e(ISLA_ANCHO_MINIMO) + 2 * e(ISLA_MARGEN_X) {
         return (ventana, true);
     }
@@ -576,8 +122,8 @@ pub fn isla_en(ventana: Rect, escala_por_cien: u32) -> (Rect, bool) {
 }
 
 /// Como queda repartida la isla. Una sola cuenta para pintarla y para
-/// repartir sus clics (ver `disposicion_info` en la ventana del chat: hubo
-/// un tiempo en que eran dos, y los botones no respondian).
+/// repartir sus clics (ver `ficha_del_chat::disposicion` en la ventana del
+/// chat: hubo un tiempo en que eran dos, y los botones no respondian).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Isla {
     pub panel: Rect,
@@ -590,7 +136,13 @@ pub struct Isla {
     pub cerrar: Rect,
     /// La caja de escribir lo que se busca, en el sitio del titulo.
     pub caja_buscar: Rect,
-    /// El selector de pestanas (ya con su aire alrededor).
+    /// En la previa, los dos botones de la cosa, a la izquierda del aspa:
+    /// verla en el chat y abrirla.
+    pub en_el_chat: Rect,
+    pub abrir: Rect,
+    /// El titulo de la previa, que acaba antes de esos dos botones.
+    pub titulo_previa: Rect,
+    /// La tira de pestanas, de lado a lado (sin el relleno).
     pub tira: Rect,
     pub contenido: Rect,
     /// La ventana no daba para la isla y la ocupa entera.
@@ -599,26 +151,32 @@ pub struct Isla {
 
 impl Isla {
     pub fn calcular(caja: Rect, pantalla_completa: bool, escala_por_cien: u32) -> Isla {
-        let e = |v: u32| v * escala_por_cien / 100;
+        let e = |v: u32| e(v, escala_por_cien);
         let cabecera = Rect {
             alto: e(ISLA_CABECERA).min(caja.alto),
             ..caja
         };
         let medio = |lado: u32| cabecera.y + (cabecera.alto as i32 - lado as i32) / 2;
         let boton = e(ISLA_BOTON).min(cabecera.alto);
+        let paso = (boton + e(ISLA_BOTON_HUECO)) as i32;
         let cerrar = Rect {
-            x: cabecera.derecha() - e(10) as i32 - boton as i32,
+            x: cabecera.derecha() - e(ISLA_RELLENO - 4) as i32 - boton as i32,
             y: medio(boton),
             ancho: boton,
             alto: boton,
         };
         let buscar = Rect {
-            x: cerrar.x - boton as i32,
+            x: cerrar.x - paso,
             ..cerrar
+        };
+        let abrir = buscar;
+        let en_el_chat = Rect {
+            x: abrir.x - paso,
+            ..abrir
         };
         let lado = e(ISLA_AVATAR).min(cabecera.alto);
         let avatar = Rect {
-            x: cabecera.x + e(ISLA_AVATAR_X) as i32,
+            x: cabecera.x + e(ISLA_RELLENO) as i32,
             y: medio(lado),
             ancho: lado,
             alto: lado,
@@ -630,21 +188,25 @@ impl Isla {
             ancho: (buscar.x - e(8) as i32 - tx).max(0) as u32,
             alto: cabecera.alto,
         };
+        let titulo_previa = Rect {
+            ancho: (en_el_chat.x - e(8) as i32 - tx).max(0) as u32,
+            ..titulo
+        };
         let alto_caja = e(BUSCAR_ALTO).min(cabecera.alto);
         let caja_buscar = Rect {
-            x: titulo.x,
+            x: avatar.x,
             y: medio(alto_caja),
-            ancho: titulo.ancho,
+            ancho: (buscar.x - e(8) as i32 - avatar.x).max(0) as u32,
             alto: alto_caja,
         };
         let franja = e(ISLA_TIRA).min(caja.alto.saturating_sub(cabecera.alto));
         let tira = Rect {
-            x: caja.x + e(ISLA_TIRA_MARGEN_X) as i32,
-            y: cabecera.abajo() + e(ISLA_TIRA_MARGEN_Y) as i32,
-            ancho: caja.ancho.saturating_sub(2 * e(ISLA_TIRA_MARGEN_X)),
-            alto: franja.saturating_sub(2 * e(ISLA_TIRA_MARGEN_Y)),
+            x: caja.x + e(ISLA_RELLENO / 2) as i32,
+            y: cabecera.abajo(),
+            ancho: caja.ancho.saturating_sub(e(ISLA_RELLENO)),
+            alto: franja,
         };
-        let arriba = cabecera.abajo() + franja as i32;
+        let arriba = tira.abajo();
         Isla {
             panel: caja,
             cabecera,
@@ -653,6 +215,9 @@ impl Isla {
             buscar,
             cerrar,
             caja_buscar,
+            en_el_chat,
+            abrir,
+            titulo_previa,
             tira,
             contenido: Rect {
                 x: caja.x,
@@ -664,67 +229,50 @@ impl Isla {
         }
     }
 
-    /// Donde cae cada pestana en la tira, en el orden de los anchos de texto
-    /// (que mide quien pinta). Se reparten centradas con su relleno; si no
-    /// caben, primero se les quita relleno y, si aun asi no caben, se
-    /// reparte la tira a partes iguales: nunca se sale ninguna.
-    pub fn pestanas(&self, anchos_de_texto: &[f32], escala_por_cien: u32) -> Vec<Rect> {
-        let e = |v: u32| (v * escala_por_cien / 100) as f32;
-        let n = anchos_de_texto.len();
-        if n == 0 || self.tira.ancho == 0 {
-            return Vec::new();
-        }
+    /// **Donde cae cada pestana** en la tira, en el orden de los anchos de
+    /// texto (que mide quien pinta), con la tira desplazada `desplazado`
+    /// pixeles. Cada una lleva su texto entero y su relleno: nunca se parte
+    /// ni se recorta un rotulo. Si caben todas, el sitio que sobra se
+    /// reparte y llenan la tira (y no se desplaza); si no, van seguidas y la
+    /// tira se puede desplazar hasta `tope`.
+    pub fn pestanas(
+        &self,
+        anchos_de_texto: &[f32],
+        desplazado: i32,
+        escala_por_cien: u32,
+    ) -> Pestanas {
+        let relleno = (ISLA_PESTANA_RELLENO * escala_por_cien / 100) as f32;
+        let naturales: Vec<f32> = anchos_de_texto
+            .iter()
+            .map(|w| w.max(0.0).ceil() + 2.0 * relleno)
+            .collect();
+        let total: f32 = naturales.iter().sum();
         let sitio = self.tira.ancho as f32;
-        let texto: f32 = anchos_de_texto.iter().sum();
-        let relleno = ((sitio - texto) / (2.0 * n as f32))
-            .min(e(ISLA_PESTANA_RELLENO))
-            .max(0.0);
-        let anchos: Vec<f32> = if relleno >= e(ISLA_PESTANA_RELLENO_MINIMO) {
-            anchos_de_texto.iter().map(|w| w + 2.0 * relleno).collect()
+        let (anchos, tope) = if total <= sitio && !naturales.is_empty() {
+            let sobra = (sitio - total) / naturales.len() as f32;
+            (naturales.iter().map(|w| w + sobra).collect(), 0)
         } else {
-            vec![sitio / n as f32; n]
+            (naturales, (total - sitio).ceil().max(0.0) as i32)
         };
-        let total: f32 = anchos.iter().sum();
-        let mut x = self.tira.x as f32 + ((sitio - total) / 2.0).max(0.0);
-        anchos
+        let desplazado = desplazado.clamp(0, tope);
+        let mut x = self.tira.x as f32 - desplazado as f32;
+        let rects = anchos
             .iter()
             .map(|ancho| {
-                let r = Rect {
-                    x: x.round() as i32,
-                    y: self.tira.y,
-                    ancho: ancho.round().max(0.0) as u32,
-                    alto: self.tira.alto,
-                };
+                let izquierda = x.round() as i32;
                 x += ancho;
-                r
+                Rect {
+                    x: izquierda,
+                    y: self.tira.y,
+                    ancho: (x.round() as i32 - izquierda).max(0) as u32,
+                    alto: self.tira.alto,
+                }
             })
-            .collect()
-    }
-
-    /// El fondo del selector: solo tan ancho como sus pestanas.
-    pub fn fondo_de_la_tira(&self, pestanas: &[Rect]) -> Rect {
-        match (pestanas.first(), pestanas.last()) {
-            (Some(a), Some(b)) => Rect {
-                x: a.x,
-                y: self.tira.y,
-                ancho: (b.derecha() - a.x).max(0) as u32,
-                alto: self.tira.alto,
-            },
-            _ => Rect {
-                ancho: 0,
-                ..self.tira
-            },
-        }
-    }
-
-    /// La pildora de la pestana activa, encogida por los cuatro lados.
-    pub fn pildora(&self, pestana: Rect, escala_por_cien: u32) -> Rect {
-        let hueco = (PILDORA_HUECO * escala_por_cien / 100) as i32;
-        Rect {
-            x: pestana.x + hueco,
-            y: pestana.y + hueco,
-            ancho: (pestana.ancho as i32 - 2 * hueco).max(0) as u32,
-            alto: (pestana.alto as i32 - 2 * hueco).max(0) as u32,
+            .collect();
+        Pestanas {
+            rects,
+            tope,
+            desplazado,
         }
     }
 
@@ -741,63 +289,332 @@ impl Isla {
     }
 }
 
-/// La rejilla de miniaturas de la isla: columnas cuadradas que se adaptan al
-/// ancho (mas sitio, mas columnas), centradas.
-pub fn rejilla_isla(ancho: u32, escala_por_cien: u32) -> Rejilla {
-    rejilla_con(
-        ancho,
-        ISLA_CELDA_MINIMA,
-        ISLA_CELDA_HUECO,
-        ISLA_MARGEN,
-        escala_por_cien,
-    )
+/// Las pestanas ya colocadas en su tira.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pestanas {
+    pub rects: Vec<Rect>,
+    /// Hasta donde se puede desplazar la tira (cero si caben todas).
+    pub tope: i32,
+    /// Lo desplazada que esta de verdad, ya sujeto entre cero y `tope`.
+    pub desplazado: i32,
 }
 
-/// Las filas (archivos, enlaces, voz) de la isla, una debajo de otra: la de
-/// numero `n`, con el desplazamiento ya restado.
-pub fn fila_isla(n: usize, area: Rect, scroll: i32, escala_por_cien: u32) -> Rect {
-    let e = |v: u32| v * escala_por_cien / 100;
-    let alto = e(ISLA_FILA).max(1);
+impl Pestanas {
+    /// Lo que hay que desplazar la tira para que la pestana `n` se vea
+    /// entera, con un poco de aire; si ya se ve, lo de ahora.
+    pub fn para_ver(&self, n: usize, tira: Rect, escala_por_cien: u32) -> i32 {
+        let Some(r) = self.rects.get(n) else {
+            return self.desplazado;
+        };
+        let aire = (ISLA_PESTANA_RELLENO * escala_por_cien / 100) as i32;
+        let mut d = self.desplazado;
+        if r.x < tira.x {
+            d -= tira.x - r.x + aire;
+        } else if r.derecha() > tira.derecha() {
+            d += r.derecha() - tira.derecha() + aire;
+        }
+        d.clamp(0, self.tope)
+    }
+
+    /// La pestana bajo `p`, sin contar lo que se sale de la tira.
+    pub fn en(&self, p: Punto, tira: Rect) -> Option<usize> {
+        if !tira.contiene(p) {
+            return None;
+        }
+        self.rects.iter().position(|r| r.contiene(p))
+    }
+}
+
+/// **La rayita** de la pestana activa: tan ancha como su texto, centrada y
+/// pegada abajo, con las puntas redondas.
+pub fn subrayado(pestana: Rect, ancho_de_texto: f32, escala_por_cien: u32) -> Rect {
+    let alto = e(ISLA_SUBRAYADO, escala_por_cien).max(1);
+    let ancho = (ancho_de_texto.ceil().max(0.0) as u32).min(pestana.ancho);
     Rect {
-        x: area.x + e(ISLA_MARGEN / 2) as i32,
-        y: area.y + e(ISLA_MARGEN / 2) as i32 + (n as u32 * alto) as i32 - scroll,
-        ancho: area.ancho.saturating_sub(e(ISLA_MARGEN)),
+        x: pestana.x + (pestana.ancho as i32 - ancho as i32) / 2,
+        y: pestana.abajo() - alto as i32,
+        ancho,
         alto,
     }
 }
 
-/// Que filas se ven: `(primera, cuantas)`, con una de mas por arriba y por
-/// abajo que asoma al desplazar.
-pub fn filas_visibles(
+// --- El contenido: rejilla o filas, por meses --------------------------------
+
+/// Una pieza del contenido.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pieza {
+    /// El rotulo de un mes; lleva el numero de la primera cosa de ese mes
+    /// (para saber cual es).
+    Mes(usize),
+    /// La cosa numero `n` de la seccion, su celda o su fila.
+    Cosa(usize),
+}
+
+/// **Como queda el contenido de una seccion**, sin desplazar: cada rotulo
+/// de mes y cada cosa en su sitio. La misma cuenta para pintar, para el
+/// clic, para el resalte del raton y para mover el foco con las flechas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lista {
+    pub piezas: Vec<(Pieza, Rect)>,
+    /// Lo que mide todo junto (para el tope de la rueda).
+    pub alto: u32,
+    /// Cuantas columnas tiene (una, en filas).
+    pub columnas: u32,
+}
+
+/// Cuantas columnas y de que lado en una rejilla de borde a borde: de tres a
+/// cinco, las que quepan con al menos la celda minima. Devuelve tambien el
+/// margen que queda a la izquierda al centrarla (lo que no se reparte por
+/// el redondeo).
+pub fn columnas_isla(ancho: u32, escala_por_cien: u32) -> (u32, u32, u32) {
+    let hueco = e(ISLA_CELDA_HUECO, escala_por_cien);
+    let minima = e(ISLA_CELDA_MINIMA, escala_por_cien).max(1);
+    let columnas =
+        ((ancho + hueco) / (minima + hueco)).clamp(ISLA_COLUMNAS_MINIMO, ISLA_COLUMNAS_MAXIMO);
+    let lado = (ancho.saturating_sub((columnas - 1) * hueco) / columnas).max(1);
+    let ocupa = columnas * lado + (columnas - 1) * hueco;
+    (columnas, lado, ancho.saturating_sub(ocupa) / 2)
+}
+
+/// **Coloca el contenido** en `area`: `meses` lleva la clave del mes de
+/// cada cosa, en orden (cada vez que cambia sale un rotulo); `cuadricula`
+/// dice si va en rejilla o en filas de `alto_fila` (logico).
+pub fn lista_isla(
     area: Rect,
-    cuantas: usize,
+    meses: &[i64],
+    cuadricula: bool,
+    alto_fila: u32,
+    escala_por_cien: u32,
+) -> Lista {
+    let e = |v: u32| e(v, escala_por_cien);
+    let alto_mes = e(ISLA_MES);
+    let hueco = e(ISLA_CELDA_HUECO) as i32;
+    let (columnas, lado, margen) = if cuadricula {
+        columnas_isla(area.ancho, escala_por_cien)
+    } else {
+        (1, e(alto_fila).max(1), 0)
+    };
+    let fila_x = area.x + e(ISLA_RELLENO / 2) as i32;
+    let fila_ancho = area.ancho.saturating_sub(e(ISLA_RELLENO));
+    let mut piezas = Vec::with_capacity(meses.len() + 8);
+    let mut y = area.y;
+    let mut columna = 0;
+    for (n, mes) in meses.iter().enumerate() {
+        if n == 0 || meses[n - 1] != *mes {
+            if columna != 0 {
+                // Se cierra la fila a medias del mes de antes.
+                y += lado as i32 + hueco;
+                columna = 0;
+            }
+            piezas.push((
+                Pieza::Mes(n),
+                Rect {
+                    x: fila_x,
+                    y,
+                    ancho: fila_ancho,
+                    alto: alto_mes,
+                },
+            ));
+            y += alto_mes as i32;
+        }
+        let caja = if cuadricula {
+            Rect {
+                x: area.x + margen as i32 + (columna * (lado + hueco as u32)) as i32,
+                y,
+                ancho: lado,
+                alto: lado,
+            }
+        } else {
+            Rect {
+                x: fila_x,
+                y,
+                ancho: fila_ancho,
+                alto: lado,
+            }
+        };
+        piezas.push((Pieza::Cosa(n), caja));
+        columna += 1;
+        if columna == columnas {
+            columna = 0;
+            y += lado as i32 + if cuadricula { hueco } else { 0 };
+        }
+    }
+    if columna != 0 {
+        y += lado as i32;
+    }
+    let alto = if meses.is_empty() {
+        0
+    } else {
+        (y - area.y).max(0) as u32 + e(ISLA_PIE_DE_LISTA)
+    };
+    Lista {
+        piezas,
+        alto,
+        columnas,
+    }
+}
+
+/// **Filas sin rotulos de mes**, una bajo otra, para lo que no va por
+/// fechas: la pestana de proyectos, que sigue el orden de la lista de chats
+/// («Mensajes guardados» y el asistente delante, aunque sean viejos) y con
+/// rotulos de mes repetiria meses. Arriba lleva el mismo aire que el pie,
+/// para que la primera fila no pegue con la tira de pestanas.
+pub fn filas_isla(area: Rect, cuantas: usize, alto_fila: u32, escala_por_cien: u32) -> Lista {
+    let e = |v: u32| e(v, escala_por_cien);
+    let alto = e(alto_fila).max(1);
+    let aire = e(ISLA_PIE_DE_LISTA);
+    let fila_x = area.x + e(ISLA_RELLENO / 2) as i32;
+    let fila_ancho = area.ancho.saturating_sub(e(ISLA_RELLENO));
+    let piezas = (0..cuantas)
+        .map(|n| {
+            (
+                Pieza::Cosa(n),
+                Rect {
+                    x: fila_x,
+                    y: area.y + aire as i32 + (n as u32 * alto) as i32,
+                    ancho: fila_ancho,
+                    alto,
+                },
+            )
+        })
+        .collect();
+    Lista {
+        piezas,
+        alto: if cuantas == 0 {
+            0
+        } else {
+            2 * aire + cuantas as u32 * alto
+        },
+        columnas: 1,
+    }
+}
+
+impl Lista {
+    /// Las piezas que se ven en `area` con el desplazamiento `scroll`, ya
+    /// movidas a su sitio en la pantalla.
+    pub fn visibles(&self, area: Rect, scroll: i32) -> Vec<(Pieza, Rect)> {
+        self.piezas
+            .iter()
+            .map(|(p, r)| {
+                (
+                    *p,
+                    Rect {
+                        y: r.y - scroll,
+                        ..*r
+                    },
+                )
+            })
+            .filter(|(_, r)| r.abajo() > area.y && r.y < area.abajo())
+            .collect()
+    }
+
+    /// Donde esta la cosa `n`, sin desplazar.
+    pub fn caja_de(&self, n: usize) -> Option<Rect> {
+        self.piezas
+            .iter()
+            .find(|(p, _)| *p == Pieza::Cosa(n))
+            .map(|(_, r)| *r)
+    }
+
+    /// **A que cosa se va con las flechas** desde la `actual`: a los lados,
+    /// la de antes o la de despues; arriba y abajo, la de la fila de encima
+    /// o de debajo que caiga mas cerca en horizontal (con los meses en
+    /// medio, la fila de abajo no siempre esta a `columnas` de distancia).
+    pub fn vecina(&self, actual: usize, dx: i32, dy: i32) -> Option<usize> {
+        let cosas: Vec<(usize, Rect)> = self
+            .piezas
+            .iter()
+            .filter_map(|(p, r)| match p {
+                Pieza::Cosa(n) => Some((*n, *r)),
+                Pieza::Mes(_) => None,
+            })
+            .collect();
+        let (_, aqui) = *cosas.iter().find(|(n, _)| *n == actual)?;
+        if dy == 0 {
+            let k = actual as i64 + dx.signum() as i64;
+            return (k >= 0)
+                .then(|| cosas.iter().find(|(n, _)| *n as i64 == k).map(|(n, _)| *n))
+                .flatten();
+        }
+        let centro = |r: &Rect| r.x + r.ancho as i32 / 2;
+        let fila = cosas
+            .iter()
+            .filter(|(_, r)| if dy > 0 { r.y > aqui.y } else { r.y < aqui.y })
+            .map(|(_, r)| r.y)
+            .min_by_key(|y| (y - aqui.y).abs())?;
+        cosas
+            .iter()
+            .filter(|(_, r)| r.y == fila)
+            .min_by_key(|(_, r)| (centro(r) - centro(&aqui)).abs())
+            .map(|(n, _)| *n)
+    }
+
+    /// El desplazamiento que deja ver entera la cosa `n` en un area de
+    /// `alto` (lo de ahora si ya se ve).
+    pub fn para_ver(&self, n: usize, area: Rect, scroll: i32) -> i32 {
+        let Some(r) = self.caja_de(n) else {
+            return scroll;
+        };
+        let arriba = r.y - area.y;
+        let abajo = r.abajo() - area.y;
+        let tope = (self.alto as i32 - area.alto as i32).max(0);
+        let s = if arriba < scroll {
+            arriba
+        } else if abajo > scroll + area.alto as i32 {
+            abajo - area.alto as i32
+        } else {
+            scroll
+        };
+        s.clamp(0, tope)
+    }
+}
+
+/// **La barra de desplazamiento**, encima del contenido y pegada a su borde
+/// derecho: solo si hay mas de lo que cabe.
+pub fn barra_de_desplazamiento(
+    area: Rect,
+    alto_total: u32,
     scroll: i32,
     escala_por_cien: u32,
-) -> (usize, usize) {
-    let alto = (ISLA_FILA * escala_por_cien / 100).max(1) as i32;
-    let primera = (scroll / alto).max(0) as usize;
-    let caben = (area.alto as i32 / alto + 2) as usize;
-    (
-        primera.min(cuantas),
-        caben.min(cuantas.saturating_sub(primera)),
-    )
-}
-
-/// Lo que miden todas las filas juntas, con su aire arriba y abajo.
-pub fn alto_de_las_filas(cuantas: usize, escala_por_cien: u32) -> u32 {
-    let e = |v: u32| v * escala_por_cien / 100;
-    if cuantas == 0 {
-        return 0;
+) -> Option<Rect> {
+    if alto_total <= area.alto || area.alto == 0 {
+        return None;
     }
-    cuantas as u32 * e(ISLA_FILA) + e(ISLA_MARGEN)
+    let ancho = e(ISLA_BARRA, escala_por_cien).max(1);
+    let aire = e(3, escala_por_cien) as i32;
+    let carril = area.alto.saturating_sub(2 * aire as u32);
+    let alto = ((carril as u64 * area.alto as u64 / alto_total as u64) as u32)
+        .max(e(ISLA_BARRA_MINIMA, escala_por_cien))
+        .min(carril);
+    let tope = (alto_total - area.alto) as i64;
+    let recorrido = (carril - alto) as i64;
+    let y = scroll.clamp(0, tope as i32) as i64 * recorrido / tope.max(1);
+    Some(Rect {
+        x: area.derecha() - aire - ancho as i32,
+        y: area.y + aire + y as i32,
+        ancho,
+        alto,
+    })
 }
 
-/// Lo de dentro de una fila de la isla: la miniatura redonda a la izquierda
-/// y dos lineas de texto.
+/// Lo de dentro de una fila de la isla: la miniatura (o la chapa) de 44 a la
+/// izquierda y dos lineas de texto o, en una fila de enlace, tres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FilaArchivo {
+    pub fila: Rect,
+    pub miniatura: Rect,
+    pub nombre: Punto,
+    pub estado: Punto,
+    /// La tercera linea (el texto que acompana a un enlace), si cabe.
+    pub tercera: Option<Punto>,
+    pub ancho_texto: u32,
+}
+
+/// Coloca lo de dentro de una fila de la isla.
 pub fn dentro_de_la_fila(fila: Rect, escala_por_cien: u32) -> FilaArchivo {
-    let e = |v: u32| v * escala_por_cien / 100;
+    let e = |v: u32| e(v, escala_por_cien);
     let lado = e(ISLA_FILA_MINIATURA).min(fila.alto);
-    let x = fila.x + e(10) as i32;
+    let x = fila.x + e(8) as i32;
     let miniatura = Rect {
         x,
         y: fila.y + (fila.alto as i32 - lado as i32) / 2,
@@ -805,91 +622,74 @@ pub fn dentro_de_la_fila(fila: Rect, escala_por_cien: u32) -> FilaArchivo {
         alto: lado,
     };
     let texto_x = miniatura.derecha() + e(12) as i32;
-    let derecha = fila.derecha() - e(10) as i32;
+    let derecha = fila.derecha() - e(8) as i32;
+    let tres = fila.alto >= e(ISLA_FILA_ENLACE);
+    // Las lineas, de 18 la primera y de 16 las otras, con 2 entre ellas y
+    // centradas en la fila.
+    let alto_texto = if tres {
+        18 + 2 + 16 + 2 + 16
+    } else {
+        18 + 2 + 16
+    };
+    let arriba = fila.y + (fila.alto as i32 - e(alto_texto) as i32) / 2;
     FilaArchivo {
         fila,
         miniatura,
         nombre: Punto {
             x: texto_x,
-            y: fila.y + e(12) as i32,
+            y: arriba,
         },
         estado: Punto {
             x: texto_x,
-            y: fila.y + e(34) as i32,
+            y: arriba + e(20) as i32,
         },
-        fecha: Punto {
+        tercera: tres.then(|| Punto {
             x: texto_x,
-            y: fila.y + e(34) as i32,
-        },
+            y: arriba + e(38) as i32,
+        }),
         ancho_texto: (derecha - texto_x).max(0) as u32,
     }
 }
 
-/// La previa de una cosa dentro de la isla.
+// --- La previa ---------------------------------------------------------------
+
+/// La previa de una cosa dentro de la isla: la cosa en grande y las flechas
+/// encima, a los lados (como el visor de Telegram). Sus botones van en la
+/// cabecera ([`Isla::abrir`], [`Isla::en_el_chat`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Previa {
     /// Donde se ensena la cosa en grande (la foto, el dibujo, su ficha).
     pub vista: Rect,
-    /// Las flechas de la anterior y la siguiente, a los lados.
     pub anterior: Rect,
     pub siguiente: Rect,
-    /// El pie, con sus dos botones: abrir y verla en el chat.
-    pub pie: Rect,
-    pub abrir: Rect,
-    pub en_el_chat: Rect,
 }
 
 /// Reparte el hueco de la previa (`Isla::hueco_de_la_previa`).
 pub fn previa(hueco: Rect, escala_por_cien: u32) -> Previa {
-    let e = |v: u32| v * escala_por_cien / 100;
-    let alto_pie = e(ISLA_PIE).min(hueco.alto);
-    let pie = Rect {
-        y: hueco.abajo() - alto_pie as i32,
-        alto: alto_pie,
-        ..hueco
-    };
-    let margen = e(ISLA_MARGEN) as i32;
-    let flecha = e(ISLA_FLECHA);
+    let e = |v: u32| e(v, escala_por_cien);
+    let margen = e(ISLA_PREVIA_MARGEN);
     let vista = Rect {
-        x: hueco.x + margen + flecha as i32,
-        y: hueco.y + margen,
-        ancho: (hueco.ancho as i32 - 2 * (margen + flecha as i32)).max(0) as u32,
-        alto: (pie.y - hueco.y - 2 * margen).max(0) as u32,
+        x: hueco.x + margen as i32,
+        y: hueco.y + margen as i32,
+        ancho: hueco.ancho.saturating_sub(2 * margen),
+        alto: hueco.alto.saturating_sub(2 * margen),
     };
+    let flecha = e(ISLA_FLECHA).min(vista.ancho / 3).min(vista.alto);
     let medio_y = vista.y + (vista.alto as i32 - flecha as i32) / 2;
     let anterior = Rect {
-        x: hueco.x + margen / 2,
+        x: vista.x + e(8) as i32,
         y: medio_y,
         ancho: flecha,
         alto: flecha,
     };
     let siguiente = Rect {
-        x: hueco.derecha() - margen / 2 - flecha as i32,
+        x: vista.derecha() - e(8) as i32 - flecha as i32,
         ..anterior
     };
-    let alto_boton = e(ISLA_BOTON_PIE).min(alto_pie);
-    let ancho_boton =
-        e(ISLA_BOTON_PIE_ANCHO).min(hueco.ancho.saturating_sub(3 * margen as u32) / 2);
-    let y_boton = pie.y + (alto_pie as i32 - alto_boton as i32) / 2;
-    let juntos = 2 * ancho_boton as i32 + margen;
-    let x0 = pie.x + (pie.ancho as i32 - juntos) / 2;
     Previa {
         vista,
         anterior,
         siguiente,
-        pie,
-        en_el_chat: Rect {
-            x: x0,
-            y: y_boton,
-            ancho: ancho_boton,
-            alto: alto_boton,
-        },
-        abrir: Rect {
-            x: x0 + ancho_boton as i32 + margen,
-            y: y_boton,
-            ancho: ancho_boton,
-            alto: alto_boton,
-        },
     }
 }
 
@@ -914,160 +714,96 @@ pub fn encajar(ancho: u32, alto: u32, caja: Rect) -> Rect {
     }
 }
 
+/// La duracion de un video o una nota de voz como se lee en su insignia:
+/// «0:07», «12:30», «1:02:03». Sin duracion, nada.
+pub fn duracion_corta(ms: i64) -> String {
+    if ms <= 0 {
+        return String::new();
+    }
+    let s = (ms + 500) / 1000;
+    let (h, m, s) = (s / 3600, (s % 3600) / 60, s % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+// --- Las fotos de las notas ricas en la ficha (25-oct-2026) -----------------
+//
+// Una nota rica lleva sus fotos dentro del texto (`![…](pixpin:files/…)`,
+// ver `nota_rica` y `docs/nota-rica-del-chat.md`). En «Fotos» sale CADA UNA
+// como una miniatura mas, en el sitio de su nota: quien busca la foto de la
+// obra no piensa en si la mando sola o con texto.
+
+/// Una cosa de la ficha: un mensaje entero o una foto de una nota rica.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Cosa {
+    /// Su posicion en los mensajes del chat.
+    pub mensaje: usize,
+    /// En una nota rica, que foto suya es (en el orden de
+    /// `nota_rica::imagenes`, el mismo que cuenta la burbuja); `None`, el
+    /// mensaje entero.
+    pub foto: Option<usize>,
+}
+
+impl Cosa {
+    /// El mensaje entero.
+    pub fn entera(mensaje: usize) -> Cosa {
+        Cosa {
+            mensaje,
+            foto: None,
+        }
+    }
+}
+
+/// Las fotos de una nota rica, en el orden en que se ven en su burbuja. Lo
+/// que no es una foto (un PDF, un audio) no cuenta. Sin `![` no se parte el
+/// texto: la ficha pregunta por cada nota en cada fotograma.
+pub fn fotos_de_la_nota(texto: &str) -> Vec<crate::nota_rica::Imagen> {
+    if !texto.contains("![") {
+        return Vec::new();
+    }
+    let bloques = crate::nota_rica::bloques(texto.trim());
+    crate::nota_rica::imagenes(&bloques).cloned().collect()
+}
+
+/// **Lo que sale en «Fotos»**: los mensajes de foto (`fotos`) y, de cada
+/// nota (`notas`), cada una de sus fotos, todo en el orden del chat. Las dos
+/// listas son posiciones en los mensajes, de menor a mayor; `cuantas_fotos`
+/// dice cuantas lleva la nota de esa posicion. Una nota sin fotos no sale.
+pub fn con_las_fotos_de_las_notas(
+    fotos: &[usize],
+    notas: &[usize],
+    cuantas_fotos: impl Fn(usize) -> usize,
+) -> Vec<Cosa> {
+    let mut salida = Vec::with_capacity(fotos.len());
+    let (mut f, mut n) = (fotos.iter().peekable(), notas.iter().peekable());
+    loop {
+        match (f.peek(), n.peek()) {
+            (Some(&&a), Some(&&b)) if a <= b => {
+                salida.push(Cosa::entera(a));
+                f.next();
+            }
+            (_, Some(&&b)) => {
+                salida.extend((0..cuantas_fotos(b)).map(|k| Cosa {
+                    mensaje: b,
+                    foto: Some(k),
+                }));
+                n.next();
+            }
+            (Some(&&a), None) => {
+                salida.push(Cosa::entera(a));
+                f.next();
+            }
+            (None, None) => return salida,
+        }
+    }
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
-
-    fn hueco() -> Rect {
-        Rect {
-            x: 700,
-            y: 24,
-            ancho: 392,
-            alto: 700,
-        }
-    }
-
-    #[test]
-    fn el_panel_es_columna_en_una_ventana_ancha_y_lo_ocupa_todo_en_una_estrecha() {
-        let ancho = ancho_panel(1400, 100);
-        assert!((ANCHO_MINIMO..=ANCHO_MAXIMO).contains(&ancho), "{ancho}");
-        // Justo en el umbral ya cabe como columna.
-        assert!(ancho_panel(ANCHO_TRES_COLUMNAS, 100) < ANCHO_TRES_COLUMNAS);
-        // Estrecha: no cabe de columna y se lo queda todo.
-        assert_eq!(ancho_panel(800, 100), 800);
-        // Y escala con el DPI.
-        assert!(ancho_panel(2800, 200) >= ANCHO_MINIMO * 2);
-    }
-
-    #[test]
-    fn las_piezas_del_panel_van_en_orden_y_sin_solaparse() {
-        let d = Disposicion::calcular(hueco(), false, 100);
-        assert_eq!(d.cabecera.y, hueco().y);
-        assert_eq!(d.ficha.y, d.cabecera.abajo());
-        assert_eq!(d.tira.y, d.ficha.abajo());
-        assert_eq!(d.contenido.y, d.tira.abajo());
-        assert_eq!(d.contenido.abajo(), hueco().abajo());
-        assert!(d.contenido.alto > 0);
-        // La isla vive dentro de la tira, con su aire.
-        assert!(d.isla.y > d.tira.y);
-        assert!(d.isla.abajo() < d.tira.abajo());
-        assert_eq!(d.isla.alto, TIRA_ALTO - 2 * TIRA_MARGEN_Y);
-    }
-
-    #[test]
-    fn las_pestanas_se_reparten_y_se_aprietan_si_no_caben() {
-        let d = Disposicion::calcular(hueco(), false, 100);
-        // Holgadas: cada una con su ancho natural.
-        let anchos = [40.0, 50.0];
-        let p = d.pestanas(&anchos, 100);
-        assert_eq!(p.len(), 2);
-        assert_eq!(p[0].ancho, 40 + 2 * PESTANA_RELLENO);
-        assert_eq!(p[1].x, p[0].derecha(), "pegadas, sin hueco entre ellas");
-
-        // Las siete de verdad no caben en 392: se reparten a partes iguales
-        // en vez de dejar que la ultima se salga.
-        let muchas: Vec<f32> = (0..7).map(|_| 60.0).collect();
-        let p = d.pestanas(&muchas, 100);
-        assert_eq!(p.len(), 7);
-        assert!(p[6].derecha() <= d.isla.derecha() + 1, "{:?}", p[6]);
-        assert!(p.windows(2).all(|w| w[0].ancho == w[1].ancho));
-    }
-
-    #[test]
-    fn la_pildora_se_encoge_dentro_de_su_pestana() {
-        let d = Disposicion::calcular(hueco(), false, 100);
-        let p = d.pestanas(&[40.0], 100);
-        let pildora = d.pildora(p[0], 100);
-        // Encogida por los cuatro lados, no solo arriba y abajo.
-        assert_eq!(pildora.ancho, p[0].ancho - 2 * PILDORA_HUECO);
-        assert_eq!(pildora.alto, p[0].alto - 2 * PILDORA_HUECO);
-        assert!(pildora.y > p[0].y && pildora.abajo() < p[0].abajo());
-        assert!(pildora.x > p[0].x && pildora.derecha() < p[0].derecha());
-        // Y se acierta donde se pulsa.
-        let dentro = Punto {
-            x: p[0].x + 5,
-            y: p[0].y + 5,
-        };
-        assert_eq!(d.pestana_en(dentro, &p), Some(0));
-        let fuera = Punto {
-            x: p[0].x + 5,
-            y: d.contenido.y + 5,
-        };
-        assert_eq!(d.pestana_en(fuera, &p), None);
-    }
-
-    #[test]
-    fn la_cuadricula_reparte_el_sobrante_y_queda_centrada() {
-        // Con el panel a 392 caben cuatro columnas.
-        let r = rejilla(392, 100);
-        assert_eq!(r.columnas, 4);
-        assert!(
-            r.lado >= CELDA_MINIMA,
-            "ninguna celda por debajo del minimo"
-        );
-        // Lo que ocupa, mas los dos margenes, es el ancho entero (o uno menos
-        // por el redondeo): no sobra un pico a la derecha.
-        let ocupa = r.columnas * r.lado + (r.columnas - 1) * CELDA_HUECO;
-        assert!(392 - (ocupa + 2 * r.margen) <= 1, "sobra demasiado");
-
-        // En un panel estrechisimo queda una sola columna, no cero.
-        let r = rejilla(60, 100);
-        assert_eq!(r.columnas, 1);
-        assert!(r.lado >= 1);
-    }
-
-    #[test]
-    fn de_mil_fotos_solo_se_pintan_las_que_entran() {
-        let d = Disposicion::calcular(hueco(), false, 100);
-        let r = rejilla(d.contenido.ancho, 100);
-        let (primera, cuantas) = r.visibles(d.contenido, 1000, 0, 100);
-        assert_eq!(primera, 0);
-        assert!(cuantas < 60, "demasiadas: {cuantas}");
-
-        // Bajando, se empieza por otra fila entera.
-        let paso = (r.lado + CELDA_HUECO) as i32;
-        let (primera, _) = r.visibles(d.contenido, 1000, paso * 3, 100);
-        assert_eq!(primera, 3 * r.columnas as usize, "filas enteras");
-
-        // Las celdas de una fila van en linea y las de la siguiente, debajo.
-        let a = r.celda(0, d.contenido, 0, 100);
-        let b = r.celda(1, d.contenido, 0, 100);
-        let c = r.celda(r.columnas as usize, d.contenido, 0, 100);
-        assert_eq!(a.y, b.y);
-        assert_eq!(b.x - a.x, (r.lado + CELDA_HUECO) as i32);
-        assert_eq!(c.x, a.x);
-        assert!(c.y > a.y);
-        assert_eq!(a.ancho, a.alto, "cuadradas");
-    }
-
-    #[test]
-    fn sin_fotos_la_cuadricula_no_ocupa_nada() {
-        let r = rejilla(392, 100);
-        assert_eq!(r.alto_total(0, 100), 0);
-        let d = Disposicion::calcular(hueco(), false, 100);
-        assert_eq!(r.visibles(d.contenido, 0, 0, 100), (0, 0));
-        // Una sola foto ocupa una fila.
-        assert_eq!(r.alto_total(1, 100), r.lado);
-    }
-
-    #[test]
-    fn la_fila_de_un_archivo_tiene_sus_tres_lineas_en_su_sitio() {
-        let fila = Rect {
-            x: 700,
-            y: 200,
-            ancho: 392,
-            alto: ARCHIVO_ALTO,
-        };
-        let f = fila_archivo(fila, 100);
-        assert_eq!(f.miniatura.ancho, ARCHIVO_MINIATURA);
-        assert_eq!(f.miniatura.alto, ARCHIVO_MINIATURA);
-        assert!(f.miniatura.abajo() <= fila.abajo(), "cabe en su fila");
-        // Las tres lineas, de arriba abajo y a la derecha de la miniatura.
-        assert!(f.nombre.y < f.estado.y && f.estado.y < f.fecha.y);
-        assert_eq!(f.nombre.x, f.estado.x);
-        assert!(f.nombre.x >= f.miniatura.derecha());
-        assert!(f.ancho_texto > 0);
-    }
 
     fn ventana() -> Rect {
         Rect {
@@ -1078,61 +814,9 @@ mod pruebas {
         }
     }
 
-    #[test]
-    fn la_capa_se_centra_y_deja_su_aire_a_los_lados() {
-        let (caja, completa) = capa_en(ventana(), 100);
-        assert!(!completa);
-        assert_eq!(caja.ancho, CAPA_ANCHO_DESEADO);
-        // Centrada: lo que sobra a la izquierda es lo que sobra a la derecha.
-        assert_eq!(caja.x, ventana().derecha() - caja.derecha());
-        assert_eq!(caja.y, ventana().abajo() - caja.abajo());
-        assert!(caja.alto < ventana().alto, "no llega a los bordes");
-    }
-
-    #[test]
-    fn en_una_ventana_pequena_la_capa_se_lo_queda_todo() {
-        // Caso negativo: por debajo del minimo mas sus margenes no cabe, y
-        // encoger hasta lo ilegible seria peor que taparlo todo.
-        let pequena = Rect {
-            x: 0,
-            y: 0,
-            ancho: CAPA_ANCHO_MINIMO + 2 * CAPA_MARGEN - 1,
-            alto: 500,
-        };
-        let (caja, completa) = capa_en(pequena, 100);
-        assert!(completa);
-        assert_eq!(caja, pequena);
-    }
-
-    #[test]
-    fn en_la_capa_el_aspa_va_a_la_derecha_y_la_lupa_a_su_lado() {
-        let (caja, _) = capa_en(ventana(), 100);
-        let d = Disposicion::capa(caja, 100);
-        // El aspa pegada al borde derecho de la cabecera.
-        assert_eq!(d.volver.derecha(), d.cabecera.derecha());
-        // La lupa, justo a su izquierda y sin solaparse.
-        let lupa = d.buscar(100);
-        assert_eq!(lupa.derecha(), d.volver.x);
-        assert!(lupa.x < d.volver.x);
-        // La capa no tiene ficha: el nombre ya va en la cabecera.
-        assert_eq!(d.ficha.alto, 0);
-        // Y el contenido empieza justo bajo la tira.
-        assert_eq!(d.contenido.y, d.tira.abajo());
-        assert_eq!(d.contenido.abajo(), caja.abajo());
-    }
-
-    #[test]
-    fn la_caja_de_buscar_ocupa_el_sitio_del_titulo_sin_pisar_la_lupa() {
-        let (caja, _) = capa_en(ventana(), 100);
-        let d = Disposicion::capa(caja, 100);
-        let b = d.caja_buscar(100);
-        assert_eq!(b.x, d.cabecera.x + CAPA_TITULO_X as i32, "el mismo margen");
-        assert!(b.derecha() <= d.buscar(100).x, "no se mete bajo la lupa");
-        assert!(b.ancho > 0);
-        // Centrada en la cabecera y mas baja que ella: es una caja dentro,
-        // no una franja que la sustituya.
-        assert!(b.alto < d.cabecera.alto);
-        assert_eq!(b.y - d.cabecera.y, d.cabecera.abajo() - b.abajo());
+    fn isla(escala: u32) -> Isla {
+        let (caja, completa) = isla_en(ventana(), escala);
+        Isla::calcular(caja, completa, escala)
     }
 
     #[test]
@@ -1143,7 +827,6 @@ mod pruebas {
         let sobra = normal.x - (ventana().derecha() - normal.derecha());
         assert!(sobra.abs() <= 1, "centrada: {sobra}");
         assert_eq!(normal.y, ventana().abajo() - normal.abajo());
-        // En un monitor enorme se queda en su maximo, ancho y alto.
         let enorme = Rect {
             x: 0,
             y: 0,
@@ -1153,7 +836,6 @@ mod pruebas {
         let (grande, _) = isla_en(enorme, 100);
         assert_eq!(grande.ancho, ISLA_ANCHO_MAXIMO);
         assert_eq!(grande.alto, ISLA_ALTO_MAXIMO);
-        // Y al 200 % mide el doble de minimo.
         let (doble, _) = isla_en(enorme, 200);
         assert!(doble.ancho >= ISLA_ANCHO_MINIMO * 2);
         // Caso negativo: en una ventana pequena se lo queda todo.
@@ -1167,143 +849,350 @@ mod pruebas {
     }
 
     #[test]
-    fn las_piezas_de_la_isla_no_se_pisan() {
-        let (caja, completa) = isla_en(ventana(), 100);
-        let i = Isla::calcular(caja, completa, 100);
-        assert_eq!(i.cerrar.derecha() + 10, i.cabecera.derecha());
-        assert_eq!(i.buscar.derecha(), i.cerrar.x, "la lupa junto al aspa");
+    fn la_cabecera_mide_lo_mismo_en_cualquier_ventana_y_no_se_pisa() {
+        let i = isla(100);
+        assert_eq!(i.cabecera.alto, ISLA_CABECERA);
+        assert_eq!((i.cerrar.ancho, i.cerrar.alto), (ISLA_BOTON, ISLA_BOTON));
+        assert_eq!(i.avatar.ancho, ISLA_AVATAR);
+        assert_eq!(i.avatar.x - i.panel.x, ISLA_RELLENO as i32);
+        assert_eq!(i.buscar.derecha() + ISLA_BOTON_HUECO as i32, i.cerrar.x);
         assert!(i.avatar.derecha() < i.titulo.x);
         assert!(i.titulo.derecha() < i.buscar.x, "el nombre no pisa la lupa");
-        assert_eq!(i.caja_buscar.x, i.titulo.x);
-        assert!(i.tira.y > i.cabecera.abajo() - 1 && i.tira.abajo() < i.contenido.y + 1);
-        assert_eq!(i.contenido.abajo(), caja.abajo());
-        // La previa usa la tira y el contenido juntos.
+        assert!(i.caja_buscar.derecha() < i.buscar.x);
+        // En la previa, sus dos botones a la izquierda del aspa, y el
+        // titulo antes de ellos.
+        assert_eq!(i.abrir.derecha() + ISLA_BOTON_HUECO as i32, i.cerrar.x);
+        assert!(i.en_el_chat.derecha() < i.abrir.x);
+        assert!(i.titulo_previa.derecha() < i.en_el_chat.x);
+        // Tira y contenido, uno bajo otro hasta abajo.
+        assert_eq!(i.tira.y, i.cabecera.abajo());
+        assert_eq!(i.contenido.y, i.tira.abajo());
+        assert_eq!(i.contenido.abajo(), i.panel.abajo());
+        // Al 150 % todo mide la vez y media, sea cual sea la ventana.
+        let g = isla(150);
+        assert_eq!(g.cabecera.alto, ISLA_CABECERA * 3 / 2);
+        assert_eq!(g.cerrar.ancho, ISLA_BOTON * 3 / 2);
         let h = i.hueco_de_la_previa();
-        assert_eq!((h.y, h.abajo()), (i.cabecera.abajo(), caja.abajo()));
+        assert_eq!((h.y, h.abajo()), (i.cabecera.abajo(), i.panel.abajo()));
     }
 
     #[test]
-    fn las_pestanas_de_la_isla_se_centran_y_nunca_se_salen() {
-        let (caja, completa) = isla_en(ventana(), 100);
-        let i = Isla::calcular(caja, completa, 100);
-        let pocas = i.pestanas(&[40.0, 60.0], 100);
-        assert_eq!(pocas[0].ancho, 40 + 2 * ISLA_PESTANA_RELLENO);
-        assert_eq!(pocas[1].x, pocas[0].derecha(), "pegadas");
-        // Centradas en la tira.
-        let fondo = i.fondo_de_la_tira(&pocas);
-        let izq = fondo.x - i.tira.x;
-        let der = i.tira.derecha() - fondo.derecha();
-        assert!((izq - der).abs() <= 1, "{izq} {der}");
-        // Muchas: menos relleno, y si aun asi no caben, a partes iguales.
-        let muchas = i.pestanas(&[70.0; 10], 100);
-        assert_eq!(muchas.len(), 10);
-        assert!(muchas[9].derecha() <= i.tira.derecha() + 1);
-        assert!(muchas[0].x >= i.tira.x);
-        // La pildora, dentro de su pestana.
-        let p = i.pildora(pocas[0], 100);
-        assert!(p.x > pocas[0].x && p.derecha() < pocas[0].derecha());
-        // Caso negativo: sin pestanas no hay fondo.
-        assert_eq!(i.fondo_de_la_tira(&[]).ancho, 0);
+    fn las_pestanas_que_caben_llenan_la_tira_y_no_se_desplazan() {
+        let i = isla(100);
+        let p = i.pestanas(&[40.0, 60.0, 50.0], 99, 100);
+        assert_eq!(p.tope, 0);
+        assert_eq!(p.desplazado, 0, "si caben, no hay nada que desplazar");
+        assert_eq!(p.rects[0].x, i.tira.x);
+        assert!((p.rects[2].derecha() - i.tira.derecha()).abs() <= 1);
+        assert!(p.rects.windows(2).all(|w| w[0].derecha() == w[1].x));
+        // Cada una al menos con su texto y su relleno.
+        assert!(p.rects[1].ancho >= 60 + 2 * ISLA_PESTANA_RELLENO);
+        // Caso negativo: sin pestanas no hay nada.
+        assert!(i.pestanas(&[], 0, 100).rects.is_empty());
     }
 
     #[test]
-    fn la_rejilla_de_la_isla_pone_mas_columnas_cuanto_mas_ancha() {
-        let estrecha = rejilla_isla(380, 100);
-        let ancha = rejilla_isla(720, 100);
-        assert!(ancha.columnas > estrecha.columnas);
-        for r in [estrecha, ancha] {
-            assert!(r.lado >= ISLA_CELDA_MINIMA);
-            assert_eq!(r.hueco, ISLA_CELDA_HUECO);
+    fn las_que_no_caben_no_se_recortan_y_la_tira_se_desplaza_hasta_la_activa() {
+        let i = isla(100);
+        let anchos = [90.0; 10];
+        let p = i.pestanas(&anchos, 0, 100);
+        assert!(p.tope > 0);
+        assert!(
+            p.rects
+                .iter()
+                .all(|r| r.ancho >= 90 + 2 * ISLA_PESTANA_RELLENO),
+            "ningun rotulo se aprieta"
+        );
+        // La ultima no se ve; para verla hay que desplazar, sin pasarse.
+        assert!(p.rects[9].derecha() > i.tira.derecha());
+        let d = p.para_ver(9, i.tira, 100);
+        assert!(d > 0 && d <= p.tope);
+        let vista = i.pestanas(&anchos, d, 100);
+        assert!(vista.rects[9].derecha() <= i.tira.derecha());
+        // Y de vuelta a la primera.
+        assert_eq!(vista.para_ver(0, i.tira, 100), 0);
+        // Lo que asoma fuera de la tira no se pulsa.
+        let fuera = Punto {
+            x: i.tira.derecha() + 5,
+            y: i.tira.y + 5,
+        };
+        assert_eq!(p.en(fuera, i.tira), None);
+        assert_eq!(
+            p.en(
+                Punto {
+                    x: p.rects[0].x + 3,
+                    y: i.tira.y + 3
+                },
+                i.tira
+            ),
+            Some(0)
+        );
+        // Desplazar mas alla del tope se queda en el tope.
+        assert_eq!(i.pestanas(&anchos, 1_000_000, 100).desplazado, p.tope);
+    }
+
+    #[test]
+    fn la_rayita_va_bajo_el_texto_centrada() {
+        let r = Rect {
+            x: 100,
+            y: 50,
+            ancho: 80,
+            alto: ISLA_TIRA,
+        };
+        let s = subrayado(r, 40.0, 100);
+        assert_eq!(s.ancho, 40);
+        assert_eq!(s.abajo(), r.abajo());
+        assert_eq!(s.x - r.x, r.derecha() - s.derecha());
+        assert_eq!(s.alto, ISLA_SUBRAYADO);
+    }
+
+    #[test]
+    fn la_rejilla_tiene_de_tres_a_cinco_columnas_y_va_de_borde_a_borde() {
+        for (ancho, columnas) in [(300, 3), (380, 3), (500, 4), (640, 5), (2000, 5)] {
+            let (c, lado, margen) = columnas_isla(ancho, 100);
+            assert_eq!(c, columnas, "a {ancho}");
+            let ocupa = c * lado + (c - 1) * ISLA_CELDA_HUECO;
+            assert!(ancho - ocupa < c, "de borde a borde a {ancho}");
+            assert_eq!(margen, (ancho - ocupa) / 2);
         }
-        // Las celdas, con su hueco de la isla y no el del panel viejo.
-        let area = Rect {
+    }
+
+    fn area() -> Rect {
+        Rect {
+            x: 10,
+            y: 100,
+            ancho: 640,
+            alto: 400,
+        }
+    }
+
+    #[test]
+    fn cada_mes_lleva_su_rotulo_y_sus_cosas_debajo() {
+        // Siete fotos: cinco de un mes y dos del siguiente.
+        let meses = [5, 5, 5, 5, 5, 4, 4];
+        let l = lista_isla(area(), &meses, true, ISLA_FILA, 100);
+        assert_eq!(l.columnas, 5);
+        let rotulos: Vec<usize> = l
+            .piezas
+            .iter()
+            .filter_map(|(p, _)| match p {
+                Pieza::Mes(n) => Some(*n),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rotulos, [0, 5]);
+        let a = l.caja_de(0).unwrap();
+        assert_eq!(a.y, area().y + ISLA_MES as i32, "bajo su rotulo");
+        let b = l.caja_de(1).unwrap();
+        assert_eq!(b.x - a.derecha(), ISLA_CELDA_HUECO as i32);
+        assert_eq!(a.ancho, a.alto, "cuadradas");
+        // Las del mes siguiente, bajo su rotulo y empezando en la primera
+        // columna.
+        let f = l.caja_de(5).unwrap();
+        assert_eq!(f.x, a.x);
+        assert!(f.y >= a.abajo() + ISLA_MES as i32);
+        // Caso negativo: sin cosas no hay nada que medir.
+        let vacia = lista_isla(area(), &[], true, ISLA_FILA, 100);
+        assert!(vacia.piezas.is_empty());
+        assert_eq!(vacia.alto, 0);
+    }
+
+    #[test]
+    fn las_filas_van_una_bajo_otra_y_solo_se_dan_las_que_se_ven() {
+        let meses = vec![1; 100];
+        let l = lista_isla(area(), &meses, false, ISLA_FILA, 100);
+        let a = l.caja_de(0).unwrap();
+        let b = l.caja_de(1).unwrap();
+        assert_eq!(b.y, a.abajo());
+        assert_eq!(a.alto, ISLA_FILA);
+        assert_eq!(l.alto, ISLA_MES + 100 * ISLA_FILA + ISLA_PIE_DE_LISTA);
+        let v = l.visibles(area(), 0);
+        assert!(v.len() < 12, "solo las que entran: {}", v.len());
+        let lejos = l.visibles(area(), 50 * ISLA_FILA as i32);
+        assert!(lejos.iter().all(|(_, r)| r.abajo() > area().y));
+        assert!(lejos.iter().any(|(p, _)| *p == Pieza::Cosa(50)));
+    }
+
+    #[test]
+    fn las_filas_de_proyectos_van_seguidas_sin_rotulos_y_se_pulsan_donde_se_ven() {
+        let l = filas_isla(area(), 30, ISLA_FILA, 100);
+        assert!(
+            l.piezas.iter().all(|(p, _)| matches!(p, Pieza::Cosa(_))),
+            "sin rotulos de mes"
+        );
+        let a = l.caja_de(0).unwrap();
+        assert_eq!(a.y, area().y + ISLA_PIE_DE_LISTA as i32, "con aire arriba");
+        assert_eq!(l.caja_de(1).unwrap().y, a.abajo());
+        assert_eq!(a.alto, ISLA_FILA);
+        assert_eq!(l.alto, 2 * ISLA_PIE_DE_LISTA + 30 * ISLA_FILA);
+        // Lo que se pinta desplazado es lo que recibe el clic: la fila 12,
+        // bajada a la vista, esta donde la da `visibles`.
+        let scroll = l.para_ver(12, area(), 0);
+        let (_, r) = l
+            .visibles(area(), scroll)
+            .into_iter()
+            .find(|(p, _)| *p == Pieza::Cosa(12))
+            .unwrap();
+        assert!(area().contiene(Punto {
+            x: r.x + 5,
+            y: r.y + 5
+        }));
+        assert_eq!(r.y, l.caja_de(12).unwrap().y - scroll);
+        // Las flechas: arriba y abajo de una en una, y nada bajo la ultima.
+        assert_eq!(l.vecina(0, 0, 1), Some(1));
+        assert_eq!(l.vecina(5, 0, -1), Some(4));
+        assert_eq!(l.vecina(29, 0, 1), None);
+        // Caso negativo: sin proyectos no hay nada que medir.
+        let vacia = filas_isla(area(), 0, ISLA_FILA, 100);
+        assert!(vacia.piezas.is_empty());
+        assert_eq!(vacia.alto, 0);
+        // Y con la escala crecen las filas, no el numero de ellas.
+        let grande = filas_isla(area(), 3, ISLA_FILA, 150);
+        assert_eq!(grande.caja_de(0).unwrap().alto, ISLA_FILA * 3 / 2);
+    }
+
+    #[test]
+    fn las_flechas_mueven_el_foco_por_la_rejilla_aunque_haya_meses_en_medio() {
+        // Tres de un mes y cuatro del siguiente, en cinco columnas.
+        let meses = [2, 2, 2, 1, 1, 1, 1];
+        let l = lista_isla(area(), &meses, true, ISLA_FILA, 100);
+        assert_eq!(l.vecina(0, 1, 0), Some(1));
+        assert_eq!(l.vecina(1, -1, 0), Some(0));
+        // Abajo desde la segunda: la del mes siguiente en su columna.
+        assert_eq!(l.vecina(1, 0, 1), Some(4));
+        assert_eq!(l.vecina(4, 0, -1), Some(1));
+        // Caso negativo: no hay nada antes de la primera ni bajo la ultima.
+        assert_eq!(l.vecina(0, -1, 0), None);
+        assert_eq!(l.vecina(6, 0, 1), None);
+        assert_eq!(l.vecina(6, 1, 0), None);
+    }
+
+    #[test]
+    fn para_ver_una_cosa_se_desplaza_lo_justo() {
+        let meses = vec![1; 100];
+        let l = lista_isla(area(), &meses, false, ISLA_FILA, 100);
+        assert_eq!(l.para_ver(0, area(), 0), 0, "ya se ve");
+        let s = l.para_ver(20, area(), 0);
+        let r = l.caja_de(20).unwrap();
+        assert_eq!(r.abajo() - s, area().abajo());
+        // Y subiendo, que quede arriba.
+        assert_eq!(l.para_ver(3, area(), s), l.caja_de(3).unwrap().y - area().y);
+    }
+
+    #[test]
+    fn la_barra_de_desplazamiento_solo_sale_si_hay_mas_de_lo_que_cabe() {
+        assert_eq!(barra_de_desplazamiento(area(), 300, 0, 100), None);
+        let arriba = barra_de_desplazamiento(area(), 1600, 0, 100).unwrap();
+        let abajo = barra_de_desplazamiento(area(), 1600, 1200, 100).unwrap();
+        assert!(arriba.y < abajo.y);
+        assert!(arriba.alto >= ISLA_BARRA_MINIMA);
+        assert!(abajo.abajo() <= area().abajo());
+        assert!(arriba.derecha() <= area().derecha());
+        // Un cuarto de lo que hay se ve: la barra mide en torno a un cuarto.
+        assert!((arriba.alto as i32 - 100).abs() <= 3, "{}", arriba.alto);
+    }
+
+    #[test]
+    fn en_una_fila_la_chapa_va_a_la_izquierda_y_el_texto_detras() {
+        let fila = Rect {
             x: 0,
             y: 0,
-            ancho: 720,
-            alto: 500,
-        };
-        let a = ancha.celda(0, area, 0, 100);
-        let b = ancha.celda(1, area, 0, 100);
-        assert_eq!(b.x - a.derecha(), ISLA_CELDA_HUECO as i32);
-        // La de la fila siguiente, debajo y en la primera columna.
-        let c = ancha.celda(ancha.columnas as usize, area, 0, 100);
-        assert_eq!((c.x, c.y), (a.x, a.abajo() + ISLA_CELDA_HUECO as i32));
-    }
-
-    #[test]
-    fn las_filas_de_la_isla_van_una_bajo_otra_y_solo_se_miran_las_que_se_ven() {
-        let area = Rect {
-            x: 100,
-            y: 200,
             ancho: 500,
-            alto: 310,
+            alto: ISLA_FILA,
         };
-        let a = fila_isla(0, area, 0, 100);
-        let b = fila_isla(1, area, 0, 100);
-        assert_eq!(b.y, a.abajo());
-        assert!(a.x > area.x && a.derecha() < area.derecha());
-        let (primera, cuantas) = filas_visibles(area, 100, 0, 100);
-        assert_eq!(primera, 0);
-        assert_eq!(cuantas, 310 / ISLA_FILA as usize + 2);
-        let (primera, _) = filas_visibles(area, 100, 3 * ISLA_FILA as i32, 100);
-        assert_eq!(primera, 3);
-        // Caso negativo: no se pasa de las que hay.
-        assert_eq!(filas_visibles(area, 2, 0, 100), (0, 2));
-        assert_eq!(alto_de_las_filas(0, 100), 0);
-        let f = dentro_de_la_fila(a, 100);
-        assert!(f.miniatura.x > a.x && f.miniatura.abajo() <= a.abajo());
-        assert!(f.nombre.x > f.miniatura.derecha() && f.estado.y > f.nombre.y);
+        let f = dentro_de_la_fila(fila, 100);
+        assert_eq!(f.miniatura.ancho, ISLA_FILA_MINIATURA);
+        assert_eq!(f.miniatura.y - fila.y, fila.abajo() - f.miniatura.abajo());
+        assert!(f.nombre.x > f.miniatura.derecha());
+        assert!(f.estado.y > f.nombre.y);
+        assert!(f.tercera.is_none(), "dos lineas");
+        let enlace = dentro_de_la_fila(
+            Rect {
+                alto: ISLA_FILA_ENLACE,
+                ..fila
+            },
+            100,
+        );
+        let t = enlace.tercera.expect("un enlace lleva tres lineas");
+        assert!(t.y > enlace.estado.y && t.y + 16 <= ISLA_FILA_ENLACE as i32);
     }
 
     #[test]
-    fn la_previa_deja_las_flechas_a_los_lados_y_los_botones_abajo() {
-        let (caja, completa) = isla_en(ventana(), 100);
-        let i = Isla::calcular(caja, completa, 100);
+    fn la_previa_pone_las_flechas_encima_de_la_cosa_a_los_lados() {
+        let i = isla(100);
         let h = i.hueco_de_la_previa();
         let p = previa(h, 100);
-        assert!(p.anterior.derecha() <= p.vista.x);
-        assert!(p.siguiente.x >= p.vista.derecha());
-        assert!(p.vista.abajo() <= p.pie.y);
-        assert_eq!(p.pie.abajo(), h.abajo());
-        assert!(p.en_el_chat.derecha() < p.abrir.x, "sin pisarse");
-        assert!(p.abrir.abajo() <= p.pie.abajo() && p.abrir.y >= p.pie.y);
-        // Centrados: lo que sobra a cada lado del par es lo mismo.
-        let izq = p.en_el_chat.x - p.pie.x;
-        let der = p.pie.derecha() - p.abrir.derecha();
-        assert!((izq - der).abs() <= 1);
+        assert!(p.anterior.x >= p.vista.x && p.siguiente.derecha() <= p.vista.derecha());
+        assert!(p.anterior.derecha() < p.siguiente.x);
+        assert_eq!(
+            p.anterior.y - p.vista.y,
+            p.vista.abajo() - p.anterior.abajo(),
+            "a media altura"
+        );
+        assert!(p.vista.abajo() <= h.abajo());
     }
 
     #[test]
-    fn encajar_no_recorta_ni_deforma() {
-        let caja = Rect {
-            x: 10,
-            y: 20,
-            ancho: 400,
-            alto: 300,
-        };
-        // Apaisada: llena el ancho y sobra arriba y abajo por igual.
-        let r = encajar(800, 400, caja);
-        assert_eq!((r.ancho, r.alto), (400, 200));
-        assert_eq!(r.y - caja.y, caja.abajo() - r.abajo());
-        // Vertical: llena el alto.
-        let r = encajar(100, 600, caja);
-        assert_eq!(r.alto, 300);
-        assert_eq!(r.ancho, 50);
-        // Caso negativo: una imagen sin tamano no ocupa nada.
-        assert_eq!(encajar(0, 10, caja).ancho, 0);
+    fn la_duracion_se_lee_como_en_un_reproductor() {
+        assert_eq!(duracion_corta(7_000), "0:07");
+        assert_eq!(duracion_corta(750_000), "12:30");
+        assert_eq!(duracion_corta(3_723_000), "1:02:03");
+        // Caso negativo: sin duracion no se dice nada.
+        assert_eq!(duracion_corta(0), "");
     }
 
     #[test]
-    fn en_una_cabecera_estrechisima_la_caja_de_buscar_se_queda_en_nada() {
-        // Caso negativo: si no cabe, ancho cero — nunca un rectangulo del
-        // reves, que al pintarlo se saldria por la izquierda.
-        let estrecha = Rect {
-            x: 0,
-            y: 0,
-            ancho: 60,
-            alto: 200,
+    fn las_fotos_de_una_nota_salen_cada_una_en_el_sitio_de_su_nota() {
+        // Mensajes: 0 foto, 1 nota con dos fotos, 2 nota sin fotos, 3 foto,
+        // 4 nota con una.
+        let fotos = [0, 3];
+        let notas = [1, 2, 4];
+        let cuantas = |n: usize| match n {
+            1 => 2,
+            4 => 1,
+            _ => 0,
         };
-        let d = Disposicion::capa(estrecha, 100);
-        assert_eq!(d.caja_buscar(100).ancho, 0);
+        let c = con_las_fotos_de_las_notas(&fotos, &notas, cuantas);
+        let nota = |mensaje, k| Cosa {
+            mensaje,
+            foto: Some(k),
+        };
+        assert_eq!(
+            c,
+            vec![
+                Cosa::entera(0),
+                nota(1, 0),
+                nota(1, 1),
+                Cosa::entera(3),
+                nota(4, 0)
+            ]
+        );
+        // Caso negativo: sin notas, las fotos tal cual; sin nada, nada.
+        assert_eq!(
+            con_las_fotos_de_las_notas(&[5, 7], &[], cuantas),
+            vec![Cosa::entera(5), Cosa::entera(7)]
+        );
+        assert!(con_las_fotos_de_las_notas(&[], &[2], cuantas).is_empty());
+    }
+
+    #[test]
+    fn de_una_nota_solo_cuentan_sus_fotos_y_en_el_orden_de_la_burbuja() {
+        let nota = "Visita\n![](pixpin:files/guardados/pc/c/notas/1-a.png)\n![planta|300](pixpin:files/guardados/pc/c/notas/2-b.jpg)\n\nY el plano\n![Plano.pdf](pixpin:files/guardados/pc/c/notas/3-Plano.pdf)\n![](notas/4-c.webp)";
+        let f = fotos_de_la_nota(nota);
+        let enlaces: Vec<&str> = f.iter().map(|i| i.enlace.as_str()).collect();
+        assert_eq!(
+            enlaces,
+            [
+                "pixpin:files/guardados/pc/c/notas/1-a.png",
+                "pixpin:files/guardados/pc/c/notas/2-b.jpg",
+                "notas/4-c.webp"
+            ]
+        );
+        // El mismo orden en que la burbuja las cuenta para abrirlas.
+        let b = crate::nota_rica::bloques(nota.trim());
+        let de_la_burbuja: Vec<_> = crate::nota_rica::imagenes(&b).cloned().collect();
+        assert_eq!(f, de_la_burbuja);
+        // Caso negativo: una nota llana no tiene fotos.
+        assert!(fotos_de_la_nota("hola, mira https://x.com/a.png").is_empty());
     }
 }

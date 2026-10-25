@@ -38,6 +38,13 @@ use pixpin_proyecto::anotado as an;
 /// del borde de abajo de la barra (`AIRE_BAJO_LA_BARRA` de Windows).
 pub const AIRE_BAJO_LA_BARRA: f32 = 48.0;
 
+/// Los topes del aumento del editor del Mac (`VistaEditorLienzoNS.zoomMinimo`
+/// y `zoomMaximo`, los de la rueda y el pellizco): la vista de una marca se
+/// encaja con ellos y no con los de la camara (Windows 64af3c3), para que la
+/// primera muesca de alejar despues de llegar no acerque de golpe.
+pub const ZOOM_MINIMO_DEL_EDITOR: f32 = 0.05;
+pub const ZOOM_MAXIMO_DEL_EDITOR: f32 = 30.0;
+
 /// Una marca del lienzo como la ve Swift.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct MarcaDelLienzo {
@@ -386,7 +393,10 @@ impl MarcasDelLienzo {
         let e = self.estado();
         let m = e.marcas.iter().find(|m| m.id == id)?;
         Some(match e.vistas.get(&id) {
-            Some(v) => v.camara(ancho_px, alto_px).into(),
+            // Con los topes del editor y no los de la camara.
+            Some(v) => v
+                .camara_entre(ancho_px, alto_px, ZOOM_MINIMO_DEL_EDITOR, ZOOM_MAXIMO_DEL_EDITOR)
+                .into(),
             None => marcas::camara_con_la_marca_arriba(
                 m,
                 camara.zoom,
@@ -399,7 +409,9 @@ impl MarcasDelLienzo {
 
     /// **Echa a volar la camara** hacia la marca `id` (ver
     /// [`MarcasDelLienzo::destino`]). Antes relee las vistas: la que se haya
-    /// cambiado en otro aparato manda. `false` si la marca no esta.
+    /// cambiado en otro aparato manda. `false` si la marca no esta o si no
+    /// hay hueco (la ventana minimizada, o a medio crear): la camara saldria
+    /// para una ventana de un pixel (Windows 64af3c3).
     pub fn ir_a(
         &self,
         id: i64,
@@ -408,6 +420,9 @@ impl MarcasDelLienzo {
         alto_px: f32,
         bajo_la_barra: f32,
     ) -> bool {
+        if !(ancho_px >= 1.0 && alto_px >= 1.0) {
+            return false;
+        }
         let vistas = leer_vistas(&self.ruta_vistas);
         {
             let mut e = self.estado();
@@ -567,6 +582,43 @@ mod pruebas {
         assert!(m.quitar(a));
         let vistas = leer_vistas(&m.rutas().1);
         assert_eq!(vistas.keys().copied().collect::<Vec<_>>(), vec![b]);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn lejos_del_origen_el_vuelo_aterriza_y_sin_hueco_no_despega() {
+        // Windows 64af3c3: un plano en milimetros, coordenadas de millones y
+        // el aumento al maximo; el vuelo acaba exactamente en la vista.
+        let d = carpeta("lejos");
+        let m = MarcasDelLienzo::junto_al_dibujo(d.join("a.excalidraw").display().to_string());
+        let alli = CamaraDelLienzo {
+            x: 2_003_000.5,
+            y: -1_499_000.5,
+            zoom: ZOOM_MAXIMO_DEL_EDITOR,
+        };
+        let id = m.poner(2_003_010.0, -1_498_990.0, "⭐".into(), alli, 1600.0, 900.0);
+        let aqui = CamaraDelLienzo {
+            x: 2_000_000.0,
+            y: -1_500_000.0,
+            zoom: ZOOM_MAXIMO_DEL_EDITOR,
+        };
+        let destino = m.destino(id, aqui, 1600.0, 900.0, 0.0).unwrap();
+        assert!(m.ir_a(id, aqui, 1600.0, 900.0, 0.0));
+        assert_eq!(volar(&m, aqui), destino);
+        assert!(!m.volando());
+        // Una vista enorme no baja del minimo del editor.
+        let enorme = m.poner(0.0, 0.0, "❗".into(), CAM, 800.0, 600.0);
+        let lejisimos = CamaraDelLienzo {
+            x: -1e6,
+            y: -1e6,
+            zoom: 0.0001,
+        };
+        assert!(m.fijar_vista(enorme, lejisimos, 800.0, 600.0));
+        let c = m.destino(enorme, CAM, 800.0, 600.0, 0.0).unwrap();
+        assert_eq!(c.zoom, ZOOM_MINIMO_DEL_EDITOR);
+        // Caso negativo: sin hueco (la ventana minimizada) no se echa a volar.
+        assert!(!m.ir_a(id, aqui, 0.0, 900.0, 0.0));
+        assert!(!m.volando());
         let _ = std::fs::remove_dir_all(&d);
     }
 

@@ -1,0 +1,38 @@
+[package]
+name = "pixpin-motor-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = "2.0.20"
+tracing = "0.1.44"
+
+# Todo lo de Windows va aparte: la aritmetica (formatos, reloj, deriva,
+# remuestreo, mezcla) compila y se prueba en Linux sin arrastrarlo.
+[target.'cfg(windows)'.dependencies]
+# El `#[implement]` de los avisos de aparatos y de la activacion por
+# proceso se expande a `windows_core::...`, como en `pixpin-audio`.
+windows-core = "0.62.2"
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_MediaFoundation",
+    # `PROPVARIANT` (firma de `IMMDevice::Activate` y el blob de la captura
+    # por proceso) y el `VARIANT` del que cuelga.
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_System_Com",
+    # El nombre de cada microfono para la lista (`PKEY_Device_FriendlyName`
+    # y el `IPropertyStore` donde vive).
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_UI_Shell_PropertiesSystem",
+    # `CreateEventW` esta detras de `Win32_Security` por el descriptor de
+    # seguridad de su primer parametro, que aqui va nulo.
+    "Win32_Security",
+    "Win32_System_Threading",
+    # `QueryPerformanceCounter`: el reloj con el que WASAPI fecha cada
+    # paquete.
+    "Win32_System_Performance",
+] }

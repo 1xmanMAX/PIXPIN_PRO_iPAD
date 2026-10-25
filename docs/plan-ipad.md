@@ -143,3 +143,8 @@ llevarlas al Mac): `proyectos.rs` (renombrar, archivar e `importar_proyecto`), `
 `hojas/suelto.rs` y `hojas/graficos.rs`, `notas/comentarios_nativos.rs` y `notas/nativo_md.rs`,
 `apuntar_tarea_con_imagenes_en` (`tareas.rs`) y la ficha de clase del horario
 (`horario/ventana_mac.rs`: `FichaDeClase`).
+Luego, el Mac `27b1bcd` (2 commits sobre `2a49a4c`): el crate `pixpin-motor-audio` (entra
+solo por `nucleo/*`; nadie lo usa aun desde Swift), la nota rica revisada, el vuelo a una
+marca que aterriza, la figura que reabre el chat y la foto pegada numerada; sin conflictos
+en Rust. Esas funciones del iPad van al Mac en `dffbeef` (rama `claude/vibrant-gates-0lx4dc`),
+que aun no esta en `27b1bcd`.

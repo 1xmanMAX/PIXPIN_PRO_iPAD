@@ -386,8 +386,12 @@ mod pruebas {
         assert!(sitio(SeccionFicha::Fotos) < sitio(SeccionFicha::Archivos));
         assert!(sitio(SeccionFicha::Videos) < sitio(SeccionFicha::Enlaces));
         assert_eq!(ORDEN[ORDEN.len() - 1], SeccionFicha::Buzon);
-        // Cada una de la ficha es una del cuaderno distinta.
+        // Cada una de la ficha es una del cuaderno distinta (menos la de
+        // los proyectos, que no es de mensajes y esta ficha aun no la lleva).
         for s in cuaderno::Seccion::TODAS {
+            if s == cuaderno::Seccion::Proyectos {
+                continue;
+            }
             assert_eq!(ORDEN.iter().filter(|x| x.del_cuaderno() == s).count(), 1);
         }
     }

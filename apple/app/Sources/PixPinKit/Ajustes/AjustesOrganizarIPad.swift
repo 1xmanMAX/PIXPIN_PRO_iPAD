@@ -72,10 +72,12 @@ public enum AjustesOrganizarIPad {
 
     /// El nombre de `[herramientas]` de una herramienta de la barra del
     /// lienzo del iPad (`flecha_libre` → `flecha-libre`). La flecha no se
-    /// apaga (sin ella no se elige nada); la zona al chat va con la zona.
+    /// apaga (sin ella no se elige nada), ni el marco, que salio de la barra
+    /// al riel y de los `NOMBRES` de Windows (como el Mac); la zona al chat
+    /// va con la zona.
     public static func nombreEnToml(_ id: String) -> String? {
         switch id {
-        case "seleccion": return nil
+        case "seleccion", "marco": return nil
         case "zona_chat": return "zona"
         default: return id.replacingOccurrences(of: "_", with: "-")
         }

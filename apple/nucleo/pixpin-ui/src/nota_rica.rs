@@ -104,41 +104,84 @@ pub fn es_foto(enlace: &str) -> bool {
 }
 
 /// Las fotos y adjuntos `![alt](enlace)` de un renglon, con lo que queda
-/// entre ellos: `Err` con cada trozo de texto y `Ok` con cada imagen.
+/// entre ellos: `Err` con cada trozo de texto y `Ok` con cada imagen. Lo
+/// que va dentro de un `` `codigo` `` es texto aunque lo parezca (quien
+/// explica la sintaxis escribe `` `![](foto.png)` ``).
 fn partir_imagenes(linea: &str) -> Vec<Result<Imagen, &str>> {
+    let codigo = tramos_de_codigo(linea);
     let mut salida = Vec::new();
-    let mut resto = linea;
-    while let Some(i) = resto.find("![") {
-        let Some((imagen, largo)) = imagen_en(&resto[i..]) else {
-            // Un `![` que no cierra: texto, y se sigue buscando detras.
-            let corte = i + 2;
-            salida.push(Err(&resto[..corte]));
-            resto = &resto[corte..];
+    // Donde empieza el texto aun sin soltar, y desde donde se busca.
+    let (mut desde, mut buscar) = (0, 0);
+    while let Some(k) = linea[buscar..].find("![") {
+        let i = buscar + k;
+        let imagen = if codigo.iter().any(|r| r.contains(&i)) {
+            None
+        } else {
+            imagen_en(&linea[i..])
+        };
+        let Some((imagen, largo)) = imagen else {
+            // Un `![` que no cierra, o de un codigo: texto, y se sigue
+            // buscando detras.
+            buscar = i + 2;
             continue;
         };
-        if i > 0 {
-            salida.push(Err(&resto[..i]));
+        if i > desde {
+            salida.push(Err(&linea[desde..i]));
         }
         salida.push(Ok(imagen));
-        resto = &resto[i + largo..];
+        desde = i + largo;
+        buscar = desde;
     }
-    if !resto.is_empty() {
-        salida.push(Err(resto));
+    if desde < linea.len() {
+        salida.push(Err(&linea[desde..]));
     }
-    // Los trozos de texto pegados (por un `![` sin cerrar) van juntos.
-    let mut juntas: Vec<Result<Imagen, &str>> = Vec::new();
-    for t in salida {
-        match (juntas.last_mut(), t) {
-            (Some(Err(a)), Err(b)) => {
-                // Son trozos seguidos del mismo renglon: se unen sin copiar.
-                let inicio = a.as_ptr() as usize - linea.as_ptr() as usize;
-                let fin = b.as_ptr() as usize - linea.as_ptr() as usize + b.len();
-                *a = &linea[inicio..fin];
+    salida
+}
+
+/// Donde hay `` `codigo` `` en un renglon (en bytes, con sus comillas),
+/// cerrado como lo cierra [`en_linea`].
+fn tramos_de_codigo(linea: &str) -> Vec<std::ops::Range<usize>> {
+    let mut tramos = Vec::new();
+    let mut i = 0;
+    while let Some(k) = linea[i..].find('`') {
+        let inicio = i + k;
+        let tiras = linea[inicio..].bytes().take_while(|b| *b == b'`').count();
+        let valla = &linea[inicio..inicio + tiras];
+        match linea[inicio + tiras..].find(valla) {
+            Some(j) => {
+                let fin = inicio + tiras + j + tiras;
+                tramos.push(inicio..fin);
+                i = fin;
             }
-            (_, t) => juntas.push(t),
+            None => i = inicio + tiras,
         }
     }
-    juntas
+    tramos
+}
+
+/// Donde cierra el `(` de un enlace, en `tras` (lo de detras del `(`): el
+/// `)` que lo empareja, contando los que se abren dentro, porque una ruta
+/// de Windows (`C:\Fotos (2)\a.png`) o una direccion de la Wikipedia los
+/// llevan. Entre `<…>` (`![](<ruta con ) suelto>)`), el de despues del `>`.
+/// Si no se emparejan, el primero, como antes.
+fn cierre_del_parentesis(tras: &str) -> Option<usize> {
+    if tras.trim_start().starts_with('<')
+        && let Some(g) = tras.find('>')
+        && let Some(k) = tras[g..].find(')')
+    {
+        return Some(g + k);
+    }
+    let mut nivel = 0usize;
+    for (k, c) in tras.char_indices() {
+        match c {
+            '(' => nivel += 1,
+            ')' if nivel == 0 => return Some(k),
+            ')' => nivel -= 1,
+            '\n' => break,
+            _ => {}
+        }
+    }
+    tras.find(')')
 }
 
 /// Una `![alt](enlace)` al principio de `s`, y lo que ocupa en bytes.
@@ -151,7 +194,7 @@ fn imagen_en(s: &str) -> Option<(Imagen, usize)> {
         return None;
     }
     let tras = &s2[cierre + 2..];
-    let fin = tras.find(')')?;
+    let fin = cierre_del_parentesis(tras)?;
     let enlace = tras[..fin].trim();
     // Un titulo detras de la ruta (`![a](ruta "titulo")`) no es la ruta.
     let enlace = enlace.split(" \"").next().unwrap_or(enlace).trim();
@@ -502,6 +545,15 @@ fn cierre(s: &str, delim: &str) -> Option<usize> {
         if vale {
             return Some(j);
         }
+        // Un `**` con un blanco delante y letra detras no cierra: abre otra
+        // (`**abierto y **cerrado**`). Esa se queda con el cierre de mas
+        // alla, y la de fuera no cierra nunca: se ve tal cual, como en
+        // cualquier lector de Markdown, y no tine de negrita medio renglon.
+        let abre_otra =
+            dentro.ends_with(char::is_whitespace) && detras.is_some_and(|c| !c.is_whitespace());
+        if abre_otra && !doble_de_mas {
+            return None;
+        }
         desde = j + delim.len();
     }
     None
@@ -646,7 +698,7 @@ fn enlace_en(s: &str) -> Option<(&str, &str, usize)> {
     }
     let cierre = cierre?;
     let tras = s2[cierre + 1..].strip_prefix('(')?;
-    let fin = tras.find(')')?;
+    let fin = cierre_del_parentesis(tras)?;
     let url = tras[..fin].trim();
     if url.is_empty() || url.contains(char::is_whitespace) {
         return None;
@@ -661,7 +713,15 @@ pub fn tiene_formato(bloques: &[Bloque], original: &str) -> bool {
     match bloques {
         [] => false,
         [Bloque::Texto(Clase::Parrafo, l)] => {
-            !l.marcas.is_empty() || !l.enlaces.is_empty() || l.texto != original.trim()
+            // Los blancos de final de renglon y los `\r\n` no son formato:
+            // el parrafo los quita, y la nota llana tiene que seguir llana.
+            let llano = original
+                .trim()
+                .lines()
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n");
+            !l.marcas.is_empty() || !l.enlaces.is_empty() || l.texto != llano
         }
         _ => true,
     }
@@ -827,11 +887,13 @@ pub fn en_su_renglon(antes: &str, despues: &str, renglones: &[String]) -> String
     s
 }
 
-/// El renglon de una foto que se guardo en `notas/<fichero>` de la
-/// carpeta del proyecto, como lo deja la caja de escribir: relativo, corto
-/// de leer mientras se escribe.
-pub fn renglon_de_foto(fichero: &str) -> String {
-    format!("![]({NOTAS}{fichero})")
+/// El renglon de la foto `numero` (desde 1, en el orden de la nota) que se
+/// guardo en `notas/<fichero>` de la carpeta del proyecto, como lo deja la
+/// caja de escribir: relativo y con su numero delante (`![foto 2](…)`),
+/// que es lo que se lee mientras se escribe —el nombre del fichero es una
+/// hora de trece cifras— y lo que dice el resumen («🖼 foto 2»).
+pub fn renglon_de_foto(fichero: &str, numero: usize) -> String {
+    format!("![foto {numero}]({NOTAS}{fichero})")
 }
 
 /// La carpeta de las fotos de las notas, dentro de la del proyecto (la
@@ -1021,17 +1083,20 @@ mod pruebas {
     }
     #[test]
     fn una_foto_pegada_va_en_su_propio_renglon_y_sale_portatil() {
-        let f = vec![renglon_de_foto("1-pegado.png")];
-        assert_eq!(en_su_renglon("hola", "", &f), "\n![](notas/1-pegado.png)\n");
+        let f = vec![renglon_de_foto("1-pegado.png", 1)];
+        assert_eq!(
+            en_su_renglon("hola", "", &f),
+            "\n![foto 1](notas/1-pegado.png)\n"
+        );
         // A principio de renglon y con mas texto detras, sin saltos de mas.
         assert_eq!(
             en_su_renglon("hola\n", "\nadios", &f),
-            "![](notas/1-pegado.png)"
+            "![foto 1](notas/1-pegado.png)"
         );
         let nota = format!("hola\n{}\n[ver](notas/x.pdf)", f[0]);
         assert_eq!(
             enlaces_portatiles(&nota, Some("pixpin:files/guardados/pc/c1/notas/")),
-            "hola\n![](pixpin:files/guardados/pc/c1/notas/1-pegado.png)\n[ver](pixpin:files/guardados/pc/c1/notas/x.pdf)"
+            "hola\n![foto 1](pixpin:files/guardados/pc/c1/notas/1-pegado.png)\n[ver](pixpin:files/guardados/pc/c1/notas/x.pdf)"
         );
         // Caso negativo: sin ruta portatil no se toca, y lo que ya era
         // portatil o de otra carpeta tampoco.
@@ -1040,5 +1105,63 @@ mod pruebas {
         assert_eq!(enlaces_portatiles(otra, Some("pixpin:files/x/notas")), otra);
         // Y la foto relativa se lee como foto.
         assert!(matches!(&bloques(&nota)[1], Bloque::Imagenes(_)));
+        assert_eq!(resumen(&nota), "hola\n🖼 foto 1\nver");
+    }
+
+    #[test]
+    fn una_ruta_de_windows_con_espacios_y_parentesis_es_una_sola_foto() {
+        let b = bloques(r"![](C:\Users\Max Antony\Fotos (2)\obra 1.png) y sigue");
+        match &b[0] {
+            Bloque::Imagenes(v) => {
+                assert_eq!(v[0].enlace, r"C:\Users\Max Antony\Fotos (2)\obra 1.png")
+            }
+            otro => panic!("{otro:?}"),
+        }
+        assert!(matches!(&b[1], Bloque::Texto(_, l) if l.texto == "y sigue"));
+        // Entre `<…>` vale un parentesis suelto.
+        let b = bloques("![](<C:/a (b.png>)");
+        assert!(matches!(&b[0], Bloque::Imagenes(v) if v[0].enlace == "C:/a (b.png"));
+        // Y un enlace de la Wikipedia no pierde su final.
+        let l = linea("[casa](https://es.wikipedia.org/wiki/Casa_(edificio)) fin");
+        assert_eq!(l.texto, "casa fin");
+        assert_eq!(
+            l.enlaces[0].url,
+            "https://es.wikipedia.org/wiki/Casa_(edificio)"
+        );
+    }
+
+    #[test]
+    fn lo_que_va_en_codigo_no_es_una_foto() {
+        // Quien explica la sintaxis la escribe entre comillas: es texto.
+        let b = bloques("se pone `![](foto.png)` asi");
+        assert_eq!(b.len(), 1, "{b:?}");
+        assert!(
+            matches!(&b[0], Bloque::Texto(Clase::Parrafo, l) if l.texto == "se pone ![](foto.png) asi")
+        );
+        // Y en un bloque de codigo, igual.
+        let b = bloques("```\n![](x.png)\n```");
+        assert_eq!(b, vec![Bloque::Codigo("![](x.png)".into())]);
+        // Caso de control: fuera de las comillas si lo es.
+        let b = bloques("`a` ![](foto.png)");
+        assert!(b.iter().any(|x| matches!(x, Bloque::Imagenes(_))));
+    }
+
+    #[test]
+    fn los_blancos_del_final_y_los_saltos_de_windows_no_son_formato() {
+        let llana = "hola  \r\nque tal\t\r\nadios";
+        assert!(!tiene_formato(&bloques(llana), llana));
+        // Caso negativo: un escape si cambia lo que se ve.
+        assert!(tiene_formato(&bloques(r"5 \* 3"), r"5 \* 3"));
+    }
+
+    #[test]
+    fn las_marcas_sin_cerrar_y_los_emojis_no_descuadran_las_posiciones() {
+        // Un `**` sin cerrar se queda; la negrita de detras empieza donde
+        // toca contando el emoji (2 en UTF-16) y la ñ (1).
+        let l = linea("🙂 ñ **abierto y **cerrado**");
+        assert_eq!(l.texto, "🙂 ñ **abierto y cerrado");
+        let m = l.marcas.iter().find(|m| m.negrita).unwrap();
+        let antes: u32 = "🙂 ñ **abierto y ".encode_utf16().count() as u32;
+        assert_eq!((m.inicio, m.largo), (antes, 7));
     }
 }

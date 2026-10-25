@@ -6200,7 +6200,9 @@ public protocol MarcasDelLienzoProtocol: AnyObject, Sendable {
     /**
      * **Echa a volar la camara** hacia la marca `id` (ver
      * [`MarcasDelLienzo::destino`]). Antes relee las vistas: la que se haya
-     * cambiado en otro aparato manda. `false` si la marca no esta.
+     * cambiado en otro aparato manda. `false` si la marca no esta o si no
+     * hay hueco (la ventana minimizada, o a medio crear): la camara saldria
+     * para una ventana de un pixel (Windows 64af3c3).
      */
     func irA(id: Int64, camara: CamaraDelLienzo, anchoPx: Float, altoPx: Float, bajoLaBarra: Float)  -> Bool
     
@@ -6390,7 +6392,9 @@ open func fijarVista(id: Int64, camara: CamaraDelLienzo, anchoPx: Float, altoPx:
     /**
      * **Echa a volar la camara** hacia la marca `id` (ver
      * [`MarcasDelLienzo::destino`]). Antes relee las vistas: la que se haya
-     * cambiado en otro aparato manda. `false` si la marca no esta.
+     * cambiado en otro aparato manda. `false` si la marca no esta o si no
+     * hay hueco (la ventana minimizada, o a medio crear): la camara saldria
+     * para una ventana de un pixel (Windows 64af3c3).
      */
 open func irA(id: Int64, camara: CamaraDelLienzo, anchoPx: Float, altoPx: Float, bajoLaBarra: Float) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -8319,10 +8323,12 @@ public protocol NucleoProtocol: AnyObject, Sendable {
      * **Una foto pegada con texto ya escrito va dentro de lo escrito**
      * (`fotos_al_borrador` de Windows): se guarda en `notas/<ms>-<nombre>`
      * del proyecto (donde guarda las suyas el editor de notas) y devuelve
-     * su renglon `![](notas/…)`, que Swift mete donde esta la rayita. Al
-     * enviar, [`Nucleo::escribir_nota`] lo pasa a la ruta portatil.
+     * su renglon `![foto N](notas/…)`, que Swift mete donde esta la rayita. Al
+     * enviar, [`Nucleo::escribir_nota`] lo pasa a la ruta portatil. Las
+     * fotos se numeran detras de las que ya lleve `escrito` (`![foto 2](…)`,
+     * como Windows); `orden` es su puesto entre las que se pegan juntas.
      */
-    func fotoALaNota(chat: String, nombre: String, datos: Data) throws  -> String
+    func fotoALaNota(chat: String, nombre: String, datos: Data, escrito: String, orden: UInt32) throws  -> String
     
     /**
      * **La nota rica de `texto`** (una `NOTA` de `chat`): sus bloques con
@@ -11842,17 +11848,21 @@ open func croquisDelChat(chat: String, referencia: String) -> String?  {
      * **Una foto pegada con texto ya escrito va dentro de lo escrito**
      * (`fotos_al_borrador` de Windows): se guarda en `notas/<ms>-<nombre>`
      * del proyecto (donde guarda las suyas el editor de notas) y devuelve
-     * su renglon `![](notas/…)`, que Swift mete donde esta la rayita. Al
-     * enviar, [`Nucleo::escribir_nota`] lo pasa a la ruta portatil.
+     * su renglon `![foto N](notas/…)`, que Swift mete donde esta la rayita. Al
+     * enviar, [`Nucleo::escribir_nota`] lo pasa a la ruta portatil. Las
+     * fotos se numeran detras de las que ya lleve `escrito` (`![foto 2](…)`,
+     * como Windows); `orden` es su puesto entre las que se pegan juntas.
      */
-open func fotoALaNota(chat: String, nombre: String, datos: Data)throws  -> String  {
+open func fotoALaNota(chat: String, nombre: String, datos: Data, escrito: String, orden: UInt32)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
         uniffiCallStatus in
     uniffi_pixpin_nucleo_fn_method_nucleo_foto_a_la_nota(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(chat),
         FfiConverterString.lower(nombre),
-        FfiConverterData.lower(datos),uniffiCallStatus
+        FfiConverterData.lower(datos),
+        FfiConverterString.lower(escrito),
+        FfiConverterUInt32.lower(orden),uniffiCallStatus
     )
 })
 }
@@ -50448,7 +50458,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_croquis_del_chat() != 45128) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pixpin_nucleo_checksum_method_nucleo_foto_a_la_nota() != 52549) {
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_foto_a_la_nota() != 27463) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_nota_rica() != 583) {
@@ -51189,7 +51199,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_marcasdellienzo_fijar_vista() != 56404) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pixpin_nucleo_checksum_method_marcasdellienzo_ir_a() != 38244) {
+    if (uniffi_pixpin_nucleo_checksum_method_marcasdellienzo_ir_a() != 53465) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_marcasdellienzo_lista() != 61261) {

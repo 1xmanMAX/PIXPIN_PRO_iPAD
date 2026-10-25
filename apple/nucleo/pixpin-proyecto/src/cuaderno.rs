@@ -69,8 +69,9 @@ pub enum Seccion {
     /// galeria solo aparezca lo mismo que aparece en la seccion de proyectos
     /// de Android».
     ///
-    /// Es la primera porque es la que se abre al pulsar el titulo: lo que se
-    /// quiere al entrar es VER lo que hay, no leer una lista.
+    /// Es la primera de las del chat: lo que se quiere al entrar es VER lo
+    /// que hay, no leer una lista. (La ficha se abre en «Proyectos», que va
+    /// delante y no es de mensajes.)
     Galeria,
     Todo,
     Fotos,
@@ -86,6 +87,12 @@ pub enum Seccion {
     Dibujos,
     Fijados,
     Buzon,
+    /// **Los proyectos** (25-oct-2026, el usuario: «quiero que esta zona de
+    /// proyectos se mueva al menu que se abre al darle click en la parte de
+    /// arriba del chat»): la pestana de la ficha del chat que lista los
+    /// proyectos para pasar de uno a otro. No es de mensajes —ninguno es de
+    /// esta seccion— y no se guarda ni viaja: solo dice que pestana se ve.
+    Proyectos,
 }
 
 /// Las extensiones de video: las mismas que la familia «video» de los
@@ -128,7 +135,7 @@ pub fn tiene_enlace(texto: &str) -> bool {
 }
 
 impl Seccion {
-    pub const TODAS: [Seccion; 10] = [
+    pub const TODAS: [Seccion; 11] = [
         Seccion::Galeria,
         Seccion::Todo,
         Seccion::Fotos,
@@ -139,6 +146,7 @@ impl Seccion {
         Seccion::Dibujos,
         Seccion::Fijados,
         Seccion::Buzon,
+        Seccion::Proyectos,
     ];
 
     /// La clave de su nombre traducido.
@@ -154,6 +162,7 @@ impl Seccion {
             Seccion::Dibujos => "info-dibujos",
             Seccion::Fijados => "info-fijados",
             Seccion::Buzon => "info-buzon",
+            Seccion::Proyectos => "info-proyectos",
         }
     }
 
@@ -286,7 +295,7 @@ pub fn sin_rutas_de_fotos(texto: &str) -> String {
         let cierre = tras
             .find("](")
             .filter(|&c| !tras[..c].contains('\n'))
-            .and_then(|c| Some((c, tras[c + 2..].find(')')?)));
+            .and_then(|c| Some((c, cierre_del_parentesis(&tras[c + 2..])?)));
         match cierre {
             Some((c, f)) => {
                 let alt = tras[..c].split('|').next().unwrap_or_default().trim();
@@ -302,6 +311,29 @@ pub fn sin_rutas_de_fotos(texto: &str) -> String {
     }
     salida.push_str(resto);
     salida
+}
+
+/// El `)` que cierra la ruta de una foto, contando los que se abren dentro
+/// (`C:\Fotos (2)\a.png`), o el de detras del `>` en `<…>`; como
+/// `pixpin_ui::nota_rica`, que es quien pinta la nota.
+fn cierre_del_parentesis(tras: &str) -> Option<usize> {
+    if tras.trim_start().starts_with('<')
+        && let Some(g) = tras.find('>')
+        && let Some(k) = tras[g..].find(')')
+    {
+        return Some(g + k);
+    }
+    let mut nivel = 0usize;
+    for (k, c) in tras.char_indices() {
+        match c {
+            '(' => nivel += 1,
+            ')' if nivel == 0 => return Some(k),
+            ')' => nivel -= 1,
+            '\n' => break,
+            _ => {}
+        }
+    }
+    tras.find(')')
 }
 
 /// Quien escribe, cuando y en que conversacion: lo que sella un mensaje
@@ -685,7 +717,7 @@ pub fn indices_de_seccion(mensajes: &[Mensaje], seccion: Seccion) -> Vec<usize> 
                 // son hojas y no salen.
                 Seccion::Galeria => matches!(m.clase, Some(Clase::Dibujo | Clase::Pagina)),
                 Seccion::Todo => true,
-                Seccion::Buzon => false,
+                Seccion::Buzon | Seccion::Proyectos => false,
                 Seccion::Fijados => m.fijado,
                 Seccion::Fotos => m.clase == Some(Clase::Imagen) && !es_video(m),
                 Seccion::Videos => es_video(m),
@@ -963,6 +995,11 @@ mod pruebas {
         assert_eq!(m.resumen(), "hola\n🖼\n🖼 planta fin");
         // Caso negativo: un `![` sin cerrar se queda como se escribio.
         assert_eq!(sin_rutas_de_fotos("mira ![esto"), "mira ![esto");
+        // Una ruta de Windows con parentesis no deja un trozo detras.
+        assert_eq!(
+            sin_rutas_de_fotos(r"ver ![](C:\Fotos (2)\a.png) y ![b](<x (1.png>)."),
+            "ver 🖼 y 🖼 b."
+        );
     }
 
     #[test]
@@ -1225,7 +1262,7 @@ mod pruebas {
 
     #[test]
     fn la_galeria_es_la_primera_pestana_y_lo_del_buzon_no_se_cuela() {
-        // Es la que se abre al pulsar el titulo del proyecto.
+        // La primera de las del chat.
         assert_eq!(Seccion::TODAS[0], Seccion::Galeria);
         // Caso negativo: un lienzo en el buzon esta ahi para decidir si se
         // queda, y ensenarlo ya en la galeria seria darlo por aceptado.
@@ -1301,6 +1338,25 @@ mod pruebas {
         // Caso negativo: sin mensajes no hay indices que devolver, y no se
         // inventa el cero.
         assert!(indices_de_seccion(&[], Seccion::Todo).is_empty());
+    }
+
+    #[test]
+    fn la_de_proyectos_no_se_queda_ningun_mensaje() {
+        // La pestana de proyectos lista proyectos, no mensajes: ni una nota,
+        // ni un proyecto adjunto, ni lo del buzon se cuelan en ella.
+        let c = Cuaderno::leer(concat!(
+            r#"{"id":"n","clase":"NOTA","texto":"hola","fijado":true}"#,
+            "\n",
+            r#"{"id":"p","clase":"PROYECTO","referencia":"otro"}"#,
+            "\n",
+            r#"{"id":"b","clase":"IMAGEN","enBuzon":true}"#,
+            "\n"
+        ));
+        assert!(c.de_seccion(Seccion::Proyectos).is_empty());
+        assert!(!Seccion::Proyectos.es_cuadricula());
+        assert_eq!(Seccion::Proyectos.clave(), "info-proyectos");
+        // Caso de control: los mismos mensajes si salen en «Todo».
+        assert_eq!(c.de_seccion(Seccion::Todo).len(), 2);
     }
 
     #[test]
