@@ -33,23 +33,55 @@
 //! Todas las funciones son `ORT_API_CALL`, que en Windows es `__stdcall`:
 //! `extern "system"` en Rust (en x86-64 es la misma convencion que C).
 //!
+//! **Tambien en Linux**, solo para las pruebas: la misma tabla se pide al
+//! `libonnxruntime.so` (con `dlopen`), y asi Qwen3-ASR se puede probar
+//! entero, con el modelo de verdad, en la maquina de desarrollo. La app solo
+//! existe en Windows; lo unico que cambia es como se carga la biblioteca y
+//! que las rutas van en UTF-8 y no en UTF-16 (`ORTCHAR_T`).
+//!
 //! Este modulo habla con una libreria en C: cada `unsafe` lleva su
 //! `// SAFETY:`.
 
 use std::ffi::{CStr, CString, c_char, c_void};
+#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+#[cfg(windows)]
 use windows::Win32::System::LibraryLoader::{
     GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
 };
+#[cfg(windows)]
 use windows::core::{PCSTR, PCWSTR};
 
 use crate::ErrorVoz;
 
 /// El nombre del fichero, para buscarlo y para decir cual falta.
+#[cfg(windows)]
 pub const NOMBRE_DE_LA_DLL: &str = "onnxruntime.dll";
+/// En Linux (solo pruebas), la biblioteca compartida.
+#[cfg(not(windows))]
+pub const NOMBRE_DE_LA_DLL: &str = "libonnxruntime.so";
+
+/// El caracter de las rutas de ONNX Runtime (`ORTCHAR_T`): `wchar_t` en
+/// Windows, `char` en los demas.
+#[cfg(windows)]
+type CaracterOrt = u16;
+#[cfg(not(windows))]
+type CaracterOrt = c_char;
+
+/// `dlopen` y `dlsym` de la biblioteca de C, para las pruebas en Linux.
+#[cfg(unix)]
+mod dl {
+    use std::ffi::{c_char, c_int, c_void};
+    pub const RTLD_NOW: c_int = 2;
+    #[cfg_attr(target_os = "linux", link(name = "dl"))]
+    unsafe extern "C" {
+        pub fn dlopen(fichero: *const c_char, modo: c_int) -> *mut c_void;
+        pub fn dlsym(modulo: *mut c_void, nombre: *const c_char) -> *mut c_void;
+    }
+}
 
 /// La version de la tabla que se pide primero: la del `.h` del que salen los
 /// indices (`ORT_API_VERSION 17`, linea 41).
@@ -93,10 +125,13 @@ mod indice {
     pub const SESSION_GET_MODEL_METADATA: usize = 111;
     pub const MODEL_METADATA_LOOKUP_CUSTOM_METADATA_MAP: usize = 116;
     pub const RELEASE_MODEL_METADATA: usize = 118;
+    /// `AddSessionConfigEntry` (API 4 y siguientes): para Qwen3-ASR,
+    /// `session.disable_prepacking` en el modo cuidadoso.
+    pub const ADD_SESSION_CONFIG_ENTRY: usize = 130;
 
     /// Todos, en el orden de la tabla, para la prueba de orden.
     #[cfg(test)]
-    pub const TODOS: [usize; 30] = [
+    pub const TODOS: [usize; 31] = [
         GET_ERROR_MESSAGE,
         CREATE_ENV,
         CREATE_SESSION,
@@ -127,6 +162,7 @@ mod indice {
         SESSION_GET_MODEL_METADATA,
         MODEL_METADATA_LOOKUP_CUSTOM_METADATA_MAP,
         RELEASE_MODEL_METADATA,
+        ADD_SESSION_CONFIG_ENTRY,
     ];
 }
 
@@ -163,8 +199,12 @@ type FnCrearOpciones = unsafe extern "system" fn(*mut *mut c_void) -> Estado;
 type FnOpcionEntera = unsafe extern "system" fn(*mut c_void, i32) -> Estado;
 /// `DisableCpuMemArena` y `DisableMemPattern`: solo las opciones.
 type FnOpcionSola = unsafe extern "system" fn(*mut c_void) -> Estado;
-type FnCrearSesion =
-    unsafe extern "system" fn(*const c_void, *const u16, *const c_void, *mut *mut c_void) -> Estado;
+type FnCrearSesion = unsafe extern "system" fn(
+    *const c_void,
+    *const CaracterOrt,
+    *const c_void,
+    *mut *mut c_void,
+) -> Estado;
 type FnCuenta = unsafe extern "system" fn(*const c_void, *mut usize) -> Estado;
 type FnNombre =
     unsafe extern "system" fn(*const c_void, usize, *mut c_void, *mut *mut c_char) -> Estado;
@@ -194,6 +234,9 @@ type FnObtener = unsafe extern "system" fn(*const c_void, *mut *mut c_void) -> E
 type FnCrearMemoria = unsafe extern "system" fn(i32, i32, *mut *mut c_void) -> Estado;
 type FnLiberar = unsafe extern "system" fn(*mut c_void, *mut c_void) -> Estado;
 type FnAsignador = unsafe extern "system" fn(*mut *mut c_void) -> Estado;
+/// `AddSessionConfigEntry(opciones, clave, valor)`.
+type FnEntradaDeConfig =
+    unsafe extern "system" fn(*mut c_void, *const c_char, *const c_char) -> Estado;
 type FnBuscarMetadato = unsafe extern "system" fn(
     *const c_void,
     *mut c_void,
@@ -227,6 +270,12 @@ pub fn buscar(raiz: &Path, junto_al_exe: Option<&Path>) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
+#[cfg(not(windows))]
+fn carpeta_del_sistema() -> Option<PathBuf> {
+    None
+}
+
+#[cfg(windows)]
 fn carpeta_del_sistema() -> Option<PathBuf> {
     let mut buf = [0u16; 260];
     // SAFETY: el buffer es propio y se pasa con su longitud; devuelve
@@ -238,11 +287,71 @@ fn carpeta_del_sistema() -> Option<PathBuf> {
     (n > 0 && n < buf.len()).then(|| PathBuf::from(String::from_utf16_lossy(&buf[..n])))
 }
 
+#[cfg(windows)]
 fn ancha(p: &Path) -> Vec<u16> {
     p.as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+/// La ruta como la quiere ONNX Runtime fuera de Windows: bytes terminados
+/// en cero.
+#[cfg(not(windows))]
+fn ancha(p: &Path) -> Vec<c_char> {
+    use std::os::unix::ffi::OsStrExt;
+    p.as_os_str()
+        .as_bytes()
+        .iter()
+        .map(|&b| b as c_char)
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+/// **`OrtGetApiBase` de la biblioteca**, cargandola. En Windows con
+/// `LoadLibraryExW`; fuera, con `dlopen`.
+#[cfg(windows)]
+fn api_base(dll: &Path) -> Result<FnGetApiBase, String> {
+    let ruta = ancha(dll);
+    // SAFETY: `ruta` es UTF-16 terminada en cero y viva durante la
+    // llamada. `LOAD_WITH_ALTERED_SEARCH_PATH` hace que las dependencias
+    // de una DLL puesta a mano se busquen a su lado y no junto al exe.
+    let modulo =
+        unsafe { LoadLibraryExW(PCWSTR(ruta.as_ptr()), None, LOAD_WITH_ALTERED_SEARCH_PATH) }
+            .map_err(|e| format!("no se pudo cargar: {e}"))?;
+    // SAFETY: el modulo esta cargado y el nombre es una constante
+    // terminada en cero. La firma de `OrtGetApiBase` es la de la
+    // cabecera (linea 674): sin argumentos, devuelve `const OrtApiBase*`.
+    unsafe {
+        let f = GetProcAddress(modulo, PCSTR(c"OrtGetApiBase".as_ptr().cast()))
+            .ok_or("la DLL no exporta OrtGetApiBase: no es ONNX Runtime")?;
+        Ok(std::mem::transmute::<
+            unsafe extern "system" fn() -> isize,
+            FnGetApiBase,
+        >(f))
+    }
+}
+
+#[cfg(unix)]
+fn api_base(dll: &Path) -> Result<FnGetApiBase, String> {
+    let ruta = ancha(dll);
+    // SAFETY: `ruta` es una cadena terminada en cero viva durante la
+    // llamada; `dlopen` ejecuta los constructores de la biblioteca, que es
+    // lo que se quiere.
+    let modulo = unsafe { dl::dlopen(ruta.as_ptr(), dl::RTLD_NOW) };
+    if modulo.is_null() {
+        return Err("no se pudo cargar".into());
+    }
+    // SAFETY: el modulo esta cargado y el nombre termina en cero; si no
+    // existe, `dlsym` devuelve nulo y se dice. La firma es la de la
+    // cabecera.
+    unsafe {
+        let f = dl::dlsym(modulo, c"OrtGetApiBase".as_ptr());
+        if f.is_null() {
+            return Err("la biblioteca no exporta OrtGetApiBase: no es ONNX Runtime".into());
+        }
+        Ok(std::mem::transmute::<*mut c_void, FnGetApiBase>(f))
+    }
 }
 
 /// **El runtime cargado**, con su tabla, su entorno y su asignador.
@@ -306,23 +415,10 @@ impl Runtime {
     }
 
     fn cargar(dll: &Path) -> Result<Runtime, String> {
-        let ruta = ancha(dll);
-        // SAFETY: `ruta` es UTF-16 terminada en cero y viva durante la
-        // llamada. `LOAD_WITH_ALTERED_SEARCH_PATH` hace que las dependencias
-        // de una DLL puesta a mano se busquen a su lado y no junto al exe.
-        let modulo =
-            unsafe { LoadLibraryExW(PCWSTR(ruta.as_ptr()), None, LOAD_WITH_ALTERED_SEARCH_PATH) }
-                .map_err(|e| format!("no se pudo cargar: {e}"))?;
-
-        // SAFETY: el modulo esta cargado y el nombre es una constante
-        // terminada en cero. La firma de `OrtGetApiBase` es la de la
-        // cabecera (linea 674): sin argumentos, devuelve `const OrtApiBase*`.
-        let base = unsafe {
-            let f = GetProcAddress(modulo, PCSTR(c"OrtGetApiBase".as_ptr().cast()))
-                .ok_or("la DLL no exporta OrtGetApiBase: no es ONNX Runtime")?;
-            let f: FnGetApiBase = std::mem::transmute(f);
-            f()
-        };
+        let f = api_base(dll)?;
+        // SAFETY: `f` es `OrtGetApiBase` de la biblioteca recien cargada:
+        // sin argumentos, devuelve un puntero a su estructura estatica.
+        let base = unsafe { f() };
         if base.is_null() {
             return Err("OrtGetApiBase devolvio nulo".into());
         }
@@ -453,6 +549,20 @@ impl Runtime {
         hilos: usize,
         arena: bool,
     ) -> Result<Sesion<'_>, ErrorVoz> {
+        self.abrir_con_config(modelo, hilos, arena, &[])
+    }
+
+    /// Como [`Runtime::abrir_con`], con entradas de configuracion de la
+    /// sesion (`AddSessionConfigEntry`), p. ej.
+    /// `("session.disable_prepacking", "1")`. Una clave que este runtime no
+    /// conozca se ignora (no impide abrir el modelo).
+    pub fn abrir_con_config(
+        &self,
+        modelo: &Path,
+        hilos: usize,
+        arena: bool,
+        config: &[(&CStr, &CStr)],
+    ) -> Result<Sesion<'_>, ErrorVoz> {
         let mut opciones = std::ptr::null_mut();
         // SAFETY: firma de `CreateSessionOptions`.
         let st =
@@ -492,6 +602,18 @@ impl Runtime {
                 )
             };
             for s in [a, b, c, d] {
+                if !s.is_null() {
+                    self.f::<FnSoltar>(indice::RELEASE_STATUS)(s);
+                }
+            }
+            // Las claves y valores son `CStr` vivos durante la llamada; ONNX
+            // Runtime copia las cadenas.
+            for (clave, valor) in config {
+                let s = self.f::<FnEntradaDeConfig>(indice::ADD_SESSION_CONFIG_ENTRY)(
+                    opciones,
+                    clave.as_ptr(),
+                    valor.as_ptr(),
+                );
                 if !s.is_null() {
                     self.f::<FnSoltar>(indice::RELEASE_STATUS)(s);
                 }
@@ -722,6 +844,35 @@ impl Valor<'_> {
             Ok(std::slice::from_raw_parts(datos.cast::<f32>(), n as usize))
         }
     }
+
+    /// Los datos de un tensor de `f32` para **escribir en su sitio** (la
+    /// cache de claves y valores de Qwen3-ASR, que se rellena paso a paso
+    /// sin copiarla entera).
+    pub fn como_f32_mut(&mut self) -> Result<&mut [f32], ErrorVoz> {
+        if self.tipo()? != TIPO_F32 {
+            return Err(ErrorVoz::Onnx {
+                paso: "escribir un tensor",
+                detalle: "se esperaba float32".into(),
+            });
+        }
+        let n: i64 = self.forma()?.iter().product();
+        let mut datos = std::ptr::null_mut();
+        // SAFETY: `ptr` es un tensor vivo de `f32` (comprobado arriba). El
+        // slice toma prestado `self` en exclusiva (`&mut`), asi que nadie
+        // mas lo lee ni lo pasa a `Run` mientras viva; ONNX Runtime no
+        // guarda el puntero entre llamadas.
+        unsafe {
+            let st = self.rt.f::<FnDatos>(indice::GET_TENSOR_MUTABLE_DATA)(self.ptr, &mut datos);
+            self.rt.comprobar(st, "escribir un tensor")?;
+            if datos.is_null() || n <= 0 {
+                return Ok(&mut []);
+            }
+            Ok(std::slice::from_raw_parts_mut(
+                datos.cast::<f32>(),
+                n as usize,
+            ))
+        }
+    }
 }
 
 /// Un modelo abierto, con los nombres de sus entradas y salidas.
@@ -851,6 +1002,7 @@ mod pruebas {
         assert!(indice::TODOS.iter().all(|&i| i < 150));
     }
 
+    #[cfg(windows)]
     #[test]
     fn el_runtime_se_busca_primero_en_windows_y_luego_en_los_datos_y_junto_al_exe() {
         let v = candidatos(Path::new("C:/datos"), Some(Path::new("C:/app")));
@@ -864,6 +1016,7 @@ mod pruebas {
         assert_eq!(v[2], Path::new("C:/app/onnxruntime.dll"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn una_dll_que_no_es_onnx_runtime_se_rechaza_sin_saltar_a_la_nada() {
         // `kernel32.dll` esta siempre y no exporta `OrtGetApiBase`.

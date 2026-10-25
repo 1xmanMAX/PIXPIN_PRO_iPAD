@@ -1,4 +1,4 @@
-//! **Por donde se parte una nota para Whisper**: en frases, y las frases
+//! **Por donde se parte una nota para Whisper y Qwen3-ASR**: en frases, y las frases
 //! en tandas.
 //!
 //! Puerto de `Transcriptor.cortes`, `puntoMasCallado` y `agrupar`

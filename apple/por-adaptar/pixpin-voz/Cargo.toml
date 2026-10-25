@@ -18,6 +18,10 @@ serde_json = "1.0"
 # El `Sec-MS-GEC` de las voces de Microsoft (`edge`) es un SHA-256, y el
 # nombre de cada MP3 en su cache tambien. Ya esta en el arbol.
 sha2 = "0.10"
+
+# Solo en Windows: asi las partes puras del crate (cortes, tiempos, el mel y
+# los tokens de Qwen3-ASR…) compilan y se prueban tambien en Linux.
+[target.'cfg(windows)'.dependencies]
 # Media Foundation para decodificar el `.m4a` a PCM, y el cargador de DLL
 # para `libvosk.dll`. Sin `windows-core` suelto: aqui no hay `#[implement]`.
 windows = { version = "0.62.2", features = [

@@ -540,17 +540,33 @@ pub enum ModoDeIdiomas {
     TodoEnUno,
 }
 
+/// Con que motor se pasan a texto las notas y las grabaciones (25-oct-2026,
+/// ver `docs/voz-qwen3.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum MotorDeVoz {
+    /// Whisper *base*: el de siempre, unos 160 MB, rapido.
+    #[default]
+    Whisper,
+    /// Qwen3-ASR-0.6B (Apache-2.0): mucho mejor en castellano, en reuniones
+    /// y en clase; se baja aparte (unos 988 MB) solo si se elige, y pide
+    /// ~1,5 GB de memoria mientras transcribe. Sin bajar, o si falla, se
+    /// pasa con Whisper.
+    Qwen3,
+}
+
 /// Seccion `[voz]`: pasar notas de voz a texto.
 ///
 /// `segundoIdiomaDeVoz` y `modoDeIdiomas` del movil (`SettingsRepository`):
 /// el primer idioma es el de la interfaz (ver `apps/pixpin/src/voz.rs`), y
-/// el segundo, solo para Whisper, vacio = ninguno.
+/// el segundo, vacio = ninguno. `motor` es solo del PC.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Voz {
     /// Codigo corto (`en`, `pt`…) o vacio.
     pub segundo_idioma: String,
     pub modo_de_idiomas: ModoDeIdiomas,
+    pub motor: MotorDeVoz,
 }
 
 // --- Tareas (18-oct-2026) -------------------------------------------------
@@ -1428,6 +1444,20 @@ alto = 200
         let a: Ajustes = toml::from_str("").unwrap();
         assert_eq!(a.voz.segundo_idioma, "");
         assert_eq!(a.voz.modo_de_idiomas, ModoDeIdiomas::CadaUno);
+        assert_eq!(a.voz.motor, MotorDeVoz::Whisper, "de fabrica, Whisper");
+    }
+
+    #[test]
+    fn el_motor_de_voz_se_escribe_y_se_lee() {
+        let a: Ajustes = toml::from_str("[voz]\nmotor = \"qwen3\"\n").unwrap();
+        assert_eq!(a.voz.motor, MotorDeVoz::Qwen3);
+        let texto = toml::to_string(&a).unwrap();
+        assert!(texto.contains("motor = \"qwen3\""), "{texto}");
+        let b: Ajustes = toml::from_str(&texto).unwrap();
+        assert_eq!(b.voz, a.voz);
+        // Unos ajustes de antes (sin `motor`) siguen con Whisper.
+        let c: Ajustes = toml::from_str("[voz]\nsegundo_idioma = \"en\"\n").unwrap();
+        assert_eq!(c.voz.motor, MotorDeVoz::Whisper);
     }
 
     #[test]

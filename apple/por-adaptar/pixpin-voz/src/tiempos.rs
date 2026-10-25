@@ -197,6 +197,20 @@ fn dos_cifras(t: &str) -> Option<i64> {
     numero(t)
 }
 
+/// El resultado de pasar una nota a texto: justo lo que hay que escribir en
+/// el mensaje del cuaderno.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Transcripcion {
+    /// El cuerpo con marcas, `[1:23] lo que se dijo`, separado por renglon
+    /// en blanco. Va a `Mensaje.transcripcion`.
+    pub texto: String,
+    /// Los trozos sueltos, por si quien llama quiere pintarlos.
+    pub segmentos: Vec<Segmento>,
+    /// Va a `resto["estadoDelTexto"]`.
+    pub estado: EstadoDelTexto,
+    pub duracion_ms: i64,
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;

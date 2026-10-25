@@ -30,7 +30,9 @@
 //!    [`creible`](crate::credibilidad::creible).
 
 pub mod bajar;
-pub mod cortes;
+/// Los cortes viven en la raiz del crate (sin Windows): tambien los usa
+/// Qwen3-ASR (ver [`crate::qwen3`]). Se reexportan para no cambiar rutas.
+pub use crate::cortes;
 pub mod fichas;
 pub mod mel;
 
