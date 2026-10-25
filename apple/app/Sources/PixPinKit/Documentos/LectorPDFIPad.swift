@@ -1433,6 +1433,13 @@ private struct CuerpoLectorIPad: View {
             Color(uiColor: .systemBackground).ignoresSafeArea()
             VistaPDFIPad(controlador: c)
                 .ignoresSafeArea(edges: .bottom)
+                .alert("Cambiar el nombre", isPresented: $modelo.renombrando) {
+                    TextField("Nombre", text: $modelo.nombreNuevo)
+                    Button("Guardar") { c.confirmarNombre(modelo.nombreNuevo) }
+                    Button("Cancelar", role: .cancel) {}
+                } message: {
+                    Text("La extensión no cambia.")
+                }
                 .padding(.top, modelo.completa ? 0 : 58)
             if modelo.completa {
                 HStack {
@@ -1513,13 +1520,6 @@ private struct CuerpoLectorIPad: View {
         }
         .sheet(isPresented: $modelo.viendoIndice) {
             HojaIndiceIPad(entradas: c.indice, actual: modelo.pagina, ir: { c.ir(a: $0) })
-        }
-        .alert("Cambiar el nombre", isPresented: $modelo.renombrando) {
-            TextField("Nombre", text: $modelo.nombreNuevo)
-            Button("Guardar") { c.confirmarNombre(modelo.nombreNuevo) }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("La extensión no cambia.")
         }
         .onAppear { c.abrir() }
         .onDisappear { c.cerrar() }

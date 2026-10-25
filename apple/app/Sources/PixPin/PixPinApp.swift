@@ -22,6 +22,7 @@ struct PixPinApp: App {
         SincroDeFondo.activar()
         LienzoDelIPad.activar()
         AsistenteDelIPad.activar()
+        CompartirDelIPad.activar()
         // El buzon de la extension de Compartir y los datos de los widgets.
         SistemaDelIPad.activar()
     }
