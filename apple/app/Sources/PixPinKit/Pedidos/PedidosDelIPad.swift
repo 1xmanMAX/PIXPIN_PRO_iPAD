@@ -521,9 +521,9 @@ extension HacerPedidos {
             return nav.irAlChat(suyo)
         }
         let ia = AsistenteEnElChat.compartido
-        let corto = String(texto.prefix(200))
-        let tarjeta = AvisoFlotante.compartido.mostrar("💭 " + (corto.isEmpty ? "Mirando la foto…" : corto),
-                                                       titulo: "Asistente", acabado: false, dura: AvisoFlotante.dura)
+        let pensando = "💭 Pensando…"
+        let tarjeta = AvisoFlotante.compartido.mostrar(pensando, titulo: HacerPedidos.tituloDelEncargo(texto),
+                                                       acabado: false, dura: AvisoFlotante.dura)
         // Uno tras otro (la cola de encargos de Windows): si ya contesta
         // en su chat, se espera a que acabe.
         let limite = Date().addingTimeInterval(15 * 60)
@@ -561,11 +561,11 @@ extension HacerPedidos {
                         BotonAviso("Abrir", cierra: false) { nav.cerrarVisor(); nav.irAlChat(suyo, mensaje: nota) },
                         BotonAviso("No", cierra: false) {
                             AsistenteEnElChat.compartido.responder(nota: nota, si: false)
-                            tarjeta.cambiar("💭 " + corto)
+                            tarjeta.cambiar(pensando)
                         },
                         BotonAviso("Sí", principal: true, cierra: false) {
                             AsistenteEnElChat.compartido.responder(nota: nota, si: true)
-                            tarjeta.cambiar("💭 " + corto)
+                            tarjeta.cambiar(pensando)
                         },
                     ], alCerrar: { AsistenteEnElChat.compartido.responder(nota: nota, si: false) })
                 }
@@ -586,6 +586,16 @@ extension HacerPedidos {
         tarjeta.poner(dicho.isEmpty ? "Hecho." : dicho, botones: [
             BotonAviso("Abrir", principal: true) { nav.cerrarVisor(); nav.irAlChat(suyo, mensaje: respuesta.id) },
         ])
+    }
+}
+
+extension HacerPedidos {
+    /// El titulo del aviso de un encargo: «🤖 » y el principio de lo pedido
+    /// (`titulo_de` de Windows, 48 letras).
+    nonisolated static func tituloDelEncargo(_ texto: String) -> String {
+        let t = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return "🤖 Asistente" }
+        return "🤖 " + (t.count > 48 ? String(t.prefix(47)) + "…" : t)
     }
 }
 

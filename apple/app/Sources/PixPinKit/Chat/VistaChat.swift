@@ -51,6 +51,10 @@ public struct VistaChat: View {
     @State private var porEnviar: LoteDeFotos?
     /// Elegir un proyecto o una pagina de un proyecto para adjuntar.
     @State private var eligiendoProyecto: Bool?
+    /// ⇧ pulsada en el teclado del iPad: un toque marca el tramo.
+    @State private var conMayus = false
+    /// El panel Información del chat.
+    @State private var verInfo = false
 
     public init(almacen: Almacen, chat: String, alVolver: (() -> Void)? = nil) {
         self.almacen = almacen
@@ -94,7 +98,8 @@ public struct VistaChat: View {
             CabeceraChat(ficha: ficha, buscando: buscador.abierto, alVolver: alVolver,
                          buscar: { buscador.abrir() }, elegir: { empezarAElegir() },
                          escala: $escala, avisar: { menu.avisar($0) },
-                         biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil)
+                         biblioteca: ficha?.esGuardados == true ? { [almacen] in BibliotecaAudio.abrir(almacen: almacen) } : nil,
+                         informacion: { verInfo = true })
             if ficha?.esAsistente == true {
                 CabeceraDelAsistente(almacen: almacen, chat: chat)
                     .background(Paleta.chat.cabecera)
@@ -203,6 +208,10 @@ public struct VistaChat: View {
             .ignoresSafeArea()
         }
         .background { atajos }
+        .onModifierKeysChanged(mask: .shift) { _, nuevas in conMayus = nuevas.contains(.shift) }
+        .sheet(isPresented: $verInfo) {
+            VistaInfoChat(almacen: almacen, chat: chat, titulo: ficha?.nombre ?? "")
+        }
     }
 
     // MARK: La conversacion
@@ -367,6 +376,12 @@ public struct VistaChat: View {
 
     /// Un toque: con alguno elegido, lo alterna (Windows); si no, abre.
     private func toque(_ m: MensajeChat) {
+        // ⇧ + toque (teclado del iPad): todo lo de entre el ultimo tocado y
+        // este, como Mayus+clic en Windows (`marcar.rs`).
+        if conMayus {
+            withAnimation(.easeOut(duration: 0.15)) { menu.eleccion.tramo(hasta: m.id, en: idsCargados) }
+            return
+        }
         if !menu.eleccion.vacia {
             withAnimation(.easeOut(duration: 0.15)) { menu.eleccion.alternar(m.id) }
         } else {
@@ -753,6 +768,8 @@ struct CabeceraChat: View {
     let avisar: (String) -> Void
     /// «Biblioteca de audio» (sale en «Mensajes guardados», como Windows).
     var biblioteca: (() -> Void)?
+    /// El panel Información (Todo, Fotos, Archivos, Voz...).
+    var informacion: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -800,6 +817,9 @@ struct CabeceraChat: View {
                 Menu {
                     Button(action: buscar) { Label("Buscar en el chat", systemImage: "magnifyingglass") }
                     Button(action: elegir) { Label("Elegir varios", systemImage: "checkmark.circle") }
+                    if let informacion {
+                        Button(action: informacion) { Label("Información", systemImage: "info.circle") }
+                    }
                     if let biblioteca {
                         Button(action: biblioteca) { Label("Biblioteca de audio", systemImage: "music.note.list") }
                     }
