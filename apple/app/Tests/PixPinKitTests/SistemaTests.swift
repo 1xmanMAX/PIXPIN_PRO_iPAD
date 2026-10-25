@@ -99,7 +99,7 @@ final class SistemaTests: XCTestCase {
     func testSeOfrecenLosProyectosSinArchivadosNiAsistente() {
         func ficha(_ id: String, archivado: Bool = false, asistente: Bool = false) -> FichaChat {
             FichaChat(id: id, nombre: id, tocado: 0, resumen: "", hojas: 0, sinLeer: 0,
-                      esGuardados: false, esAsistente: asistente, archivado: archivado)
+                      esGuardados: false, esAsistente: asistente, archivado: archivado, foto: nil)
         }
         let ofrecidos = RecogedorCompartido.proyectos(de: [ficha("a"), ficha("b", archivado: true), ficha("c", asistente: true)])
         XCTAssertEqual(ofrecidos.map(\.id), ["a"])
