@@ -11,6 +11,14 @@
 // - Caja de seccion con sus tapas, como Revit: sus caras se mueven con las
 //   asas (arrastrando) o con los deslizadores del panel.
 //
+// - Marcadores con todo el estado de la vista (camara, caja de seccion,
+//   aislado y ocultos, por `GlobalId`), su tinta (anotar encima con todas
+//   las herramientas del lienzo) y los marcos numerados para imprimir
+//   (`MarcadoresPlanoIPad.swift`), en los ficheros de Windows.
+// - Exportar la foto de lo que se ve (PNG, JPG) y el original.
+// - Un croquis del movil abierto desde su chat se lee con sus fotos
+//   (`Nucleo.abrirCroquis`, ver `CroquisDelChatIPad`).
+//
 // Como el visor de planos, la vista esta parada y pinta solo al cambiar.
 
 import Metal
@@ -78,18 +86,32 @@ final class VisorModelo3D: ObservableObject {
     @Published var verPanel = false
     /// Las vistas guardadas del croquis (1 a 9).
     @Published private(set) var vistas: [String] = []
+    /// Anotando sobre un marcador: el modelo del lienzo (sus barras).
+    @Published private(set) var modeloAnotar: ModeloEditorLienzo?
+    /// Preparando lo que se exporta o se imprime.
+    @Published private(set) var preparando = false
     let titulo: String
     let ruta: String
     /// Quien lee el modelo (fuera del hilo principal).
     private let abrir: @Sendable () throws -> Modelo3dApple
     weak var vista: VistaModeloMetal?
+    /// El nucleo (marcadores, su tinta, el lienzo).
+    let nucleo: Nucleo?
+    /// Los marcadores con su estado (`.vistas.json`) y los marcos numerados
+    /// (`.marcos.json`), como Windows.
+    private(set) lazy var marcadores = MarcadoresDeVista(documento: URL(fileURLWithPath: ruta), nucleo: nucleo)
+    private(set) lazy var marcos3d = Marcos3D(documento: URL(fileURLWithPath: ruta), nucleo: nucleo)
 
     /// Con `nucleo`, el modelo leido queda en su cache (`cache/bim`, como
-    /// Windows): la segunda vez se abre casi al momento.
+    /// Windows): la segunda vez se abre casi al momento. Un croquis apuntado
+    /// por su chat (`CroquisDelChatIPad`) se abre con sus fotos.
     init(ruta: String, titulo: String, nucleo: Nucleo?) {
         self.ruta = ruta
         self.titulo = titulo
-        if let nucleo {
+        self.nucleo = nucleo
+        if let nucleo, let c = CroquisDelChatIPad.de(ruta) {
+            abrir = { try nucleo.abrirCroquis(chat: c.chat, referencia: c.referencia) }
+        } else if let nucleo {
             abrir = { try nucleo.abrirModelo(ruta: ruta) }
         } else {
             abrir = { try Modelo3dApple.abrir(ruta: ruta) }
@@ -158,7 +180,7 @@ final class VisorModelo3D: ObservableObject {
     func verTodo() { filtrar(Filtro3d(nivelesOcultos: [], tiposOcultos: [], aislado: nil)) }
 
     /// Rehace los indices fuera del hilo principal; los vertices se quedan.
-    private func filtrar(_ f: Filtro3d) {
+    func filtrar(_ f: Filtro3d) {
         guard let d = datos else { return }
         filtro = f
         Task {
@@ -185,6 +207,232 @@ final class VisorModelo3D: ObservableObject {
     func encuadrar() { vista?.encuadrar() }
     func planta() { vista?.planta() }
     func irAVista(_ i: Int) { vista?.irAVista(i) }
+
+    // MARK: El estado de la vista (`Estado3d` de Windows)
+
+    /// **Lo que se ve, como `Estado3d` de Windows**: camara, corte en
+    /// coordenadas absolutas, aislado y ocultos (`n:=<clave>`, `t:<Tipo>`).
+    func estado3d() -> [String: Any]? {
+        guard let c = vista?.camara else { return nil }
+        var e: [String: Any] = ["objetivo": [c.objetivo.x, c.objetivo.y, c.objetivo.z], "rumbo": c.rumbo,
+                                "altura": c.altura, "dist": c.dist, "claro": claro, "aristas": aristas]
+        if let k = cajaDeCorte {
+            e["seccion"] = [k.x0, k.y0, k.z0, k.x1, k.y1, k.z1].map { Double($0) }
+        } else {
+            e["seccion"] = NSNull()
+        }
+        e["aislado"] = filtro.aislado.map { NSNumber(value: $0) } ?? NSNull()
+        // Claves estables: iguales en otro PC y en el movil.
+        if let a = filtro.aislado, let k = datos?.modelo.claveDeElemento(id: a) { e["aislado_clave"] = k }
+        e["ocultos"] = (filtro.nivelesOcultos.map { n in datos?.modelo.claveDeNivel(k: n).map { "n:=\($0)" } ?? "n:\(n)" }
+            + filtro.tiposOcultos.map { "t:\($0)" }).sorted()
+        return e
+    }
+
+    /// Vuelve a un `Estado3d`: camara, corte y filtros.
+    func aplicar(estado e: [String: Any]) {
+        if let c = camaraDeEstado3d(e) { vista?.ponerCamara(c) }
+        if let a = e["aristas"] as? Bool, a != aristas { aristas = a }
+        if let k = (e["seccion"] as? [NSNumber])?.map(\.doubleValue), k.count == 6, let c = datos?.resumen.caja {
+            func f(_ v: Double, _ a0: Float, _ b0: Float) -> Double {
+                let a = Double(a0), b = Double(b0)
+                return b > a ? min(max((v - a) / (b - a), 0), 1) : 0
+            }
+            corte = [f(k[0], c.x0, c.x1), f(k[1], c.y0, c.y1), f(k[2], c.z0, c.z1),
+                     f(k[3], c.x0, c.x1), f(k[4], c.y0, c.y1), f(k[5], c.z0, c.z1)]
+            conCorte = true
+        } else {
+            conCorte = false
+        }
+        let ocultos = e["ocultos"] as? [String] ?? []
+        let m = datos?.modelo
+        // `n:=<clave>` manda; `n:<i>` (de antes) se sigue entendiendo.
+        let niveles: [UInt32] = ocultos.compactMap { o -> UInt32? in
+            guard o.hasPrefix("n:"), o != "n:-" else { return nil }
+            let r = o.dropFirst(2)
+            return r.hasPrefix("=") ? m?.nivelDeClave(clave: String(r.dropFirst())) : UInt32(r)
+        }
+        let aislado: UInt32? = if let k = e["aislado_clave"] as? String { m?.elementoDeClave(clave: k) }
+            else { (e["aislado"] as? NSNumber)?.uint32Value }
+        let f = Filtro3d(nivelesOcultos: niveles,
+                         tiposOcultos: ocultos.compactMap { $0.hasPrefix("t:") ? String($0.dropFirst(2)) : nil },
+                         aislado: aislado)
+        if f != filtro { filtrar(f) }
+    }
+
+    // MARK: Marcadores (`Ctrl M` de Windows)
+
+    /// Un marcador con la vista de ahora (todo su estado).
+    @discardableResult
+    func ponerMarcador() -> String? {
+        guard let e = estado3d() else { return nil }
+        let id = marcadores.poner3d(estado: e)
+        alMoverLaCamara()
+        return id
+    }
+
+    func irAMarcador(_ i: Int) {
+        let l = marcadores.del3d
+        guard i < l.count else { return }
+        aplicar(estado: l[i].estado)
+    }
+
+    func quitarMarcador(_ id: String) {
+        if vista?.tinta.marcador == id, modeloAnotar != nil { terminarAnotar() }
+        marcadores.quitar3d(id)
+        alMoverLaCamara()
+    }
+
+    /// El marcador que es la vista de ahora, si lo hay.
+    func marcadorDeAhora() -> String? {
+        guard let c = vista?.camara else { return nil }
+        return marcadores.del3d.first { m in camaraDeEstado3d(m.estado).map { mismaCamara3d(c, $0) } ?? false }?.id
+    }
+
+    /// Tras mover la camara: la tinta del marcador de ahora (o ninguna);
+    /// saliendo de su vista se deja de anotar.
+    func alMoverLaCamara() {
+        guard let v = vista else { return }
+        let m = marcadorDeAhora()
+        guard m != v.tinta.marcador else { return }
+        if modeloAnotar != nil { terminarAnotar() }
+        v.tinta.marcador = m
+        v.tinta.leido = nil
+        guard let m, let nucleo else { return }
+        let r = nucleo.rutaDeTintaDeMarcador3d(modelo: ruta, id: m)
+        let hay = FileManager.default.fileExists(atPath: r) || FileManager.default.fileExists(atPath: r + ".gz")
+        guard hay else { return }
+        Task {
+            let leido = await Task.detached(priority: .utility) { () -> LienzoLeido? in
+                guard let l = try? Lienzo.deFichero(ruta: r) else { return nil }
+                return try? leerLienzo(l.plano())
+            }.value
+            guard v.tinta.marcador == m, self.modeloAnotar == nil else { return }
+            v.tinta.leido = leido
+        }
+    }
+
+    // MARK: Anotar sobre un marcador
+
+    /// **Anotar sobre la vista de ahora** con el lienzo (su barra, sus
+    /// colores, texto...). Si no es la de un marcador, se pone uno: lo
+    /// anotado va siempre con su vista.
+    func alternarAnotar() {
+        if modeloAnotar != nil { return terminarAnotar() }
+        guard let nucleo, let v = vista, datos != nil else { return }
+        if marcadorDeAhora() == nil { ponerMarcador() }
+        alMoverLaCamara()
+        guard let m = marcadorDeAhora() else { return }
+        let r = nucleo.rutaDeTintaDeMarcador3d(modelo: ruta, id: m)
+        guard let ed = try? EditorLienzo.deFichero(ruta: r, crear: true) else { return }
+        let modelo = ModeloEditorLienzo(editor: ed, referencia: "modelo3d|" + r, nucleo: nucleo, titulo: titulo)
+        modelo.elegir("lapiz")
+        // Trazo limpio: sobre un modelo se senala, no se boceta.
+        modelo.cambiarEstilo(.rugosidad(valor: 0))
+        modelo.alCerrar = { [weak self] in self?.terminarAnotar() }
+        modelo.alDeshacer = { [weak v, weak ed] in
+            _ = ed?.deshacer()
+            v?.tinta.setNeedsDisplay()
+        }
+        modelo.alRehacer = { [weak v, weak ed] in
+            _ = ed?.rehacer()
+            v?.tinta.setNeedsDisplay()
+        }
+        modeloAnotar = modelo
+        v.tinta.modelo = modelo
+        v.alCambiarAnotar()
+    }
+
+    /// Deja de anotar: lo escrito se guarda y se ve como la tinta de siempre.
+    func terminarAnotar() {
+        guard let modelo = modeloAnotar, let v = vista else { return }
+        _ = modelo.editor.terminarTexto()
+        let leido = try? leerLienzo(modelo.editor.plano())
+        modelo.guardarAhora()
+        modeloAnotar = nil
+        v.tinta.modelo = nil
+        v.tinta.leido = leido
+        v.alCambiarAnotar()
+    }
+
+    // MARK: Marcos numerados
+
+    func alternarMarcos3D() {
+        if modeloAnotar != nil { terminarAnotar() }
+        marcos3d.activo.toggle()
+        vista?.alCambiarAnotar()
+    }
+
+    /// **Imprimir los marcos**: cada uno con su vista, fotografiado y
+    /// recortado a su recuadro; una hoja por marco. Sin marcos, lo que se ve.
+    func imprimirMarcos3D() {
+        guard let v = vista, datos != nil, !preparando else { return }
+        let lista = marcos3d.lista
+        let antes = estado3d()
+        var hojas: [UIImage] = []
+        preparando = true
+        func listo() {
+            if let antes { aplicar(estado: antes) }
+            preparando = false
+            guard !hojas.isEmpty else { return }
+            let impresora = UIPrintInteractionController.shared
+            let info = UIPrintInfo.printInfo()
+            info.jobName = titulo
+            info.outputType = .photo
+            if let h = hojas.first { info.orientation = h.size.width >= h.size.height ? .landscape : .portrait }
+            impresora.printInfo = info
+            impresora.printingItems = hojas
+            _ = impresora.present(from: CGRect(x: v.bounds.maxX - 60, y: 60, width: 1, height: 1), in: v,
+                                  animated: true, completionHandler: nil)
+        }
+        guard !lista.isEmpty else {
+            v.foto { img in
+                if let img { hojas.append(UIImage(cgImage: img)) }
+                listo()
+            }
+            return
+        }
+        func siguiente(_ i: Int) {
+            guard i < lista.count else { return listo() }
+            let m = lista[i]
+            aplicar(estado: m.estado)
+            // Que lleguen los indices del filtro antes de la foto.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                v.foto { img in
+                    if let img {
+                        let r = Marcos3D.rect(m.caja, en: CGSize(width: img.width, height: img.height)).integral
+                        if let c = img.cropping(to: r) { hojas.append(UIImage(cgImage: c)) }
+                    }
+                    siguiente(i + 1)
+                }
+            }
+        }
+        siguiente(0)
+    }
+
+    // MARK: Exportar
+
+    /// **Exportar lo que se ve** (la foto de la vista, como Windows, que
+    /// pinta con la tarjeta) en PNG o JPG, o el original.
+    func exportar(jpg: Bool?) {
+        guard let v = vista, datos != nil else { return }
+        let carpeta = ExportarPlanoIPad.carpetaTemporal()
+        let base = ExportarPlanoIPad.base(titulo)
+        guard let jpg else {
+            let origen = URL(fileURLWithPath: ruta)
+            let salida = carpeta.appendingPathComponent(origen.lastPathComponent)
+            if (try? FileManager.default.copyItem(at: origen, to: salida)) != nil {
+                ExportarPlanoIPad.compartir([salida], carpeta: carpeta, desde: v)
+            }
+            return
+        }
+        v.foto { img in
+            guard let img, let datos = ExportarPlanoIPad.codificar(img, jpg: jpg) else { return }
+            let salida = carpeta.appendingPathComponent(base + (jpg ? ".jpg" : ".png"))
+            guard (try? datos.write(to: salida)) != nil else { return }
+            ExportarPlanoIPad.compartir([salida], carpeta: carpeta, desde: v)
+        }
+    }
 }
 
 // MARK: - La vista de Metal

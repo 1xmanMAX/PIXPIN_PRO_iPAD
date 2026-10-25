@@ -647,8 +647,9 @@ public struct VistaChat: View {
         case .pagina:
             eligiendoProyecto = true
         case let .mini(miniapp):
+            let titulo = DocumentoMini.nombre(miniapp)
             crear { nucleo in
-                try nucleo.crearMiniapp(chat: chat, miniapp: miniapp, titulo: DocumentoMini.nombre(miniapp),
+                try nucleo.crearMiniapp(chat: chat, miniapp: miniapp, titulo: titulo,
                                         moneda: Locale.current.currency?.identifier ?? "EUR")
             } despues: { m in
                 // Viva en un pin, como el panel flotante de Windows.

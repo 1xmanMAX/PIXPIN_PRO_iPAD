@@ -428,6 +428,12 @@ final class VisorPlano: ObservableObject {
         mirar(hallados[((i + paso) % hallados.count + hallados.count) % hallados.count])
     }
 
+    /// Que numero (desde 1) es lo hallado que se ensena; 0 si ninguno.
+    var posicionHallado: Int {
+        guard let h = hallado, let i = hallados.firstIndex(of: h) else { return 0 }
+        return i + 1
+    }
+
     func cerrarBusqueda() {
         buscando = false
         turnoBusqueda += 1
@@ -1354,6 +1360,15 @@ public struct VisorPlanoIPad: View {
 
     @ViewBuilder private var botones: some View {
         Group {
+            botonesDeModo
+            botonesDeVer
+            menuMas
+        }
+        .disabled(visor.datos == nil)
+    }
+
+    /// Mover, medir, marcos y anotar.
+    @ViewBuilder private var botonesDeModo: some View {
             Button { visor.modo = .mover } label: { Image(systemName: "hand.raised") }
                 .foregroundStyle(visor.modo == .mover && !visor.anotando ? Paleta.v2.acento : Color.primary)
                 .help("Mover")
@@ -1369,6 +1384,10 @@ public struct VisorPlanoIPad: View {
                 .foregroundStyle(visor.anotando ? Paleta.v2.acento : Color.primary)
                 .keyboardShortcut(tecla("a"))
                 .help(visor.anotando ? "Terminar de anotar" : "Anotar (A)")
+    }
+
+    /// Ver entero, buscar, letras y capas.
+    @ViewBuilder private var botonesDeVer: some View {
             Button { visor.encuadrar() } label: { Image(systemName: "viewfinder") }
                 .keyboardShortcut(tecla("f"))
                 .help("Ver el plano entero (F)")
@@ -1389,6 +1408,10 @@ public struct VisorPlanoIPad: View {
             Button { visor.verCapas.toggle() } label: { Image(systemName: "square.3.layers.3d") }
                 .foregroundStyle(visor.verCapas ? Paleta.v2.acento : Color.primary)
                 .help("Capas")
+    }
+
+    /// El menu: imprimir, exportar, marcador, 3D y borrar.
+    private var menuMas: some View {
             Menu {
                 Section {
                     Button { visor.imprimir(conMembrete: true) } label: {
@@ -1421,8 +1444,6 @@ public struct VisorPlanoIPad: View {
                 }
                 .disabled(visor.anotado.marcos.isEmpty)
             } label: { Image(systemName: "ellipsis.circle") }
-        }
-        .disabled(visor.datos == nil)
     }
 
     /// Una tecla sola (sin ⌘) como atajo, salvo anotando: entonces las
@@ -1443,21 +1464,7 @@ public struct VisorPlanoIPad: View {
                 .textInputAutocapitalization(.never)
                 .onSubmit { visor.buscar(consulta) }
                 .frame(minWidth: 180, maxWidth: 280)
-            if visor.buscandoAhora {
-                ProgressView().controlSize(.small)
-            } else if visor.sinResultado {
-                Text("No está").font(.callout).foregroundStyle(.secondary)
-            } else if !visor.hallados.isEmpty {
-                let i = visor.hallado.flatMap { h in visor.hallados.firstIndex(of: h) }.map { $0 + 1 } ?? 0
-                Text("\(i) de \(visor.hallados.count)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                Button { visor.otroHallado(-1) } label: { Image(systemName: "chevron.up") }
-                    .keyboardShortcut("g", modifiers: [.command, .shift])
-                Button { visor.otroHallado(1) } label: { Image(systemName: "chevron.down") }
-                    .keyboardShortcut("g", modifiers: .command)
-                if let h = visor.hallado {
-                    Text(h.texto).font(.callout).lineLimit(1).frame(maxWidth: 220, alignment: .leading)
-                }
-            }
+            resultadoDeBusqueda
             Button { visor.cerrarBusqueda() } label: { Image(systemName: "xmark.circle.fill") }
                 .foregroundStyle(.secondary)
         }
@@ -1466,6 +1473,29 @@ public struct VisorPlanoIPad: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(.separator.opacity(0.5)))
+    }
+
+    /// Lo hallado: cuantos, anterior, siguiente y el texto.
+    @ViewBuilder private var resultadoDeBusqueda: some View {
+        if visor.buscandoAhora {
+            ProgressView().controlSize(.small)
+        } else if visor.sinResultado {
+            Text("No está").font(.callout).foregroundStyle(.secondary)
+        } else if !visor.hallados.isEmpty {
+            navegarHallados
+        }
+    }
+
+    private var navegarHallados: some View {
+        let texto: String = "\(visor.posicionHallado) de \(visor.hallados.count)"
+        return HStack(spacing: 10) {
+            Text(texto).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+            Button { visor.otroHallado(-1) } label: { Image(systemName: "chevron.up") }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+            Button { visor.otroHallado(1) } label: { Image(systemName: "chevron.down") }
+                .keyboardShortcut("g", modifiers: .command)
+            Text(visor.hallado?.texto ?? "").font(.callout).lineLimit(1).frame(maxWidth: 220, alignment: .leading)
+        }
     }
 
     /// Los objetos de Civil 3D sin su dibujo (`PROXYGRAPHICS = 0`).

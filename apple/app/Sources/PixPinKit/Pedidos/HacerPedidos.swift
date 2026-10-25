@@ -481,8 +481,8 @@ public final class HacerPedidos {
             let crudo = p.texto("texto") ?? texto
             do {
                 let lista = try await Task.detached {
-                    rutas.isEmpty ? try nucleo.apuntarTarea(texto: texto, desfaseMs: desfase)
-                        : try nucleo.apuntarTareaConImagenes(texto: crudo, imagenes: rutas, desfaseMs: desfase)
+                    try rutas.isEmpty ? nucleo.apuntarTarea(texto: texto, desfaseMs: desfase)
+                        : nucleo.apuntarTareaConImagenes(texto: crudo, imagenes: rutas, desfaseMs: desfase)
                 }.value
                 avisoDeTareas(lista.chat)
                 avisar("Apuntado en el Inbox: «\(texto)».")
@@ -622,7 +622,7 @@ public final class HacerPedidos {
 
     // MARK: Asistente, voz, timeline y texto
 
-    private func preguntar(_ p: Pedido) async {
+    func preguntar(_ p: Pedido) async {
         if let id = p.texto("automatizacion") {
             return await automatizacion(Pedido("automatizacion", ["operacion": .texto("ejecutar"), "id": .texto(id)]))
         }
