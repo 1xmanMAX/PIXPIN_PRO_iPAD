@@ -259,6 +259,8 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     private let goma = GomaDeMarcoIPad()
     private var inicioMarco: CGPoint?
     private var tareaNota: DispatchWorkItem?
+    /// Un pedido con una pagina de un Word aun sin maquetar.
+    private var peticionEnEspera: IrEnElLector.Peticion?
 
     /// Las vistas de tinta de las hojas que PDFKit tiene puestas.
     private var hojas: [Int: HojaTintaIPad] = [:]
@@ -344,6 +346,12 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         }.store(in: &suscripciones)
         actualizarGestos()
         let centro = NotificationCenter.default
+        // Un pedido «abrir» (pagina, buscar) con el documento ya abierto.
+        vigias.append(centro.addObserver(forName: IrEnElLector.cambio, object: nil, queue: .main) { [weak self] n in
+            MainActor.assumeIsolated {
+                if let self, IrEnElLector.esPara(n, self.url) { self.atenderPeticion() }
+            }
+        })
         // Aligerado en su sitio mientras se lee: se vuelve a abrir.
         vigias.append(centro.addObserver(forName: .pixpinPdfAligerado, object: nil, queue: .main) { [weak self] n in
             let ruta = n.object as? String
@@ -437,6 +445,28 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         if let r = ColaAligerar.compartida.resultado[url.path] { avisar(r) }
     }
 
+    /// **Lo que pide un pedido `abrir`** (`Pedidos/IrEnElLector.swift`): ir
+    /// a una pagina y abrir el buscador con un texto.
+    func atenderPeticion() {
+        guard vistaPDF.document != nil, let p = IrEnElLector.tomar(url) else { return }
+        atender(p)
+    }
+
+    private func atender(_ p: IrEnElLector.Peticion) {
+        guard let doc = vistaPDF.document else { return }
+        peticionEnEspera = nil
+        if let i = p.indice {
+            if let hoja = doc.page(at: min(max(i, 0), doc.pageCount - 1)) { vistaPDF.go(to: hoja) }
+            // Un Word o un PowerPoint que aun se maqueta: se va al llegar.
+            if i >= doc.pageCount, modelo.maquetando { peticionEnEspera = p }
+        }
+        if let q = p.buscar {
+            let buscador: UIFindInteraction? = vistaPDF.findInteraction
+            buscador?.searchText = q
+            buscador?.presentFindNavigator(showingReplace: false)
+        }
+    }
+
     /// Un aviso arriba que se va solo a los 2,5 s.
     func avisar(_ texto: String) {
         modelo.nota = texto
@@ -475,7 +505,10 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         }
         // Por donde se iba y a que aumento, con la vista ya colocada.
         DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated { self?.irA(lectura) }
+            MainActor.assumeIsolated {
+                self?.irA(lectura)
+                self?.atenderPeticion()
+            }
         }
     }
 
@@ -528,6 +561,8 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
                 } else {
                     self.modelo.paginas = doc.pageCount
                     if Int(lectura.pagina) == Int(n) { self.vistaPDF.go(to: hoja) }
+                    // Una pagina pedida que aun no estaba maquetada.
+                    if let p = self.peticionEnEspera, let i = p.indice, i < doc.pageCount { self.atender(p) }
                 }
                 n += 1
             }

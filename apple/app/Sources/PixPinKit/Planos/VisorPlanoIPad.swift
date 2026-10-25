@@ -24,6 +24,7 @@
 // desde abajo a la izquierda (la y del dibujo sube); UIKit los cuenta desde
 // arriba, asi que aqui se da la vuelta a la y al pasar de uno a otro.
 
+import Combine
 import Metal
 import MetalKit
 import PixPinCore
@@ -145,6 +146,44 @@ final class VisorPlano: ObservableObject {
         rehacerEtiquetas()
         leerTinta()
         vista?.alLlegarElPlano()
+        aplicarZonaPendiente()
+        if let q = buscarPendiente {
+            buscarPendiente = nil
+            buscando = true
+            buscar(q)
+        }
+    }
+
+    // MARK: Abrir mirando a una zona (el asistente: `abrir` con `zona`)
+
+    /// La zona pedida que aun no se pudo mirar (el plano o la vista no
+    /// estaban), y el texto pedido que buscar al llegar el plano.
+    private var zonaPendiente: (x: Double, y: Double, ancho: Double)?
+    private(set) var buscarPendiente: String?
+
+    /// **Lo que pide un pedido** (`IrEnElLector`): mirar a una zona del
+    /// dibujo (el centro y lo que cabe a lo ancho) y, si lo dice, buscar.
+    func pedir(_ p: IrEnElLector.Peticion) {
+        if let z = p.zona {
+            zonaPendiente = z
+            aplicarZonaPendiente()
+        }
+        if let q = p.buscar {
+            if datos != nil {
+                buscando = true
+                buscar(q)
+            } else {
+                buscarPendiente = q
+            }
+        }
+    }
+
+    /// Mira a la zona pedida si ya se puede (el plano leido y la vista con
+    /// su tamano); si no, queda para luego.
+    func aplicarZonaPendiente() {
+        guard let z = zonaPendiente, datos != nil, let v = vista, v.anchoPx > 1, v.altoPx > 1 else { return }
+        zonaPendiente = nil
+        v.mirar(centroX: z.x, centroY: z.y, ancho: z.ancho)
     }
 
     /// Los objetos de otras aplicaciones (Civil 3D...) guardados sin su
@@ -706,6 +745,8 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
     override func layoutSubviews() {
         super.layoutSubviews()
         if !encuadrado { encuadrar() }
+        // Una zona pedida antes de que la vista tuviera tamano.
+        visor.aplicarZonaPendiente()
         seguirAnotador()
         repintar()
     }
@@ -1356,7 +1397,15 @@ public struct VisorPlanoIPad: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear { visor.cargar(nucleo: nucleo) }
+        .onAppear {
+            if let p = IrEnElLector.tomar(url) { visor.pedir(p) }
+            visor.cargar(nucleo: nucleo)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: IrEnElLector.cambio)) { n in
+            // Un pedido nuevo para este plano, ya abierto.
+            guard IrEnElLector.esPara(n, url), let p = IrEnElLector.tomar(url) else { return }
+            visor.pedir(p)
+        }
         .onDisappear { if visor.anotando { visor.terminarDeAnotar() } }
         .onChange(of: noche.activo) { _, _ in visor.vista?.repintar() }
         .sheet(isPresented: $visor.verLetras) { LetrasDelPlanoIPad(visor: visor) }

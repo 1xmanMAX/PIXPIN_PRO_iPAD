@@ -183,6 +183,12 @@ pub fn apuntar_direccion(raiz: &Path, id: &str, host: &str, puerto: u16) -> std:
         host: host.to_string(),
         puerto,
     });
+    escribir_direcciones(raiz, &todas)?;
+    Ok(true)
+}
+
+/// Escribe `sincro/direcciones.txt` entero con el formato del movil.
+fn escribir_direcciones(raiz: &Path, todas: &[DireccionRecordada]) -> std::io::Result<()> {
     let texto: String = todas
         .iter()
         .map(|d| format!("{}\t{}\t{}\n", d.id, d.host, d.puerto))
@@ -191,7 +197,19 @@ pub fn apuntar_direccion(raiz: &Path, id: &str, host: &str, puerto: u16) -> std:
     if let Some(carpeta) = fichero.parent() {
         std::fs::create_dir_all(carpeta)?;
     }
-    pixpin_sincro::disco::escribir_atomico(&fichero, texto.as_bytes())?;
+    pixpin_sincro::disco::escribir_atomico(&fichero, texto.as_bytes())
+}
+
+/// Quita la direccion recordada de `id`. Devuelve si estaba: si no, el
+/// fichero no se toca.
+pub fn olvidar_direccion(raiz: &Path, id: &str) -> std::io::Result<bool> {
+    let mut todas = leer_direcciones(raiz);
+    let antes = todas.len();
+    todas.retain(|d| d.id != id);
+    if todas.len() == antes {
+        return Ok(false);
+    }
+    escribir_direcciones(raiz, &todas)?;
     Ok(true)
 }
 
@@ -271,6 +289,12 @@ impl Nucleo {
         puerto: u16,
     ) -> Result<bool, ErrorNucleo> {
         Ok(apuntar_direccion(self.ruta(), &id, &host, puerto)?)
+    }
+
+    /// **Olvida la direccion recordada** del aparato `id` (la quita de
+    /// `sincro/direcciones.txt`). `false` si no habia ninguna.
+    pub fn olvidar_direccion(&self, id: String) -> Result<bool, ErrorNucleo> {
+        Ok(olvidar_direccion(self.ruta(), &id)?)
     }
 
     /// **La sonda `PING`/`PONG`** a una direccion escrita o recordada.
@@ -516,6 +540,21 @@ mod pruebas {
         assert!(!apuntar_direccion(&raiz, "x", "", 47474).unwrap());
         assert!(!apuntar_direccion(&raiz, "x", "10.0.0.1", 0).unwrap());
         assert_eq!(leer_direcciones(&raiz).len(), 2);
+        let _ = std::fs::remove_dir_all(&raiz);
+    }
+
+    #[test]
+    fn olvidar_una_direccion_quita_solo_la_de_ese_aparato() {
+        let raiz = carpeta("olvidar");
+        assert!(apuntar_direccion(&raiz, "tel", "10.0.0.2", 47474).unwrap());
+        assert!(apuntar_direccion(&raiz, "pc", "10.0.0.3", 47474).unwrap());
+        assert!(olvidar_direccion(&raiz, "tel").unwrap());
+        let texto = std::fs::read_to_string(raiz.join("sincro/direcciones.txt")).unwrap();
+        assert_eq!(texto, "pc\t10.0.0.3\t47474\n");
+        // Caso negativo: una que no esta no cambia nada.
+        assert!(!olvidar_direccion(&raiz, "tel").unwrap());
+        assert!(!olvidar_direccion(&raiz, "nadie").unwrap());
+        assert_eq!(leer_direcciones(&raiz).len(), 1);
         let _ = std::fs::remove_dir_all(&raiz);
     }
 
