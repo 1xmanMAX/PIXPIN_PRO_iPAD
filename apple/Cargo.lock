@@ -1741,6 +1741,7 @@ version = "0.1.0"
 name = "pixpin-nucleo"
 version = "0.1.0"
 dependencies = [
+ "fluent-bundle",
  "getrandom 0.2.17",
  "pdfsqueeze-core",
  "pixpin-anki",

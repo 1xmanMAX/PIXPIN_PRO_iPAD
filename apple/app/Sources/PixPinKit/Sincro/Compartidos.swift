@@ -207,6 +207,9 @@ public final class ModeloCompartidos: ObservableObject {
             aviso = "Sincronizando con \(p.nombre)…"
             let id = p.id
             let chat = c.chat
+            // Tambien esta cuenta como vuelta: el boton de la lista gira.
+            let giro = EstadoDeLaVuelta.compartido
+            giro.empieza()
             do {
                 let r = try await Task.detached(priority: .utility) { () throws -> ResumenPersona in
                     let r = try nucleo.sincronizarConPersona(host: d.host, puerto: d.puerto, id: id, chats: [chat])
@@ -217,9 +220,11 @@ public final class ModeloCompartidos: ObservableObject {
                     }
                     return r
                 }.value
+                giro.acaba(bien: true)
                 hechos.append(r.otroNombre)
                 if r.trajoAlgo { sincro.alTraerCambios?() }
             } catch {
+                giro.acaba(bien: false)
                 NSLog("PixPin: no se pudo sincronizar con una persona: %@", textoDeError(error))
             }
         }

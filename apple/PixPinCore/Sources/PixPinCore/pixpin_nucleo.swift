@@ -1244,6 +1244,143 @@ public func FfiConverterTypeAppIa_lower(_ value: AppIa) -> UInt64 {
 
 
 /**
+ * **El buscador en todos los chats** de una ventana: su indice vive aqui
+ * mientras Swift lo tenga.
+ */
+public protocol BuscadorEnChatsProtocol: AnyObject, Sendable {
+    
+    /**
+     * **Busca `aguja`** en todos los chats: pone al dia el indice (solo lo
+     * que cambio) y devuelve los `tope` primeros, del mas nuevo al mas
+     * viejo, con la cuenta de todos. Bloquea: desde una `Task` de fondo.
+     */
+    func buscar(aguja: String, tope: UInt32)  -> EncontradoEnChats
+    
+}
+/**
+ * **El buscador en todos los chats** de una ventana: su indice vive aqui
+ * mientras Swift lo tenga.
+ */
+open class BuscadorEnChats: BuscadorEnChatsProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_pixpin_nucleo_fn_clone_buscadorenchats(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_pixpin_nucleo_fn_free_buscadorenchats(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * **Busca `aguja`** en todos los chats: pone al dia el indice (solo lo
+     * que cambio) y devuelve los `tope` primeros, del mas nuevo al mas
+     * viejo, con la cuenta de todos. Bloquea: desde una `Task` de fondo.
+     */
+open func buscar(aguja: String, tope: UInt32) -> EncontradoEnChats  {
+    return try!  FfiConverterTypeEncontradoEnChats_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_buscadorenchats_buscar(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(aguja),
+        FfiConverterUInt32.lower(tope),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBuscadorEnChats: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BuscadorEnChats
+
+    public static func lift(_ handle: UInt64) throws -> BuscadorEnChats {
+        return BuscadorEnChats(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BuscadorEnChats) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BuscadorEnChats {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BuscadorEnChats, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuscadorEnChats_lift(_ handle: UInt64) throws -> BuscadorEnChats {
+    return try FfiConverterTypeBuscadorEnChats.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBuscadorEnChats_lower(_ value: BuscadorEnChats) -> UInt64 {
+    return FfiConverterTypeBuscadorEnChats.lower(value)
+}
+
+
+
+
+
+
+/**
  * Una busqueda en curso, para poder cancelarla desde otro hilo.
  */
 public protocol BusquedaProtocol: AnyObject, Sendable {
@@ -3811,6 +3948,14 @@ public protocol EscuchaProtocol: AnyObject, Sendable {
     func atender() throws  -> Atendido
     
     /**
+     * Como [`Escucha::atender`], **avisando** cuando empieza y acaba lo que
+     * no es una sonda: el boton de sincronizar de la lista gira tambien
+     * mientras el otro aparato sincroniza con este (`EnCurso` de Windows en
+     * `responder`, 0470294).
+     */
+    func atenderAvisando(aviso: AvisoDeVuelta) throws  -> Atendido
+    
+    /**
      * Espera a que llegue alguien y lo atiende entero: una sonda (`PING`),
      * alguien que se une al grupo o una vuelta de sincronizar. Devuelve
      * `false` si se cerro con [`Escucha::cerrar`] en vez de llegar nadie.
@@ -3905,6 +4050,22 @@ open func atender()throws  -> Atendido  {
         uniffiCallStatus in
     uniffi_pixpin_nucleo_fn_method_escucha_atender(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Como [`Escucha::atender`], **avisando** cuando empieza y acaba lo que
+     * no es una sonda: el boton de sincronizar de la lista gira tambien
+     * mientras el otro aparato sincroniza con este (`EnCurso` de Windows en
+     * `responder`, 0470294).
+     */
+open func atenderAvisando(aviso: AvisoDeVuelta)throws  -> Atendido  {
+    return try  FfiConverterTypeAtendido_lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_escucha_atender_avisando(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceAvisoDeVuelta_lower(aviso),uniffiCallStatus
     )
 })
 }
@@ -7762,6 +7923,12 @@ public protocol NucleoProtocol: AnyObject, Sendable {
     func ponerTextoDeDocumento(ruta: String, texto: String) throws 
     
     /**
+     * Un buscador en todos los chats nuevo (su indice nace con la primera
+     * busqueda).
+     */
+    func buscadorEnChats()  -> BuscadorEnChats
+    
+    /**
      * **Lee Google Calendar** (de hace dos dias a tres semanas) y lo deja
      * en `calendario-google.json`. Bloquea (red): Swift lo llama en un hilo
      * de fondo cada 15 min y al conectar. Devuelve si cambio algo (para
@@ -8428,6 +8595,41 @@ public protocol NucleoProtocol: AnyObject, Sendable {
      * sean viejos), con lo `buscado` en su nombre (vacio: todos).
      */
     func proyectosDeLaFicha(chat: String, buscado: String) throws  -> [ProyectoDeLaFicha]
+    
+    /**
+     * El lugar en [`fondos_de_la_foto`] del fondo que se propone a un chat
+     * (uno fijo por su codigo): un emoji sin fondo elegido se lo lleva.
+     */
+    func fondoPropuestoDelChat(chat: String) throws  -> UInt32
+    
+    /**
+     * La foto de un chat como esta ahora (la hoja abre con ella).
+     */
+    func fotoDelChat(chat: String) throws  -> FotoDelChat?
+    
+    /**
+     * Un emoji sobre `fondo` como foto del chat.
+     */
+    func ponerFotoEmoji(chat: String, emoji: String, fondo: FondoDeLaFoto?) throws 
+    
+    /**
+     * **Guarda la foto preparada** recortada por `recorte` como foto del
+     * chat (Guardar en la hoja con una imagen nueva). Borra la preparada.
+     */
+    func ponerFotoImagen(chat: String, preparada: String, recorte: RecorteDeLaFoto) throws 
+    
+    /**
+     * Las iniciales sobre `fondo`; sin fondo, **«Como siempre»** (se
+     * escribe `{"tipo":"iniciales"}`, no se borra: asi viaja).
+     */
+    func ponerFotoIniciales(chat: String, fondo: FondoDeLaFoto?) throws 
+    
+    /**
+     * **Prepara una foto elegida** (el fichero de una imagen o el PNG de una
+     * pegada): la lee derecha, la reduce a [`LADO_DE_TRABAJO`] y la deja en
+     * un PNG temporal. Sus medidas son las del recorte.
+     */
+    func prepararFotoDelChat(origen: String) throws  -> FotoPreparada
     
     /**
      * **Junta las paginas ya pintadas en un lienzo nuevo** del chat: sus
@@ -10338,6 +10540,19 @@ open func ponerTextoDeDocumento(ruta: String, texto: String)throws   {try rustCa
 }
     
     /**
+     * Un buscador en todos los chats nuevo (su indice nace con la primera
+     * busqueda).
+     */
+open func buscadorEnChats() -> BuscadorEnChats  {
+    return try!  FfiConverterTypeBuscadorEnChats_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_buscador_en_chats(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * **Lee Google Calendar** (de hace dos dias a tres semanas) y lo deja
      * en `calendario-google.json`. Bloquea (red): Swift lo llama en un hilo
      * de fondo cada 15 min y al conectar. Devuelve si cambio algo (para
@@ -11822,6 +12037,91 @@ open func proyectosDeLaFicha(chat: String, buscado: String)throws  -> [ProyectoD
             self.uniffiCloneHandle(),
         FfiConverterString.lower(chat),
         FfiConverterString.lower(buscado),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * El lugar en [`fondos_de_la_foto`] del fondo que se propone a un chat
+     * (uno fijo por su codigo): un emoji sin fondo elegido se lo lleva.
+     */
+open func fondoPropuestoDelChat(chat: String)throws  -> UInt32  {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_fondo_propuesto_del_chat(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(chat),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * La foto de un chat como esta ahora (la hoja abre con ella).
+     */
+open func fotoDelChat(chat: String)throws  -> FotoDelChat?  {
+    return try  FfiConverterOptionTypeFotoDelChat.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_foto_del_chat(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(chat),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Un emoji sobre `fondo` como foto del chat.
+     */
+open func ponerFotoEmoji(chat: String, emoji: String, fondo: FondoDeLaFoto?)throws   {try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_poner_foto_emoji(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(chat),
+        FfiConverterString.lower(emoji),
+        FfiConverterOptionTypeFondoDeLaFoto.lower(fondo),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * **Guarda la foto preparada** recortada por `recorte` como foto del
+     * chat (Guardar en la hoja con una imagen nueva). Borra la preparada.
+     */
+open func ponerFotoImagen(chat: String, preparada: String, recorte: RecorteDeLaFoto)throws   {try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_poner_foto_imagen(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(chat),
+        FfiConverterString.lower(preparada),
+        FfiConverterTypeRecorteDeLaFoto_lower(recorte),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Las iniciales sobre `fondo`; sin fondo, **«Como siempre»** (se
+     * escribe `{"tipo":"iniciales"}`, no se borra: asi viaja).
+     */
+open func ponerFotoIniciales(chat: String, fondo: FondoDeLaFoto?)throws   {try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_poner_foto_iniciales(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(chat),
+        FfiConverterOptionTypeFondoDeLaFoto.lower(fondo),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * **Prepara una foto elegida** (el fichero de una imagen o el PNG de una
+     * pegada): la lee derecha, la reduce a [`LADO_DE_TRABAJO`] y la deja en
+     * un PNG temporal. Sus medidas son las del recorte.
+     */
+open func prepararFotoDelChat(origen: String)throws  -> FotoPreparada  {
+    return try  FfiConverterTypeFotoPreparada_lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_preparar_foto_del_chat(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(origen),uniffiCallStatus
     )
 })
 }
@@ -23505,6 +23805,71 @@ public func FfiConverterTypeCuentaMini_lower(_ value: CuentaMini) -> RustBuffer 
 
 
 /**
+ * Donde se pinta la foto ENTERA para que su cuadrado llene la caja.
+ */
+public struct DestinoDeLaFoto: Equatable, Hashable {
+    public var x: Float
+    public var y: Float
+    public var ancho: Float
+    public var alto: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(x: Float, y: Float, ancho: Float, alto: Float) {
+        self.x = x
+        self.y = y
+        self.ancho = ancho
+        self.alto = alto
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DestinoDeLaFoto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDestinoDeLaFoto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DestinoDeLaFoto {
+        return
+            try DestinoDeLaFoto(
+                x: FfiConverterFloat.read(from: &buf), 
+                y: FfiConverterFloat.read(from: &buf), 
+                ancho: FfiConverterFloat.read(from: &buf), 
+                alto: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DestinoDeLaFoto, into buf: inout [UInt8]) {
+        FfiConverterFloat.write(value.x, into: &buf)
+        FfiConverterFloat.write(value.y, into: &buf)
+        FfiConverterFloat.write(value.ancho, into: &buf)
+        FfiConverterFloat.write(value.alto, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDestinoDeLaFoto_lift(_ buf: RustBuffer) throws -> DestinoDeLaFoto {
+    return try FfiConverterTypeDestinoDeLaFoto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDestinoDeLaFoto_lower(_ value: DestinoDeLaFoto) -> RustBuffer {
+    return FfiConverterTypeDestinoDeLaFoto.lower(value)
+}
+
+
+/**
  * De que esta hecha una figura (el previsualizador del chat de Windows).
  */
 public struct DetalleDeFigura: Equatable, Hashable {
@@ -24354,6 +24719,63 @@ public func FfiConverterTypeEncajePlano_lift(_ buf: RustBuffer) throws -> Encaje
 #endif
 public func FfiConverterTypeEncajePlano_lower(_ value: EncajePlano) -> RustBuffer {
     return FfiConverterTypeEncajePlano.lower(value)
+}
+
+
+/**
+ * Lo que contesta una busqueda: los primeros `tope` y cuantos hay en total.
+ */
+public struct EncontradoEnChats: Equatable, Hashable {
+    public var mensajes: [MensajeEncontrado]
+    public var total: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(mensajes: [MensajeEncontrado], total: UInt64) {
+        self.mensajes = mensajes
+        self.total = total
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension EncontradoEnChats: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEncontradoEnChats: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EncontradoEnChats {
+        return
+            try EncontradoEnChats(
+                mensajes: FfiConverterSequenceTypeMensajeEncontrado.read(from: &buf), 
+                total: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: EncontradoEnChats, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeMensajeEncontrado.write(value.mensajes, into: &buf)
+        FfiConverterUInt64.write(value.total, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEncontradoEnChats_lift(_ buf: RustBuffer) throws -> EncontradoEnChats {
+    return try FfiConverterTypeEncontradoEnChats.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEncontradoEnChats_lower(_ value: EncontradoEnChats) -> RustBuffer {
+    return FfiConverterTypeEncontradoEnChats.lower(value)
 }
 
 
@@ -25409,6 +25831,11 @@ public struct FichaChat: Equatable, Hashable {
      */
     public var esAsistente: Bool
     public var archivado: Bool
+    /**
+     * La foto del chat (`avatar` de la ficha, Windows 22bf4dc), si no es
+     * la de siempre. Solo la lleva la lista ([`Nucleo::chats`]).
+     */
+    public var foto: FotoDelChat?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -25424,7 +25851,11 @@ public struct FichaChat: Equatable, Hashable {
          */esGuardados: Bool, 
         /**
          * El chat del asistente local.
-         */esAsistente: Bool, archivado: Bool) {
+         */esAsistente: Bool, archivado: Bool, 
+        /**
+         * La foto del chat (`avatar` de la ficha, Windows 22bf4dc), si no es
+         * la de siempre. Solo la lleva la lista ([`Nucleo::chats`]).
+         */foto: FotoDelChat?) {
         self.id = id
         self.nombre = nombre
         self.tocado = tocado
@@ -25434,6 +25865,7 @@ public struct FichaChat: Equatable, Hashable {
         self.esGuardados = esGuardados
         self.esAsistente = esAsistente
         self.archivado = archivado
+        self.foto = foto
     }
 
     
@@ -25460,7 +25892,8 @@ public struct FfiConverterTypeFichaChat: FfiConverterRustBuffer {
                 sinLeer: FfiConverterUInt32.read(from: &buf), 
                 esGuardados: FfiConverterBool.read(from: &buf), 
                 esAsistente: FfiConverterBool.read(from: &buf), 
-                archivado: FfiConverterBool.read(from: &buf)
+                archivado: FfiConverterBool.read(from: &buf), 
+                foto: FfiConverterOptionTypeFotoDelChat.read(from: &buf)
         )
     }
 
@@ -25474,6 +25907,7 @@ public struct FfiConverterTypeFichaChat: FfiConverterRustBuffer {
         FfiConverterBool.write(value.esGuardados, into: &buf)
         FfiConverterBool.write(value.esAsistente, into: &buf)
         FfiConverterBool.write(value.archivado, into: &buf)
+        FfiConverterOptionTypeFotoDelChat.write(value.foto, into: &buf)
     }
 }
 
@@ -26533,6 +26967,63 @@ public func FfiConverterTypeFinChatIa_lower(_ value: FinChatIa) -> RustBuffer {
 
 
 /**
+ * Un fondo de la paleta (`pixpin_ui::foto_del_chat::FONDOS`).
+ */
+public struct FondoDeLaFoto: Equatable, Hashable {
+    public var arriba: UInt32
+    public var abajo: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(arriba: UInt32, abajo: UInt32) {
+        self.arriba = arriba
+        self.abajo = abajo
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FondoDeLaFoto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFondoDeLaFoto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FondoDeLaFoto {
+        return
+            try FondoDeLaFoto(
+                arriba: FfiConverterUInt32.read(from: &buf), 
+                abajo: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FondoDeLaFoto, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.arriba, into: &buf)
+        FfiConverterUInt32.write(value.abajo, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFondoDeLaFoto_lift(_ buf: RustBuffer) throws -> FondoDeLaFoto {
+    return try FfiConverterTypeFondoDeLaFoto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFondoDeLaFoto_lower(_ value: FondoDeLaFoto) -> RustBuffer {
+    return FfiConverterTypeFondoDeLaFoto.lower(value)
+}
+
+
+/**
  * Una respuesta del asistente como se pinta en su burbuja: las listas
  * como listas y las negritas aparte (en unidades UTF-16, las de
  * `NSString`). Lo guardado no cambia.
@@ -26827,6 +27318,115 @@ public func FfiConverterTypeFotoDeNota_lower(_ value: FotoDeNota) -> RustBuffer 
 
 
 /**
+ * **La foto de un chat, para pintarla** (`logo::pintar` de Windows).
+ */
+public struct FotoDelChat: Equatable, Hashable {
+    /**
+     * `imagen`, `emoji`, `iniciales` o lo que traiga otro aparato (que se
+     * pinta como `iniciales`).
+     */
+    public var tipo: String
+    /**
+     * Solo con `emoji`, y no vacio.
+     */
+    public var emoji: String?
+    /**
+     * El degradado del circulo de arriba (`arriba`) abajo (`abajo`), en
+     * `0xRRGGBB`. Sin el, el color de siempre del chat.
+     */
+    public var arriba: UInt32?
+    public var abajo: UInt32?
+    /**
+     * Solo con `imagen`: el fichero en este Mac. Puede no estar aun (no ha
+     * llegado por la sincronizacion): mientras, se pinta como siempre.
+     */
+    public var imagen: String?
+    /**
+     * Cuando se puso (ms). Informativo.
+     */
+    public var cuando: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `imagen`, `emoji`, `iniciales` o lo que traiga otro aparato (que se
+         * pinta como `iniciales`).
+         */tipo: String, 
+        /**
+         * Solo con `emoji`, y no vacio.
+         */emoji: String?, 
+        /**
+         * El degradado del circulo de arriba (`arriba`) abajo (`abajo`), en
+         * `0xRRGGBB`. Sin el, el color de siempre del chat.
+         */arriba: UInt32?, abajo: UInt32?, 
+        /**
+         * Solo con `imagen`: el fichero en este Mac. Puede no estar aun (no ha
+         * llegado por la sincronizacion): mientras, se pinta como siempre.
+         */imagen: String?, 
+        /**
+         * Cuando se puso (ms). Informativo.
+         */cuando: Int64) {
+        self.tipo = tipo
+        self.emoji = emoji
+        self.arriba = arriba
+        self.abajo = abajo
+        self.imagen = imagen
+        self.cuando = cuando
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FotoDelChat: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFotoDelChat: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FotoDelChat {
+        return
+            try FotoDelChat(
+                tipo: FfiConverterString.read(from: &buf), 
+                emoji: FfiConverterOptionString.read(from: &buf), 
+                arriba: FfiConverterOptionUInt32.read(from: &buf), 
+                abajo: FfiConverterOptionUInt32.read(from: &buf), 
+                imagen: FfiConverterOptionString.read(from: &buf), 
+                cuando: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FotoDelChat, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.tipo, into: &buf)
+        FfiConverterOptionString.write(value.emoji, into: &buf)
+        FfiConverterOptionUInt32.write(value.arriba, into: &buf)
+        FfiConverterOptionUInt32.write(value.abajo, into: &buf)
+        FfiConverterOptionString.write(value.imagen, into: &buf)
+        FfiConverterInt64.write(value.cuando, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFotoDelChat_lift(_ buf: RustBuffer) throws -> FotoDelChat {
+    return try FfiConverterTypeFotoDelChat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFotoDelChat_lower(_ value: FotoDelChat) -> RustBuffer {
+    return FfiConverterTypeFotoDelChat.lower(value)
+}
+
+
+/**
  * Una foto para que la mire el modelo (ya reducida por Swift a ~768 px).
  */
 public struct FotoIa: Equatable, Hashable {
@@ -27038,6 +27638,68 @@ public func FfiConverterTypeFotoNueva_lift(_ buf: RustBuffer) throws -> FotoNuev
 #endif
 public func FfiConverterTypeFotoNueva_lower(_ value: FotoNueva) -> RustBuffer {
     return FfiConverterTypeFotoNueva.lower(value)
+}
+
+
+/**
+ * Una foto elegida, lista para recortarla: un PNG entero (reducido a
+ * [`LADO_DE_TRABAJO`]) y sus medidas, que son las del recorte.
+ */
+public struct FotoPreparada: Equatable, Hashable {
+    public var ruta: String
+    public var ancho: UInt32
+    public var alto: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(ruta: String, ancho: UInt32, alto: UInt32) {
+        self.ruta = ruta
+        self.ancho = ancho
+        self.alto = alto
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FotoPreparada: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFotoPreparada: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FotoPreparada {
+        return
+            try FotoPreparada(
+                ruta: FfiConverterString.read(from: &buf), 
+                ancho: FfiConverterUInt32.read(from: &buf), 
+                alto: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FotoPreparada, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.ruta, into: &buf)
+        FfiConverterUInt32.write(value.ancho, into: &buf)
+        FfiConverterUInt32.write(value.alto, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFotoPreparada_lift(_ buf: RustBuffer) throws -> FotoPreparada {
+    return try FfiConverterTypeFotoPreparada.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFotoPreparada_lower(_ value: FotoPreparada) -> RustBuffer {
+    return FfiConverterTypeFotoPreparada.lower(value)
 }
 
 
@@ -31141,6 +31803,99 @@ public func FfiConverterTypeMedidaPagina_lower(_ value: MedidaPagina) -> RustBuf
 
 
 /**
+ * Las medidas y los tiempos de la seccion, los de Windows.
+ */
+public struct MedidasDeBuscarEnChats: Equatable, Hashable {
+    /**
+     * Cuantos se ensenan de primeras, y cuantos mas con cada «Ver más».
+     */
+    public var dePrimeras: UInt32
+    /**
+     * La espera desde la ultima tecla antes de buscar.
+     */
+    public var esperaMs: UInt32
+    /**
+     * El alto de la cabecera «Mensajes · N» y de la fila «Ver N más».
+     */
+    public var cabecera: UInt32
+    public var verMas: UInt32
+    /**
+     * El alto de cada fila: el de una fila de chat.
+     */
+    public var fila: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Cuantos se ensenan de primeras, y cuantos mas con cada «Ver más».
+         */dePrimeras: UInt32, 
+        /**
+         * La espera desde la ultima tecla antes de buscar.
+         */esperaMs: UInt32, 
+        /**
+         * El alto de la cabecera «Mensajes · N» y de la fila «Ver N más».
+         */cabecera: UInt32, verMas: UInt32, 
+        /**
+         * El alto de cada fila: el de una fila de chat.
+         */fila: UInt32) {
+        self.dePrimeras = dePrimeras
+        self.esperaMs = esperaMs
+        self.cabecera = cabecera
+        self.verMas = verMas
+        self.fila = fila
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MedidasDeBuscarEnChats: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMedidasDeBuscarEnChats: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MedidasDeBuscarEnChats {
+        return
+            try MedidasDeBuscarEnChats(
+                dePrimeras: FfiConverterUInt32.read(from: &buf), 
+                esperaMs: FfiConverterUInt32.read(from: &buf), 
+                cabecera: FfiConverterUInt32.read(from: &buf), 
+                verMas: FfiConverterUInt32.read(from: &buf), 
+                fila: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MedidasDeBuscarEnChats, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.dePrimeras, into: &buf)
+        FfiConverterUInt32.write(value.esperaMs, into: &buf)
+        FfiConverterUInt32.write(value.cabecera, into: &buf)
+        FfiConverterUInt32.write(value.verMas, into: &buf)
+        FfiConverterUInt32.write(value.fila, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMedidasDeBuscarEnChats_lift(_ buf: RustBuffer) throws -> MedidasDeBuscarEnChats {
+    return try FfiConverterTypeMedidasDeBuscarEnChats.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMedidasDeBuscarEnChats_lower(_ value: MedidasDeBuscarEnChats) -> RustBuffer {
+    return FfiConverterTypeMedidasDeBuscarEnChats.lower(value)
+}
+
+
+/**
  * Las medidas con que se pinta un mosaico (`pixpin_ui::funciones`).
  */
 public struct MedidasDeFunciones: Equatable, Hashable {
@@ -31616,6 +32371,115 @@ public func FfiConverterTypeMensajeChat_lift(_ buf: RustBuffer) throws -> Mensaj
 #endif
 public func FfiConverterTypeMensajeChat_lower(_ value: MensajeChat) -> RustBuffer {
     return FfiConverterTypeMensajeChat.lower(value)
+}
+
+
+/**
+ * **Un mensaje encontrado**, listo para pintar su fila.
+ */
+public struct MensajeEncontrado: Equatable, Hashable {
+    /**
+     * El `id` de la ficha de su chat.
+     */
+    public var chat: String
+    /**
+     * El `id` del mensaje (para marcarlo al saltar).
+     */
+    public var mensaje: String
+    /**
+     * Su posicion en el chat (0 el mas antiguo, la de [`Nucleo::mensajes`]):
+     * la pagina que se carga al saltar.
+     */
+    public var posicion: UInt64
+    /**
+     * Su codigo unico.
+     */
+    public var codigo: String
+    public var cuando: Int64
+    /**
+     * El trozo en una linea, con «…» si se corta.
+     */
+    public var texto: String
+    public var tramos: [TramoEncontrado]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * El `id` de la ficha de su chat.
+         */chat: String, 
+        /**
+         * El `id` del mensaje (para marcarlo al saltar).
+         */mensaje: String, 
+        /**
+         * Su posicion en el chat (0 el mas antiguo, la de [`Nucleo::mensajes`]):
+         * la pagina que se carga al saltar.
+         */posicion: UInt64, 
+        /**
+         * Su codigo unico.
+         */codigo: String, cuando: Int64, 
+        /**
+         * El trozo en una linea, con «…» si se corta.
+         */texto: String, tramos: [TramoEncontrado]) {
+        self.chat = chat
+        self.mensaje = mensaje
+        self.posicion = posicion
+        self.codigo = codigo
+        self.cuando = cuando
+        self.texto = texto
+        self.tramos = tramos
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MensajeEncontrado: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMensajeEncontrado: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MensajeEncontrado {
+        return
+            try MensajeEncontrado(
+                chat: FfiConverterString.read(from: &buf), 
+                mensaje: FfiConverterString.read(from: &buf), 
+                posicion: FfiConverterUInt64.read(from: &buf), 
+                codigo: FfiConverterString.read(from: &buf), 
+                cuando: FfiConverterInt64.read(from: &buf), 
+                texto: FfiConverterString.read(from: &buf), 
+                tramos: FfiConverterSequenceTypeTramoEncontrado.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MensajeEncontrado, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.chat, into: &buf)
+        FfiConverterString.write(value.mensaje, into: &buf)
+        FfiConverterUInt64.write(value.posicion, into: &buf)
+        FfiConverterString.write(value.codigo, into: &buf)
+        FfiConverterInt64.write(value.cuando, into: &buf)
+        FfiConverterString.write(value.texto, into: &buf)
+        FfiConverterSequenceTypeTramoEncontrado.write(value.tramos, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMensajeEncontrado_lift(_ buf: RustBuffer) throws -> MensajeEncontrado {
+    return try FfiConverterTypeMensajeEncontrado.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMensajeEncontrado_lower(_ value: MensajeEncontrado) -> RustBuffer {
+    return FfiConverterTypeMensajeEncontrado.lower(value)
 }
 
 
@@ -35666,6 +36530,80 @@ public func FfiConverterTypeRecordatorioMac_lower(_ value: RecordatorioMac) -> R
 
 
 /**
+ * Que cuadrado de la foto preparada entra en el circulo
+ * (`pixpin_ui::foto_del_chat::Recorte`).
+ */
+public struct RecorteDeLaFoto: Equatable, Hashable {
+    /**
+     * 1 = el cuadrado mas grande que cabe; hasta 8.
+     */
+    public var aumento: Float
+    /**
+     * El centro del cuadrado, en pixeles de la foto.
+     */
+    public var cx: Float
+    public var cy: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 1 = el cuadrado mas grande que cabe; hasta 8.
+         */aumento: Float, 
+        /**
+         * El centro del cuadrado, en pixeles de la foto.
+         */cx: Float, cy: Float) {
+        self.aumento = aumento
+        self.cx = cx
+        self.cy = cy
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RecorteDeLaFoto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecorteDeLaFoto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecorteDeLaFoto {
+        return
+            try RecorteDeLaFoto(
+                aumento: FfiConverterFloat.read(from: &buf), 
+                cx: FfiConverterFloat.read(from: &buf), 
+                cy: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecorteDeLaFoto, into buf: inout [UInt8]) {
+        FfiConverterFloat.write(value.aumento, into: &buf)
+        FfiConverterFloat.write(value.cx, into: &buf)
+        FfiConverterFloat.write(value.cy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecorteDeLaFoto_lift(_ buf: RustBuffer) throws -> RecorteDeLaFoto {
+    return try FfiConverterTypeRecorteDeLaFoto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecorteDeLaFoto_lower(_ value: RecorteDeLaFoto) -> RustBuffer {
+    return FfiConverterTypeRecorteDeLaFoto.lower(value)
+}
+
+
+/**
  * Como acabo «Recuperar todos».
  */
 public struct Recuperados: Equatable, Hashable {
@@ -37417,6 +38355,63 @@ public func FfiConverterTypeRotuloVista_lower(_ value: RotuloVista) -> RustBuffe
 
 
 /**
+ * Los rotulos de la seccion: «Mensajes · N» y «Ver N más».
+ */
+public struct RotulosDeBuscarEnChats: Equatable, Hashable {
+    public var mensajes: String
+    public var verMas: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(mensajes: String, verMas: String) {
+        self.mensajes = mensajes
+        self.verMas = verMas
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RotulosDeBuscarEnChats: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRotulosDeBuscarEnChats: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RotulosDeBuscarEnChats {
+        return
+            try RotulosDeBuscarEnChats(
+                mensajes: FfiConverterString.read(from: &buf), 
+                verMas: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RotulosDeBuscarEnChats, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.mensajes, into: &buf)
+        FfiConverterString.write(value.verMas, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRotulosDeBuscarEnChats_lift(_ buf: RustBuffer) throws -> RotulosDeBuscarEnChats {
+    return try FfiConverterTypeRotulosDeBuscarEnChats.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRotulosDeBuscarEnChats_lower(_ value: RotulosDeBuscarEnChats) -> RustBuffer {
+    return FfiConverterTypeRotulosDeBuscarEnChats.lower(value)
+}
+
+
+/**
  * Un trozo de lo reconocido y en que milisegundo del audio empieza (el
  * `Segmento` de `pixpin-voz`; Swift lo saca de `SFTranscriptionSegment`).
  */
@@ -38447,6 +39442,107 @@ public func FfiConverterTypeTextosDeFunciones_lower(_ value: TextosDeFunciones) 
 
 
 /**
+ * Los textos de la hoja (`foto-chat-*` de `pixpin-store`).
+ */
+public struct TextosDeLaFoto: Equatable, Hashable {
+    public var menu: String
+    public var titulo: String
+    public var imagen: String
+    public var pegar: String
+    public var quitar: String
+    public var buscar: String
+    public var sinEmojis: String
+    public var fondo: String
+    public var recorte: String
+    public var guardar: String
+    public var cancelar: String
+    public var sinImagen: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(menu: String, titulo: String, imagen: String, pegar: String, quitar: String, buscar: String, sinEmojis: String, fondo: String, recorte: String, guardar: String, cancelar: String, sinImagen: String, error: String) {
+        self.menu = menu
+        self.titulo = titulo
+        self.imagen = imagen
+        self.pegar = pegar
+        self.quitar = quitar
+        self.buscar = buscar
+        self.sinEmojis = sinEmojis
+        self.fondo = fondo
+        self.recorte = recorte
+        self.guardar = guardar
+        self.cancelar = cancelar
+        self.sinImagen = sinImagen
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TextosDeLaFoto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextosDeLaFoto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextosDeLaFoto {
+        return
+            try TextosDeLaFoto(
+                menu: FfiConverterString.read(from: &buf), 
+                titulo: FfiConverterString.read(from: &buf), 
+                imagen: FfiConverterString.read(from: &buf), 
+                pegar: FfiConverterString.read(from: &buf), 
+                quitar: FfiConverterString.read(from: &buf), 
+                buscar: FfiConverterString.read(from: &buf), 
+                sinEmojis: FfiConverterString.read(from: &buf), 
+                fondo: FfiConverterString.read(from: &buf), 
+                recorte: FfiConverterString.read(from: &buf), 
+                guardar: FfiConverterString.read(from: &buf), 
+                cancelar: FfiConverterString.read(from: &buf), 
+                sinImagen: FfiConverterString.read(from: &buf), 
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TextosDeLaFoto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.menu, into: &buf)
+        FfiConverterString.write(value.titulo, into: &buf)
+        FfiConverterString.write(value.imagen, into: &buf)
+        FfiConverterString.write(value.pegar, into: &buf)
+        FfiConverterString.write(value.quitar, into: &buf)
+        FfiConverterString.write(value.buscar, into: &buf)
+        FfiConverterString.write(value.sinEmojis, into: &buf)
+        FfiConverterString.write(value.fondo, into: &buf)
+        FfiConverterString.write(value.recorte, into: &buf)
+        FfiConverterString.write(value.guardar, into: &buf)
+        FfiConverterString.write(value.cancelar, into: &buf)
+        FfiConverterString.write(value.sinImagen, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextosDeLaFoto_lift(_ buf: RustBuffer) throws -> TextosDeLaFoto {
+    return try FfiConverterTypeTextosDeLaFoto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextosDeLaFoto_lower(_ value: TextosDeLaFoto) -> RustBuffer {
+    return FfiConverterTypeTextosDeLaFoto.lower(value)
+}
+
+
+/**
  * Las constantes de la automatica, para Swift.
  */
 public struct TiemposAuto: Equatable, Hashable {
@@ -38702,6 +39798,64 @@ public func FfiConverterTypeTramoDeSonido_lift(_ buf: RustBuffer) throws -> Tram
 #endif
 public func FfiConverterTypeTramoDeSonido_lower(_ value: TramoDeSonido) -> RustBuffer {
     return FfiConverterTypeTramoDeSonido.lower(value)
+}
+
+
+/**
+ * Un trozo de lo encontrado dentro del texto, en unidades UTF-16 (las de
+ * `NSString`): va en negrita y con el fondo de enviar.
+ */
+public struct TramoEncontrado: Equatable, Hashable {
+    public var inicio: UInt32
+    public var largo: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(inicio: UInt32, largo: UInt32) {
+        self.inicio = inicio
+        self.largo = largo
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TramoEncontrado: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTramoEncontrado: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TramoEncontrado {
+        return
+            try TramoEncontrado(
+                inicio: FfiConverterUInt32.read(from: &buf), 
+                largo: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TramoEncontrado, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.inicio, into: &buf)
+        FfiConverterUInt32.write(value.largo, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTramoEncontrado_lift(_ buf: RustBuffer) throws -> TramoEncontrado {
+    return try FfiConverterTypeTramoEncontrado.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTramoEncontrado_lower(_ value: TramoEncontrado) -> RustBuffer {
+    return FfiConverterTypeTramoEncontrado.lower(value)
 }
 
 
@@ -46187,6 +47341,176 @@ public func FfiConverterCallbackInterfaceAvanceAligerar_lower(_ v: AvanceAligera
 
 
 /**
+ * **Lo que avisa una llamada de fuera** (ver [`Escucha::atender_avisando`]).
+ * Se llama desde el hilo que atiende.
+ */
+public protocol AvisoDeVuelta: AnyObject, Sendable {
+    
+    /**
+     * Llego alguien que no es una sonda: empieza su vuelta.
+     */
+    func empieza() 
+    
+    /**
+     * Acabo; `bien` si salio entera (un fallo es que se corto o no se
+     * entendio).
+     */
+    func acaba(bien: Bool) 
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceAvisoDeVuelta {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAvisoDeVuelta = UniffiVTableCallbackInterfaceAvisoDeVuelta(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceAvisoDeVuelta.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface AvisoDeVuelta: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceAvisoDeVuelta.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface AvisoDeVuelta: handle missing in uniffiClone")
+            }
+        },
+        empieza: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceAvisoDeVuelta.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.empieza(
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        acaba: { (
+            uniffiHandle: UInt64,
+            bien: Int8,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceAvisoDeVuelta.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.acaba(
+                     bien: try FfiConverterBool.lift(bien)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAvisoDeVuelta> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAvisoDeVuelta>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitAvisoDeVuelta() {
+    uniffi_pixpin_nucleo_fn_init_callback_vtable_avisodevuelta(UniffiCallbackInterfaceAvisoDeVuelta.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceAvisoDeVuelta {
+    fileprivate static let handleMap = UniffiHandleMap<AvisoDeVuelta>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceAvisoDeVuelta : FfiConverter {
+    typealias SwiftType = AvisoDeVuelta
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceAvisoDeVuelta_lift(_ handle: UInt64) throws -> AvisoDeVuelta {
+    return try FfiConverterCallbackInterfaceAvisoDeVuelta.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceAvisoDeVuelta_lower(_ v: AvisoDeVuelta) -> UInt64 {
+    return FfiConverterCallbackInterfaceAvisoDeVuelta.lower(v)
+}
+
+
+
+
+/**
  * **Decidir lo que se ofrece** antes de aceptar: devuelve las identidades
  * que se crean como nuevas (lo demas que ya se tenga se pone al dia), o
  * `None` para decir «No, gracias». Se llama desde el hilo que recibe, que
@@ -47744,6 +49068,30 @@ fileprivate struct FfiConverterOptionTypeFichaDeClase: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFondoDeLaFoto: FfiConverterRustBuffer {
+    typealias SwiftType = FondoDeLaFoto?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFondoDeLaFoto.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFondoDeLaFoto.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFotoAnotada: FfiConverterRustBuffer {
     typealias SwiftType = FotoAnotada?
 
@@ -47760,6 +49108,30 @@ fileprivate struct FfiConverterOptionTypeFotoAnotada: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFotoAnotada.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFotoDelChat: FfiConverterRustBuffer {
+    typealias SwiftType = FotoDelChat?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFotoDelChat.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFotoDelChat.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -50623,6 +51995,31 @@ fileprivate struct FfiConverterSequenceTypeFilaElegir: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFondoDeLaFoto: FfiConverterRustBuffer {
+    typealias SwiftType = [FondoDeLaFoto]
+
+    public static func write(_ value: [FondoDeLaFoto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFondoDeLaFoto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FondoDeLaFoto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FondoDeLaFoto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFondoDeLaFoto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFotoDeGrabacion: FfiConverterRustBuffer {
     typealias SwiftType = [FotoDeGrabacion]
 
@@ -51415,6 +52812,31 @@ fileprivate struct FfiConverterSequenceTypeMensajeChat: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeMensajeChat.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeMensajeEncontrado: FfiConverterRustBuffer {
+    typealias SwiftType = [MensajeEncontrado]
+
+    public static func write(_ value: [MensajeEncontrado], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMensajeEncontrado.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MensajeEncontrado] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MensajeEncontrado]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMensajeEncontrado.read(from: &buf))
         }
         return seq
     }
@@ -52398,6 +53820,31 @@ fileprivate struct FfiConverterSequenceTypeTramoDeLaFicha: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeTramoEncontrado: FfiConverterRustBuffer {
+    typealias SwiftType = [TramoEncontrado]
+
+    public static func write(_ value: [TramoEncontrado], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTramoEncontrado.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TramoEncontrado] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TramoEncontrado]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTramoEncontrado.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTramoFormula: FfiConverterRustBuffer {
     typealias SwiftType = [TramoFormula]
 
@@ -53328,6 +54775,42 @@ public func automatizacionHerramientas() -> [HerramientaAutomatizacion]  {
     return try!  FfiConverterSequenceTypeHerramientaAutomatizacion.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_pixpin_nucleo_fn_func_automatizacion_herramientas(uniffiCallStatus
+    )
+})
+}
+/**
+ * **Si un chat pasa el filtro de la lista** (02b3124): lo escrito en
+ * cualquier sitio de su nombre o de su ultima linea, sin mirar mayusculas
+ * ni tildes (como la seccion «Mensajes»). Sin nada escrito, todos.
+ */
+public func chatPasaElFiltro(nombre: String, resumen: String, aguja: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_chat_pasa_el_filtro(
+        FfiConverterString.lower(nombre),
+        FfiConverterString.lower(resumen),
+        FfiConverterString.lower(aguja),uniffiCallStatus
+    )
+})
+}
+public func medidasDeBuscarEnChats() -> MedidasDeBuscarEnChats  {
+    return try!  FfiConverterTypeMedidasDeBuscarEnChats_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_medidas_de_buscar_en_chats(uniffiCallStatus
+    )
+})
+}
+/**
+ * Los rotulos para `total` encontrados y `mas` por ensenar
+ * (`chat-buscar-mensajes` y `chat-buscar-ver-mas` de `pixpin-store`).
+ */
+public func rotulosDeBuscarEnChats(locale: String, total: UInt64, mas: UInt64) -> RotulosDeBuscarEnChats  {
+    return try!  FfiConverterTypeRotulosDeBuscarEnChats_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_rotulos_de_buscar_en_chats(
+        FfiConverterString.lower(locale),
+        FfiConverterUInt64.lower(total),
+        FfiConverterUInt64.lower(mas),uniffiCallStatus
     )
 })
 }
@@ -54288,6 +55771,117 @@ public func vecinaEnLaFicha(meses: [Int64], cuadricula: Bool, ancho: UInt32, act
         FfiConverterUInt32.lower(actual),
         FfiConverterInt32.lower(dx),
         FfiConverterInt32.lower(dy),uniffiCallStatus
+    )
+})
+}
+/**
+ * Donde pintar la foto entera para que su cuadrado caiga en un circulo de
+ * `lado` con su esquina en el cero.
+ */
+public func destinoDelRecorte(recorte: RecorteDeLaFoto, ancho: UInt32, alto: UInt32, lado: Float) -> DestinoDeLaFoto  {
+    return try!  FfiConverterTypeDestinoDeLaFoto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_destino_del_recorte(
+        FfiConverterTypeRecorteDeLaFoto_lower(recorte),
+        FfiConverterUInt32.lower(ancho),
+        FfiConverterUInt32.lower(alto),
+        FfiConverterFloat.lower(lado),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Los emojis que encuentra `consulta`** en la rejilla (sin nada, todos):
+ * en castellano o en ingles, sin tildes y por el principio de las palabras.
+ */
+public func emojisDeLaFoto(consulta: String) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_emojis_de_la_foto(
+        FfiConverterString.lower(consulta),uniffiCallStatus
+    )
+})
+}
+/**
+ * Los doce fondos que se ofrecen, en su orden.
+ */
+public func fondosDeLaFoto() -> [FondoDeLaFoto]  {
+    return try!  FfiConverterSequenceTypeFondoDeLaFoto.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_fondos_de_la_foto(uniffiCallStatus
+    )
+})
+}
+/**
+ * Acercar (`factor` > 1) o alejar hacia `(px, py)`, en fraccion del
+ * circulo (0..1): lo que hay bajo el raton se queda bajo el.
+ */
+public func recorteAcercado(recorte: RecorteDeLaFoto, ancho: UInt32, alto: UInt32, factor: Float, px: Float, py: Float) -> RecorteDeLaFoto  {
+    return try!  FfiConverterTypeRecorteDeLaFoto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_recorte_acercado(
+        FfiConverterTypeRecorteDeLaFoto_lower(recorte),
+        FfiConverterUInt32.lower(ancho),
+        FfiConverterUInt32.lower(alto),
+        FfiConverterFloat.lower(factor),
+        FfiConverterFloat.lower(px),
+        FfiConverterFloat.lower(py),uniffiCallStatus
+    )
+})
+}
+/**
+ * El cuadrado mas grande, en el centro: como se abre una foto.
+ */
+public func recorteCentrado(ancho: UInt32, alto: UInt32) -> RecorteDeLaFoto  {
+    return try!  FfiConverterTypeRecorteDeLaFoto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_recorte_centrado(
+        FfiConverterUInt32.lower(ancho),
+        FfiConverterUInt32.lower(alto),uniffiCallStatus
+    )
+})
+}
+/**
+ * Un giro de rueda (`delta` en unidades de 120 de Windows; positivo acerca)
+ * hacia `(px, py)`.
+ */
+public func recorteConRueda(recorte: RecorteDeLaFoto, ancho: UInt32, alto: UInt32, delta: Int32, px: Float, py: Float) -> RecorteDeLaFoto  {
+    return try!  FfiConverterTypeRecorteDeLaFoto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_recorte_con_rueda(
+        FfiConverterTypeRecorteDeLaFoto_lower(recorte),
+        FfiConverterUInt32.lower(ancho),
+        FfiConverterUInt32.lower(alto),
+        FfiConverterInt32.lower(delta),
+        FfiConverterFloat.lower(px),
+        FfiConverterFloat.lower(py),uniffiCallStatus
+    )
+})
+}
+/**
+ * Arrastrar la foto `(dx, dy)` puntos en un circulo de `lado`: la foto va
+ * con el raton y el cuadrado nunca se sale de ella.
+ */
+public func recorteMovido(recorte: RecorteDeLaFoto, ancho: UInt32, alto: UInt32, lado: Float, dx: Float, dy: Float) -> RecorteDeLaFoto  {
+    return try!  FfiConverterTypeRecorteDeLaFoto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_recorte_movido(
+        FfiConverterTypeRecorteDeLaFoto_lower(recorte),
+        FfiConverterUInt32.lower(ancho),
+        FfiConverterUInt32.lower(alto),
+        FfiConverterFloat.lower(lado),
+        FfiConverterFloat.lower(dx),
+        FfiConverterFloat.lower(dy),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Los textos de la foto del chat** para `locale`, como `textos_de_funciones`.
+ */
+public func textosDeLaFoto(locale: String) -> TextosDeLaFoto  {
+    return try!  FfiConverterTypeTextosDeLaFoto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_textos_de_la_foto(
+        FfiConverterString.lower(locale),uniffiCallStatus
     )
 })
 }
@@ -55893,6 +57487,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_func_automatizacion_herramientas() != 54389) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_func_chat_pasa_el_filtro() != 9300) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_medidas_de_buscar_en_chats() != 38305) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_rotulos_de_buscar_en_chats() != 9855) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_func_dentro_de_carpetas() != 63864) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56107,6 +57710,30 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_vecina_en_la_ficha() != 26888) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_destino_del_recorte() != 821) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_emojis_de_la_foto() != 20815) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_fondos_de_la_foto() != 54706) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_recorte_acercado() != 15756) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_recorte_centrado() != 4539) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_recorte_con_rueda() != 15569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_recorte_movido() != 27681) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_textos_de_la_foto() != 37896) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_funcion_en_la_rejilla() != 28150) {
@@ -56655,6 +58282,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_poner_texto_de_documento() != 3914) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_buscador_en_chats() != 41610) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_calendario_leer() != 39044) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56938,6 +58568,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_proyectos_de_la_ficha() != 65358) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_fondo_propuesto_del_chat() != 55155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_foto_del_chat() != 59808) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_poner_foto_emoji() != 52594) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_poner_foto_imagen() != 45307) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_poner_foto_iniciales() != 58024) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_preparar_foto_del_chat() != 40043) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_fusionar_paginas() != 41663) {
@@ -57358,6 +59006,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_busqueda_cancelar() != 5789) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_buscadorenchats_buscar() != 7672) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_invitacion_anuncio() != 30446) {
@@ -58107,6 +59758,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_escucha_atender() != 13245) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_escucha_atender_avisando() != 28717) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_escucha_atender_una() != 60926) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -58212,6 +59866,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_medidorletras_existe() != 13979) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_avisodevuelta_empieza() != 48313) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_avisodevuelta_acaba() != 56129) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_elegirsincro_elegir() != 51131) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -58224,6 +59884,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTransporteApp()
     uniffiCallbackInitAbrirNavegador()
     uniffiCallbackInitAvanceAligerar()
+    uniffiCallbackInitAvisoDeVuelta()
     uniffiCallbackInitDecidirOferta()
     uniffiCallbackInitElegirSincro()
     uniffiCallbackInitMedidorLetras()

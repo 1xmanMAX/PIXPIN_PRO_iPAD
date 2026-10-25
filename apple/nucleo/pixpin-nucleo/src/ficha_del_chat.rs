@@ -532,7 +532,7 @@ impl Nucleo {
             .map(|f| ProyectoDeLaFicha {
                 este: f.id == chat,
                 disponible: pixpin_proyecto::ubicacion::disponible(f),
-                ficha: FichaChat::from(f),
+                ficha: FichaChat::con_foto(self.ruta(), f),
             })
             .collect())
     }

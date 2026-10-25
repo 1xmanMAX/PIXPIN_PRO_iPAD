@@ -355,7 +355,12 @@ public final class Sincronizador: ObservableObject {
         // anuncio.
         ocupado = true
         fase = "Buscando a \(fila.nombre)…"
+        // Cuenta como vuelta tambien si no llega a conectar: el boton de la
+        // lista gira y, si no se encuentra, se pone en rojo.
+        let giro = EstadoDeLaVuelta.compartido
+        giro.empieza()
         guard let direccion = await llegar(fila) else {
+            giro.acaba(bien: false)
             ocupado = false
             fase = nil
             poner(fila.id, .noEncontrado, direccion: nil)
@@ -364,6 +369,8 @@ public final class Sincronizador: ObservableObject {
         }
         fase = "Conectando con \(fila.nombre)…"
         let fin = await vuelta(con: direccion, id: fila.id, alcance: .preguntar)
+        // Como acabo ya lo apunto la vuelta de dentro.
+        giro.acaba(bien: nil)
         ocupado = false
         fase = nil
         switch fin {
@@ -417,12 +424,21 @@ public final class Sincronizador: ObservableObject {
         guard !lista.isEmpty, !ocupado else { return true }
         let manual = motivo == .manual
         ocupado = true
-        defer { ocupado = false; fase = nil }
-        let rondas = rondasConTodos(aparatos: UInt32(lista.count), soloTareas: false)
+        // Toda la ronda cuenta como una vuelta (`lanzar_con_todos` de
+        // Windows): sale si quedo al dia con alguno; que uno estuviera
+        // apagado no pone el boton en rojo.
+        let giro = EstadoDeLaVuelta.compartido
+        giro.empieza()
         var alDia: [String] = []
+        var fallaron: [(String, String)] = []
+        defer {
+            ocupado = false
+            fase = nil
+            giro.acaba(bien: !alDia.isEmpty ? true : fallaron.isEmpty ? nil : false)
+        }
+        let rondas = rondasConTodos(aparatos: UInt32(lista.count), soloTareas: false)
         var textos: [String] = []
         var avisos: [String] = []
-        var fallaron: [(String, String)] = []
         var trajo = false
         for ronda in 1 ... rondas {
             for fila in lista where !fallaron.contains(where: { $0.0 == fila.nombre }) {
@@ -469,9 +485,14 @@ public final class Sincronizador: ObservableObject {
         let lista = filas.filter { $0.direccion != nil }
         guard !lista.isEmpty, !ocupado else { return }
         ocupado = true
-        defer { ocupado = false }
+        let giro = EstadoDeLaVuelta.compartido
+        giro.empieza()
         var trajo = false
         var alDia: [String] = []
+        defer {
+            ocupado = false
+            giro.acaba(bien: alDia.isEmpty ? nil : true)
+        }
         for fila in lista {
             guard let direccion = fila.direccion else { continue }
             if case let .hecha(r) = await vuelta(con: direccion, id: fila.id, alcance: .tareas(fichas)) {
@@ -487,6 +508,10 @@ public final class Sincronizador: ObservableObject {
     /// `ocupado`: eso es de quien llama.
     private func vuelta(con direccion: Direccion, id: String?, alcance: Alcance) async -> FinVuelta {
         if let id { poner(id, .sincronizando, direccion: direccion) }
+        // El boton de la lista gira mientras dura (`una_vuelta` de Windows)
+        // y apunta como acabo: cancelada u ocupado no cuentan.
+        let giro = EstadoDeLaVuelta.compartido
+        giro.empieza()
         let nucleo = self.nucleo
         let puente = PuenteElegir { [weak self] pregunta, responder in
             DispatchQueue.main.async {
@@ -517,14 +542,17 @@ public final class Sincronizador: ObservableObject {
                 filas[i].ultimaVez = ahoraMs()
             }
             apuntar(r.otroId, direccion)
+            giro.acaba(bien: r.cancelada ? nil : true)
             return .hecha(r)
         } catch {
             pregunta = nil
             let texto = textoDeError(error)
             if esOcupado(texto) {
+                giro.acaba(bien: nil)
                 if let id { poner(id, .contesta, direccion: direccion) }
                 return .ocupado
             }
+            giro.acaba(bien: false)
             if let id { poner(id, .fallo(texto), direccion: direccion) }
             return .fallo(texto)
         }

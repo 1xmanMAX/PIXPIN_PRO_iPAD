@@ -41,12 +41,15 @@ public final class Puerta: @unchecked Sendable {
     public func arrancar(hilos: Int = Int(hilosDeEscucha()),
                          alAtender: @escaping @Sendable (Result<Atendido, Error>) -> Void) {
         let escucha = self.escucha
+        // Lo que llama de fuera (no las sondas) hace girar el boton de
+        // sincronizar de la lista (`GiroDeSincronizar.swift`).
+        let aviso = AvisoDeLaPuerta()
         for numero in 0 ..< max(1, hilos) {
             let hilo = Thread {
                 var fallosSeguidos = 0
                 while true {
                     do {
-                        let atendido = try escucha.atender()
+                        let atendido = try escucha.atenderAvisando(aviso: aviso)
                         if atendido == .cerrada { return }
                         fallosSeguidos = 0
                         alAtender(.success(atendido))

@@ -717,27 +717,15 @@ impl Escucha {
     /// Se puede llamar desde varios hilos a la vez sobre la misma
     /// `Escucha`: cada uno atiende una conexion.
     pub fn atender(&self) -> Result<Atendido, ErrorNucleo> {
-        if self.cerrada.load(Ordering::SeqCst) {
-            return Ok(Atendido::Cerrada);
-        }
-        let flujo = {
-            let _espera = EnEspera::nueva(&self.esperando);
-            self.escucha.accept()?.0
-        };
-        if self.cerrada.load(Ordering::SeqCst) {
-            return Ok(Atendido::Cerrada);
-        }
-        let r = atender(flujo, &self.nucleo, self.puerto);
-        if matches!(
-            r,
-            Ok(Atendido::Aparato { .. } | Atendido::Persona { .. } | Atendido::Archivos { .. })
-        ) {
-            // Lo que llego cambia los cuadernos y la galeria.
-            self.nucleo.vaciar_caches();
-            // Y si era el chat del asistente de otro aparato, uno solo.
-            self.nucleo.unificar_asistentes();
-        }
-        r
+        self.atender_con(None)
+    }
+
+    /// Como [`Escucha::atender`], **avisando** cuando empieza y acaba lo que
+    /// no es una sonda: el boton de sincronizar de la lista gira tambien
+    /// mientras el otro aparato sincroniza con este (`EnCurso` de Windows en
+    /// `responder`, 0470294).
+    pub fn atender_avisando(&self, aviso: Box<dyn AvisoDeVuelta>) -> Result<Atendido, ErrorNucleo> {
+        self.atender_con(Some(aviso.as_ref()))
     }
 
     /// Deja de escuchar: **todas** las `atender` que esten esperando vuelven
@@ -756,6 +744,43 @@ impl Escucha {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+    }
+}
+
+/// **Lo que avisa una llamada de fuera** (ver [`Escucha::atender_avisando`]).
+/// Se llama desde el hilo que atiende.
+#[uniffi::export(callback_interface)]
+pub trait AvisoDeVuelta: Send + Sync {
+    /// Llego alguien que no es una sonda: empieza su vuelta.
+    fn empieza(&self);
+    /// Acabo; `bien` si salio entera (un fallo es que se corto o no se
+    /// entendio).
+    fn acaba(&self, bien: bool);
+}
+
+impl Escucha {
+    fn atender_con(&self, aviso: Option<&dyn AvisoDeVuelta>) -> Result<Atendido, ErrorNucleo> {
+        if self.cerrada.load(Ordering::SeqCst) {
+            return Ok(Atendido::Cerrada);
+        }
+        let flujo = {
+            let _espera = EnEspera::nueva(&self.esperando);
+            self.escucha.accept()?.0
+        };
+        if self.cerrada.load(Ordering::SeqCst) {
+            return Ok(Atendido::Cerrada);
+        }
+        let r = atender(flujo, &self.nucleo, self.puerto, aviso);
+        if matches!(
+            r,
+            Ok(Atendido::Aparato { .. } | Atendido::Persona { .. } | Atendido::Archivos { .. })
+        ) {
+            // Lo que llego cambia los cuadernos y la galeria.
+            self.nucleo.vaciar_caches();
+            // Y si era el chat del asistente de otro aparato, uno solo.
+            self.nucleo.unificar_asistentes();
+        }
+        r
     }
 }
 
@@ -797,7 +822,12 @@ fn mirar_cuatro(flujo: &TcpStream) -> Result<(usize, [u8; 4]), ErrorNucleo> {
 /// Atiende una conexion entrante: `responder` de Windows entero (la sonda,
 /// el grupo con su galeria, los archivos sueltos y las personas de los
 /// chats compartidos).
-fn atender(mut flujo: TcpStream, nucleo: &Nucleo, mi_puerto: u16) -> Result<Atendido, ErrorNucleo> {
+fn atender(
+    mut flujo: TcpStream,
+    nucleo: &Nucleo,
+    mi_puerto: u16,
+    aviso: Option<&dyn AvisoDeVuelta>,
+) -> Result<Atendido, ErrorNucleo> {
     // Corto para los cuatro primeros y la sonda.
     flujo.set_read_timeout(Some(Duration::from_secs(5)))?;
     let (n, cuatro) = mirar_cuatro(&flujo)?;
@@ -806,6 +836,25 @@ fn atender(mut flujo: TcpStream, nucleo: &Nucleo, mi_puerto: u16) -> Result<Aten
         flujo.write_all(pixpin_sincro::SONDA_RESPUESTA)?;
         return Ok(Atendido::Sonda);
     }
+    // Las sondas no cuentan (duran un instante); lo demas, si.
+    if let Some(a) = aviso {
+        a.empieza();
+    }
+    let r = atender_saludo(flujo, nucleo, mi_puerto, n, cuatro);
+    if let Some(a) = aviso {
+        a.acaba(r.is_ok());
+    }
+    r
+}
+
+/// Lo de [`atender`] tras ver que no es una sonda.
+fn atender_saludo(
+    flujo: TcpStream,
+    nucleo: &Nucleo,
+    mi_puerto: u16,
+    n: usize,
+    cuatro: [u8; 4],
+) -> Result<Atendido, ErrorNucleo> {
     // Largo, como `Red.escuchar` del movil: mientras el otro decide que
     // sincronizar, aqui no llega nada.
     flujo.set_read_timeout(Some(Duration::from_secs(30 * 60)))?;

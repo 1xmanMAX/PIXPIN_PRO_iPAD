@@ -604,20 +604,41 @@ enum AbrirDeLaFicha {
 
 // MARK: - La hoja
 
-/// El avatar de un chat: el circulo de su color con sus iniciales.
+/// El avatar de un chat: su foto (imagen, emoji o color) o el circulo de su
+/// color con sus iniciales (`Chat/FotoDelChat.swift`).
 struct AvatarDelChat: View {
     let id: String
     let nombre: String
     let lado: CGFloat
+    var foto: FotoDelChat?
 
     var body: some View {
-        ZStack {
-            Circle().fill(Paleta.avatar(id))
-            Text(Paleta.iniciales(nombre))
-                .font(.system(size: lado * 0.4))
-                .foregroundStyle(.white)
+        CirculoDelChat(id: id, nombre: nombre, lado: lado, foto: foto)
+    }
+}
+
+/// **El avatar de la isla**: tocarlo abre la hoja de la foto del chat
+/// (Windows 22bf4dc). En el iPad la ficha ya es una hoja, asi que la de la
+/// foto sale encima de ella desde aqui (no por `PeticionDeFoto`, que la
+/// pediria a la seccion de debajo, ocupada con la ficha).
+struct AvatarDeLaIsla: View {
+    /// Mirado aqui: al guardar una foto nueva, la isla la ensena ya.
+    @ObservedObject var almacen: Almacen
+    let id: String
+    @State private var eligiendo = false
+
+    var body: some View {
+        let datos = almacen.chats.first(where: { $0.id == id })
+        Button { eligiendo = true } label: {
+            AvatarDelChat(id: id, nombre: datos?.nombre ?? "", lado: MedidasFicha.avatar, foto: datos?.foto)
+                .contentShape(Circle())
         }
-        .frame(width: lado, height: lado)
+        .buttonStyle(.plain)
+        .hoverEffect(.lift)
+        .accessibilityLabel(TextosFoto.actuales.menu)
+        .sheet(isPresented: $eligiendo) {
+            HojaFotoDelChat(chat: id, almacen: almacen) { eligiendo = false }
+        }
     }
 }
 
@@ -703,7 +724,7 @@ struct VistaInfoChat: View {
                     .background(Paleta.proyectos.buscador, in: Capsule())
                     .onAppear { enBuscar = true }
             } else {
-                AvatarDelChat(id: chat, nombre: nombreDelChat, lado: MedidasFicha.avatar)
+                AvatarDeLaIsla(almacen: almacen, id: chat)
                 rotulos(nombreDelChat,
                        subtitulo: ficha.leida.map { TextosFicha.resumen(cosas: $0.cosas, codigo: $0.codigo) } ?? "")
                     .padding(.leading, 12)

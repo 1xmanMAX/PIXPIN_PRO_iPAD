@@ -597,6 +597,58 @@ fn dos_aparatos_se_unen_y_sincronizan_por_la_red() {
     ));
 }
 
+/// Cuenta los avisos de [`pixpin_nucleo::sincro::AvisoDeVuelta`].
+#[derive(Default)]
+struct Avisos {
+    empiezan: std::sync::atomic::AtomicU32,
+    bien: std::sync::atomic::AtomicU32,
+    mal: std::sync::atomic::AtomicU32,
+}
+
+struct Aviso(Arc<Avisos>);
+
+impl pixpin_nucleo::sincro::AvisoDeVuelta for Aviso {
+    fn empieza(&self) {
+        self.0.empiezan.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    fn acaba(&self, bien: bool) {
+        let n = if bien { &self.0.bien } else { &self.0.mal };
+        n.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn una_llamada_de_fuera_avisa_al_empezar_y_al_acabar_y_una_sonda_no() {
+    use std::io::{Read, Write};
+    use std::sync::atomic::Ordering;
+    let t = Temporal::nueva("avisos-de-vuelta");
+    let pc = t.nucleo("PC");
+    let escucha = Arc::clone(&pc).escuchar(0).unwrap();
+    let puerto = escucha.puerto();
+    let avisos = Arc::new(Avisos::default());
+
+    // Una sonda no es una vuelta: el boton no gira por ella.
+    let (e, a) = (Arc::clone(&escucha), Arc::clone(&avisos));
+    let hilo = std::thread::spawn(move || e.atender_avisando(Box::new(Aviso(a))));
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", puerto)).unwrap();
+    s.write_all(pixpin_sincro::SONDA).unwrap();
+    let mut r = [0u8; 4];
+    s.read_exact(&mut r).unwrap();
+    assert_eq!(hilo.join().unwrap().unwrap(), pixpin_nucleo::Atendido::Sonda);
+    assert_eq!(avisos.empiezan.load(Ordering::SeqCst), 0);
+
+    // Una llamada que se corta: empieza y acaba mal (la marca roja).
+    let (e, a) = (Arc::clone(&escucha), Arc::clone(&avisos));
+    let hilo = std::thread::spawn(move || e.atender_avisando(Box::new(Aviso(a))));
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", puerto)).unwrap();
+    s.write_all(b"PXS1 esto no es un saludo").unwrap();
+    drop(s);
+    assert!(hilo.join().unwrap().is_err());
+    assert_eq!(avisos.empiezan.load(Ordering::SeqCst), 1);
+    assert_eq!(avisos.mal.load(Ordering::SeqCst), 1);
+    assert_eq!(avisos.bien.load(Ordering::SeqCst), 0);
+}
+
 #[test]
 fn una_sonda_se_contesta_sin_sincronizar() {
     use std::io::{Read, Write};

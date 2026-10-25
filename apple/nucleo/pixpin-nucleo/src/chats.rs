@@ -56,6 +56,9 @@ pub struct FichaChat {
     /// El chat del asistente local.
     pub es_asistente: bool,
     pub archivado: bool,
+    /// La foto del chat (`avatar` de la ficha, Windows 22bf4dc), si no es
+    /// la de siempre. Solo la lleva la lista ([`Nucleo::chats`]).
+    pub foto: Option<crate::foto_del_chat::FotoDelChat>,
 }
 
 /// Un mensaje, con lo que hace falta para pintar su burbuja.
@@ -157,6 +160,17 @@ impl From<&almacen::Ficha> for FichaChat {
                 .get(pixpin_proyecto::vista::MARCA_ARCHIVADO)
                 .and_then(|v| v.as_bool())
                 == Some(true),
+            foto: None,
+        }
+    }
+}
+
+impl FichaChat {
+    /// La de `f` con su foto, que necesita la carpeta para la imagen.
+    pub fn con_foto(raiz: &Path, f: &almacen::Ficha) -> FichaChat {
+        FichaChat {
+            foto: crate::foto_del_chat::FotoDelChat::de_ficha(raiz, f),
+            ..FichaChat::from(f)
         }
     }
 }
@@ -420,7 +434,7 @@ impl Nucleo {
         Ok(indice
             .ordenadas()
             .into_iter()
-            .map(FichaChat::from)
+            .map(|f| FichaChat::con_foto(self.ruta(), f))
             .collect())
     }
 

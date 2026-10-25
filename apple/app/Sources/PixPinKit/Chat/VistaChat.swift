@@ -593,6 +593,9 @@ public struct VistaChat: View {
         guard let s = nav.saltoAMensaje, s.chat == chat else { return false }
         let id = s.mensaje
         nav.saltoAMensaje = nil
+        // Con la lupa puesta el mensaje podria estar escondido: se quita
+        // (lo pulsado en «Mensajes» de la lista, Windows d106969).
+        if buscador.abierto { buscador.cerrar() }
         if idsCargados.contains(id) {
             ir(a: id)
             return true

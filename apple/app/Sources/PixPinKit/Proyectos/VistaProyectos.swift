@@ -6,10 +6,12 @@
 //   Funciones, `FuncionesDeLaLista.swift`, se pone en el sitio de la lista).
 // - La lista: el boton redondo dorado de sincronizar (Tareas, la galeria y
 //   el timeline pasaron a la pestana Funciones, Windows a274ac0), el
-//   buscador en capsula, las filas de 62 con el avatar de
-//   46 y sus iniciales (`Paleta.avatar`, `Paleta.iniciales`), la ultima linea
-//   y los sin leer; abajo, los archivados, y el boton redondo de proyecto
-//   nuevo (54) abajo a la derecha.
+//   que gira mientras se sincroniza (`Sincro/GiroDeSincronizar.swift`,
+//   Windows 0470294), el buscador en capsula, las filas de 62 con el avatar
+//   de 46 y su foto (`Chat/FotoDelChat.swift`, Windows 22bf4dc), la ultima
+//   linea y los sin leer; abajo, los archivados, la seccion «Mensajes» de
+//   buscar en todos los chats (`Chat/BuscarEnTodosLosChats.swift`, Windows
+//   d106969) y el boton redondo de proyecto nuevo (54) abajo a la derecha.
 // - El chat, sobre su papel (`Chat/VistaChat.swift`).
 // - Estrecho (el iPad en vertical con la barra lateral, Split View, Slide
 //   Over): o la lista o el chat, con la flecha para volver, como el movil.
@@ -32,11 +34,10 @@ public struct VistaProyectos: View {
     @State private var estrecho = false
     /// El proyecto que se va a borrar, mientras se pregunta.
     @State private var aBorrar: FichaChat?
-    /// El proyecto al que se le elige la imagen de logo.
-    @State private var logoPara: FichaChat?
-    @State private var fotoLogo: [PhotosPickerItem] = []
-    @State private var eligiendoLogo = false
     @ObservedObject private var logos = LogosProyecto.compartidos
+    /// La hoja de la foto del chat (`Chat/FotoDelChat.swift`): la pide el
+    /// menu de la fila.
+    @ObservedObject private var pideFoto = PeticionDeFoto.compartida
     /// El proyecto al que se le cambia el nombre, y lo escrito.
     @State private var aRenombrar: FichaChat?
     @State private var nombreNuevo = ""
@@ -64,18 +65,13 @@ public struct VistaProyectos: View {
                     Button { HojaCompartir.abrir(.proyectos([chat]), almacen: almacen) } label: {
                         Label("Compartir…", systemImage: "square.and.arrow.up")
                     }
-                    if !chat.esAsistente {
+                    // «Cambiar foto del chat…» sustituye a «Poner imagen de
+                    // logo…» (Windows 22bf4dc; esta en `ListaProyectos`). Un
+                    // logo viejo de este aparato aun se puede quitar.
+                    if !chat.esAsistente, logos.tiene(chat.id) {
                         Button {
-                            logoPara = chat
-                            eligiendoLogo = true
-                        } label: {
-                            Label("Poner imagen de logo…", systemImage: "photo.circle")
-                        }
-                        if logos.tiene(chat.id) {
-                            Button {
-                                Task { await logos.quitar(chat.id, nucleo: almacen.nucleo) }
-                            } label: { Label("Quitar imagen de logo", systemImage: "circle.slash") }
-                        }
+                            _ = Task<Void, Never> { await logos.quitar(chat.id, nucleo: almacen.nucleo) }
+                        } label: { Label("Quitar imagen de logo", systemImage: "circle.slash") }
                     }
                     if !chat.esGuardados, !chat.esAsistente {
                         // Cambiar el nombre y archivar (Windows,
@@ -159,18 +155,9 @@ public struct VistaProyectos: View {
             }
             .disabled(nombreNuevo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .photosPicker(isPresented: $eligiendoLogo, selection: $fotoLogo, maxSelectionCount: 1, matching: .images)
-        .onChange(of: fotoLogo) { _, elegidas in
-            guard let item = elegidas.first, let chat = logoPara else { return }
-            fotoLogo = []
-            logoPara = nil
-            let (logos, nucleo, almacen) = (self.logos, self.almacen.nucleo, self.almacen)
-            Task {
-                guard let datos = try? await item.loadTransferable(type: Data.self),
-                      await logos.poner(chat.id, datos: datos, nucleo: nucleo) else {
-                    almacen.ponerError("No se pudo poner esa imagen de logo")
-                    return
-                }
+        .sheet(isPresented: Binding(get: { pideFoto.chat != nil }, set: { if !$0 { pideFoto.chat = nil } })) {
+            if let chat = pideFoto.chat {
+                HojaFotoDelChat(chat: chat, almacen: almacen) { pideFoto.chat = nil }
             }
         }
         .task {
@@ -261,6 +248,9 @@ struct ListaProyectos<Menu: View>: View {
     @State private var marcados: Set<String> = []
     @State private var preguntarBorrar = false
     @State private var verBorrados = false
+    /// La seccion «Mensajes» de debajo: lo escrito, buscado en todos los
+    /// chats (`Chat/BuscarEnTodosLosChats.swift`, Windows d106969).
+    @StateObject private var enChats = MensajesDeLaLista()
 
     /// El «…» de la lista: elegir varios, proyectos borrados y la biblioteca de audio.
     private var menuMas: some View {
@@ -282,10 +272,12 @@ struct ListaProyectos<Menu: View>: View {
     }
     @ObservedObject private var logos = LogosProyecto.compartidos
 
+    /// Sin mirar mayusculas ni tildes, en el nombre o la ultima linea
+    /// (`filtrar` de Windows, 02b3124).
     private func casa(_ c: FichaChat) -> Bool {
         let f = filtro.trimmingCharacters(in: .whitespaces)
         guard !f.isEmpty else { return true }
-        return c.nombre.localizedStandardContains(f) || c.resumen.localizedStandardContains(f)
+        return chatPasaElFiltro(nombre: c.nombre, resumen: c.resumen, aguja: f)
     }
 
     private var visibles: [FichaChat] { almacen.chats.filter { !$0.archivado && casa($0) } }
@@ -298,9 +290,9 @@ struct ListaProyectos<Menu: View>: View {
                 // Como la cabecera de Windows: solo sincronizar (Tareas, la
                 // galeria y el timeline estan en la pestana Funciones,
                 // Windows a274ac0).
-                BotonRedondoLista(simbolo: "arrow.triangle.2.circlepath", ayuda: "Sincronizar") {
-                    Navegacion.compartida.seccion = .aparatos
-                }
+                // Gira mientras hay una vuelta y marca en rojo si fallo
+                // (`Sincro/GiroDeSincronizar.swift`, Windows 0470294).
+                BotonSincronizar { Navegacion.compartida.seccion = .aparatos }
                 menuMas
             }
             .padding(.horizontal, 7)
@@ -338,7 +330,10 @@ struct ListaProyectos<Menu: View>: View {
                             ForEach(archivados, id: \.id) { chat in fila(chat) }
                         }
                     }
-                    if visibles.isEmpty, archivados.isEmpty, !filtro.isEmpty {
+                    // Debajo de los chats, los mensajes de todos que llevan
+                    // lo escrito.
+                    SeccionMensajes(mensajes: enChats, chats: almacen.chats) { e in abrirMensaje(e) }
+                    if visibles.isEmpty, archivados.isEmpty, enChats.encontrados.isEmpty, !filtro.isEmpty {
                         Text("Ningún proyecto con «\(filtro)»")
                             .font(.system(size: 14))
                             .foregroundStyle(Paleta.proyectos.apagado)
@@ -395,7 +390,12 @@ struct ListaProyectos<Menu: View>: View {
         .animation(.easeOut(duration: 0.15), value: aviso)
         // La chapa de compartido: al cambiar la lista (un chat nuevo, uno
         // que llego al entrar en un compartido) se vuelve a mirar.
-        .onReceive(almacen.$chats) { _ in chapas.releer(almacen.nucleo) }
+        .onReceive(almacen.$chats) { _ in
+            chapas.releer(almacen.nucleo)
+            // Llego algo (o cambio un chat): la busqueda puesta se repite.
+            enChats.releer()
+        }
+        .onChange(of: filtro) { _, texto in enChats.escrito(texto, nucleo: almacen.nucleo) }
         .alert(nuevoCompartido ? TextosCompartido.compartido : "Proyecto nuevo", isPresented: $creando) {
             TextField("Nombre", text: $nuevo)
             Button("Cancelar", role: .cancel) { nuevo = "" }
@@ -430,11 +430,21 @@ struct ListaProyectos<Menu: View>: View {
         .onAppear { logos.mirar(chat.id, nucleo: almacen.nucleo) }
         .contextMenu {
             Button { elegido = chat.id } label: { Label("Abrir", systemImage: "bubble.left") }
+            // Windows 22bf4dc: sustituye a «Poner/Quitar imagen de logo».
+            Button { PeticionDeFoto.compartida.chat = chat.id } label: {
+                Label(TextosFoto.actuales.menu, systemImage: "person.crop.circle")
+            }
             menu(chat)
             if sePuedeMarcar(chat) {
                 Button { empezarAMarcar(chat.id) } label: { Label("Elegir varios", systemImage: "checkmark.circle") }
             }
         }
+    }
+
+    /// **Abre el chat de un mensaje encontrado** llevado a el y resaltado:
+    /// el mismo salto que «Ver en el chat».
+    private func abrirMensaje(_ e: MensajeEncontrado) {
+        Navegacion.compartida.irAlChat(e.chat, mensaje: e.mensaje)
     }
 
     /// «Mensajes guardados» y el asistente no se borran ni se marcan.
@@ -632,7 +642,7 @@ struct BotonProyectoNuevo: View {
     }
 }
 
-/// Una fila de la lista: el avatar con sus iniciales, el nombre y debajo
+/// Una fila de la lista: el avatar con su foto (o sus iniciales), el nombre y debajo
 /// la ultima linea (o cuantas hojas tiene); elegida, en azul con el texto
 /// blanco.
 struct FilaProyecto: View {

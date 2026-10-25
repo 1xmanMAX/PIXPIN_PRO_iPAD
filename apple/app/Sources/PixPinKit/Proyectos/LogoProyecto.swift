@@ -115,7 +115,9 @@ final class LogosProyecto: ObservableObject {
     }
 }
 
-/// El avatar de un proyecto: su logo, o el circulo con sus iniciales.
+/// El avatar de un proyecto: su foto del chat (imagen, emoji o color, la
+/// que viaja: `Chat/FotoDelChat.swift`); si no tiene, el logo viejo de este
+/// aparato; si no, el circulo con sus iniciales.
 struct AvatarProyecto: View {
     let chat: FichaChat
     var logo: UIImage?
@@ -123,13 +125,10 @@ struct AvatarProyecto: View {
 
     var body: some View {
         ZStack {
-            if let logo {
+            if chat.foto == nil, let logo {
                 Image(uiImage: logo).resizable().scaledToFill()
             } else {
-                Circle().fill(Paleta.avatar(chat.id))
-                Text(Paleta.iniciales(chat.nombre))
-                    .font(.system(size: lado * 0.39, weight: .regular))
-                    .foregroundStyle(.white)
+                CirculoDelChat(id: chat.id, nombre: chat.nombre, lado: lado, foto: chat.foto, letra: lado * 0.39)
             }
         }
         .frame(width: lado, height: lado)
