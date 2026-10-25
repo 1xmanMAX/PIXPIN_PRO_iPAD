@@ -58,7 +58,7 @@ public struct VistaTimeline: View {
         .onChange(of: modelo.consulta) { _, _ in modelo.consultaCambiada() }
         .onChange(of: modelo.filtro) { _, _ in _ = Task<Void, Never> { await modelo.recargar() } }
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
-            Task { await modelo.recargar() }
+            _ = Task<Void, Never> { await modelo.recargar() }
         }
         .task {
             ArranqueOrganizar.apuntar()
