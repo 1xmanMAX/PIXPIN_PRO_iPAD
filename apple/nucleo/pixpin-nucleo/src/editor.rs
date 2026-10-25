@@ -154,6 +154,9 @@ fn herramienta_de(nombre: &str) -> Option<Herramienta> {
         "recortar" => Herramienta::Recortar,
         "extender" => Herramienta::Extender,
         "punto" => Herramienta::Punto,
+        // La marca de angulo (letra griega o el cuadradito de 90 grados),
+        // la de nombrar de Windows (`dibujo/permitidas.rs`).
+        "angulo" => Herramienta::Angulo,
         // Las que tapan o senalan, enmarcan, eligen y arreglan de la barra
         // de Windows (`BOTONES_EDITOR`): unas nacen del gesto (el mosaico, el
         // marco) y las demas las lleva `editor_herramientas`.
@@ -195,6 +198,7 @@ fn nombre_de(h: Herramienta) -> &'static str {
         Herramienta::Recortar => "recortar",
         Herramienta::Extender => "extender",
         Herramienta::Punto => "punto",
+        Herramienta::Angulo => "angulo",
         Herramienta::Mosaico => "mosaico",
         Herramienta::Lupa => "lupa",
         Herramienta::Foco => "foco",
@@ -1321,6 +1325,37 @@ impl EditorLienzo {
             self.subir_version();
         }
         hecho
+    }
+
+    /// **La letra griega de la marca de angulo recien puesta** (o de la
+    /// unica elegida): `paso` > 0 la siguiente libre, < 0 la anterior, en
+    /// un paso de deshacer. Es lo que hacen las flechas arriba y abajo con
+    /// el angulo en la mano en Windows (`dibujo/mano.rs`). `false` si no
+    /// habia marca o no cambio.
+    pub fn cambiar_letra_de_angulo(&self, paso: i32) -> bool {
+        if paso == 0 {
+            return false;
+        }
+        let mut guarda = self.tomar();
+        let st = &mut *guarda;
+        let hecho = st.gesto.cambiar_letra_de_angulo(&mut st.escena, paso.signum());
+        drop(guarda);
+        if hecho {
+            self.subir_cambios();
+            self.subir_version();
+        }
+        hecho
+    }
+
+    /// **La variante de 90 grados** del angulo: pulsar su atajo con el
+    /// angulo ya en la mano pasa del cuadradito a la letra griega y al
+    /// reves (Windows, `dibujo/mano.rs`). Devuelve si queda el cuadradito.
+    pub fn alternar_angulo_recto(&self) -> bool {
+        let mut st = self.tomar();
+        let modo = st.gesto.alternar_angulo_recto();
+        drop(st);
+        self.subir_version();
+        modo == pixpin_motor2d::geometria_exacta::ModoAngulo::Recto
     }
 
     /// Las unidades que se ofrecen al calibrar, de mas a menos uso.

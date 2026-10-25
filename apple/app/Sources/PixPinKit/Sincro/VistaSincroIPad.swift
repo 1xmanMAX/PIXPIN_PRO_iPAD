@@ -502,6 +502,10 @@ struct SeccionDireccionesRecordadas: View {
                         }
                         Button("Probar") { probar(d) }
                             .disabled(probando.contains(d.id))
+                        // Una direccion vieja (otra Wi‑Fi, un aparato que ya
+                        // no esta): se quita de `sincro/direcciones.txt`.
+                        Button("Olvidar", role: .destructive) { olvidar(d) }
+                            .disabled(probando.contains(d.id))
                     }
                 }
             }
@@ -509,6 +513,16 @@ struct SeccionDireccionesRecordadas: View {
         } footer: {
             Text("Donde contestó cada uno la última vez. Se prueba antes que buscar en la Wi‑Fi; si cambia, se apunta sola la nueva.")
                 .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func olvidar(_ d: DireccionConNombre) {
+        let nucleo = sincro.nucleo
+        let id = d.id
+        Task {
+            _ = await Task.detached(priority: .utility) { try? nucleo.olvidarDireccion(id: id) }.value
+            probadas[id] = nil
+            await sincro.refrescar()
         }
     }
 

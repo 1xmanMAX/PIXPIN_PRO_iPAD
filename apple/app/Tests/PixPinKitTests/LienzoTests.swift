@@ -103,6 +103,13 @@ final class LienzoHerramientasTests: XCTestCase {
         XCTAssertEqual(HerramientaLienzo.deTecla("L")?.id, "lapiz")
         XCTAssertEqual(HerramientaLienzo.deTecla("b")?.id, "borrador")
         XCTAssertNil(HerramientaLienzo.deTecla("k"))
+        // La «W» es del angulo (Windows); extender no tiene letra.
+        XCTAssertEqual(HerramientaLienzo.deTecla("W")?.id, "angulo")
+        XCTAssertNil(HerramientaLienzo.con(id: "extender")?.tecla)
+        XCTAssertEqual(HerramientaLienzo.con(id: "angulo")?.grupo, .nombrar)
+        // Ninguna letra elige dos herramientas.
+        let letras = HerramientaLienzo.herramientas.compactMap(\.tecla)
+        XCTAssertEqual(Set(letras).count, letras.count)
         XCTAssertEqual(CajetinesLienzo.numero(" 2,5 "), 2.5)
         XCTAssertEqual(CajetinesLienzo.numero("3.25"), 3.25)
         XCTAssertNil(CajetinesLienzo.numero("dos"))

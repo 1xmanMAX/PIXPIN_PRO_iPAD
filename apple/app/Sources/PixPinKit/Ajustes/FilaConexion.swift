@@ -7,7 +7,7 @@
 // Google admite; un `WKWebView` no). La vuelta es la de Windows y el Mac: el
 // nucleo escucha en `http://127.0.0.1:<puerto>/` mientras tanto (la app esta
 // delante, asi que el puerto local contesta) y, al llegar el permiso, se
-// cierra la hoja. Para eso el nucleo tiene que dar la URL a Swift en vez de
+// cierra la hoja. El nucleo da la URL a Swift (`iaConectarCon`) en vez de
 // abrirla el con `open` (que en iOS no existe): ver `AbridorDeConexion`.
 
 import AuthenticationServices
@@ -76,7 +76,9 @@ struct FilaConexion: View {
         TransporteHttps.instalar()
         let id = self.id
         Task {
-            let r = await Task.detached { Result { try iaConectar(servicioId: id) } }.value
+            let r = await Task.detached {
+                Result { try iaConectarCon(servicioId: id, abrir: AbridorDeConexion()) }
+            }.value
             conectando = false
             SesionWebConexion.compartida.cerrar()
             if case let .failure(e) = r { aviso = textoDeFalloAlConectar(e) }
@@ -92,13 +94,11 @@ struct FilaConexion: View {
     }
 }
 
-/// El fallo de «Conectar…» en palabras. En el iPad, el nucleo de ahora
-/// intenta abrir el navegador con `open` (como en el Mac) y eso iOS no lo
-/// deja: se dice claro en vez del error del sistema.
+/// El fallo de «Conectar…» en palabras (el del sistema no se entiende).
 func textoDeFalloAlConectar(_ e: Error) -> String {
     let t = "\(e)"
     if t.contains("no se pudo abrir el navegador") {
-        return "Aún no se puede conectar desde el iPad: hazlo en el PC o el Mac y vuelve a intentarlo cuando se actualice PixPin."
+        return "No se pudo abrir la página de Google para dar permiso. Inténtalo otra vez."
     }
     if t.contains("cancelado") { return "Cancelado." }
     return t
@@ -172,14 +172,9 @@ final class SesionWebConexion: NSObject, ASWebAuthenticationPresentationContextP
 
 /// **Quien abre la pagina de permiso** desde el nucleo (en su hilo): la pasa
 /// a la hoja en el hilo principal y dice que si al momento (la espera la
-/// lleva el nucleo).
-///
-/// Pendiente del nucleo: cuando `apple/nucleo` exporte
-/// `ia_conectar_con(servicio_id, abrir: Box<dyn AbrirNavegador>)` (ver
-/// `docs/faltantes-ipad.md` §5.2), esta clase se declara `AbrirNavegador` y
-/// `FilaConexion.conectar` llama a `iaConectarCon(servicioId:abrir:)` en vez
-/// de `iaConectar(servicioId:)`.
-final class AbridorDeConexion: @unchecked Sendable {
+/// lleva el nucleo). Es el `AbrirNavegador` del nucleo
+/// (`ia_conectar_con`).
+final class AbridorDeConexion: AbrirNavegador, @unchecked Sendable {
     func abrir(url: String) -> Bool {
         guard let u = URL(string: url) else { return false }
         DispatchQueue.main.async {

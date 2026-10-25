@@ -396,7 +396,23 @@ struct AtajosLienzo: View {
     var body: some View {
         ZStack {
             ForEach(HerramientaLienzo.herramientas.filter { $0.tecla != nil }) { h in
-                atajo(KeyEquivalent(h.tecla ?? " "), []) { modelo.elegir(h.id) }
+                atajo(KeyEquivalent(h.tecla ?? " "), []) {
+                    // La letra del angulo con el angulo ya en la mano: la
+                    // variante de 90 grados y vuelta (Windows, `dibujo/mano.rs`).
+                    if h.id == "angulo", modelo.herramienta == "angulo" {
+                        _ = modelo.editor.alternarAnguloRecto()
+                        modelo.vista?.trasCambio()
+                    } else {
+                        modelo.elegir(h.id)
+                    }
+                }
+            }
+            // ↑↓ con el angulo en la mano: la letra griega de la marca recien
+            // puesta (cuando el lienzo no tiene el teclado; si lo tiene, lo
+            // hace `pressesBegan`).
+            if modelo.herramienta == "angulo" {
+                atajo(.upArrow, []) { modelo.vista?.cambiarLetraDeAngulo(1) }
+                atajo(.downArrow, []) { modelo.vista?.cambiarLetraDeAngulo(-1) }
             }
             ForEach(Array(["1", "2", "3"].enumerated()), id: \.offset) { _, c in
                 atajo(KeyEquivalent(Character(c)), []) {

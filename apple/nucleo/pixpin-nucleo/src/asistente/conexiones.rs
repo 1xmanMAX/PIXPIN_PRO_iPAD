@@ -123,15 +123,48 @@ pub fn ia_guardar_cliente(servicio_id: String, pegado: String) -> Result<String,
 /// Swift lo llama fuera del hilo principal. Devuelve la cuenta.
 #[uniffi::export]
 pub fn ia_conectar(servicio_id: String) -> Result<String, ErrorNucleo> {
-    let s = servicio(&servicio_id)?;
+    let abrir = |url: &str| -> Result<(), String> {
+        std::process::Command::new("open").arg(url).status().map(|_| ()).map_err(|e| format!("no se pudo abrir el navegador: {e}"))
+    };
+    conectar_abriendo(&servicio_id, &abrir)
+}
+
+/// **Quien abre el navegador** para dar permiso (lo implementa Swift): en
+/// iPadOS no hay `open`, y la pagina la abre `ASWebAuthenticationSession`
+/// o `UIApplication.open`. Devuelve si se pudo abrir.
+#[uniffi::export(callback_interface)]
+pub trait AbrirNavegador: Send + Sync {
+    fn abrir(&self, url: String) -> bool;
+}
+
+/// **Conecta** como [`ia_conectar`], pero la pagina de permiso la abre
+/// Swift con `abrir` (iPad e iPhone). Bloquea hasta la vuelta (hasta 5 min).
+#[uniffi::export]
+pub fn ia_conectar_con(
+    servicio_id: String,
+    abrir: Box<dyn AbrirNavegador>,
+) -> Result<String, ErrorNucleo> {
+    let abrir = |url: &str| -> Result<(), String> {
+        if abrir.abrir(url.to_string()) {
+            Ok(())
+        } else {
+            Err("no se pudo abrir el navegador".to_string())
+        }
+    };
+    conectar_abriendo(&servicio_id, &abrir)
+}
+
+/// Lo comun de conectar: corta la espera de antes y espera la vuelta.
+fn conectar_abriendo(
+    servicio_id: &str,
+    abrir: &dyn Fn(&str) -> Result<(), String>,
+) -> Result<String, ErrorNucleo> {
+    let s = servicio(servicio_id)?;
     let parar = Arc::new(AtomicBool::new(false));
     if let Some(antes) = ESPERA.lock().unwrap_or_else(|e| e.into_inner()).replace(parar.clone()) {
         antes.store(true, Ordering::SeqCst);
     }
-    let abrir = |url: &str| -> Result<(), String> {
-        std::process::Command::new("open").arg(url).status().map(|_| ()).map_err(|e| format!("no se pudo abrir el navegador: {e}"))
-    };
-    conexiones::conectar_en(s, &s.extremos(), &carpeta(), &abrir, &parar, conexiones::oauth::ESPERA).map_err(mal)
+    conexiones::conectar_en(s, &s.extremos(), &carpeta(), abrir, &parar, conexiones::oauth::ESPERA).map_err(mal)
 }
 
 /// Corta la espera al navegador.
@@ -164,5 +197,22 @@ mod pruebas {
         assert!(ia_guardar_cliente("dropbox".into(), "x".into()).is_err());
         assert!(ia_guardar_cliente("google_drive".into(), "no es un id".into()).is_err());
         assert!(ia_desconectar("nada".into()).is_err());
+    }
+
+    struct Abridor(std::sync::Arc<std::sync::atomic::AtomicU32>);
+
+    impl AbrirNavegador for Abridor {
+        fn abrir(&self, _url: String) -> bool {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            false
+        }
+    }
+
+    #[test]
+    fn conectar_con_un_servicio_que_no_existe_no_abre_nada() {
+        let veces = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        // Caso negativo: el servicio no esta, y el navegador ni se abre.
+        assert!(ia_conectar_con("dropbox".into(), Box::new(Abridor(veces.clone()))).is_err());
+        assert_eq!(veces.load(Ordering::SeqCst), 0);
     }
 }

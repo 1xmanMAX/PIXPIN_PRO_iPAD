@@ -2108,6 +2108,13 @@ public protocol EditorLienzoProtocol: AnyObject, Sendable {
     func alFrente() 
     
     /**
+     * **La variante de 90 grados** del angulo: pulsar su atajo con el
+     * angulo ya en la mano pasa del cuadradito a la letra griega y al
+     * reves (Windows, `dibujo/mano.rs`). Devuelve si queda el cuadradito.
+     */
+    func alternarAnguloRecto()  -> Bool
+    
+    /**
      * **Si lo de encima se mueve solo** (la estela del laser, que se apaga
      * sola): mientras diga que si, Swift repinta a cada fotograma aunque la
      * version no cambie.
@@ -2139,6 +2146,15 @@ public protocol EditorLienzoProtocol: AnyObject, Sendable {
      * deshacer; `false` si la medida no puede ser cierta (no toca nada).
      */
     func calibrar(largoPx: Float, valor: Float, unidad: String)  -> Bool
+    
+    /**
+     * **La letra griega de la marca de angulo recien puesta** (o de la
+     * unica elegida): `paso` > 0 la siguiente libre, < 0 la anterior, en
+     * un paso de deshacer. Es lo que hacen las flechas arriba y abajo con
+     * el angulo en la mano en Windows (`dibujo/mano.rs`). `false` si no
+     * habia marca o no cambio.
+     */
+    func cambiarLetraDeAngulo(paso: Int32)  -> Bool
     
     /**
      * Sube con cada cambio del DOCUMENTO (para guardar solo, con calma).
@@ -2529,6 +2545,20 @@ open func alFrente()  {try! rustCall() {
 }
     
     /**
+     * **La variante de 90 grados** del angulo: pulsar su atajo con el
+     * angulo ya en la mano pasa del cuadradito a la letra griega y al
+     * reves (Windows, `dibujo/mano.rs`). Devuelve si queda el cuadradito.
+     */
+open func alternarAnguloRecto() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_editorlienzo_alternar_angulo_recto(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * **Si lo de encima se mueve solo** (la estela del laser, que se apaga
      * sola): mientras diga que si, Swift repinta a cada fotograma aunque la
      * version no cambie.
@@ -2595,6 +2625,23 @@ open func calibrar(largoPx: Float, valor: Float, unidad: String) -> Bool  {
         FfiConverterFloat.lower(largoPx),
         FfiConverterFloat.lower(valor),
         FfiConverterString.lower(unidad),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **La letra griega de la marca de angulo recien puesta** (o de la
+     * unica elegida): `paso` > 0 la siguiente libre, < 0 la anterior, en
+     * un paso de deshacer. Es lo que hacen las flechas arriba y abajo con
+     * el angulo en la mano en Windows (`dibujo/mano.rs`). `false` si no
+     * habia marca o no cambio.
+     */
+open func cambiarLetraDeAngulo(paso: Int32) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_editorlienzo_cambiar_letra_de_angulo(
+            self.uniffiCloneHandle(),
+        FfiConverterInt32.lower(paso),uniffiCallStatus
     )
 })
 }
@@ -5841,6 +5888,12 @@ public protocol NucleoProtocol: AnyObject, Sendable {
     func miembrosDelGrupo() throws  -> [MiembroGrupo]
     
     /**
+     * **Olvida la direccion recordada** del aparato `id` (la quita de
+     * `sincro/direcciones.txt`). `false` si no habia ninguna.
+     */
+    func olvidarDireccion(id: String) throws  -> Bool
+    
+    /**
      * **Renombra este aparato** (`Disco.renombrar`): tambien en su ficha
      * de miembro, que es lo que ven los demas en la siguiente vuelta. Sin
      * blancos alrededor y con el tope del movil (40); vacio no vale.
@@ -6891,6 +6944,31 @@ public protocol NucleoProtocol: AnyObject, Sendable {
     func quitarLetrasDePlanos()  -> UInt32
     
     /**
+     * **Archiva (o desarchiva) un proyecto** (Windows, «Archivar» de su
+     * fila). «Mensajes guardados» y el asistente no se archivan.
+     */
+    func archivarProyecto(ficha: String, archivar: Bool) throws  -> FichaChat
+    
+    /**
+     * **Abre un `.pixpin`** que llega de fuera en la lista de proyectos:
+     * pone al dia el que ya hay (con copia de antes) o, con `como_nuevo`,
+     * entra aparte con codigos nuevos.
+     */
+    func importarProyecto(ruta: String, comoNuevo: Bool) throws  -> FichaChat
+    
+    /**
+     * El nombre del proyecto de aqui que ya es ese `.pixpin`, si lo hay
+     * (para preguntar «Actualizar el que tengo» / «Crear como nuevo»).
+     */
+    func proyectoQueYaEsta(ruta: String) throws  -> String?
+    
+    /**
+     * **Cambia el nombre de un proyecto** (Windows, «Cambiar el nombre…»
+     * de su fila). En blanco o «Mensajes guardados» no vale.
+     */
+    func renombrarProyecto(ficha: String, nombre: String) throws  -> FichaChat
+    
+    /**
      * **Le quita la hora** al recordatorio `id` del chat `chat` (al sonar,
      * o «Quitar el recordatorio»): `recuerdaEn` fuera del mensaje, o la
      * marca `⏰` fuera del texto de la tarea. `false` si ya no estaba.
@@ -7581,6 +7659,20 @@ open func miembrosDelGrupo()throws  -> [MiembroGrupo]  {
         uniffiCallStatus in
     uniffi_pixpin_nucleo_fn_method_nucleo_miembros_del_grupo(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Olvida la direccion recordada** del aparato `id` (la quita de
+     * `sincro/direcciones.txt`). `false` si no habia ninguna.
+     */
+open func olvidarDireccion(id: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_olvidar_direccion(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -9918,6 +10010,66 @@ open func quitarLetrasDePlanos() -> UInt32  {
         uniffiCallStatus in
     uniffi_pixpin_nucleo_fn_method_nucleo_quitar_letras_de_planos(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Archiva (o desarchiva) un proyecto** (Windows, «Archivar» de su
+     * fila). «Mensajes guardados» y el asistente no se archivan.
+     */
+open func archivarProyecto(ficha: String, archivar: Bool)throws  -> FichaChat  {
+    return try  FfiConverterTypeFichaChat_lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_archivar_proyecto(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(ficha),
+        FfiConverterBool.lower(archivar),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Abre un `.pixpin`** que llega de fuera en la lista de proyectos:
+     * pone al dia el que ya hay (con copia de antes) o, con `como_nuevo`,
+     * entra aparte con codigos nuevos.
+     */
+open func importarProyecto(ruta: String, comoNuevo: Bool)throws  -> FichaChat  {
+    return try  FfiConverterTypeFichaChat_lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_importar_proyecto(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(ruta),
+        FfiConverterBool.lower(comoNuevo),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * El nombre del proyecto de aqui que ya es ese `.pixpin`, si lo hay
+     * (para preguntar «Actualizar el que tengo» / «Crear como nuevo»).
+     */
+open func proyectoQueYaEsta(ruta: String)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_proyecto_que_ya_esta(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(ruta),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Cambia el nombre de un proyecto** (Windows, «Cambiar el nombre…»
+     * de su fila). En blanco o «Mensajes guardados» no vale.
+     */
+open func renombrarProyecto(ficha: String, nombre: String)throws  -> FichaChat  {
+    return try  FfiConverterTypeFichaChat_lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_renombrar_proyecto(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(ficha),
+        FfiConverterString.lower(nombre),uniffiCallStatus
     )
 })
 }
@@ -34359,6 +34511,146 @@ public func FfiConverterTypeToqueFormula_lower(_ value: ToqueFormula) -> RustBuf
 
 
 /**
+ * **Quien abre el navegador** para dar permiso (lo implementa Swift): en
+ * iPadOS no hay `open`, y la pagina la abre `ASWebAuthenticationSession`
+ * o `UIApplication.open`. Devuelve si se pudo abrir.
+ */
+public protocol AbrirNavegador: AnyObject, Sendable {
+    
+    func abrir(url: String)  -> Bool
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceAbrirNavegador {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAbrirNavegador = UniffiVTableCallbackInterfaceAbrirNavegador(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceAbrirNavegador.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface AbrirNavegador: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceAbrirNavegador.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface AbrirNavegador: handle missing in uniffiClone")
+            }
+        },
+        abrir: { (
+            uniffiHandle: UInt64,
+            url: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceAbrirNavegador.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.abrir(
+                     url: try FfiConverterString.lift(url)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAbrirNavegador> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAbrirNavegador>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitAbrirNavegador() {
+    uniffi_pixpin_nucleo_fn_init_callback_vtable_abrirnavegador(UniffiCallbackInterfaceAbrirNavegador.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceAbrirNavegador {
+    fileprivate static let handleMap = UniffiHandleMap<AbrirNavegador>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceAbrirNavegador : FfiConverter {
+    typealias SwiftType = AbrirNavegador
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceAbrirNavegador_lift(_ handle: UInt64) throws -> AbrirNavegador {
+    return try FfiConverterCallbackInterfaceAbrirNavegador.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceAbrirNavegador_lower(_ v: AbrirNavegador) -> UInt64 {
+    return FfiConverterCallbackInterfaceAbrirNavegador.lower(v)
+}
+
+
+
+
+/**
  * El avance de un aligerado, desde los hilos de trabajo.
  */
 public protocol AvanceAligerar: AnyObject, Sendable {
@@ -39385,6 +39677,19 @@ public func iaConectar(servicioId: String)throws  -> String  {
 })
 }
 /**
+ * **Conecta** como [`ia_conectar`], pero la pagina de permiso la abre
+ * Swift con `abrir` (iPad e iPhone). Bloquea hasta la vuelta (hasta 5 min).
+ */
+public func iaConectarCon(servicioId: String, abrir: AbrirNavegador)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_ia_conectar_con(
+        FfiConverterString.lower(servicioId),
+        FfiConverterCallbackInterfaceAbrirNavegador_lower(abrir),uniffiCallStatus
+    )
+})
+}
+/**
  * Los servicios y como estan.
  */
 public func iaConexiones() -> [ConexionIa]  {
@@ -41079,6 +41384,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_func_ia_conectar() != 15273) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_func_ia_conectar_con() != 10785) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_func_ia_conexiones() != 23516) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -41527,6 +41835,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_miembros_del_grupo() != 45628) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_olvidar_direccion() != 28926) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_renombrar_aparato() != 28007) {
@@ -41985,6 +42296,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_quitar_letras_de_planos() != 41315) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_archivar_proyecto() != 2546) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_importar_proyecto() != 11273) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_proyecto_que_ya_esta() != 21063) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_renombrar_proyecto() != 59710) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_olvidar_recordatorio() != 60871) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42237,6 +42560,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_al_frente() != 31791) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_alternar_angulo_recto() != 15626) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_animando() != 33995) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42250,6 +42576,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_calibrar() != 24290) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_cambiar_letra_de_angulo() != 29995) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_editorlienzo_cambios() != 48507) {
@@ -42807,6 +43136,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_avancealigerar_avance() != 54882) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_abrirnavegador_abrir() != 58839) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_medidorreflujo_avances() != 57608) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42832,6 +43164,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitOyenteChatIa()
     uniffiCallbackInitOyenteIa()
     uniffiCallbackInitTransporteApp()
+    uniffiCallbackInitAbrirNavegador()
     uniffiCallbackInitAvanceAligerar()
     uniffiCallbackInitDecidirOferta()
     uniffiCallbackInitElegirSincro()

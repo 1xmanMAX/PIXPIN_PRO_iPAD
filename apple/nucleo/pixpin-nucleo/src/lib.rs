@@ -94,6 +94,7 @@ pub mod modelos3d;
 pub mod notas;
 pub mod office;
 pub mod planos;
+pub mod proyectos;
 pub mod recepcion;
 pub mod recordatorios;
 pub mod red;

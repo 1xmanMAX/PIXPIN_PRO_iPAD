@@ -85,8 +85,8 @@ public struct HerramientaLienzo: Identifiable, Equatable {
 
     /// El catalogo, en el orden de los desplegables de Windows
     /// (`GrupoBarra::miembros`), con las acciones de los grupos. Las letras
-    /// M L R T B A E G P F Q C Z J son las de Windows
-    /// (`tecla_a_herramienta`); S O D X W N, las de Excalidraw que alli no
+    /// M L R T B A E G P F Q C Z J W son las de Windows
+    /// (`tecla_a_herramienta`); S O D X N, las de Excalidraw que alli no
     /// se usan.
     public static let todas: [HerramientaLienzo] = [
         .init("seleccion", "Seleccionar", .selection, tecla: "m"),
@@ -110,13 +110,18 @@ public struct HerramientaLienzo: Identifiable, Equatable {
         .init("linea", "Línea", .line, grupo: .flechas),
         .init("flecha_codos", "Flecha de codos", .elbowArrow, grupo: .flechas),
         .init("recortar", "Recortar", .cut, tecla: "x", grupo: .arreglar),
-        .init("extender", "Extender", .arrowRight, tecla: "w", grupo: .arreglar),
+        // Sin letra, como en Windows: la «W» es del angulo.
+        .init("extender", "Extender", .arrowRight, grupo: .arreglar),
         // Soldar vertices: la chincheta de Excalidraw, que es un clavo.
         .init("nudo", "Soldar vértices", .pin, grupo: .arreglar),
         .init("copiar_estilo", "Copiar estilo", .eyeDropper, grupo: .arreglar),
         .init("texto", "Texto", .text, tecla: "t", grupo: .nombrar),
         .init("serie", "Numerito", .abacus, grupo: .nombrar),
         .init("punto", "Punto", .dots, tecla: "n", grupo: .nombrar),
+        // La marca de angulo con su letra griega (Windows, 17-oct): la «W» se
+        // parece a una ω. Pulsarla con el angulo en la mano pasa al
+        // cuadradito de 90 grados; ↑↓ cambian la letra de la recien puesta.
+        .init("angulo", "Ángulo", .angle, tecla: "w", grupo: .nombrar),
         // El ojo cerrado: lo que un mosaico hace es dejar de ensenar.
         .init("mosaico", "Pixelar (mosaico)", .eyeClosed, grupo: .tapar),
         .init("lupa", "Lupa", .search, tecla: "q", grupo: .tapar),

@@ -365,3 +365,35 @@ fn varios_hilos_a_la_vez() {
     ed.guardar().unwrap();
     assert_eq!(tipos(&ruta).len(), 20);
 }
+
+#[test]
+fn el_angulo_pone_su_letra_y_las_flechas_la_cambian() {
+    let t = Temporal::nueva("angulo");
+    let ruta = t.0.join("a.excalidraw").display().to_string();
+    let ed = EditorLienzo::de_fichero(ruta.clone(), true).unwrap();
+    // Un triangulo de tres rectas, como en las pruebas del motor.
+    ed.herramienta("linea".into()).unwrap();
+    arrastre(&ed, (0.0, 0.0), (200.0, 0.0));
+    arrastre(&ed, (200.0, 0.0), (60.0, -150.0));
+    arrastre(&ed, (60.0, -150.0), (0.0, 0.0));
+    ed.herramienta("angulo".into()).unwrap();
+    assert_eq!(ed.herramienta_actual(), "angulo");
+    // Caso negativo: sin marca puesta no hay letra que cambiar.
+    assert!(!ed.cambiar_letra_de_angulo(1));
+    let antes = ed.cuantos_elementos();
+    ed.puntero(FasePuntero::Pulsar, 25.0, -8.0, None, 0, 1.0);
+    ed.puntero(FasePuntero::Soltar, 25.0, -8.0, None, 0, 1.0);
+    assert_eq!(ed.cuantos_elementos(), antes + 1, "nace la marca");
+    assert!(ed.cambiar_letra_de_angulo(1));
+    assert!(ed.cambiar_letra_de_angulo(-1));
+    assert!(!ed.cambiar_letra_de_angulo(0), "paso cero no cambia nada");
+    // La variante de 90 grados va y vuelve.
+    assert!(ed.alternar_angulo_recto());
+    assert!(!ed.alternar_angulo_recto());
+    // Con otra herramienta y nada elegido, nada.
+    ed.herramienta("lapiz".into()).unwrap();
+    assert!(!ed.cambiar_letra_de_angulo(1));
+    ed.guardar().unwrap();
+    let texto = std::fs::read_to_string(&ruta).unwrap();
+    assert!(texto.contains("marcaAngulo") || texto.contains("angulo"), "{texto}");
+}

@@ -34,6 +34,9 @@ public struct VistaProyectos: View {
     @State private var fotoLogo: [PhotosPickerItem] = []
     @State private var eligiendoLogo = false
     @ObservedObject private var logos = LogosProyecto.compartidos
+    /// El proyecto al que se le cambia el nombre, y lo escrito.
+    @State private var aRenombrar: FichaChat?
+    @State private var nombreNuevo = ""
 
     public init(almacen: Almacen) { self.almacen = almacen }
 
@@ -60,6 +63,22 @@ public struct VistaProyectos: View {
                         }
                     }
                     if !chat.esGuardados, !chat.esAsistente {
+                        // Cambiar el nombre y archivar (Windows,
+                        // `ventana_chat/proyectos.rs`): el nombre viaja en su
+                        // `proyecto.json` y el archivado tambien.
+                        Button {
+                            nombreNuevo = chat.nombre
+                            aRenombrar = chat
+                        } label: {
+                            Label("Cambiar el nombre…", systemImage: "pencil")
+                        }
+                        Button { archivar(chat, !chat.archivado) } label: {
+                            if chat.archivado {
+                                Label("Desarchivar", systemImage: "tray.and.arrow.up")
+                            } else {
+                                Label("Archivar", systemImage: "archivebox")
+                            }
+                        }
                         Button(role: .destructive) { aBorrar = chat } label: {
                             Label("Borrar proyecto", systemImage: "trash")
                         }
@@ -107,6 +126,16 @@ public struct VistaProyectos: View {
             Text("Se borra también en tus otros aparatos la próxima vez que sincronices. "
                 + "Queda una copia en la papelera de PixPin por si te arrepientes.")
         }
+        .alert("Nombre del proyecto",
+               isPresented: Binding(get: { aRenombrar != nil }, set: { if !$0 { aRenombrar = nil } })) {
+            TextField("Nombre", text: $nombreNuevo)
+            Button("Cancelar", role: .cancel) { aRenombrar = nil }
+            Button("Guardar") {
+                if let chat = aRenombrar { renombrar(chat, nombreNuevo) }
+                aRenombrar = nil
+            }
+            .disabled(nombreNuevo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
         .photosPicker(isPresented: $eligiendoLogo, selection: $fotoLogo, maxSelectionCount: 1, matching: .images)
         .onChange(of: fotoLogo) { _, elegidas in
             guard let item = elegidas.first, let chat = logoPara else { return }
@@ -136,6 +165,37 @@ public struct VistaProyectos: View {
                     .padding()
                     .onTapGesture { almacen.ponerError(nil) }
             }
+        }
+    }
+
+    /// Cambia el nombre en el nucleo (indice y `proyecto.json`) y relee la
+    /// lista; en blanco o igual no hace nada.
+    private func renombrar(_ chat: FichaChat, _ nombre: String) {
+        let limpio = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !limpio.isEmpty, limpio != chat.nombre else { return }
+        let (nucleo, almacen, id) = (self.almacen.nucleo, self.almacen, chat.id)
+        Task {
+            let r = await Task.detached(priority: .userInitiated) {
+                Result { try nucleo.renombrarProyecto(ficha: id, nombre: limpio) }
+            }.value
+            if case let .failure(e) = r { almacen.ponerError("No se pudo cambiar el nombre: \(e)") }
+            await almacen.cargarChats()
+            // La sincronizacion sola cuenta su calma desde aqui.
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
+        }
+    }
+
+    /// Archiva o desarchiva y relee la lista (pasa a «Archivados» o vuelve).
+    private func archivar(_ chat: FichaChat, _ si: Bool) {
+        if si, nav.chatAbierto == chat.id, estrecho { nav.chatAbierto = nil }
+        let (nucleo, almacen, id) = (self.almacen.nucleo, self.almacen, chat.id)
+        Task {
+            let r = await Task.detached(priority: .userInitiated) {
+                Result { try nucleo.archivarProyecto(ficha: id, archivar: si) }
+            }.value
+            if case let .failure(e) = r { almacen.ponerError("No se pudo archivar: \(e)") }
+            await almacen.cargarChats()
+            NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
         }
     }
 

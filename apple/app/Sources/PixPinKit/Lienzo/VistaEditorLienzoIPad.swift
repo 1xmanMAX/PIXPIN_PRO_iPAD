@@ -765,7 +765,24 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
                 }
             }
         }
+        // La letra griega de la marca recien puesta (Windows, 17-oct): con
+        // el angulo en la mano, ↑ la siguiente libre y ↓ la anterior.
+        if !usadas, !editor.escribiendo(), modelo.herramienta == "angulo" {
+            for p in presses {
+                guard let k = p.key, k.modifierFlags.intersection([.command, .alternate, .control]).isEmpty else { continue }
+                switch k.keyCode {
+                case .keyboardUpArrow: usadas = true; cambiarLetraDeAngulo(1)
+                case .keyboardDownArrow: usadas = true; cambiarLetraDeAngulo(-1)
+                default: break
+                }
+            }
+        }
         if !usadas { super.pressesBegan(presses, with: event) }
+    }
+
+    /// Cambia la letra de la ultima marca de angulo (`paso` 1 o -1).
+    func cambiarLetraDeAngulo(_ paso: Int32) {
+        if editor.cambiarLetraDeAngulo(paso: paso) { trasCambio() }
     }
 
     /// Termina el texto que se estaba escribiendo (otra herramienta, cerrar).
