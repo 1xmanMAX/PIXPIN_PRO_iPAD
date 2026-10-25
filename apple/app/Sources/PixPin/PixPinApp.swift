@@ -16,6 +16,7 @@ struct PixPinApp: App {
     init() {
         Tema.aplicarAlArrancar()
         SincroDeFondo.activar()
+        LienzoDelIPad.activar()
     }
 
     var body: some Scene {

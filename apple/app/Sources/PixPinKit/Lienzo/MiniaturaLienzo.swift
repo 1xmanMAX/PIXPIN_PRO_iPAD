@@ -44,16 +44,17 @@ public struct MiniaturaLienzo: View {
                     .interpolation(.high)
             } else if falta {
                 RoundedRectangle(cornerRadius: 8).fill(.quaternary)
-                    .overlay(Label(mensaje.nombre.isEmpty ? "Lienzo" : mensaje.nombre,
-                                   systemImage: "scribble.variable")
-                        .font(.callout).foregroundStyle(.secondary).padding(8))
+                    .overlay {
+                        Label(mensaje.nombre.isEmpty ? "Lienzo" : mensaje.nombre, systemImage: "scribble.variable")
+                            .font(.callout).foregroundStyle(.secondary).padding(8)
+                    }
             } else {
-                RoundedRectangle(cornerRadius: 8).fill(.quaternary).overlay(ProgressView())
+                RoundedRectangle(cornerRadius: 8).fill(.quaternary).overlay { ProgressView() }
             }
         }
         .frame(width: MiniaturaLienzo.tamano.width, height: MiniaturaLienzo.tamano.height)
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.4)))
+        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.4)) }
         .contentShape(Rectangle())
         .onTapGesture(perform: editar)
         .accessibilityLabel(mensaje.nombre.isEmpty ? "Lienzo" : mensaje.nombre)

@@ -29,7 +29,6 @@ public struct EditorLienzoIPad: View {
     let foto: URL?
 
     @StateObject private var carga = CargaLienzoIPad()
-    @State private var fotoElegida: PhotosPickerItem?
 
     public init(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?) {
         self.almacen = almacen; self.chat = chat; self.mensaje = mensaje; self.foto = foto
@@ -52,9 +51,6 @@ public struct EditorLienzoIPad: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .listo(modelo):
                 EditorLienzoVistaIPad(modelo: modelo)
-                    .photosPicker(isPresented: Binding(get: { modelo.pidiendoImagen },
-                                                       set: { modelo.pidiendoImagen = $0 }),
-                                  selection: $fotoElegida, matching: .images)
             }
             BarraVisorIPad(tipo: "Lienzo", icono: "scribble.variable", titulo: carga.titulo ?? tituloDePartida) {
                 if case let .listo(modelo) = carga.estado {
@@ -70,15 +66,6 @@ public struct EditorLienzoIPad: View {
         .task {
             LienzoDelIPad.activar()
             await carga.abrir(almacen: almacen, chat: chat, mensaje: mensaje, foto: foto)
-        }
-        .onChange(of: fotoElegida) { _, item in
-            guard let item, case let .listo(modelo) = carga.estado else { return }
-            fotoElegida = nil
-            Task {
-                if let datos = try? await item.loadTransferable(type: Data.self) {
-                    modelo.vista?.meterImagen(datos)
-                }
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
             if case let .listo(modelo) = carga.estado { modelo.guardarAhora(terminarTexto: false) }
@@ -212,6 +199,8 @@ struct LienzoEditableIPad: UIViewRepresentable {
 /// estilo a la izquierda.
 struct EditorLienzoVistaIPad: View {
     @ObservedObject var modelo: ModeloEditorLienzo
+    /// La foto elegida con el boton de imagen (el selector de Fotos).
+    @State private var fotoElegida: PhotosPickerItem?
     /// Lo que ocupa arriba la barra comun del visor.
     static let bajoLaBarraDelVisor: CGFloat = 58
 
@@ -252,6 +241,16 @@ struct EditorLienzoVistaIPad: View {
         }
         .overlayPreferenceValue(AnclasGruposLienzo.self) { anclas in
             MenuGrupoLienzo(modelo: modelo, anclas: anclas)
+        }
+        .photosPicker(isPresented: $modelo.pidiendoImagen, selection: $fotoElegida, matching: .images)
+        .onChange(of: fotoElegida) { _, item in
+            guard let item else { return }
+            fotoElegida = nil
+            Task {
+                if let datos = try? await item.loadTransferable(type: Data.self) {
+                    modelo.vista?.meterImagen(datos)
+                }
+            }
         }
     }
 }

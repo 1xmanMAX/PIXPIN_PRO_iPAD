@@ -494,7 +494,7 @@ public struct VistaChat: View {
     private func atenderSalto() -> Bool {
         guard let s = nav.saltoAMensaje, s.chat == chat else { return false }
         let id = s.mensaje
-        Task { @MainActor in if nav.saltoAMensaje?.mensaje == id { nav.saltoAMensaje = nil } }
+        nav.saltoAMensaje = nil
         if idsCargados.contains(id) {
             ir(a: id)
             return true

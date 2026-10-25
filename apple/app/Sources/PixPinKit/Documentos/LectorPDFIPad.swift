@@ -33,6 +33,7 @@ import PDFKit
 import PixPinCore
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 public extension Notification.Name {
     /// Se guardo lo anotado de un documento: `object` es su ruta.
@@ -366,6 +367,7 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         vistaPDF.document = doc
         modelo.paginas = doc.pageCount
         ponerMargenes()
+        actualizarGestos()
         let ruta = url.path
         let n = UInt32(doc.pageCount)
         let nucleo = self.nucleo
@@ -620,6 +622,7 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
         if !auto { vistaPDF.scaleFactor = escala }
         if let destino { vistaPDF.go(to: destino) }
         ponerMargenes()
+        actualizarGestos()
     }
 
     // MARK: Anotar
@@ -961,7 +964,8 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
     }
 
     func buscar() {
-        vistaPDF.findInteraction.presentFindNavigator(showingReplace: false)
+        let buscador: UIFindInteraction? = vistaPDF.findInteraction
+        buscador?.presentFindNavigator(showingReplace: false)
     }
 
     func escuchar() {

@@ -6,6 +6,7 @@
 import Foundation
 import PixPinCore
 @testable import PixPinKit
+import SwiftUI
 import UIKit
 import XCTest
 
@@ -109,7 +110,7 @@ final class LienzoHerramientasTests: XCTestCase {
     }
 
     func testElColorDelSelectorLlegaAlMotorEnSRGB() throws {
-        let c = try XCTUnwrap(OpcionesEstiloLienzo.estilo(de: .init(.sRGB, red: 1, green: 0.5, blue: 0, opacity: 1)))
+        let c = try XCTUnwrap(OpcionesEstiloLienzo.estilo(de: Color(.sRGB, red: 1, green: 0.5, blue: 0, opacity: 1)))
         XCTAssertEqual(c.r, 1, accuracy: 0.01)
         XCTAssertEqual(c.g, 0.5, accuracy: 0.01)
         XCTAssertEqual(c.b, 0, accuracy: 0.01)
@@ -179,8 +180,10 @@ final class LienzoEditorTests: XCTestCase {
         vista.layoutIfNeeded()
         let formato = UIGraphicsImageRendererFormat()
         formato.scale = 1
-        let img = UIGraphicsImageRenderer(bounds: vista.bounds, format: formato).image { c in
-            vista.layer.render(in: c.cgContext)
+        // `draw` pinta en el contexto de ahora (el del renderizador), con la
+        // Y hacia abajo como en pantalla.
+        let img = UIGraphicsImageRenderer(bounds: vista.bounds, format: formato).image { _ in
+            vista.draw(vista.bounds)
         }
         let cg = try XCTUnwrap(img.cgImage)
         XCTAssertGreaterThan(oscuros(cg), 5, "el trazo tiene que verse")

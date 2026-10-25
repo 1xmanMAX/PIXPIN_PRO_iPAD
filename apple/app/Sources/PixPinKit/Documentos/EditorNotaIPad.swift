@@ -283,7 +283,7 @@ final class ModeloTextoNota: ObservableObject {
     /// Sin formato (un `.txt`): ni tramos ni casillas.
     let markdown: Bool
     /// Escribe el texto donde viva (fuera del hilo principal lo hace el).
-    var guardar: ((String) -> Void)?
+    var guardar: (@MainActor (String) -> Void)?
     fileprivate weak var vista: UITextView?
     private var guardado: String
     private var restilo: DispatchWorkItem?
@@ -385,6 +385,7 @@ final class ModeloTextoNota: ObservableObject {
               let b = v.position(from: a, offset: 1), let r = v.textRange(from: a, to: b) else { return false }
         let ahora = ns.substring(with: NSRange(location: pos, length: 1))
         v.replace(r, withText: ahora == " " ? "x" : " ")
+        cambio()
         return true
     }
 
@@ -401,12 +402,14 @@ final class ModeloTextoNota: ObservableObject {
             return true
         case let .con(prefijo):
             v.insertText("\n" + prefijo)
+            cambio()
             return false
         case .cortar:
             guard let a = v.position(from: v.beginningOfDocument, offset: renglon.location),
                   let b = v.position(from: a, offset: (sinSalto as NSString).length),
                   let r = v.textRange(from: a, to: b) else { return true }
             v.replace(r, withText: "")
+            cambio()
             return false
         }
     }

@@ -248,11 +248,15 @@ public struct SegmentosCabecera<Valor: Hashable>: View {
 
 public extension View {
     /// **Una seccion de la barra comun**, como las ventanas de Windows:
-    /// oscura siempre (aunque el iPad vaya en claro), con el fondo #1C1C1E y
-    /// sin la barra de navegacion del sistema (la `Cabecera` hace de titulo).
+    /// oscura siempre (aunque el iPad vaya en claro), con el fondo #1C1C1E.
+    /// La barra de navegacion del sistema se queda (fina y del mismo color)
+    /// para el boton de la barra lateral; el titulo lo pone la `Cabecera`.
     func ventanaConCabecera() -> some View {
         background(Paleta.v2.fondo)
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Paleta.v2.fondo, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .environment(\.colorScheme, .dark)
     }
 }

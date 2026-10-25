@@ -129,7 +129,7 @@ public final class Navegacion: ObservableObject {
         case .documento: abrir(.documento(url: url, titulo: nombre, chat: chat, mensaje: mensaje))
         case .medio: abrir(.medio(url: url, titulo: nombre))
         case .imagen:
-            if let chat { abrir(.lienzo(chat: chat, mensaje: nil, foto: url)) } else { abrir(.vistaRapida(url: url)) }
+            if let chat { abrir(.lienzo(chat: chat, mensaje: mensaje, foto: url)) } else { abrir(.vistaRapida(url: url)) }
         case .otro: abrir(.vistaRapida(url: url))
         }
     }

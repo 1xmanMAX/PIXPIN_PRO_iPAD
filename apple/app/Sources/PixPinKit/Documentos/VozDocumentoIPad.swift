@@ -62,10 +62,11 @@ final class VozDocumentoIPad: NSObject, ObservableObject {
         for i in 0..<doc.pageCount {
             if let s = doc.page(at: i)?.string, !s.isEmpty { textos.append((i, s)) }
         }
+        let hojas = textos
         Task {
             let hechos = await Task.detached(priority: .userInitiated) { () -> [Trozo] in
                 var t: [Trozo] = []
-                for (i, s) in textos {
+                for (i, s) in hojas {
                     let ns = s as NSString
                     for r in VozAlta.cortes(s, tope: VozAlta.tope) {
                         let dicho = VozAlta.paraDecir(ns.substring(with: r))

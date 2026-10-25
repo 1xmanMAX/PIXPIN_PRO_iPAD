@@ -190,7 +190,10 @@ public final class ModeloAsistente: ObservableObject {
     /// no hacen nada): sin ellos no se guarda ninguna clave ni se llama a la
     /// nube.
     public static func instalarLaNube() {
-        LlaveroDelSistema.instalar()
+        // En las pruebas, el Llavero de pruebas (un servicio propio): nunca
+        // se tocan las claves de verdad.
+        let enPruebas = NSClassFromString("XCTestCase") != nil
+        LlaveroDelSistema.instalar(enPruebas ? LlaveroDelSistema.dePruebas : LlaveroDelSistema())
         TransporteHttps.instalar()
     }
 
