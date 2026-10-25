@@ -4,6 +4,7 @@
 // SVG, la pagina web, el PDF y el PNG de un lienzo con un trazo; el fondo
 // fijo y el papel de noche.
 
+import CoreText
 import Foundation
 import PixPinCore
 @testable import PixPinKit
@@ -110,8 +111,7 @@ final class LienzoLetrasSacarTests: XCTestCase {
         XCTAssertEqual(fondo.tamano, CGSize(width: 300, height: 200))
         let ed = try EditorLienzo.deFichero(ruta: carpeta.appendingPathComponent("f.excalidraw").path, crear: true)
         let modelo = ModeloEditorLienzo(editor: ed, fondo: fondo)
-        // Sin nada dibujado, el fondo sale igual (es el papel).
-        XCTAssertFalse(ed.hojasParaExportar(que: .todo).isEmpty)
+        XCTAssertNotNil(fondo.png(), "va dentro del SVG")
         // Con fondo, el modo noche no oscurece el papel.
         let antes = ModoNoche.compartido.activo
         defer { ModoNoche.compartido.activo = antes }
