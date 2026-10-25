@@ -347,6 +347,20 @@ proyecto-renombrar = Rename
 proyecto-logo-poner = Set logo image…
 proyecto-logo-quitar = Remove logo image
 proyecto-logo-error = Couldn't set that logo image
+# The chat photo (25-oct-2026): image, emoji or colour in the circle.
+foto-chat-menu = Change chat photo…
+foto-chat-titulo = Chat photo
+foto-chat-imagen = Choose image…
+foto-chat-pegar = Paste image
+foto-chat-quitar = Default
+foto-chat-buscar = Search emoji
+foto-chat-sin-emojis = No emoji is called that
+foto-chat-fondo = Background
+foto-chat-recorte = Drag to move · scroll to zoom
+foto-chat-guardar = Save
+foto-chat-cancelar = Cancel
+foto-chat-sin-imagen = There's no copied image
+foto-chat-error = Couldn't save the chat photo
 proyecto-borrar = Delete project
 proyecto-borrar-varios = Delete selected
 proyecto-borrar-aviso = It will leave the list and its folder will go to the PixPin bin. Continue?
@@ -531,6 +545,13 @@ chat-buscar-resultados = { $n ->
    *[other] { $n } results
 }
 chat-buscar-en-contexto = See in context
+# The list search box also searches inside every chat: the section under the
+# chats and its "show more" (25-oct-2026).
+chat-buscar-mensajes = { $n ->
+    [one] Messages · 1
+   *[other] Messages · { $n }
+}
+chat-buscar-ver-mas = Show { $n } more
 chat-pagina-n = Page { $n }
 chat-unido-a = Added to "{ $nombre }"
 chat-unir-nada = Nothing here can be added: only photos, drawings, notes and PDFs

@@ -9,6 +9,8 @@
 
 pub mod ajustes;
 pub mod barra;
+/// Buscar dentro de todos los chats desde el buscador de la lista.
+pub mod buscar_en_chats;
 pub mod caja_herramientas;
 pub mod chat;
 /// Un color por tipo de archivo (`ColorDeExtension` del movil, v0.98.4).
@@ -19,8 +21,12 @@ pub mod conversacion;
 /// Acercar y mover una imagen en su caja, como en un lienzo.
 pub mod encuadre;
 pub mod evento_anotador;
+/// La foto del chat: los fondos, los emojis y el recorte de una imagen.
+pub mod foto_del_chat;
 /// La pantalla de Funciones del chat: la rejilla de mosaicos.
 pub mod funciones;
+/// El giro del boton de sincronizar mientras hay una vuelta en marcha.
+pub mod giro;
 pub mod historial;
 pub mod hoja_compartir;
 pub mod hojita;

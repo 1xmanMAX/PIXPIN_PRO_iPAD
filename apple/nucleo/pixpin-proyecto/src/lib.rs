@@ -29,6 +29,7 @@
 
 pub mod almacen;
 pub mod anotado;
+pub mod avatar;
 pub mod capas_del_pdf;
 pub mod carpeta_de_paginas;
 pub mod clase;

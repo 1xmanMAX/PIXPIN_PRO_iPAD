@@ -93,6 +93,9 @@ pub mod editor_ventana;
 pub mod envio;
 // La isla de la ficha del chat (Windows 71bd8b5).
 pub mod ficha_del_chat;
+/// La pestana Funciones de la ventana de los chats (Windows 2e0da60 y
+/// 768b73f).
+pub mod funciones;
 pub mod galeria;
 pub mod galeria_sincro;
 pub mod hojas;
@@ -120,6 +123,8 @@ pub mod calendario_google;
 pub mod carpetas;
 pub mod horario;
 // Clip → «Página de un proyecto» (Windows, `ventana_chat/paginas.rs`).
+/// `carpeta` en Buscar: las carpetas de todos los chats (Windows 22c3ce2).
+pub mod carpetas_flow;
 pub mod llamada;
 pub mod llavero;
 pub mod mini_tiempos;
@@ -144,6 +149,9 @@ pub mod timeline;
 pub mod turnos;
 pub mod unidades;
 pub mod version;
+/// Las vistas de Tareas (Tarjetas, Kanban, Horario) y las chapitas de la
+/// semana (Windows 5dab99a, 25-oct).
+pub mod vista_tareas;
 pub mod voz;
 
 use std::path::{Path, PathBuf};

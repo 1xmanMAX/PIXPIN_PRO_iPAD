@@ -371,6 +371,27 @@ public struct VistaBuscar: View {
             Navegacion.compartida.abrirFichero(URL(fileURLWithPath: c.ruta), titulo: c.nombre)
         case let .ventana(id, _):
             ir(id)
+        case .grabarClase:
+            // «Grabar clase o reunión…», como la bandeja: en el chat abierto
+            // o en «Mensajes guardados» (se puede cambiar al empezar).
+            guard let destino = Navegacion.compartida.chatAbierto ?? (try? nucleo.chatGuardados().id) else { return }
+            GrabarClase.abrir(chat: destino, almacen: almacen)
+        case let .carpeta(c):
+            CarpetasSinChat.abrir(chat: c.chat, id: c.id, nombre: c.nombre, almacen: almacen)
+        case let .paginaEnCarpeta(c):
+            _ = Task<Void, Never> {
+                if !(await CarpetasSinChat.nuevaPagina(chat: c.chat, carpeta: c.id, almacen: almacen)) {
+                    modelo.avisar(TextosCarpeta.noSePudo)
+                }
+            }
+        case let .nuevaCarpeta(nombre):
+            _ = Task<Void, Never> {
+                if await CarpetasSinChat.nueva(nombre: nombre, en: nil, almacen: almacen) {
+                    texto = ""
+                } else {
+                    modelo.avisar(TextosCarpeta.noSePudo)
+                }
+            }
         }
     }
 

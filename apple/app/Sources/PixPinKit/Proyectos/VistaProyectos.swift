@@ -2,8 +2,11 @@
 // derecha, como la ventana de Proyectos de Windows (`ventana_chat.rs`, el
 // chat de estilo Telegram) y el Mac (`Vistas.swift`, `ListaProyectos.swift`).
 //
-// - La lista: los botones redondos dorados (Galeria, Timeline, Tareas,
-//   Sincronizar), el buscador en capsula, las filas de 62 con el avatar de
+// - Arriba de la lista, el interruptor Chat · Funciones (Windows 768b73f:
+//   Funciones, `FuncionesDeLaLista.swift`, se pone en el sitio de la lista).
+// - La lista: el boton redondo dorado de sincronizar (Tareas, la galeria y
+//   el timeline pasaron a la pestana Funciones, Windows a274ac0), el
+//   buscador en capsula, las filas de 62 con el avatar de
 //   46 y sus iniciales (`Paleta.avatar`, `Paleta.iniciales`), la ultima linea
 //   y los sin leer; abajo, los archivados, y el boton redondo de proyecto
 //   nuevo (54) abajo a la derecha.
@@ -37,12 +40,24 @@ public struct VistaProyectos: View {
     /// El proyecto al que se le cambia el nombre, y lo escrito.
     @State private var aRenombrar: FichaChat?
     @State private var nombreNuevo = ""
+    /// La pestana Funciones del interruptor, en el sitio de la lista
+    /// (`FuncionesDeLaLista`, Windows 768b73f).
+    @State private var enFunciones = false
 
     public init(almacen: Almacen) { self.almacen = almacen }
 
     public var body: some View {
         HStack(spacing: 0) {
-            if !estrecho || nav.chatAbierto == nil {
+            // Estrecha, como el movil: o la lista o el chat (con ← para
+            // volver). Con Funciones puesta, la rejilla ocupa la pantalla
+            // entera, como en Windows.
+            if !estrecho || nav.chatAbierto == nil || enFunciones {
+              VStack(spacing: 0) {
+                // El interruptor Chat · Funciones (Windows c687285 y 768b73f).
+                InterruptorChatFunciones(funciones: $enFunciones)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Paleta.proyectos.lista)
                 ListaProyectos(almacen: almacen, elegido: $nav.chatAbierto) { chat in
                     // Compartir con formatos: sus hojas en PDF, HTML, PNG...,
                     // los originales y el proyecto entero como `.pixpin`.
@@ -84,15 +99,23 @@ public struct VistaProyectos: View {
                         }
                     }
                 }
-                .frame(width: estrecho ? nil : anchoLista)
-                .frame(maxWidth: estrecho ? .infinity : nil)
+                // Funciones, encima de la lista (que sigue debajo con su
+                // buscador como estaba).
+                .overlay {
+                    if enFunciones {
+                        FuncionesDeLaLista(almacen: almacen, abierto: nav.chatAbierto) { enFunciones = false }
+                    }
+                }
+              }
+              .frame(width: estrecho ? nil : anchoLista)
+              .frame(maxWidth: estrecho ? .infinity : nil)
             }
             if !estrecho {
                 Paleta.proyectos.separador
                     .frame(width: 1)
                     .overlay { asaLista }
             }
-            if !estrecho || nav.chatAbierto != nil {
+            if !estrecho || (nav.chatAbierto != nil && !enFunciones) {
                 ZStack {
                     PapelChat().ignoresSafeArea()
                     if let chat = nav.chatAbierto, almacen.chats.isEmpty || almacen.chats.contains(where: { $0.id == chat }) {
@@ -272,17 +295,9 @@ struct ListaProyectos<Menu: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 CapsulaBuscar(texto: $filtro)
-                // Como la cabecera de Windows: galeria, timeline, tareas y
-                // sincronizar a mano.
-                BotonRedondoLista(simbolo: "photo.on.rectangle", ayuda: "Galería") {
-                    Navegacion.compartida.seccion = .galeria
-                }
-                BotonRedondoLista(simbolo: "clock.arrow.circlepath", ayuda: "Timeline") {
-                    Navegacion.compartida.seccion = .timeline
-                }
-                BotonRedondoLista(simbolo: "checklist", ayuda: "Tareas") {
-                    Navegacion.compartida.seccion = .tareas
-                }
+                // Como la cabecera de Windows: solo sincronizar (Tareas, la
+                // galeria y el timeline estan en la pestana Funciones,
+                // Windows a274ac0).
                 BotonRedondoLista(simbolo: "arrow.triangle.2.circlepath", ayuda: "Sincronizar") {
                     Navegacion.compartida.seccion = .aparatos
                 }

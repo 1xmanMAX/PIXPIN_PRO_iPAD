@@ -13,9 +13,18 @@
 // Windows). Va dentro de su texto, asi que viaja; la hace sonar el vigia
 // (`Recordatorios`).
 //
+// **Tres vistas** (Windows 5139e5d, 25-oct-2026): Tarjetas (cada lista con
+// sus cuadrados y la foto de fondo), Kanban (una columna por lista) y
+// Horario (el calendario semanal de las clases, `VistaHorarioIPad`, con las
+// tareas con hora como chapitas). La Lista se quito; quien la tenia abre
+// en las tarjetas. Lo puro de las vistas (su palabra, su atajo, donde va
+// cada cosa del horario) es del nucleo (`vista_tareas.rs`).
+//
 // En el iPad, el modelo es el del Mac (sin AppKit ni los pines de tareas,
 // que en el iPad no flotan encima de otras apps); la vista es
-// `VistaTareas.swift`.
+// `VistaTareas.swift`. Ojo: `VistaTareas` en PixPinKit es esa vista; la
+// eleccion del nucleo (`PixPinCore.VistaTareas`) aqui se llama
+// `VistaDeTareas`.
 
 import Foundation
 import PixPinCore
@@ -198,6 +207,24 @@ public final class ModeloTareas: ObservableObject {
     /// Las asignaturas del horario (donde tambien se puede apuntar).
     public var asignaturas: [String] { nucleo.nombresDeAsignaturas(desfaseMs: desfaseLocalMs()) }
 
+    /// Lo pendiente con hora (`⏰`) de todas las listas, para las chapitas
+    /// de la semana del Horario (sin lo buscado: la semana es entera).
+    public var conHora: [TareaConLista] {
+        listas.flatMap { l in
+            l.tareas.filter { !$0.hecha && $0.recuerda != nil }.map { TareaConLista(lista: l, tarea: $0) }
+        }
+    }
+
+    /// La lista de tareas de una asignatura del horario, si ya tiene.
+    public func listaDeAsignatura(_ nombre: String) -> ListaTareas? {
+        nucleo.listaDeAsignatura(listas: listas, asignatura: nombre)
+    }
+
+    /// Fija la tarea en la pantalla (su pin, encima de PixPin).
+    public func pinear(_ t: TareaConLista) {
+        PinesDeTareasIPad.compartidos.abrir(t, nucleo: nucleo)
+    }
+
     /// La tarea de un id (`chat/lista/indice`), para soltarla en el Kanban.
     public func tarea(id: String) -> TareaConLista? {
         for l in listas {
@@ -296,5 +323,36 @@ public final class ModeloTareas: ObservableObject {
             self.error = "\(error)"
         }
         await cargar()
+    }
+}
+
+// MARK: - Las vistas
+
+/// La vista de Tareas que elige el nucleo (`PixPinCore.VistaTareas`:
+/// tarjetas, kanban u horario); `VistaTareas` en PixPinKit es la seccion.
+public typealias VistaDeTareas = PixPinCore.VistaTareas
+
+/// Lo que el iPad ensena de cada vista en la barra (la palabra que se
+/// guarda y el atajo los da el nucleo, `pixpin_ui::vista_tareas`).
+public extension VistaDeTareas {
+    /// En el orden del conmutador.
+    static let todas: [VistaDeTareas] = [.tarjetas, .kanban, .horario]
+
+    var rotulo: String {
+        switch self {
+        case .tarjetas: "Tarjetas"
+        case .kanban: "Kanban"
+        case .horario: "Horario"
+        }
+    }
+
+    /// La letra del atajo, que con el teclado del iPad va con ⌃⌘, como en
+    /// el Mac (en Windows es Ctrl+T, Ctrl+K y Ctrl+H).
+    var letraAtajo: Character { Character(vistaTareasAtajo(vista: self).lowercased()) }
+
+    /// «Tarjetas · ⌃⌘T», la pista del conmutador (`tareas5-vista-*`).
+    var pista: String {
+        let nombre = self == .kanban ? "Tablero Kanban" : rotulo
+        return "\(nombre) · ⌃⌘\(vistaTareasAtajo(vista: self))"
     }
 }

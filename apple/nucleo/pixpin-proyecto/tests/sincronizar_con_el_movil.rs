@@ -3027,3 +3027,142 @@ fn una_nota_rica_del_pc_llega_al_movil_con_sus_fotos() {
     }
     p.quieto(&chat);
 }
+
+// ------------------------------------- la foto del chat (25-oct-2026)
+
+/// El `avatar` del proyecto `id` en el movil, tal cual.
+fn foto_en_movil(p: &Par, id: &str) -> Option<serde_json::Value> {
+    p.movil
+        .leer_proyectos()
+        .iter()
+        .find(|x| kotlin::cadena(x, "id") == Some(id))
+        .and_then(|x| x.como_objeto()?.obtener("avatar").map(Json::a_valor))
+}
+
+/// Cambia el `avatar` de un proyecto en el movil, y lo da por tocado.
+fn poner_foto_en_movil(p: &Par, id: &str, foto: serde_json::Value) {
+    let lista: Vec<Json> = p
+        .movil
+        .leer_proyectos()
+        .into_iter()
+        .map(|mut x| {
+            if kotlin::cadena(&x, "id") == Some(id) {
+                kotlin::poner(&mut x, "avatar", Json::de_valor(&foto));
+                kotlin::poner(&mut x, "tocado", Json::numero(p.reloj.tic()));
+            }
+            x
+        })
+        .collect();
+    p.movil.escribir_proyectos(&lista).unwrap();
+}
+
+fn foto_en_pc(p: &Par, ficha_id: &str) -> Option<pixpin_proyecto::avatar::Avatar> {
+    let f = Indice::leer(&p.raiz()).buscar(ficha_id).cloned()?;
+    pixpin_proyecto::avatar::de_ficha(&f)
+}
+
+#[test]
+fn la_foto_del_chat_viaja_con_su_imagen_y_vuelve_cambiada_desde_el_movil() {
+    use pixpin_proyecto::avatar::{self, Avatar};
+    let p = montar("foto-del-chat");
+    let obra = proyecto_del_pc(&p);
+    let raiz = p.raiz();
+    let chat = vista::chat_de_ficha(&raiz, &obra.id).unwrap();
+    p.desde_pc(&[&chat]);
+    assert_eq!(
+        foto_en_movil(&p, &chat),
+        None,
+        "sin foto no sale ningun campo"
+    );
+
+    // 1. Una imagen puesta en el PC llega al movil con su fichero.
+    p.reloj.saltar(1_000);
+    let cuando = p.reloj.tic();
+    let rel = avatar::guardar_imagen(&raiz, &obra.id, b"PNG de la foto", cuando).unwrap();
+    avatar::poner(&raiz, &obra.id, &Avatar::imagen(&rel, cuando)).unwrap();
+    p.desde_pc(&[&chat]);
+    let llego = foto_en_movil(&p, &chat).expect("el movil tiene la foto");
+    assert_eq!(llego["tipo"], "imagen");
+    let portatil = llego["ruta"].as_str().unwrap();
+    let en_files = format!("guardados/pc/{}/{rel}", pixpin_sincro::disco::limpio(&chat));
+    // El movil la guarda con su ruta local, como el `pdfOrigen`.
+    assert_eq!(portatil, p.movil.absoluta(&en_files));
+    assert_eq!(
+        std::fs::read(p.movil.raiz().join(&en_files))
+            .ok()
+            .as_deref(),
+        Some(&b"PNG de la foto"[..]),
+        "la imagen viaja con el proyecto"
+    );
+    p.quieto(&chat);
+
+    // 2. Un emoji puesto en el movil llega al PC, y la imagen que ya no se
+    //    usa se va de su carpeta.
+    p.reloj.saltar(1_000);
+    let emoji = json!({"tipo":"emoji","emoji":"🏗️","color":"#FFCD6A","color2":"#FFA85C",
+                       "cuando": p.reloj.ahora()});
+    poner_foto_en_movil(&p, &chat, emoji);
+    p.desde_movil(&[&chat]);
+    let en_pc = foto_en_pc(&p, &obra.id).expect("el PC tiene la foto");
+    assert_eq!(en_pc.el_emoji(), Some("🏗️"));
+    assert_eq!(en_pc.fondo(), Some((0xffcd6a, 0xffa85c)));
+    assert!(
+        !almacen::carpeta(&raiz, &obra.id).join(&rel).exists(),
+        "la imagen vieja se borra"
+    );
+    p.quieto(&chat);
+
+    // 3. Volver a lo de siempre en el PC tambien viaja (se escribe, no se
+    //    borra), y un campo que no se conoce dentro se conserva.
+    p.reloj.saltar(1_000);
+    avatar::poner(&raiz, &obra.id, &Avatar::iniciales(None, p.reloj.tic())).unwrap();
+    p.desde_pc(&[&chat]);
+    let llego = foto_en_movil(&p, &chat).unwrap();
+    assert_eq!(llego["tipo"], "iniciales");
+    assert!(llego.get("color").is_none());
+    p.quieto(&chat);
+    p.reloj.saltar(1_000);
+    poner_foto_en_movil(
+        &p,
+        &chat,
+        json!({"tipo":"animado","gif":"x","cuando": p.reloj.ahora()}),
+    );
+    p.desde_movil(&[&chat]);
+    p.desde_pc(&[&chat]);
+    assert_eq!(
+        foto_en_movil(&p, &chat).unwrap()["gif"],
+        "x",
+        "lo que no se entiende vuelve tal cual"
+    );
+    assert!(foto_en_pc(&p, &obra.id).unwrap().es_lo_de_siempre());
+    p.quieto(&chat);
+}
+
+#[test]
+fn el_logo_de_antes_empieza_a_viajar_como_foto_del_chat() {
+    let p = montar("logo-de-antes");
+    let obra = proyecto_del_pc(&p);
+    let raiz = p.raiz();
+    let chat = vista::chat_de_ficha(&raiz, &obra.id).unwrap();
+    std::fs::write(
+        almacen::carpeta(&raiz, &obra.id).join("logo.png"),
+        b"logo de octubre",
+    )
+    .unwrap();
+    p.desde_pc(&[&chat]);
+    let llego = foto_en_movil(&p, &chat).expect("el logo sale como foto");
+    assert_eq!(llego["tipo"], "imagen");
+    let rel = llego["ruta"]
+        .as_str()
+        .unwrap()
+        .strip_prefix(p.movil.prefijo())
+        .unwrap()
+        .trim_start_matches('/')
+        .to_string();
+    assert!(rel.ends_with("/logo.png"), "{rel}");
+    assert_eq!(
+        std::fs::read(p.movil.raiz().join(&rel)).ok().as_deref(),
+        Some(&b"logo de octubre"[..])
+    );
+    p.quieto(&chat);
+}

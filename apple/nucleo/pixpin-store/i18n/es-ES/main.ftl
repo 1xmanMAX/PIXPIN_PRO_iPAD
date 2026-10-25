@@ -348,6 +348,20 @@ proyecto-renombrar = Cambiar nombre
 proyecto-logo-poner = Poner imagen de logo…
 proyecto-logo-quitar = Quitar imagen de logo
 proyecto-logo-error = No se pudo poner esa imagen de logo
+# La foto del chat (25-oct-2026): imagen, emoji o color en el circulo.
+foto-chat-menu = Cambiar foto del chat…
+foto-chat-titulo = Foto del chat
+foto-chat-imagen = Elegir imagen…
+foto-chat-pegar = Pegar imagen
+foto-chat-quitar = Como siempre
+foto-chat-buscar = Buscar emoji
+foto-chat-sin-emojis = Ningún emoji se llama así
+foto-chat-fondo = Fondo
+foto-chat-recorte = Arrastra para mover · rueda para acercar
+foto-chat-guardar = Guardar
+foto-chat-cancelar = Cancelar
+foto-chat-sin-imagen = No hay ninguna imagen copiada
+foto-chat-error = No se pudo guardar la foto del chat
 proyecto-borrar = Borrar proyecto
 proyecto-borrar-varios = Borrar los marcados
 proyecto-borrar-aviso = Se quitara de la lista y su carpeta ira a la papelera de PixPin. ¿Seguir?
@@ -532,6 +546,13 @@ chat-buscar-resultados = { $n ->
    *[other] { $n } resultados
 }
 chat-buscar-en-contexto = Ver en contexto
+# El buscador de la lista busca también dentro de todos los chats: la
+# sección de debajo de los chats y su «ver más» (25-oct-2026).
+chat-buscar-mensajes = { $n ->
+    [one] Mensajes · 1
+   *[other] Mensajes · { $n }
+}
+chat-buscar-ver-mas = Ver { $n } más
 chat-pagina-n = Página { $n }
 chat-unido-a = Unido a «{ $nombre }»
 chat-unir-nada = No hay nada que se pueda unir: solo fotos, dibujos, notas y PDF

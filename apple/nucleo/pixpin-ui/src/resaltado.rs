@@ -79,7 +79,7 @@ impl Tramo {
 /// Efecto secundario asumido: si `ñ` vale `n`, buscar «cana» tambien saca
 /// «caña». Preferimos ese exceso al fallo contrario, que es que quien no
 /// tiene la enne a mano no encuentre nada.
-fn normalizar(caracter: char) -> char {
+pub(crate) fn normalizar(caracter: char) -> char {
     // Primero a minuscula. Se coge solo el primer caracter porque esta tabla
     // tiene que ser de uno a uno: si una minuscula ocupase dos caracteres se
     // descuadrarian los indices del original.

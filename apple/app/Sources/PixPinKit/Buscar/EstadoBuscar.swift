@@ -110,6 +110,14 @@ public enum AccionBuscar: Hashable, Sendable {
     case ultimaCaptura
     /// Una ventana de la app por su id («g», la galeria; «a», el asistente).
     case ventana(id: String, titulo: String)
+    /// «clase»: grabar una clase o reunion (Windows 22c3ce2, `p clase`).
+    case grabarClase
+    /// «carpeta …»: una carpeta de paginas, a su ventana (`p carpeta`).
+    case carpeta(CarpetaDeFlow)
+    /// Su pagina siguiente, abierta en el lienzo.
+    case paginaEnCarpeta(CarpetaDeFlow)
+    /// Crear una carpeta en «Mensajes guardados» (sin nombre, «Cuaderno»).
+    case nuevaCarpeta(String)
 
     public var titulo: String {
         switch self {
@@ -119,6 +127,10 @@ public enum AccionBuscar: Hashable, Sendable {
         case .capturar: return "Capturar"
         case .ultimaCaptura: return "Pinear la última captura"
         case let .ventana(_, titulo): return titulo
+        case .grabarClase: return "Grabar clase o reunión"
+        case let .carpeta(c): return c.nombre
+        case let .paginaEnCarpeta(c): return "Nueva página en «\(c.nombre)»"
+        case let .nuevaCarpeta(t): return t.isEmpty ? "Nueva carpeta de páginas" : "Nueva carpeta «\(t)»"
         }
     }
 
@@ -130,6 +142,12 @@ public enum AccionBuscar: Hashable, Sendable {
         case .capturar: return "Una zona de la pantalla"
         case .ultimaCaptura: return "La más nueva de la galería"
         case .ventana: return "Abrir la ventana"
+        case .grabarClase: return "Audio, vídeo de la pantalla y capturas; al acabar entra en el chat"
+        case let .carpeta(c): return detalleDeCarpetaDeFlow(c: c)
+        case .paginaEnCarpeta: return "La plantilla de la última página, vacía, y se abre en el lienzo"
+        case let .nuevaCarpeta(t):
+            return t.isEmpty ? "Se llamará «Cuaderno» en Mensajes guardados · «carpeta <nombre>» para nombrarla"
+                : "Intro: crearla en Mensajes guardados y abrirla"
         }
     }
 
@@ -140,6 +158,10 @@ public enum AccionBuscar: Hashable, Sendable {
         case .nuevoLienzo: return "scribble.variable"
         case .capturar: return "camera.viewfinder"
         case .ultimaCaptura: return "pin"
+        case .grabarClase: return "mic"
+        case .carpeta: return "books.vertical"
+        case .paginaEnCarpeta: return "plus.circle"
+        case .nuevaCarpeta: return "folder.badge.plus"
         case let .ventana(id, _):
             switch id {
             case IdVentana.galeria: return "photo.on.rectangle"
@@ -160,7 +182,9 @@ public enum AccionBuscar: Hashable, Sendable {
         case .nuevaNota, .nuevoLienzo: return "Crear"
         case .capturar: return "Capturar"
         case .ultimaCaptura: return "Pinear"
-        case .ventana: return "Abrir"
+        case .ventana, .carpeta: return "Abrir"
+        case .grabarClase: return "Grabar"
+        case .paginaEnCarpeta, .nuevaCarpeta: return "Crear"
         }
     }
 
@@ -177,7 +201,33 @@ public enum AccionBuscar: Hashable, Sendable {
         (.ultimaCaptura, ["ultima", "last"]),
         (.nuevaNota(""), ["nota", "note"]),
         (.nuevoLienzo, ["lienzo", "canvas", "dibujo", "pizarra"]),
+        // «reunión» plegado es «reunion»; «grabar» la ofrece tambien.
+        (.grabarClase, ["clase", "reunion", "class", "meeting", "grabar"]),
     ]
+
+    /// Lo que llama a las carpetas de paginas («carpeta diario»), como
+    /// `Funcion::Carpeta` del plugin de Windows.
+    static let aliasCarpeta = ["carpeta", "carpetas", "cuaderno", "cuadernos", "folder", "notebook"]
+
+    /// **Si lo escrito pide las carpetas**, lo de detras: la primera palabra
+    /// es una de esas, o lo escrito (una palabra de 4 letras o mas) es el
+    /// principio de una («carp»).
+    public static func consultaDeCarpetas(_ consulta: String) -> String? {
+        let limpia = consulta.trimmingCharacters(in: .whitespaces)
+        let partes = limpia.split(separator: " ", maxSplits: 1)
+        guard let primera = partes.first.map({ plegarBuscar(String($0)) }) else { return nil }
+        let resto = partes.count > 1 ? String(partes[1]).trimmingCharacters(in: .whitespaces) : ""
+        if aliasCarpeta.contains(primera) { return resto }
+        if partes.count == 1, primera.count >= 4, aliasCarpeta.contains(where: { $0.hasPrefix(primera) }) { return "" }
+        return nil
+    }
+
+    /// Si la primera palabra es justo una de las de las carpetas: entonces
+    /// solo salen ellas (no se busca en el resto).
+    public static func soloCarpetas(_ consulta: String) -> Bool {
+        let primera = consulta.trimmingCharacters(in: .whitespaces).split(separator: " ").first
+        return primera.map { aliasCarpeta.contains(plegarBuscar(String($0))) } ?? false
+    }
 }
 
 /// Una letra rapida de la caja vacia («Escribe una letra y espacio»).
@@ -233,10 +283,21 @@ func plegarBuscar(_ s: String) -> String {
 /// **Las acciones para lo escrito**: con una letra rapida, la suya; si no,
 /// las funciones cuyo nombre empieza por lo escrito y, al final, apuntarlo
 /// como tarea (el «Apuntar «grie»» de la maqueta de Windows).
-public func accionesBuscar(para consulta: String) -> [AccionBuscar] {
+public func accionesBuscar(para consulta: String, carpetas: CarpetasDeFlow? = nil) -> [AccionBuscar] {
     let limpia = consulta.trimmingCharacters(in: .whitespaces)
     if let (l, resto) = LetrasRapidas.analizar(consulta), let a = LetrasRapidas.accion(l, resto) {
         return [a]
+    }
+    // «carpeta diario»: cada carpeta y su «Nueva página» (no en la de una
+    // clase grabada) y, si ninguna se llama asi, crearla (Windows 22c3ce2).
+    if let resto = AccionBuscar.consultaDeCarpetas(consulta) {
+        var v: [AccionBuscar] = []
+        for c in carpetas?.carpetas ?? [] {
+            v.append(.carpeta(c))
+            if !c.grabacion { v.append(.paginaEnCarpeta(c)) }
+        }
+        if carpetas?.exacta != true { v.append(.nuevaCarpeta(resto)) }
+        return v
     }
     guard !limpia.isEmpty else { return [] }
     let q = plegarBuscar(limpia)
@@ -471,6 +532,8 @@ public struct EstadoBuscar: Equatable {
     public var resultados: [ResultadoBusqueda] = []
     /// Las acciones de lo escrito (`accionesBuscar`).
     public var acciones: [AccionBuscar] = []
+    /// Las carpetas de paginas de lo escrito, si pide carpetas.
+    public var carpetas: CarpetasDeFlow?
     /// La fila elegida: su posicion en `visibles`.
     public var elegido = 0
     public var menu: MenuBuscar?
@@ -541,7 +604,7 @@ public struct EstadoBuscar: Equatable {
     public mutating func poner(_ r: [ResultadoBusqueda], mantener: Bool = false) {
         let antes = filaElegida?.id
         resultados = r
-        acciones = pestana == .todo || pestana == .acciones ? accionesBuscar(para: consulta) : []
+        acciones = pestana == .todo || pestana == .acciones ? accionesBuscar(para: consulta, carpetas: carpetas) : []
         menu = nil
         if mantener, let antes, let i = visibles().firstIndex(where: { $0.id == antes }) {
             elegido = i
@@ -574,7 +637,7 @@ public struct EstadoBuscar: Equatable {
         elegido = 0
         menu = nil
         if consulta.trimmingCharacters(in: .whitespaces).isEmpty { return .buscar }
-        acciones = p == .todo || p == .acciones ? accionesBuscar(para: consulta) : []
+        acciones = p == .todo || p == .acciones ? accionesBuscar(para: consulta, carpetas: carpetas) : []
         return .nada
     }
 

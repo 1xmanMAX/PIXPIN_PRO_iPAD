@@ -96,6 +96,15 @@ public final class ModeloBuscar: ObservableObject {
         enRust = b
         buscando = true
         let pedido = pedidoDe(texto)
+        // «carpeta …»: las carpetas de todos los chats (Windows 22c3ce2).
+        if let resto = AccionBuscar.consultaDeCarpetas(texto) {
+            let nucleo = almacen.nucleo
+            estado.carpetas = await Task.detached(priority: .userInitiated) {
+                try? nucleo.carpetasParaFlow(texto: resto)
+            }.value
+        } else {
+            estado.carpetas = nil
+        }
         let hecho = await pedir(pedido, busqueda: b)
         // Si mientras tanto se escribio otra cosa, esto ya no vale.
         guard enRust === b, !Task.isCancelled else { return }
@@ -129,6 +138,8 @@ public final class ModeloBuscar: ObservableObject {
             .buscar(OpcionesBusqueda(consulta: q, clases: clases, tope: tope,
                                      diasCaducidad: dias, desfaseMs: desfaseLocalMs()))
         }
+        // «carpeta diario»: solo las carpetas, como `p carpeta` de Flow.
+        if AccionBuscar.soloCarpetas(texto) { return .nada }
         if let (letra, resto) = LetrasRapidas.analizar(texto) {
             // «g muro» busca en las capturas; las demas letras no buscan.
             return letra == "g" ? opciones(resto, [.captura]) : .nada

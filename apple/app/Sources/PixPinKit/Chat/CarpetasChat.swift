@@ -47,6 +47,7 @@ enum TextosCarpeta {
     static func adjuntado(_ nombre: String) -> String { "Adjuntado a la clase: \(nombre)" }
     static let grabacionPista = "Toca una pieza para estudiarla en su minuto · «Adjuntar a la clase» suma un archivo, una foto o una nota sin mezclarlo con lo grabado"
     static let noSePudo = "No se pudo: mira el registro de PixPin"
+    static let noEsta = "Esa carpeta ya no está en el chat"
 }
 
 /// El color de lo adjuntado a una clase (no es de lo grabado): un ambar que

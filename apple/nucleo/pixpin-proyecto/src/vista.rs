@@ -280,7 +280,37 @@ impl DiscoPc {
         if f.es_asistente() {
             kotlin::poner(&mut p, "asistente", Json::booleano(true));
         }
+        // La foto del chat (`avatar`, 25-oct-2026): la verdad es la ficha,
+        // tambien con `proyecto.json`. Su imagen nacida aqui sale con ruta
+        // portatil, y asi `alcance` la lleva con el proyecto.
+        match self.avatar_al_cable(chat, f) {
+            Some(a) => kotlin::poner(&mut p, crate::avatar::CLAVE, a),
+            None => {
+                if let Json::Objeto(o) = &mut p {
+                    o.quitar(crate::avatar::CLAVE);
+                }
+            }
+        }
         p
+    }
+
+    /// La foto de una ficha como sale por la red: su JSON crudo (o el
+    /// `logo.png` de antes) con la ruta de su imagen hecha portatil si nacio
+    /// aqui.
+    fn avatar_al_cable(&self, chat: &str, f: &Ficha) -> Option<Json> {
+        let valor = match crate::avatar::valor_de(f) {
+            Some(v) => v.clone(),
+            None => crate::avatar::de_ficha_o_logo(&self.raiz, f)?.a_valor(),
+        };
+        let mut a = Json::de_valor(&valor);
+        if let Some(r) = kotlin::cadena(&a, "ruta")
+            .filter(|r| es_relativa(r))
+            .map(str::to_string)
+        {
+            let v = format!("{PORTATIL}{}", virtual_de(chat, &r));
+            kotlin::poner(&mut a, "ruta", Json::cadena(v));
+        }
+        Some(a)
     }
 }
 
@@ -878,7 +908,17 @@ impl Disco for DiscoPc {
             // Ya tiene `proyecto.json`, que dice si esta archivado: la marca
             // de la ficha diria lo contrario si el movil lo desarchivo.
             f.resto.remove(MARCA_ARCHIVADO);
+            // La foto del chat que llega pasa a la ficha, que es su verdad.
+            let avatar = puesto
+                .como_objeto()
+                .and_then(|o| o.obtener(crate::avatar::CLAVE))
+                .map(Json::a_valor);
+            let foto_cambiada = crate::avatar::al_llegar(f, avatar.as_ref());
+            let con_foto = foto_cambiada.then(|| f.clone());
             indice.guardar(&self.raiz)?;
+            if let Some(f) = con_foto {
+                crate::avatar::limpiar_tras_llegar(&self.raiz, &f);
+            }
             self.olvidar_mapa();
         }
         self.avisar(Cambio::Proyectos);

@@ -1,14 +1,22 @@
 // Las tareas de todos los chats en el iPad (`VentanaTareas` del Mac, la de
-// Windows): la barra comun con el buscador (texto o `#etiqueta`) y las
-// vistas «Por fecha», «Por lista» y «Kanban»; debajo, la caja para apuntar
-// en el Inbox de «Mensajes guardados» (o en la lista de una asignatura), con
-// fotos.
+// Windows): la barra comun con el conmutador de las **tres vistas**
+// (Windows 5139e5d, 25-oct-2026): **Tarjetas** (cada lista con lo pendiente
+// en cuadrados, con su primera foto de fondo, y lo hecho plegado),
+// **Kanban** (una columna por lista) y **Horario** (el calendario semanal de
+// las clases, `VistaHorarioIPad`, con las tareas con hora como chapitas).
+// La vista se guarda con la palabra de Windows (lo que el iPad guardaba
+// antes, «Por fecha» o «Por lista», abre en las tarjetas). Con teclado,
+// ⌃⌘T, ⌃⌘K y ⌃⌘H cambian de vista, como en el Mac.
 //
-// Con el dedo: tocar la casilla la marca; deslizar a la derecha la marca y
-// a la izquierda la borra (con deshacer); mantenerla pulsada da el menu:
+// Fuera del Horario, el buscador (texto o `#etiqueta`) y, debajo, la caja
+// para apuntar en el Inbox de «Mensajes guardados» (o en la lista de una
+// asignatura), con fotos.
+//
+// Con el dedo: tocar la casilla la marca; mantenerla pulsada da el menu:
 // corregir, urgencia, etiquetas, recordarla (`⏰`, la hace sonar el vigia
-// de `Recordatorios`), moverla a otra lista, ver su chat y borrar. En el
-// Kanban se arrastra una tarjeta a otra columna para pasarla a esa lista.
+// de `Recordatorios`), moverla a otra lista, ver su chat y borrar (con
+// deshacer). Una tarjeta se arrastra a otra columna del Kanban para
+// pasarla a esa lista.
 //
 // Todo lo cambia el nucleo en el mensaje de su chat (`ModeloTareas`, en
 // `Tareas.swift`): es lo que viaja a los demas aparatos.
@@ -20,19 +28,14 @@ import UIKit
 import UniformTypeIdentifiers
 
 public struct VistaTareas: View {
-    public enum Vista: String, CaseIterable, Identifiable {
-        case porFecha = "Por fecha"
-        case porLista = "Por lista"
-        /// Cada lista una columna; arrastrar una tarjeta la pasa a otra
-        /// lista (Windows, 17-oct).
-        case kanban = "Kanban"
-        public var id: String { rawValue }
-    }
-
     @StateObject private var modelo: ModeloTareas
-    @AppStorage("PixPinTareasVista") private var vista: Vista = .porFecha
+    /// El horario semanal de la vista Horario.
+    @StateObject private var semana: ModeloSemana
+    /// La vista elegida, con la palabra de Windows (`tareas-vista.txt`).
+    @AppStorage("PixPinTareasVista") private var vistaGuardada = "tarjetas"
+    /// En el Horario, si se ve el domingo (el boton de la barra).
+    @AppStorage("PixPinHorarioDomingo") private var conDomingo = false
     @State private var nueva = ""
-    @State private var verHechas = false
     @State private var imagenes: [URL] = []
     @State private var elegidas: [PhotosPickerItem] = []
     /// Donde se apunta: vacio el Inbox, o una asignatura (Windows, 18-oct).
@@ -42,55 +45,99 @@ public struct VistaTareas: View {
     @State private var corrigiendo: TareaConLista?
     @State private var etiquetando: TareaConLista?
     @State private var fechando: TareaConLista?
+    /// La tarea que se ensena en las tarjetas (una chapita del Horario).
+    @State private var resaltada: String?
+    /// El horario como texto (`horario.md`).
+    @State private var horarioComoTexto = false
+    @ObservedObject private var calendario = CalendarioDelIPad.compartido
+    @Environment(\.horizontalSizeClass) private var clase
     @FocusState private var enLaCaja: Bool
 
     public init(almacen: Almacen) {
         _modelo = StateObject(wrappedValue: ModeloTareas(nucleo: almacen.nucleo))
+        _semana = StateObject(wrappedValue: ModeloSemana(nucleo: almacen.nucleo))
+    }
+
+    /// (En minusculas: el iPad guardaba «Kanban» con mayuscula.)
+    private var vista: VistaDeTareas { vistaTareasDeTexto(texto: vistaGuardada.lowercased()) }
+
+    private func cambiarVista(_ v: VistaDeTareas) {
+        if v == .horario, vista != .horario { semana.abrir() }
+        if v != .horario, vista == .horario {
+            // Pudo nacer una asignatura en el Horario: para apuntar en ella.
+            _ = Task<Void, Never> { asignaturas = await ModeloTareas.asignaturasFuera(de: modelo) }
+        }
+        vistaGuardada = vistaTareasComoTexto(vista: v)
+    }
+
+    private var eleccion: Binding<VistaDeTareas> {
+        Binding(get: { vista }, set: { cambiarVista($0) })
+    }
+
+    /// La vista pedida desde fuera (el mosaico Horario de Funciones, el
+    /// pedido `ventana horario`).
+    private func irAVista(_ texto: String?) {
+        guard let texto else { return }
+        VistaTareas.vistaPedida = nil
+        cambiarVista(vistaTareasDeTexto(texto: texto))
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            Cabecera("Tareas", subtitulo: subtitulo,
-                     buscador: BuscadorCabecera($modelo.busqueda, pista: "Buscar: texto o #etiqueta")) {
-                SegmentosCabecera(Vista.allCases.map { ($0, $0.rawValue) }, eleccion: $vista)
-                BotonCabecera(icono: "calendar", rotulo: "Horario", ayuda: "Horario de clases") {
-                    HorarioIPad.abrir(nucleo: modelo.nucleoParaLeer)
+            cabecera
+            if vista == .horario {
+                VistaHorarioIPad(modelo: semana, tareas: modelo, dias: conDomingo ? 7 : 6,
+                                 alPulsarTarea: { t in
+                                     // La chapita: esa tarea en las tarjetas.
+                                     modelo.busqueda = ""
+                                     resaltada = t.id
+                                     cambiarVista(.tarjetas)
+                                 },
+                                 abrirEnTareas: { nombre in
+                                     // Sus tarjetas, y lo apuntado va a su lista.
+                                     destino = nombre
+                                     modelo.busqueda = nombre
+                                     cambiarVista(.tarjetas)
+                                 })
+            } else {
+                caja
+                if let quedara = ComoQuedaraTarea.vista(nueva) {
+                    // Mientras se escribe, como quedara (lo entiende el nucleo).
+                    Text(quedara)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Paleta.v2.gris)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 46).padding(.trailing, 16).padding(.bottom, 8)
+                        .background(Paleta.v2.fondo)
+                        .accessibilityLabel("Quedará así: \(quedara)")
                 }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
-                BotonCabecera(icono: "arrow.clockwise", ayuda: "Releer (⌘R)") { Task { await modelo.cargar() } }
-                    .keyboardShortcut("r")
-            }
-            caja
-            if let vista = ComoQuedaraTarea.vista(nueva) {
-                // Mientras se escribe, como quedara (lo entiende el nucleo).
-                Text(vista)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Paleta.v2.gris)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 46).padding(.trailing, 16).padding(.bottom, 8)
-                    .background(Paleta.v2.fondo)
-                    .accessibilityLabel("Quedará así: \(vista)")
-            }
-            Paleta.v2.linea.frame(height: 1)
-            Group {
-                switch vista {
-                case .porFecha: List { porFecha }.listStyle(.insetGrouped)
-                case .porLista: List { porLista }.listStyle(.insetGrouped)
-                case .kanban: TableroKanban(modelo: modelo, acciones: acciones)
+                Paleta.v2.linea.frame(height: 1)
+                Group {
+                    switch vista {
+                    case .kanban: TableroKanban(modelo: modelo, acciones: acciones)
+                    default: RejillaTarjetas(modelo: modelo, resaltada: $resaltada, acciones: acciones)
+                    }
                 }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Paleta.v2.fondo)
-            .refreshable { await modelo.cargar() }
-            .overlay {
-                if modelo.cargado, modelo.listas.allSatisfy({ $0.tareas.isEmpty }) {
-                    ContentUnavailableView("Sin tareas", systemImage: "checklist",
-                                           description: Text("Las listas de tareas de tus chats aparecen aquí."))
+                .background(Paleta.v2.fondo)
+                .refreshable { await modelo.cargar() }
+                .overlay {
+                    if modelo.cargado, modelo.listas.allSatisfy({ $0.tareas.isEmpty }) {
+                        ContentUnavailableView("Sin tareas", systemImage: "checklist",
+                                               description: Text("Las listas de tareas de tus chats aparecen aquí."))
+                    }
                 }
             }
         }
         .ventanaConCabecera()
+        .background {
+            // ⌃⌘T, ⌃⌘K y ⌃⌘H: las vistas (el Ctrl+T/K/H de Windows).
+            ForEach(VistaDeTareas.todas, id: \.self) { v in
+                Button(v.rotulo) { cambiarVista(v) }
+                    .keyboardShortcut(KeyEquivalent(v.letraAtajo), modifiers: [.control, .command])
+                    .hidden()
+            }
+        }
         .overlay(alignment: .bottom) {
             if let t = modelo.borrada {
                 AvisoAbajo(texto: "Borrada: \(t.tarea.texto)") { Task { await modelo.deshacer() } }
@@ -103,6 +150,8 @@ public struct VistaTareas: View {
             await modelo.cargar()
             asignaturas = await ModeloTareas.asignaturasFuera(de: modelo)
         }
+        .onAppear { irAVista(VistaTareas.vistaPedida?.rawValue) }
+        .onReceive(NotificationCenter.default.publisher(for: .pixpinAbrirVistaTareas)) { irAVista($0.object as? String) }
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
             Task { await modelo.cargar() }
         }
@@ -128,9 +177,49 @@ public struct VistaTareas: View {
                 Task { await modelo.recordar(t, en: cuando) }
             }
         }
+        .sheet(isPresented: $horarioComoTexto) {
+            HojaTextoHorario(inicial: semana.texto() ?? "") { semana.escribir($0) }
+        }
+    }
+
+    /// La barra comun de Windows (`Cabecera`): el conmutador de vistas y lo
+    /// propio de cada una (releer; en el Horario, «Domingo», la nota de voz
+    /// de la proxima clase, el calendario del iPad y «Como texto»).
+    private var cabecera: some View {
+        let compacta = clase == .compact
+        return Cabecera("Tareas", subtitulo: subtitulo,
+                        buscador: vista == .horario ? nil
+                            : BuscadorCabecera($modelo.busqueda, pista: "Buscar: texto o #etiqueta")) {
+            SegmentosCabecera(VistaDeTareas.todas.map { ($0, $0.rotulo) }, eleccion: eleccion)
+                .help(VistaDeTareas.todas.map(\.pista).joined(separator: "\n"))
+            if vista == .horario {
+                BotonCabecera(icono: "calendar", rotulo: compacta ? "" : "Domingo",
+                              ayuda: conDomingo ? "Quitar el domingo" : "Ver el domingo", activo: conDomingo) {
+                    conDomingo.toggle()
+                }
+                BotonCabecera(icono: "mic", rotulo: "", ayuda: "Nota de voz para la próxima clase") {
+                    HorarioIPad.grabarParaLaProxima(nucleo: semana.nucleo)
+                }
+                BotonCabecera(icono: "calendar.badge.clock", rotulo: "",
+                              ayuda: calendario.activo ? "Dejar de avisar de los eventos del calendario del iPad"
+                                  : "Avisar también de los eventos del calendario del iPad",
+                              activo: calendario.activo) {
+                    _ = Task<Void, Never> {
+                        await calendario.alternar()
+                        semana.releer()
+                    }
+                }
+                BotonCabecera(icono: "pencil", rotulo: compacta ? "" : "Como texto",
+                              ayuda: "Editar el horario como texto") { horarioComoTexto = true }
+            } else {
+                BotonCabecera(icono: "arrow.clockwise", ayuda: "Releer (⌘R)") { Task { await modelo.cargar() } }
+                    .keyboardShortcut("r")
+            }
+        }
     }
 
     private var subtitulo: String {
+        if vista == .horario { return semana.subtitulo }
         let pendientes = modelo.listas.reduce(0) { $0 + Int($1.pendientes) }
         let listas = modelo.listas.count == 1 ? "1 lista" : "\(modelo.listas.count) listas"
         return "\(listas) · \(pendientes) pendientes"
@@ -191,44 +280,6 @@ public struct VistaTareas: View {
             verEnChat: { Navegacion.compartida.irAlChat(t.lista.chat, mensaje: t.lista.mensaje) },
             pinear: { PinesDeTareasIPad.compartidos.abrir(t, nucleo: modelo.nucleoParaLeer) }
         )
-    }
-
-    private func fila(_ t: TareaConLista, conLista: Bool) -> some View {
-        FilaTarea(t: t, conLista: conLista, listas: modelo.listas, acciones: acciones(t))
-            .listRowBackground(Paleta.v2.tarjeta)
-    }
-
-    @ViewBuilder
-    private var porFecha: some View {
-        ForEach(modelo.pendientesPorGrupo) { g in
-            Section {
-                ForEach(g.tareas) { t in fila(t, conLista: true) }
-            } header: {
-                Text("\(g.grupo.titulo) · \(g.tareas.count)").foregroundStyle(Paleta.v2.gris)
-            }
-        }
-        let hechas = modelo.hechas
-        if !hechas.isEmpty {
-            Section {
-                DisclosureGroup(isExpanded: $verHechas) {
-                    ForEach(hechas) { t in fila(t, conLista: true) }
-                } label: {
-                    Text("Hechas (\(hechas.count))").foregroundStyle(Paleta.v2.texto)
-                }
-                .listRowBackground(Paleta.v2.tarjeta)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var porLista: some View {
-        ForEach(modelo.listasFiltradas, id: \.mensaje) { l in
-            Section {
-                ForEach(l.tareas, id: \.indice) { t in fila(TareaConLista(lista: l, tarea: t), conLista: false) }
-            } header: {
-                CabeceraLista(l: l)
-            }
-        }
     }
 
     private func apuntar() {
@@ -491,6 +542,150 @@ struct ChapitaTarea: View {
     }
 }
 
+// MARK: - Tarjetas
+
+/// **Las tarjetas** (tareas-v4 de Windows): cada lista con su encabezado y
+/// lo pendiente en cuadrados (una foto de la tarea, de fondo; con varias,
+/// los bordes de las de detras), y lo hecho plegado en filas: un cuadrado
+/// entero para algo ya tachado pesaba tanto como lo pendiente.
+struct RejillaTarjetas: View {
+    @ObservedObject var modelo: ModeloTareas
+    @Binding var resaltada: String?
+    let acciones: (TareaConLista) -> AccionesTarea
+    /// Las listas con lo hecho abierto.
+    @State private var abiertas: Set<String> = []
+
+    var body: some View {
+        ScrollViewReader { lector in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ForEach(modelo.listasFiltradas, id: \.mensaje) { l in grupo(l) }
+                }
+                .padding(12)
+            }
+            .onChange(of: resaltada) { _, id in
+                guard let id else { return }
+                withAnimation { lector.scrollTo(id, anchor: .center) }
+            }
+            .onAppear {
+                if let id = resaltada {
+                    DispatchQueue.main.async { lector.scrollTo(id, anchor: .center) }
+                }
+            }
+        }
+    }
+
+    private func grupo(_ l: ListaTareas) -> some View {
+        let pendientes = l.tareas.filter { !$0.hecha }
+        let hechas = l.tareas.filter(\.hecha)
+        let clave = "\(l.chat)/\(l.mensaje)"
+        return VStack(alignment: .leading, spacing: 10) {
+            CabeceraLista(l: l).font(.callout)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 12, alignment: .top)],
+                      alignment: .leading, spacing: 12) {
+                ForEach(pendientes, id: \.indice) { t in
+                    let x = TareaConLista(lista: l, tarea: t)
+                    TarjetaTarea(t: x, modelo: modelo, acciones: acciones(x), resaltada: resaltada == x.id)
+                        .id(x.id)
+                }
+            }
+            if !hechas.isEmpty {
+                DisclosureGroup(isExpanded: Binding(
+                    get: { abiertas.contains(clave) || !modelo.busqueda.isEmpty },
+                    set: { if $0 { abiertas.insert(clave) } else { abiertas.remove(clave) } })) {
+                    ForEach(hechas, id: \.indice) { t in
+                        let x = TareaConLista(lista: l, tarea: t)
+                        FilaTarea(t: x, conLista: false, listas: modelo.listas, acciones: acciones(x))
+                            .padding(.vertical, 2)
+                            .id(x.id)
+                    }
+                } label: {
+                    Text("Hechas (\(hechas.count))").font(.caption).foregroundStyle(Paleta.v2.gris)
+                }
+            }
+        }
+    }
+}
+
+/// **Una tarjeta**: la fila de la tarea en un cuadrado, del alto de lo suyo
+/// (entre la mitad del lado y el lado), con su primera foto de fondo.
+/// Se arrastra a otra columna del Kanban.
+struct TarjetaTarea: View {
+    let t: TareaConLista
+    @ObservedObject var modelo: ModeloTareas
+    let acciones: AccionesTarea
+    var resaltada = false
+    /// El lado de la tarjeta (`LADO_CUADRADO` de Windows).
+    static let lado: CGFloat = 200
+
+    var body: some View {
+        let fotos = t.tarea.imagenes
+        VStack(alignment: .leading, spacing: 0) {
+            FilaTarea(t: t, conLista: false, listas: modelo.listas, acciones: acciones)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: fotos.isEmpty ? Self.lado / 2 : Self.lado,
+               maxHeight: Self.lado, alignment: .topLeading)
+        .background {
+            if let primera = fotos.first {
+                FotoDeTarjeta(ruta: primera)
+                    .overlay(LinearGradient(colors: [.black.opacity(0.75), .black.opacity(0.25)],
+                                            startPoint: .top, endPoint: .bottom))
+            } else {
+                Paleta.v2.tarjeta
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(resaltada ? Paleta.v2.acento : Color.white.opacity(0.08), lineWidth: resaltada ? 2 : 1)
+        }
+        // Con varias fotos, los bordes de detras: uno con dos, dos con mas.
+        .background(alignment: .topTrailing) {
+            ForEach(0 ..< min(2, max(0, fotos.count - 1)), id: \.self) { k in
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.white.opacity(0.25 - Double(k) * 0.08), lineWidth: 1)
+                    .background(Paleta.v2.tarjeta.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                    .offset(x: CGFloat(k + 1) * 4, y: -CGFloat(k + 1) * 4)
+            }
+        }
+        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 12))
+        .draggable(t.id) {
+            Text(t.tarea.texto).padding(8)
+                .background(Paleta.v2.tarjetaEncima, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+/// La foto de fondo de una tarjeta, leida fuera del hilo principal.
+struct FotoDeTarjeta: View {
+    let ruta: String
+    @State private var imagen: UIImage?
+
+    var body: some View {
+        GeometryReader { geo in
+            if let imagen {
+                Image(uiImage: imagen).resizable().scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height).clipped()
+            } else {
+                Paleta.v2.tarjeta
+            }
+        }
+        .task(id: ruta) {
+            let ruta = ruta
+            // Reducida al tamano de la tarjeta: no hace falta la foto entera.
+            let img = await Task.detached(priority: .utility) { () -> UIImage? in
+                guard let datos = FileManager.default.contents(atPath: ruta), let u = UIImage(data: datos) else {
+                    return nil
+                }
+                return u.preparingThumbnail(of: CGSize(width: 520, height: 520)) ?? u
+            }.value
+            imagen = img
+        }
+    }
+}
+
 // MARK: - Kanban
 
 /// **El tablero Kanban** (Windows, 17-oct): cada lista una columna con lo
@@ -524,7 +719,11 @@ struct ColumnaKanban: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             CabeceraLista(l: l).font(.callout)
-            ForEach(l.tareas.filter { !$0.hecha }, id: \.indice) { t in tarjeta(t) }
+            // Las mismas tarjetas que la vista Tarjetas (con su foto).
+            ForEach(l.tareas.filter { !$0.hecha }, id: \.indice) { t in
+                let x = TareaConLista(lista: l, tarea: t)
+                TarjetaTarea(t: x, modelo: modelo, acciones: acciones(x))
+            }
             let hechas = l.tareas.filter(\.hecha)
             if !hechas.isEmpty {
                 DisclosureGroup(isExpanded: $verHechas) {

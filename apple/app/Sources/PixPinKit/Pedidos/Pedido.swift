@@ -126,6 +126,8 @@ public struct Pedido: Equatable, Sendable, CustomStringConvertible {
         "tabla_nueva", "posponer", "pines", "timeline", "leer_en_voz", "ocr", "herramienta",
         // 17-oct: fotos y texto a un lienzo por su nombre, apilados.
         "al_lienzo",
+        // 26-oct (Windows 22c3ce2): las carpetas de paginas desde Flow.
+        "carpeta_paginas",
     ]
 
     public var accion: String

@@ -1,6 +1,15 @@
 // **El horario de clases semanal** en el iPad (Windows `horario/ventana.rs`,
 // Mac `Recordatorios/VentanaHorario.swift` y `HorarioClases.swift`).
 //
+// Desde el 25-oct-2026 (Windows 5139e5d) no es una pantalla aparte: es la
+// vista «Horario» de Tareas (Tarjetas · Kanban · Horario), y «Horario de
+// clases» abre Tareas en ella (la barra de arriba, con «Domingo», la nota
+// de voz, el calendario del iPad y «Como texto», la pone Tareas). Tocar una
+// asignatura ensena debajo sus tareas pendientes (y la deja elegida para
+// ponerla en la semana); las tareas con hora (`⏰`) de la semana salen como
+// chapitas en su dia y su hora (`chipsDeLaSemana` del nucleo), y tocar una
+// la ensena en las tarjetas.
+//
 // - A la izquierda, las **asignaturas**: la caja «Nueva asignatura» (con el
 //   aula detras si se quiere: `Geometría @A-12`), el circulo de color de
 //   cada una (tocarlo pasa al siguiente color) y su aula. Mantenerla
@@ -13,8 +22,8 @@
 //   mueve arrastrandola (mantener y mover) y se alarga o se acorta tirando
 //   del asa de abajo, en saltos de 15 min. Su menu la borra (con Deshacer)
 //   o le cambia el color.
-// - Arriba: «Nota de voz para la próxima clase» (la oye la llamada de esa
-//   clase) y «Editar como texto…» (el mismo `horario.md`).
+// - Arriba (en la barra de Tareas): «Nota de voz para la próxima clase»
+//   (la oye la llamada de esa clase) y «Como texto» (el mismo `horario.md`).
 //
 // Todo se guarda al momento en `horario.md` (`SemanaHorario` del nucleo) y
 // se relee la agenda del vigia: las llamadas salen de lo mismo que se ve.
@@ -29,11 +38,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 public enum HorarioIPad {
-    /// Abre el horario semanal a pantalla completa, encima de lo que haya.
+    /// Abre el calendario semanal (Windows, 18-oct): desde el 25-oct, la
+    /// seccion Tareas en su vista Horario.
     public static func abrir(nucleo: Nucleo) {
-        ArribaUIKit.presentar(estilo: .fullScreen) { cerrar in
-            VistaHorarioIPad(nucleo: nucleo, cerrar: cerrar)
-        }
+        VistaTareas.abrir(vista: .horario)
     }
 
     /// **«Nota de voz para la próxima clase»**: graba para la clase en
@@ -137,7 +145,9 @@ final class ModeloSemana: ObservableObject {
         abrir()
     }
 
-    private func abrir() {
+    /// Lee `horario.md` (al crear el modelo y al volver a la vista: pudo
+    /// cambiar como texto).
+    func abrir() {
         do {
             semana = try SemanaHorario.abrir(nucleo: nucleo)
             error = nil
@@ -161,6 +171,9 @@ final class ModeloSemana: ObservableObject {
             self.proximas = Array((v + delIPad).sorted { $0.cuandoUtcMs < $1.cuandoUtcMs }.prefix(8))
         }
     }
+
+    /// «3 asignaturas · 5 clases», el subtitulo de la barra.
+    var subtitulo: String { "\(asignaturas.count) asignaturas · \(bloques.count) clases" }
 
     /// Lo escrito en `horario.md` (para deshacer y para editarlo a mano).
     func texto() -> String? {
@@ -270,55 +283,39 @@ enum TextoFichaClase {
 
 // MARK: - La vista
 
+/// **El panel Horario** dentro de Tareas (la barra de arriba la pone ella).
 struct VistaHorarioIPad: View {
-    @StateObject private var modelo: ModeloSemana
-    let cerrar: () -> Void
+    @ObservedObject var modelo: ModeloSemana
+    @ObservedObject var tareas: ModeloTareas
+    /// 6 (lunes a sabado) o 7 con el domingo (el boton de la barra).
+    var dias: Int = 6
+    /// Una chapita tocada: esa tarea en las tarjetas.
+    var alPulsarTarea: (TareaConLista) -> Void = { _ in }
+    /// «Abrir en Tareas» de una asignatura: sus tarjetas.
+    var abrirEnTareas: (String) -> Void = { _ in }
     @State private var nueva = ""
-    @AppStorage("PixPinHorarioDomingo") private var conDomingo = false
-    /// La asignatura tocada: el siguiente toque en la semana pone ahi una
-    /// clase (lo de arrastrar, con un dedo y sin arrastrar).
+    /// La asignatura tocada: ensena sus tareas y el siguiente toque en la
+    /// semana pone ahi una clase (lo de arrastrar, con un dedo y sin
+    /// arrastrar).
     @State private var elegida: Int?
     /// El bloque que se esta alargando y donde va su borde.
     @State private var alargando: (Int, Int)?
-    @State private var editandoTexto = false
     /// La ficha abierta (aula, nota y aviso de una clase; aula de una
     /// asignatura).
     @State private var editando: EdicionHorario?
     @ObservedObject private var calendario = CalendarioDelIPad.compartido
     @Environment(\.horizontalSizeClass) private var clase
-
-    init(nucleo: Nucleo, cerrar: @escaping () -> Void) {
-        _modelo = StateObject(wrappedValue: ModeloSemana(nucleo: nucleo))
-        self.cerrar = cerrar
-    }
+    /// El alto de la chapita de una tarea y lo que junta dos en una hora.
+    static let altoChip: Float = 18
+    static let pasoChip: UInt32 = 30
+    /// Cuantas tareas pendientes se ensenan de la asignatura elegida.
+    static let tareasALaVista = 8
 
     var body: some View {
-        VStack(spacing: 0) {
-            Cabecera("Horario de clases", subtitulo: subtitulo) {
-                BotonCabecera(icono: "calendar", rotulo: clase == .compact ? "" : "Domingo",
-                              ayuda: conDomingo ? "Quitar el domingo" : "Ver el domingo", activo: conDomingo) {
-                    conDomingo.toggle()
-                }
-                BotonCabecera(icono: "mic", rotulo: clase == .compact ? "" : "Nota de voz",
-                              ayuda: "Nota de voz para la próxima clase") {
-                    HorarioIPad.grabarParaLaProxima(nucleo: modelo.nucleo)
-                }
-                BotonCabecera(icono: "calendar.badge.clock", rotulo: clase == .compact ? "" : "Calendario del iPad",
-                              ayuda: calendario.activo ? "Dejar de avisar de los eventos del calendario del iPad"
-                                  : "Avisar también de los eventos del calendario del iPad",
-                              activo: calendario.activo) {
-                    _ = Task<Void, Never> {
-                        await calendario.alternar()
-                        modelo.releer()
-                    }
-                }
-                BotonCabecera(icono: "doc.plaintext", ayuda: "Editar como texto…") { editandoTexto = true }
-                BotonCabecera(icono: "xmark", ayuda: "Cerrar") { cerrar() }
-                    .keyboardShortcut(.cancelAction)
-            }
+        Group {
             if clase == .compact {
                 VStack(spacing: 0) {
-                    lista.frame(height: 210)
+                    lista.frame(height: 230)
                     Paleta.v2.linea.frame(height: 1)
                     rejilla
                 }
@@ -347,18 +344,10 @@ struct VistaHorarioIPad: View {
                 AvisoAbajo(texto: "Toca un hueco de la semana para poner \(modelo.asignaturas[i].nombre)")
             }
         }
-        .sheet(isPresented: $editandoTexto) {
-            HojaTextoHorario(inicial: modelo.texto() ?? "") { modelo.escribir($0) }
-        }
         .sheet(item: $editando) { ed in
             fichaDe(ed)
         }
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in modelo.releer() }
-    }
-
-    private var subtitulo: String {
-        let n = modelo.bloques.count
-        return n == 1 ? "1 clase a la semana" : "\(n) clases a la semana"
     }
 
     // MARK: Las asignaturas
@@ -385,6 +374,10 @@ struct VistaHorarioIPad: View {
                     if modelo.asignaturas.isEmpty {
                         Text("Escribe tus asignaturas arriba y arrástralas a la semana.")
                             .font(.caption).foregroundStyle(Paleta.v2.gris)
+                    }
+                    if let i = elegida, i < modelo.asignaturas.count {
+                        Paleta.v2.linea.frame(height: 1).padding(.vertical, 6)
+                        tareasDe(modelo.asignaturas[i].nombre)
                     }
                     if !modelo.proximas.isEmpty, clase != .compact {
                         Text("Próximas llamadas").font(.system(size: 13, weight: .semibold))
@@ -432,12 +425,47 @@ struct VistaHorarioIPad: View {
         }
         .contextMenu {
             Button("Ponerla en la semana") { elegida = i }
+            Button("Abrir en Tareas") { abrirEnTareas(a.nombre) }
             Button("Aula…") { editando = .asignatura(i) }
             Button("Otro color") { modelo.cambiar { $0.cambiarColor(i: UInt32(i)) } }
             Button("Borrar", role: .destructive) {
                 if elegida == i { elegida = nil }
                 modelo.cambiar(deshacible: "Borrada: \(a.nombre)") { $0.borrarAsignatura(i: UInt32(i)) }
             }
+        }
+    }
+
+    /// Las tareas pendientes de la asignatura elegida (su lista del chat
+    /// «Asignaturas»), con su casilla, y «Abrir en Tareas».
+    private func tareasDe(_ nombre: String) -> some View {
+        let lista = tareas.listaDeAsignatura(nombre)
+        let pendientes = lista?.tareas.filter { !$0.hecha } ?? []
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Tareas de \(nombre)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Paleta.v2.texto)
+            if pendientes.isEmpty {
+                Text("Sin tareas pendientes. En Tareas, elige la asignatura al apuntar.")
+                    .font(.caption).foregroundStyle(Paleta.v2.gris)
+            }
+            ForEach(Array(pendientes.prefix(Self.tareasALaVista)), id: \.indice) { t in
+                Button {
+                    guard let lista else { return }
+                    _ = Task<Void, Never> { await tareas.marcar(TareaConLista(lista: lista, tarea: t), hecha: true) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle").foregroundStyle(Paleta.v2.gris)
+                        Text(marcasDeTarea(texto: t.texto, desfaseMs: desfaseLocalMs()).vista)
+                            .font(.system(size: 13)).foregroundStyle(Paleta.v2.texto).lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(minHeight: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Marcar como hecha: \(t.texto)")
+            }
+            Button("Abrir en Tareas") { abrirEnTareas(nombre) }
+                .font(.system(size: 13))
+                .foregroundStyle(Paleta.v2.acento)
         }
     }
 
@@ -453,7 +481,6 @@ struct VistaHorarioIPad: View {
     private var rejilla: some View {
         GeometryReader { geo in
             let horas: CGFloat = 50, cabecera: CGFloat = 30
-            let dias = conDomingo ? 7 : 6
             let ancho = max(40, (geo.size.width - horas - 8) / CGFloat(dias))
             let r = ReglasHorario(cuantosDias: dias, anchoDia: Double(ancho), altoHora: 60)
             VStack(spacing: 0) {
@@ -471,14 +498,31 @@ struct VistaHorarioIPad: View {
         }
     }
 
+    /// El lunes de la semana que se ve (dias desde 1970, del nucleo).
+    private func lunesALaVistaHoy(_ ahora: Date = Date()) -> Int64 {
+        lunesALaVista(hoyMsLocales: milisegundosLocales(ahora), dias: UInt8(dias))
+    }
+
+    /// El numero del dia del mes de un dia (dias desde 1970).
+    static func numeroDelDia(_ dia: Int64) -> Int {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        return cal.component(.day, from: Date(timeIntervalSince1970: TimeInterval(dia) * 86_400))
+    }
+
+    /// Los dias, con su numero; hoy en una pastilla azul (Windows 5139e5d).
     private func cabeceraDias(_ r: ReglasHorario, horas: CGFloat) -> some View {
         let hoy = ReglasHorario.hoy()
+        let lunes = lunesALaVistaHoy()
         return HStack(spacing: 0) {
             Color.clear.frame(width: horas)
             ForEach(0 ..< r.cuantosDias, id: \.self) { d in
-                Text(ReglasHorario.dias[d])
-                    .font(.system(size: 13, weight: d == hoy ? .bold : .medium))
-                    .foregroundStyle(d == hoy ? Paleta.v2.acento : Paleta.v2.cuerpo)
+                Text("\(ReglasHorario.dias[d]) \(Self.numeroDelDia(lunes + Int64(d)))")
+                    .font(.system(size: 13, weight: d == hoy ? .semibold : .medium))
+                    .foregroundStyle(d == hoy ? Color.white : Paleta.v2.cuerpo)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(d == hoy ? Paleta.v2.azulLleno : .clear, in: Capsule())
                     .frame(width: CGFloat(r.anchoDia))
             }
             Spacer(minLength: 0)
@@ -535,9 +579,12 @@ struct VistaHorarioIPad: View {
                     elegida = nil
                 }
             // Los bloques.
+            // (las del domingo, solo si se ve).
             ForEach(Array(modelo.bloques.enumerated()), id: \.offset) { i, b in
-                bloque(i, b, r)
+                if Int(b.dia) < r.cuantosDias { bloque(i, b, r) }
             }
+            // Las tareas con hora de la semana, encima de las clases.
+            chips(r)
             // La hora de ahora en el dia de hoy.
             if hoy < r.cuantosDias, ahora >= ReglasHorario.desde, ahora <= ReglasHorario.hasta {
                 Paleta.v2.rojo.frame(width: ancho, height: 2)
@@ -610,6 +657,31 @@ struct VistaHorarioIPad: View {
         .offset(x: ancho * CGFloat(b.dia) + 2, y: y0)
     }
 
+    /// **Las tareas con hora de la semana**, como chapitas pegadas a la
+    /// derecha de su dia, encima de las clases (Windows 25-oct): donde va
+    /// cada una (y el «+2» de las que no caben) lo dice el nucleo.
+    private func chips(_ r: ReglasHorario) -> some View {
+        let conHora = tareas.conHora
+        let ancho = CGFloat(r.anchoDia)
+        let chips = chipsDeLaSemana(horas: conHora.map { $0.tarea.recuerda ?? 0 }, lunes: lunesALaVistaHoy(), dias: UInt8(dias),
+                                    desde: UInt32(ReglasHorario.desde), hasta: UInt32(ReglasHorario.hasta),
+                                    paso: Self.pasoChip)
+        return ForEach(chips, id: \.indice) { c in
+            if Int(c.indice) < conHora.count {
+                let t = conHora[Int(c.indice)]
+                let k = cajaDeChip(xDia: Float(CGFloat(c.dia) * ancho), anchoDia: Float(ancho),
+                                   y: Float(r.y(Int(c.minuto))), carril: c.carril, alto: Self.altoChip, escala: 1)
+                ChipDeTareaHorario(texto: marcasDeTarea(texto: t.tarea.texto, desfaseMs: desfaseLocalMs()).vista,
+                                   mas: Int(c.mas))
+                    .frame(width: CGFloat(k.ancho), height: CGFloat(k.alto))
+                    .offset(x: CGFloat(k.x), y: CGFloat(k.y))
+                    .onTapGesture { alPulsarTarea(t) }
+                    .accessibilityLabel("Tarea: \(t.tarea.texto)")
+                    .accessibilityAddTraits(.isButton)
+            }
+        }
+    }
+
     /// La hoja de la ficha de `ed`, con lo que tiene.
     @ViewBuilder private func fichaDe(_ ed: EdicionHorario) -> some View {
         switch ed {
@@ -658,6 +730,35 @@ struct VistaHorarioIPad: View {
                     }
             )
             .accessibilityLabel("Alargar o acortar")
+    }
+}
+
+// MARK: - La chapita de una tarea
+
+/// La chapita de una tarea con hora en la semana: un punto, su texto y,
+/// si no caben todas las de su hora, «+2».
+struct ChipDeTareaHorario: View {
+    let texto: String
+    let mas: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle().fill(Paleta.v2.acento).frame(width: 6, height: 6)
+            Text(mas > 0 ? "\(texto) +\(mas)" : texto)
+                .font(.system(size: 11))
+                .foregroundStyle(Paleta.v2.texto)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .background {
+            ZStack {
+                Capsule().fill(Color.black.opacity(0.55))
+                Capsule().fill(Paleta.v2.acento.opacity(0.35))
+            }
+        }
+        .contentShape(Capsule())
+        .hoverEffect(.highlight)
     }
 }
 
