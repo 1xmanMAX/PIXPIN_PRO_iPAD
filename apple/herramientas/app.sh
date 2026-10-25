@@ -45,6 +45,9 @@ correr() {
     grep -E "Executed|\*\* (BUILD|TEST)" "$registro" | tail -5 || true
 }
 
+# Que Xcode siga compilando los demas ficheros tras un error.
+defaults write com.apple.dt.Xcode IDEBuildingContinueBuildingAfterErrors -bool YES 2>/dev/null || true
+
 comun=(-project xcode/PixPin.xcodeproj -scheme AppPixPin -derivedDataPath "$DERIVADOS"
        CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO)
 
@@ -53,7 +56,7 @@ simulador)
     # Fichero a fichero y sin pararse al primer error: asi una pasada de la
     # CI ensena todos los errores, no solo los primeros.
     correr "$DIST/simulador.log" build "${comun[@]}" -configuration Debug -sdk iphonesimulator \
-        -destination "generic/platform=iOS Simulator" -continueBuildingAfterErrors \
+        -destination "generic/platform=iOS Simulator" \
         SWIFT_COMPILATION_MODE=singlefile
     app="$DERIVADOS/Build/Products/Debug-iphonesimulator/PixPin.app"
     (cd "$(dirname "$app")" && rm -f "$DIST/PixPin-simulador.zip" && zip -qry "$DIST/PixPin-simulador.zip" PixPin.app)
