@@ -171,3 +171,10 @@ la ventana de Figuras que se relee al sincronizar (en el iPad ya lo hacia por
 `.pixpinTrajoCambios`). `VisorClase` («Ver con las capturas») desaparece, como en el Mac.
 Conflictos: `lib.rs` (los modulos de los dos) y tres de Swift (`MenuMensaje`, `Compartidos`,
 `VistasVoz`). Ninguna funcion nueva del nucleo hecha aqui.
+Luego, el Mac `41ee5eb` (1 commit sobre `62fe093`, Windows hasta e78c1a3): el OCR sigue con
+Vision (`pixpin-indra` y `pixpin-ocr` solo de referencia en `por-traducir/`), la seccion
+`[ocr]` de `ajustes.toml` se conserva (`pixpin-store`, sin fila en Ajustes, como el Mac) y
+`pixpin-mcp` la lee solo en Windows. En el iPad, la hoja de «Sacar texto»
+(`Captura/TextoSacado.swift`, la que abren el pin y el editor de captura) dice «Leyendo…»
+hasta que llega el texto y una lectura que acaba tarde (hoja cerrada) no pisa nada. Sin
+conflictos; 575+ pruebas del nucleo pasan.

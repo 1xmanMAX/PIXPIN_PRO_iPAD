@@ -28,7 +28,8 @@ struct VistaTextoSacado: View {
                 if leyendo {
                     VStack(spacing: 12) {
                         ProgressView()
-                        Text("Leyendo el texto…").foregroundStyle(.secondary)
+                        // «Leyendo…» hasta que llega el texto (Windows 8efde62, `pin-v2-leyendo`)
+                        Text("Leyendo…").foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let fallo {
@@ -69,10 +70,19 @@ struct VistaTextoSacado: View {
             }
         }
         .task {
+            // Solo cuenta la ultima lectura pedida: si la hoja se cerro (o se
+            // pidio otra) antes de acabar, lo que llegue tarde no pisa nada
+            // (Windows c0632e7).
+            let leido: Result<String, Error>
             do {
-                texto = try await sacarTexto(de: imagen)
+                leido = .success(try await sacarTexto(de: imagen))
             } catch {
-                fallo = "\(error.localizedDescription)"
+                leido = .failure(error)
+            }
+            guard !Task.isCancelled else { return }
+            switch leido {
+            case let .success(t): texto = t
+            case let .failure(error): fallo = "\(error.localizedDescription)"
             }
             leyendo = false
         }

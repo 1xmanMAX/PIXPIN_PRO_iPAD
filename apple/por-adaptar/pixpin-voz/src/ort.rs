@@ -141,6 +141,9 @@ const MEMORIA_POR_DEFECTO: i32 = 0;
 /// `ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT` e `…_INT64`.
 const TIPO_F32: i32 = 1;
 const TIPO_I64: i32 = 7;
+/// `ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL`: un byte por valor (la mascara del
+/// modelo de orden de Indra).
+const TIPO_BOOL: i32 = 9;
 
 // Firmas de la cabecera. `OrtStatus*` es nulo si fue bien.
 type Estado = *mut c_void;
@@ -276,6 +279,14 @@ impl Runtime {
         raiz: &Path,
         junto_al_exe: Option<&Path>,
     ) -> Result<&'static Runtime, ErrorVoz> {
+        // Si no hay DLL todavia no se apunta nada: el lector Indra puede
+        // bajar la oficial a `<datos>/whisper/` con PixPin abierto, y la
+        // siguiente llamada tiene que encontrarla.
+        if RUNTIME.get().is_none() && buscar(raiz, junto_al_exe).is_none() {
+            return Err(ErrorVoz::SinOnnxRuntime {
+                donde: raiz.join("whisper").display().to_string(),
+            });
+        }
         let r = RUNTIME.get_or_init(|| {
             let Some(dll) = buscar(raiz, junto_al_exe) else {
                 return Err(String::new());
@@ -544,6 +555,14 @@ impl Runtime {
         self.tensor(Respaldo::I64(datos), forma)
     }
 
+    /// Lo mismo con booleanos (un byte cada uno, 0 o 1).
+    pub fn tensor_bool(&self, datos: Vec<bool>, forma: &[i64]) -> Result<Valor<'_>, ErrorVoz> {
+        self.tensor(
+            Respaldo::Bool(datos.into_iter().map(u8::from).collect()),
+            forma,
+        )
+    }
+
     fn tensor(&self, mut respaldo: Respaldo, forma: &[i64]) -> Result<Valor<'_>, ErrorVoz> {
         let elementos: i64 = forma.iter().product();
         let (puntero, bytes, tipo, largo) = match &mut respaldo {
@@ -559,6 +578,7 @@ impl Runtime {
                 TIPO_I64,
                 v.len(),
             ),
+            Respaldo::Bool(v) => (v.as_mut_ptr().cast::<c_void>(), v.len(), TIPO_BOOL, v.len()),
             Respaldo::Suyo => (std::ptr::null_mut(), 0, TIPO_F32, 0),
         };
         if elementos < 0 || elementos as usize != largo {
@@ -597,6 +617,7 @@ impl Runtime {
 enum Respaldo {
     F32(Vec<f32>),
     I64(Vec<i64>),
+    Bool(Vec<u8>),
     /// Tensores que asigno la propia API (las salidas).
     Suyo,
 }
@@ -642,6 +663,46 @@ impl Valor<'_> {
             rt.comprobar(st2, "leer las dimensiones")?;
             rt.comprobar(st3, "leer el tipo de un tensor")?;
             Ok(dims)
+        }
+    }
+
+    /// El tipo de elemento (`ONNXTensorElementDataType`).
+    fn tipo(&self) -> Result<i32, ErrorVoz> {
+        let rt = self.rt;
+        let mut info = std::ptr::null_mut();
+        // SAFETY: `ptr` es un tensor vivo; `info` se libera antes de salir.
+        unsafe {
+            let st = rt.f::<FnObtener>(indice::GET_TENSOR_TYPE_AND_SHAPE)(self.ptr, &mut info);
+            rt.comprobar(st, "leer el tipo de un tensor")?;
+            let mut tipo = 0i32;
+            let st = rt.f::<FnTipoDeElemento>(indice::GET_TENSOR_ELEMENT_TYPE)(info, &mut tipo);
+            rt.f::<FnSoltar>(indice::RELEASE_TENSOR_TYPE_AND_SHAPE_INFO)(info);
+            rt.comprobar(st, "leer el tipo de un tensor")?;
+            Ok(tipo)
+        }
+    }
+
+    /// Los datos de un tensor de `i64`, sin copiarlos (las clases y las
+    /// longitudes del reconocedor de Indra). Un tensor de otro tipo es un
+    /// error, no unos bytes mal leidos.
+    pub fn como_i64(&self) -> Result<&[i64], ErrorVoz> {
+        if self.tipo()? != TIPO_I64 {
+            return Err(ErrorVoz::Onnx {
+                paso: "leer un tensor",
+                detalle: "se esperaba int64".into(),
+            });
+        }
+        let n: i64 = self.forma()?.iter().product();
+        let mut datos = std::ptr::null_mut();
+        // SAFETY: `ptr` es un tensor vivo de `i64` (comprobado arriba); el
+        // puntero vale mientras viva `self`, y el slice toma prestado `self`.
+        unsafe {
+            let st = self.rt.f::<FnDatos>(indice::GET_TENSOR_MUTABLE_DATA)(self.ptr, &mut datos);
+            self.rt.comprobar(st, "leer un tensor")?;
+            if datos.is_null() || n <= 0 {
+                return Ok(&[]);
+            }
+            Ok(std::slice::from_raw_parts(datos.cast::<i64>(), n as usize))
         }
     }
 
@@ -841,5 +902,9 @@ mod pruebas {
         assert!(rt.tensor_i64(vec![1, 2], &[3]).is_err());
         let t = rt.tensor_i64(vec![7], &[1]).unwrap();
         assert_eq!(t.forma().unwrap(), [1]);
+        assert_eq!(t.como_i64().unwrap(), [7]);
+        let t = rt.tensor_bool(vec![true, false], &[1, 2]).unwrap();
+        assert_eq!(t.forma().unwrap(), [1, 2]);
+        assert!(t.como_i64().is_err(), "un bool no se lee como i64");
     }
 }

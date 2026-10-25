@@ -85,7 +85,7 @@ pub fn bajar(
         .unwrap_or_default();
     let (servidor, ruta) = partir_url(url).ok_or_else(|| fallo(&nombre, "no es una URL https"))?;
     let parte = ruta_parte(destino);
-    let salida = bajar_a(servidor, ruta, &parte, &nombre, avance, cancelado);
+    let salida = bajar_a(servidor, ruta, None, &parte, &nombre, avance, cancelado);
     match salida {
         Ok(n) => {
             // `rename` no pisa en todos los casos en Windows: se quita antes
@@ -102,9 +102,57 @@ pub fn bajar(
     }
 }
 
+/// **Baja solo `largo` bytes desde `desde`** (una peticion `Range`, que
+/// el servidor contesta con 206). Es lo que hace el lector Indra con el ZIP
+/// oficial de ONNX Runtime: de sus 83 MB solo quiere los 6 de la DLL. El
+/// resultado queda en `destino` tal cual llega (comprimido).
+pub fn bajar_tramo(
+    url: &str,
+    destino: &Path,
+    desde: u64,
+    largo: u64,
+    avance: &mut dyn FnMut(u64, Option<u64>),
+    cancelado: &AtomicBool,
+) -> Result<u64, ErrorVoz> {
+    let nombre = destino
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (servidor, ruta) = partir_url(url).ok_or_else(|| fallo(&nombre, "no es una URL https"))?;
+    if largo == 0 {
+        return Err(fallo(&nombre, "tramo vacio"));
+    }
+    let parte = ruta_parte(destino);
+    match bajar_a(
+        servidor,
+        ruta,
+        Some((desde, largo)),
+        &parte,
+        &nombre,
+        avance,
+        cancelado,
+    ) {
+        Ok(n) => {
+            let _ = std::fs::remove_file(destino);
+            std::fs::rename(&parte, destino).map_err(|e| fallo(&nombre, e))?;
+            Ok(n)
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&parte);
+            Err(e)
+        }
+    }
+}
+
+/// La cabecera `Range` de un tramo (`desde` y `largo` en bytes).
+pub fn cabecera_de_tramo(desde: u64, largo: u64) -> String {
+    format!("Range: bytes={}-{}", desde, desde + largo - 1)
+}
+
 fn bajar_a(
     servidor: &str,
     ruta: &str,
+    tramo: Option<(u64, u64)>,
     parte: &Path,
     nombre: &str,
     avance: &mut dyn FnMut(u64, Option<u64>),
@@ -162,7 +210,12 @@ fn bajar_a(
         if peticion.0.is_null() {
             return Err(fallo(nombre, windows::core::Error::from_thread()));
         }
-        WinHttpSendRequest(peticion.0, None, None, 0, 0, 0).map_err(|e| fallo(nombre, e))?;
+        // WinHTTP vuelve a mandar las cabeceras al seguir una redireccion
+        // (GitHub manda cada fichero a su CDN), asi que el tramo llega.
+        let cabecera: Option<Vec<u16>> =
+            tramo.map(|(d, l)| cabecera_de_tramo(d, l).encode_utf16().collect());
+        WinHttpSendRequest(peticion.0, cabecera.as_deref(), None, 0, 0, 0)
+            .map_err(|e| fallo(nombre, e))?;
         WinHttpReceiveResponse(peticion.0, std::ptr::null_mut()).map_err(|e| fallo(nombre, e))?;
 
         let numero = |que: u32| -> Option<u64> {
@@ -180,7 +233,8 @@ fn bajar_a(
             .map(|_| n as u64)
         };
         let estado = numero(WINHTTP_QUERY_STATUS_CODE).unwrap_or(0);
-        if estado != 200 {
+        let esperado = if tramo.is_some() { 206 } else { 200 };
+        if estado != esperado {
             return Err(fallo(nombre, format!("el servidor contesto {estado}")));
         }
         // Mas de 4 GB no cabe en el numero de 32 bits, pero el modelo mayor
@@ -254,6 +308,15 @@ mod pruebas {
         assert_eq!(partir_url("ftp://x/y"), None);
         assert_eq!(partir_url("https:///sin-servidor"), None);
         assert_eq!(partir_url("https://x:8080/a"), None);
+    }
+
+    #[test]
+    fn la_cabecera_del_tramo_cuenta_el_ultimo_byte_incluido() {
+        assert_eq!(
+            cabecera_de_tramo(221_047, 6_178_089),
+            "Range: bytes=221047-6399135"
+        );
+        assert_eq!(cabecera_de_tramo(0, 1), "Range: bytes=0-0");
     }
 
     #[test]

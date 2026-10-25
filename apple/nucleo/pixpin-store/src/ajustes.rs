@@ -289,6 +289,46 @@ pub struct Ajustes {
     /// Las palabras de cada urgencia de las tareas (`[tareas]`). Tabla: al
     /// final.
     pub tareas: Tareas,
+    /// Con que se reconoce el texto de las imagenes (`[ocr]`). Tabla: al
+    /// final.
+    pub ocr: Ocr,
+}
+
+/// Que motor lee el texto de las capturas, los pines, la galeria, los PDF
+/// escaneados y las herramientas del asistente (`docs/ocr.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum MotorOcr {
+    /// `Windows.Media.Ocr`: viene con Windows, no se baja nada.
+    #[default]
+    Windows,
+    /// Indra OCR (Datalab): mejor con fotos, escaneos y paginas torcidas;
+    /// se baja aparte (unos 26 MB) y solo si el usuario lo pide, por la
+    /// licencia de sus pesos.
+    Indra,
+}
+
+/// Seccion `[ocr]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Ocr {
+    pub motor: MotorOcr,
+    /// Corregir con el diccionario espanol las palabras que Indra lee con
+    /// poca confianza (solo en paginas en espanol; nunca cifras ni codigos).
+    pub corregir: bool,
+    /// «Mi vocabulario»: nombres, siglas y terminos que Indra debe preferir,
+    /// uno por linea o separados por comas.
+    pub vocabulario: String,
+}
+
+impl Default for Ocr {
+    fn default() -> Self {
+        Self {
+            motor: MotorOcr::Windows,
+            corregir: true,
+            vocabulario: String::new(),
+        }
+    }
 }
 
 /// Seccion `[pinear]`: las palabras magicas que pone el usuario.
@@ -631,6 +671,7 @@ impl Default for Ajustes {
             pinear: Pinear::default(),
             asistente: Asistente::default(),
             tareas: Tareas::default(),
+            ocr: Ocr::default(),
         }
     }
 }
@@ -1443,5 +1484,28 @@ alto = 200
         let texto = fs::read_to_string(donde.fichero_ajustes()).unwrap();
         assert!(texto.contains("sin-perdida"), "{texto}");
         assert_eq!(cargar(&donde).unwrap().pdf, a.pdf);
+    }
+
+    #[test]
+    fn el_motor_de_ocr_es_el_de_windows_de_fabrica_y_va_y_vuelve() {
+        let a = Ajustes::default();
+        assert_eq!(a.ocr.motor, MotorOcr::Windows);
+        assert!(a.ocr.corregir);
+        let b: Ajustes =
+            toml::from_str("[ocr]\nmotor = \"indra\"\nvocabulario = \"E030, Arequipa\"\n").unwrap();
+        assert_eq!(b.ocr.motor, MotorOcr::Indra);
+        assert!(b.ocr.corregir, "lo que no se escribe sigue de fabrica");
+        assert!(toml::from_str::<Ajustes>("[ocr]\nmotor = \"tesseract\"\n").is_err());
+        let donde = temporal("ocr");
+        let a = Ajustes {
+            ocr: Ocr {
+                motor: MotorOcr::Indra,
+                corregir: false,
+                vocabulario: "sismorresistente".into(),
+            },
+            ..Ajustes::default()
+        };
+        guardar_conservando(&donde, &a).unwrap();
+        assert_eq!(cargar(&donde).unwrap().ocr, a.ocr);
     }
 }

@@ -45,6 +45,32 @@ pub fn raiz() -> PathBuf {
         .join("PixPinMax")
 }
 
+/// **El OCR con el motor que eligio el usuario en PixPin** (`[ocr]`): leer
+/// un documento desde fuera da lo mismo que leerlo en la app. Sin ajustes
+/// legibles, el de Windows. Nunca baja nada: eso se pide en Ajustes.
+/// Solo en Windows: en el Mac el texto de una imagen lo saca Vision.
+#[cfg(windows)]
+pub fn configurar_ocr() {
+    let raiz = raiz();
+    let u = pixpin_store::Ubicacion::Instalado { raiz: raiz.clone() };
+    let a = pixpin_store::ajustes::cargar(&u).unwrap_or_default();
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(Path::to_path_buf));
+    pixpin_ocr::configurar(pixpin_ocr::Config {
+        motor: match a.ocr.motor {
+            pixpin_store::ajustes::MotorOcr::Windows => pixpin_ocr::Motor::Windows,
+            pixpin_store::ajustes::MotorOcr::Indra => pixpin_ocr::Motor::Indra,
+        },
+        raiz: Some(raiz),
+        junto_al_exe: exe,
+        corregir: a.ocr.corregir,
+        vocabulario: a.ocr.vocabulario,
+        // Un proceso aparte, a la vez que la app: dos hilos.
+        hilos: 2,
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Tareas
 
