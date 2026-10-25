@@ -150,7 +150,7 @@ enum CarpetasChat {
         let ext = ((m?.nombre ?? "") as NSString).pathExtension.lowercased()
         let videos = ["mp4", "mov", "avi", "mkv", "webm", "3gp", "m4v", "wmv", "flv"]
         if m?.clase == "IMAGEN" || m?.clase == "ARCHIVO", videos.contains(ext) { return "video" }
-        switch m?.clase ?? "" {
+        return switch m?.clase ?? "" {
         case "DIBUJO": "scribble.variable"
         case "PAGINA": "book"
         case "IMAGEN": "photo"
