@@ -361,15 +361,25 @@ impl Limitador {
                 self.linea[i + ch] = entra;
                 *v = doblar(sale * self.ganancia);
             }
-            self.pos = (self.pos + 1) % self.retraso;
+            // Sin division por marco: la vuelta es una comparacion.
+            self.pos += 1;
+            if self.pos == self.retraso {
+                self.pos = 0;
+            }
         }
     }
 }
 
 /// Pasa a 16 bits. Lo que entra ya viene limitado; se acota igual por si.
+///
+/// Redondea al mas cercano sumando medio con el signo y truncando, que es lo
+/// mismo que `f32::round` pero sin llamada: con el procesador de referencia
+/// (`target-cpu=x86-64`, sin SSE4.1) `round` es una funcion de la libreria
+/// por muestra; asi es una suma y una conversion, y el bucle se vectoriza.
 pub fn a_i16(entrada: &[f32], salida: &mut [i16]) {
     for (s, v) in salida.iter_mut().zip(entrada) {
-        *s = (v.clamp(-TECHO, TECHO) * 32_767.0).round() as i16;
+        let y = v.clamp(-TECHO, TECHO) * 32_767.0;
+        *s = (y + 0.5f32.copysign(y)) as i16;
     }
 }
 
@@ -508,5 +518,22 @@ mod pruebas {
         let mut fuera = [0i16; 3];
         a_i16(&[1.0, -1.0, 0.0], &mut fuera);
         assert_eq!(fuera, [32_764, -32_764, 0]);
+    }
+
+    #[test]
+    fn pasar_a_16_bits_redondea_como_round() {
+        let mut v = Vec::new();
+        let mut x = -1.2f32;
+        while x < 1.2 {
+            v.push(x);
+            x += 0.000_37;
+        }
+        v.extend([0.0, -0.0, 0.5 / 32_767.0, -0.5 / 32_767.0, 1.5 / 32_767.0]);
+        let mut rapido = vec![0i16; v.len()];
+        a_i16(&v, &mut rapido);
+        for (a, x) in rapido.iter().zip(&v) {
+            let esperado = (x.clamp(-TECHO, TECHO) * 32_767.0).round() as i16;
+            assert_eq!(*a, esperado, "{x}");
+        }
     }
 }

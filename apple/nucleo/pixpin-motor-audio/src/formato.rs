@@ -305,71 +305,121 @@ impl Conversor {
         self.salida
     }
 
-    /// Lee una muestra cruda en `[-1, 1]`.
-    #[inline]
-    fn leer(&self, b: &[u8]) -> f32 {
+    /// Convierte los marcos enteros de `datos` y los deja intercalados en
+    /// `salida`. Devuelve cuantos marcos escribio: los que quepan en los dos.
+    ///
+    /// El tipo de muestra se decide **una vez** por llamada y no en cada
+    /// muestra: cada tipo tiene su bucle propio (`Conversor::con` se
+    /// instancia para cada lector), sin un `match` por muestra dentro.
+    pub fn convertir(&self, datos: &[u8], salida: &mut [f32]) -> usize {
         match self.formato.muestra {
-            Muestra::F32 => {
-                let v = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
-                // Un NaN o un infinito de un controlador roto no puede
-                // envenenar la mezcla entera.
-                if v.is_finite() { v } else { 0.0 }
-            }
-            Muestra::F64 => {
-                let v = f64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]);
-                if v.is_finite() { v as f32 } else { 0.0 }
-            }
-            Muestra::U8 => (f32::from(b[0]) - 128.0) / 128.0,
-            Muestra::I16 => f32::from(i16::from_le_bytes([b[0], b[1]])) / 32_768.0,
-            Muestra::I24 => {
-                // Se mete en los 24 bits altos de un i32 y se divide igual que
-                // uno de 32: el signo sale solo.
-                let v = i32::from_le_bytes([0, b[0], b[1], b[2]]);
-                v as f32 / 2_147_483_648.0
-            }
-            Muestra::I32 => i32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f32 / 2_147_483_648.0,
+            Muestra::F32 => self.con(datos, salida, leer_f32),
+            Muestra::F64 => self.con(datos, salida, leer_f64),
+            Muestra::U8 => self.con(datos, salida, leer_u8),
+            Muestra::I16 => self.con(datos, salida, leer_i16),
+            Muestra::I24 => self.con(datos, salida, leer_i24),
+            Muestra::I32 => self.con(datos, salida, leer_i32),
         }
     }
 
-    /// Convierte los marcos enteros de `datos` y los deja intercalados en
-    /// `salida`. Devuelve cuantos marcos escribio: los que quepan en los dos.
-    pub fn convertir(&self, datos: &[u8], salida: &mut [f32]) -> usize {
+    #[inline(always)]
+    fn con(&self, datos: &[u8], salida: &mut [f32], leer: impl Fn(&[u8]) -> f32) -> usize {
         let por_marco = self.formato.bytes_por_marco();
         let n = (datos.len() / por_marco).min(salida.len() / self.salida);
         let ancho = self.formato.muestra.bytes();
-        // El caso de casi siempre, sin matriz: estereo flotante a estereo.
-        if self.formato.muestra == Muestra::F32
-            && self.formato.canales == 2
+        let entrada = &datos[..n * por_marco];
+        let fuera = &mut salida[..n * self.salida];
+        let canales = self.formato.canales as usize;
+        // Los casos de casi siempre, sin matriz.
+        if canales == 1 {
+            // Un microfono mono: va entero a uno o a los dos lados.
+            for (m, f) in entrada
+                .chunks_exact(por_marco)
+                .zip(fuera.chunks_exact_mut(self.salida))
+            {
+                f.fill(leer(m));
+            }
+            return n;
+        }
+        if canales == 2
             && self.salida == 2
             && self.matriz[0] == [1.0, 0.0]
             && self.matriz[1] == [0.0, 1.0]
         {
-            for (marco, fuera) in datos[..n * 8]
-                .chunks_exact(8)
-                .zip(salida.chunks_exact_mut(2))
+            for (m, f) in entrada
+                .chunks_exact(por_marco)
+                .zip(fuera.chunks_exact_mut(2))
             {
-                fuera[0] = self.leer(&marco[0..4]);
-                fuera[1] = self.leer(&marco[4..8]);
+                f[0] = leer(&m[..ancho]);
+                f[1] = leer(&m[ancho..]);
             }
             return n;
         }
-        for (marco, fuera) in datos[..n * por_marco]
+        if canales == 2 && self.salida == 1 && self.matriz[0] == [0.5, 0.5] {
+            // Estereo a mono (la mesa de Windows casi siempre da el
+            // microfono en estereo y las notas son mono): la media.
+            for (m, f) in entrada.chunks_exact(por_marco).zip(fuera.iter_mut()) {
+                *f = (leer(&m[..ancho]) + leer(&m[ancho..])) * 0.5;
+            }
+            return n;
+        }
+        for (marco, f) in entrada
             .chunks_exact(por_marco)
-            .zip(salida.chunks_exact_mut(self.salida))
+            .zip(fuera.chunks_exact_mut(self.salida))
         {
             let (mut i, mut d) = (0.0f32, 0.0f32);
-            for (c, coef) in self.matriz.iter().enumerate() {
-                let v = self.leer(&marco[c * ancho..]);
+            for (muestra, coef) in marco.chunks_exact(ancho).zip(&self.matriz) {
+                let v = leer(muestra);
                 i += v * coef[0];
                 d += v * coef[1];
             }
-            fuera[0] = i;
+            f[0] = i;
             if self.salida == 2 {
-                fuera[1] = d;
+                f[1] = d;
             }
         }
         n
     }
+}
+
+// Los lectores de cada tipo de muestra, a `[-1, 1]`.
+
+#[inline(always)]
+fn leer_f32(b: &[u8]) -> f32 {
+    let v = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+    // Un NaN o un infinito de un controlador roto no puede envenenar la
+    // mezcla entera.
+    if v.is_finite() { v } else { 0.0 }
+}
+
+#[inline(always)]
+fn leer_f64(b: &[u8]) -> f32 {
+    let v = f64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]);
+    if v.is_finite() { v as f32 } else { 0.0 }
+}
+
+#[inline(always)]
+fn leer_u8(b: &[u8]) -> f32 {
+    (f32::from(b[0]) - 128.0) / 128.0
+}
+
+#[inline(always)]
+fn leer_i16(b: &[u8]) -> f32 {
+    f32::from(i16::from_le_bytes([b[0], b[1]])) / 32_768.0
+}
+
+#[inline(always)]
+fn leer_i24(b: &[u8]) -> f32 {
+    // Se mete en los 24 bits altos de un i32 y se divide igual que uno de 32:
+    // el signo sale solo.
+    i32::from_le_bytes([0, b[0], b[1], b[2]]) as f32 / 2_147_483_648.0
+}
+
+/// Con signo de 32 bits; si solo valen 24 (`wValidBitsPerSample`), van
+/// arrimados arriba y se leen igual.
+#[inline(always)]
+fn leer_i32(b: &[u8]) -> f32 {
+    i32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f32 / 2_147_483_648.0
 }
 
 #[cfg(test)]
@@ -539,5 +589,70 @@ pub(crate) mod pruebas {
             1
         );
         assert_eq!(m[1], 9.0, "no toca mas alla de lo convertido");
+    }
+
+    /// La cuenta de siempre, muestra a muestra y con la matriz: lo que los
+    /// caminos rapidos tienen que dar igual.
+    fn a_mano(conv: &Conversor, datos: &[u8]) -> Vec<f32> {
+        let f = conv.formato();
+        let ancho = f.muestra.bytes();
+        let leer = |b: &[u8]| match f.muestra {
+            Muestra::F32 => leer_f32(b),
+            Muestra::F64 => leer_f64(b),
+            Muestra::U8 => leer_u8(b),
+            Muestra::I16 => leer_i16(b),
+            Muestra::I24 => leer_i24(b),
+            Muestra::I32 => leer_i32(b),
+        };
+        let mut fuera = Vec::new();
+        for marco in datos.chunks_exact(f.bytes_por_marco()) {
+            let (mut i, mut d) = (0.0f32, 0.0f32);
+            for (c, coef) in conv.matriz.iter().enumerate() {
+                let v = leer(&marco[c * ancho..]);
+                i += v * coef[0];
+                d += v * coef[1];
+            }
+            fuera.push(i);
+            if conv.canales_salida() == 2 {
+                fuera.push(d);
+            }
+        }
+        fuera
+    }
+
+    #[test]
+    fn cada_camino_rapido_da_lo_mismo_que_la_matriz() {
+        // Todos los tipos de muestra, de 1, 2, 6 y 8 canales a 1 y 2: un
+        // microfono mono de 16 bits, la mesa en flotante estereo, unos
+        // altavoces 5.1 y 7.1.
+        let tipos = [(1u16, 8u16), (1, 16), (1, 24), (1, 32), (3, 32), (3, 64)];
+        let mut semilla = 12_345u32;
+        for (etiqueta, bits) in tipos {
+            for canales in [1u16, 2, 6, 8] {
+                let f = Formato::de_bytes(&corta(etiqueta, canales, 44_100, bits)).unwrap();
+                let mut datos = vec![0u8; f.bytes_por_marco() * 64];
+                for (k, b) in datos.iter_mut().enumerate() {
+                    semilla = semilla.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                    *b = (semilla >> 16) as u8;
+                    // Flotantes razonables: el byte alto de cada muestra
+                    // flotante pequeno (si no, salen NaN y gigantes).
+                    if etiqueta == 3 && (k + 1) % (bits as usize / 8) == 0 {
+                        *b = 0x3E;
+                    }
+                }
+                for salida in [1u16, 2] {
+                    let conv = Conversor::nuevo(f, salida);
+                    let mut rapido = vec![0.0; 64 * salida as usize];
+                    assert_eq!(conv.convertir(&datos, &mut rapido), 64);
+                    let lento = a_mano(&conv, &datos);
+                    for (a, b) in rapido.iter().zip(&lento) {
+                        assert!(
+                            (a - b).abs() <= 1e-6 * b.abs().max(1.0),
+                            "{etiqueta}/{bits} bits, {canales} a {salida}: {a} contra {b}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

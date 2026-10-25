@@ -6575,6 +6575,291 @@ public func FfiConverterTypeMarcasDelLienzo_lower(_ value: MarcasDelLienzo) -> U
 
 
 /**
+ * **La mezcla de una grabacion**: las fuentes empujan sus bloques desde
+ * sus hilos y la cola de la grabacion saca lo mezclado.
+ */
+public protocol MezclaDeAudioProtocol: AnyObject, Sendable {
+    
+    /**
+     * **Un bloque de la fuente `fuente`** (su posicion en la lista), de
+     * `canales` canales: intercalado, o un canal entero detras de otro si
+     * `separadas`. Lo llama el hilo de esa fuente con cada bloque del
+     * sistema; no espera a la mezcla. Devuelve los marcos que entraron
+     * (si el anillo estaba lleno, lo que no cabe se tira).
+     */
+    func empujar(fuente: UInt32, muestras: [Float], canales: UInt16, separadas: Bool)  -> UInt32
+    
+    func enPausa()  -> Bool
+    
+    /**
+     * Lo grabado, sin las pausas (el minuto de una captura).
+     */
+    func llevadoMs()  -> Int64
+    
+    /**
+     * **Lo que toca desde la ultima vez**, por el reloj. La primera vez
+     * pone el cero y no da nada: se llama justo al empezar.
+     */
+    func mezclar()  -> BloqueMezclado
+    
+    /**
+     * Las muestras que ya salieron.
+     */
+    func muestras()  -> UInt64
+    
+    func muestreo()  -> UInt32
+    
+    /**
+     * El pico de lo ultimo mezclado, de 0 a 1 (cero en pausa).
+     */
+    func nivel()  -> Float
+    
+    /**
+     * Pausa o sigue: en pausa lo que llega se tira y el reloj no corre.
+     */
+    func pausar(pausa: Bool) 
+    
+    /**
+     * **Al parar**: lo que toque y lo que quede en los anillos. Despues no
+     * sale nada mas.
+     */
+    func terminar()  -> BloqueMezclado
+    
+}
+/**
+ * **La mezcla de una grabacion**: las fuentes empujan sus bloques desde
+ * sus hilos y la cola de la grabacion saca lo mezclado.
+ */
+open class MezclaDeAudio: MezclaDeAudioProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_pixpin_nucleo_fn_clone_mezcladeaudio(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_pixpin_nucleo_fn_free_mezcladeaudio(handle, $0) }
+    }
+
+    
+    /**
+     * **La mezcla de una grabacion** de `fuentes` (una o dos) hacia mono a
+     * `muestreo` (44 100 o 48 000).
+     */
+public static func nueva(fuentes: [FuenteDeMezcla], muestreo: UInt32)throws  -> MezclaDeAudio  {
+    return try  FfiConverterTypeMezclaDeAudio_lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_constructor_mezcladeaudio_nueva(
+        FfiConverterSequenceTypeFuenteDeMezcla.lower(fuentes),
+        FfiConverterUInt32.lower(muestreo),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+    /**
+     * **Un bloque de la fuente `fuente`** (su posicion en la lista), de
+     * `canales` canales: intercalado, o un canal entero detras de otro si
+     * `separadas`. Lo llama el hilo de esa fuente con cada bloque del
+     * sistema; no espera a la mezcla. Devuelve los marcos que entraron
+     * (si el anillo estaba lleno, lo que no cabe se tira).
+     */
+open func empujar(fuente: UInt32, muestras: [Float], canales: UInt16, separadas: Bool) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_empujar(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(fuente),
+        FfiConverterSequenceFloat.lower(muestras),
+        FfiConverterUInt16.lower(canales),
+        FfiConverterBool.lower(separadas),uniffiCallStatus
+    )
+})
+}
+    
+open func enPausa() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_en_pausa(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Lo grabado, sin las pausas (el minuto de una captura).
+     */
+open func llevadoMs() -> Int64  {
+    return try!  FfiConverterInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_llevado_ms(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Lo que toca desde la ultima vez**, por el reloj. La primera vez
+     * pone el cero y no da nada: se llama justo al empezar.
+     */
+open func mezclar() -> BloqueMezclado  {
+    return try!  FfiConverterTypeBloqueMezclado_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_mezclar(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Las muestras que ya salieron.
+     */
+open func muestras() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_muestras(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+open func muestreo() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_muestreo(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * El pico de lo ultimo mezclado, de 0 a 1 (cero en pausa).
+     */
+open func nivel() -> Float  {
+    return try!  FfiConverterFloat.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_nivel(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Pausa o sigue: en pausa lo que llega se tira y el reloj no corre.
+     */
+open func pausar(pausa: Bool)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_pausar(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(pausa),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * **Al parar**: lo que toque y lo que quede en los anillos. Despues no
+     * sale nada mas.
+     */
+open func terminar() -> BloqueMezclado  {
+    return try!  FfiConverterTypeBloqueMezclado_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_mezcladeaudio_terminar(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMezclaDeAudio: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MezclaDeAudio
+
+    public static func lift(_ handle: UInt64) throws -> MezclaDeAudio {
+        return MezclaDeAudio(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MezclaDeAudio) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MezclaDeAudio {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MezclaDeAudio, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMezclaDeAudio_lift(_ handle: UInt64) throws -> MezclaDeAudio {
+    return try FfiConverterTypeMezclaDeAudio.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMezclaDeAudio_lower(_ value: MezclaDeAudio) -> UInt64 {
+    return FfiConverterTypeMezclaDeAudio.lower(value)
+}
+
+
+
+
+
+
+/**
  * **Un modelo 3D abierto**, listo para Metal.
  */
 public protocol Modelo3dAppleProtocol: AnyObject, Sendable {
@@ -7960,8 +8245,9 @@ public protocol NucleoProtocol: AnyObject, Sendable {
     func recibirEnvioPreguntando(host: String, puerto: UInt16, codigo: String, decidir: DecidirOferta) throws  -> [RecibidoEnvio]?
     
     /**
-     * **Lo que ensena una pestana** de la ficha, del mas antiguo al mas
-     * nuevo, con lo `buscado` con su lupa ya filtrado (vacio: todo).
+     * **Lo que ensena una pestana** de la ficha, lo mas nuevo primero, con
+     * lo `buscado` con su lupa ya filtrado (vacio: todo). Los proyectos van
+     * aparte ([`Nucleo::proyectos_de_la_ficha`]).
      */
     func cosasDeLaFicha(chat: String, seccion: SeccionFicha, buscado: String) throws  -> [CosaDeLaFicha]
     
@@ -7971,6 +8257,13 @@ public protocol NucleoProtocol: AnyObject, Sendable {
      * quedado vacia).
      */
     func fichaDelChat(chat: String, actual: SeccionFicha?) throws  -> FichaDelChatLeida
+    
+    /**
+     * **Los proyectos de la pestana «Proyectos»**: los de la lista de
+     * chats, en su orden («Mensajes guardados» y el asistente delante, aunque
+     * sean viejos), con lo `buscado` en su nombre (vacio: todos).
+     */
+    func proyectosDeLaFicha(chat: String, buscado: String) throws  -> [ProyectoDeLaFicha]
     
     /**
      * **Junta las paginas ya pintadas en un lienzo nuevo** del chat: sus
@@ -11053,8 +11346,9 @@ open func recibirEnvioPreguntando(host: String, puerto: UInt16, codigo: String, 
 }
     
     /**
-     * **Lo que ensena una pestana** de la ficha, del mas antiguo al mas
-     * nuevo, con lo `buscado` con su lupa ya filtrado (vacio: todo).
+     * **Lo que ensena una pestana** de la ficha, lo mas nuevo primero, con
+     * lo `buscado` con su lupa ya filtrado (vacio: todo). Los proyectos van
+     * aparte ([`Nucleo::proyectos_de_la_ficha`]).
      */
 open func cosasDeLaFicha(chat: String, seccion: SeccionFicha, buscado: String)throws  -> [CosaDeLaFicha]  {
     return try  FfiConverterSequenceTypeCosaDeLaFicha.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
@@ -11080,6 +11374,22 @@ open func fichaDelChat(chat: String, actual: SeccionFicha?)throws  -> FichaDelCh
             self.uniffiCloneHandle(),
         FfiConverterString.lower(chat),
         FfiConverterOptionTypeSeccionFicha.lower(actual),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Los proyectos de la pestana «Proyectos»**: los de la lista de
+     * chats, en su orden («Mensajes guardados» y el asistente delante, aunque
+     * sean viejos), con lo `buscado` en su nombre (vacio: todos).
+     */
+open func proyectosDeLaFicha(chat: String, buscado: String)throws  -> [ProyectoDeLaFicha]  {
+    return try  FfiConverterSequenceTypeProyectoDeLaFicha.lift(try rustCallWithError(FfiConverterTypeErrorNucleo_lift) {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_nucleo_proyectos_de_la_ficha(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(chat),
+        FfiConverterString.lower(buscado),uniffiCallStatus
     )
 })
 }
@@ -15048,6 +15358,374 @@ public func FfiConverterTypeRelojSincro_lower(_ value: RelojSincro) -> UInt64 {
 
 
 /**
+ * **El nucleo del video de una grabacion** (`nucleo.rs` de Windows): lo
+ * que decide en cada vuelta, sin tocar la pantalla ni el codificador.
+ * Swift le cuenta lo que pasa y hace lo que dice.
+ */
+public protocol RitmoDelVideoProtocol: AnyObject, Sendable {
+    
+    func enPausa()  -> Bool
+    
+    /**
+     * Se le dio un fotograma al codificador a la hora `ahora` y `entro`
+     * (o no: estaba atascado). Devuelve si ya es un atasco de los que no
+     * se pasan (diez segundos sin que entre ninguno): se corta el video.
+     */
+    func escrito(entro: Bool, ahora: Int64)  -> Bool
+    
+    /**
+     * **Lo que se puede dormir**, en 100 ns, hasta que [`RitmoDelVideo::paso`]
+     * cambie de opinion: entre 1 y 250 ms (en pausa, 250).
+     */
+    func espera(ahora: Int64, hayRetenido: Bool)  -> Int64
+    
+    /**
+     * **Donde acaba el video** a la hora `ahora`: donde acaba el sonido
+     * (o lo corrido sin pausas si va mudo). Ahi se cierra el ultimo
+     * fotograma, para que las dos pistas duren lo mismo.
+     */
+    func finalDelVideo(ahora: Int64)  -> Int64
+    
+    /**
+     * **Una pantalla que se abrio y se volvio a caer**: si se le da otra
+     * vuelta (tres cada diez minutos) o ya no va a mejorar y se corta el
+     * video guardando lo que habia.
+     */
+    func otraVuelta(ahora: Int64)  -> Bool
+    
+    /**
+     * **Que hacer a la hora `ahora`**, con un fotograma nuevo de la
+     * pantalla capturado a `hora_retenida` esperando (o ninguno). Si dice
+     * `Nuevo` o `Repetir`, se escribe en `instante`; si el reloj aun no lo
+     * puede fechar (esperando al sonido tras la pausa), dice `Esperar` y
+     * el fotograma se queda retenido: es la imagen mas nueva.
+     */
+    func paso(ahora: Int64, horaRetenida: Int64?)  -> PasoDelVideo
+    
+    /**
+     * Pausa o sigue a la hora `ahora`. Al seguir, el atasco se cuenta de
+     * cero (una pausa larga no es un codificador atascado).
+     */
+    func pausar(pausa: Bool, ahora: Int64) 
+    
+    /**
+     * La pantalla volvio: el proximo fallo se intenta enseguida.
+     */
+    func reabierta() 
+    
+    /**
+     * **La pantalla se fue** (un monitor que se desconecta, el Mac que se
+     * duerme): si toca intentar abrirla otra vez a la hora `ahora` (cada
+     * tres segundos, el primero enseguida). Mientras, se repite la ultima
+     * imagen y el sonido no se corta.
+     */
+    func reabrirToca(ahora: Int64)  -> Bool
+    
+    /**
+     * **Un bloque de sonido** de `marcos` muestras que empieza en
+     * `posicion`, llegado a la hora `ahora`: lo que se escribe de el
+     * (`None` si ya estaba todo escrito). Ancla el reloj.
+     */
+    func sonido(posicion: UInt64, marcos: UInt64, ahora: Int64)  -> TramoDeSonido?
+    
+    /**
+     * **Si el fotograma de verdad que llega a `t_nuevo` ocupa el sitio del
+     * repetido que aun espera en `t_pendiente`** (`ocupa_el_sitio_del_repetido`):
+     * el repetido se tira y el de verdad va en su instante, sin dejar un
+     * fotograma de un milisegundo.
+     */
+    func sustituyeAlRepetido(pendienteEsRepetido: Bool, tPendiente: Int64, tNuevo: Int64)  -> Bool
+    
+}
+/**
+ * **El nucleo del video de una grabacion** (`nucleo.rs` de Windows): lo
+ * que decide en cada vuelta, sin tocar la pantalla ni el codificador.
+ * Swift le cuenta lo que pasa y hace lo que dice.
+ */
+open class RitmoDelVideo: RitmoDelVideoProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_pixpin_nucleo_fn_clone_ritmodelvideo(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_pixpin_nucleo_fn_free_ritmodelvideo(handle, $0) }
+    }
+
+    
+    /**
+     * Un video que empieza a la hora `ahora`, con sonido a `muestreo` (cero
+     * si va mudo: entonces manda el reloj del sistema sin pausas), a
+     * `por_segundo` como mucho.
+     */
+public static func nuevo(muestreo: UInt32, porSegundo: UInt32, ahora: Int64) -> RitmoDelVideo  {
+    return try!  FfiConverterTypeRitmoDelVideo_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_constructor_ritmodelvideo_nuevo(
+        FfiConverterUInt32.lower(muestreo),
+        FfiConverterUInt32.lower(porSegundo),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+open func enPausa() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_en_pausa(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Se le dio un fotograma al codificador a la hora `ahora` y `entro`
+     * (o no: estaba atascado). Devuelve si ya es un atasco de los que no
+     * se pasan (diez segundos sin que entre ninguno): se corta el video.
+     */
+open func escrito(entro: Bool, ahora: Int64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_escrito(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(entro),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Lo que se puede dormir**, en 100 ns, hasta que [`RitmoDelVideo::paso`]
+     * cambie de opinion: entre 1 y 250 ms (en pausa, 250).
+     */
+open func espera(ahora: Int64, hayRetenido: Bool) -> Int64  {
+    return try!  FfiConverterInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_espera(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(ahora),
+        FfiConverterBool.lower(hayRetenido),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Donde acaba el video** a la hora `ahora`: donde acaba el sonido
+     * (o lo corrido sin pausas si va mudo). Ahi se cierra el ultimo
+     * fotograma, para que las dos pistas duren lo mismo.
+     */
+open func finalDelVideo(ahora: Int64) -> Int64  {
+    return try!  FfiConverterInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_final_del_video(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Una pantalla que se abrio y se volvio a caer**: si se le da otra
+     * vuelta (tres cada diez minutos) o ya no va a mejorar y se corta el
+     * video guardando lo que habia.
+     */
+open func otraVuelta(ahora: Int64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_otra_vuelta(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Que hacer a la hora `ahora`**, con un fotograma nuevo de la
+     * pantalla capturado a `hora_retenida` esperando (o ninguno). Si dice
+     * `Nuevo` o `Repetir`, se escribe en `instante`; si el reloj aun no lo
+     * puede fechar (esperando al sonido tras la pausa), dice `Esperar` y
+     * el fotograma se queda retenido: es la imagen mas nueva.
+     */
+open func paso(ahora: Int64, horaRetenida: Int64?) -> PasoDelVideo  {
+    return try!  FfiConverterTypePasoDelVideo_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_paso(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(ahora),
+        FfiConverterOptionInt64.lower(horaRetenida),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Pausa o sigue a la hora `ahora`. Al seguir, el atasco se cuenta de
+     * cero (una pausa larga no es un codificador atascado).
+     */
+open func pausar(pausa: Bool, ahora: Int64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_pausar(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(pausa),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * La pantalla volvio: el proximo fallo se intenta enseguida.
+     */
+open func reabierta()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_reabierta(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * **La pantalla se fue** (un monitor que se desconecta, el Mac que se
+     * duerme): si toca intentar abrirla otra vez a la hora `ahora` (cada
+     * tres segundos, el primero enseguida). Mientras, se repite la ultima
+     * imagen y el sonido no se corta.
+     */
+open func reabrirToca(ahora: Int64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_reabrir_toca(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Un bloque de sonido** de `marcos` muestras que empieza en
+     * `posicion`, llegado a la hora `ahora`: lo que se escribe de el
+     * (`None` si ya estaba todo escrito). Ancla el reloj.
+     */
+open func sonido(posicion: UInt64, marcos: UInt64, ahora: Int64) -> TramoDeSonido?  {
+    return try!  FfiConverterOptionTypeTramoDeSonido.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_sonido(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(posicion),
+        FfiConverterUInt64.lower(marcos),
+        FfiConverterInt64.lower(ahora),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * **Si el fotograma de verdad que llega a `t_nuevo` ocupa el sitio del
+     * repetido que aun espera en `t_pendiente`** (`ocupa_el_sitio_del_repetido`):
+     * el repetido se tira y el de verdad va en su instante, sin dejar un
+     * fotograma de un milisegundo.
+     */
+open func sustituyeAlRepetido(pendienteEsRepetido: Bool, tPendiente: Int64, tNuevo: Int64) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_method_ritmodelvideo_sustituye_al_repetido(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(pendienteEsRepetido),
+        FfiConverterInt64.lower(tPendiente),
+        FfiConverterInt64.lower(tNuevo),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRitmoDelVideo: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RitmoDelVideo
+
+    public static func lift(_ handle: UInt64) throws -> RitmoDelVideo {
+        return RitmoDelVideo(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RitmoDelVideo) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RitmoDelVideo {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RitmoDelVideo, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRitmoDelVideo_lift(_ handle: UInt64) throws -> RitmoDelVideo {
+    return try FfiConverterTypeRitmoDelVideo.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRitmoDelVideo_lower(_ value: RitmoDelVideo) -> UInt64 {
+    return FfiConverterTypeRitmoDelVideo.lower(value)
+}
+
+
+
+
+
+
+/**
  * La semana abierta en la ventana.
  */
 public protocol SemanaHorarioProtocol: AnyObject, Sendable {
@@ -17574,6 +18252,79 @@ public func FfiConverterTypeBloqueHorario_lower(_ value: BloqueHorario) -> RustB
 
 
 /**
+ * Lo que sale de una vuelta de la mezcla: mono `Float32` de `-1` a `1`.
+ */
+public struct BloqueMezclado: Equatable, Hashable {
+    /**
+     * Donde empieza, en muestras desde el principio de la grabacion.
+     */
+    public var posicion: UInt64
+    public var muestras: [Float]
+    /**
+     * El pico del bloque, de 0 a 1 (para el medidor).
+     */
+    public var pico: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Donde empieza, en muestras desde el principio de la grabacion.
+         */posicion: UInt64, muestras: [Float], 
+        /**
+         * El pico del bloque, de 0 a 1 (para el medidor).
+         */pico: Float) {
+        self.posicion = posicion
+        self.muestras = muestras
+        self.pico = pico
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BloqueMezclado: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBloqueMezclado: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BloqueMezclado {
+        return
+            try BloqueMezclado(
+                posicion: FfiConverterUInt64.read(from: &buf), 
+                muestras: FfiConverterSequenceFloat.read(from: &buf), 
+                pico: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BloqueMezclado, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.posicion, into: &buf)
+        FfiConverterSequenceFloat.write(value.muestras, into: &buf)
+        FfiConverterFloat.write(value.pico, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBloqueMezclado_lift(_ buf: RustBuffer) throws -> BloqueMezclado {
+    return try FfiConverterTypeBloqueMezclado.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBloqueMezclado_lower(_ value: BloqueMezclado) -> RustBuffer {
+    return FfiConverterTypeBloqueMezclado.lower(value)
+}
+
+
+/**
  * Los buferes de un grupo, tal como van a la tarjeta (ver la doc del
  * modulo).
  */
@@ -18301,6 +19052,99 @@ public func FfiConverterTypeCambioDeTurno_lift(_ buf: RustBuffer) throws -> Camb
 #endif
 public func FfiConverterTypeCambioDeTurno_lower(_ value: CambioDeTurno) -> RustBuffer {
     return FfiConverterTypeCambioDeTurno.lower(value)
+}
+
+
+/**
+ * Un intento de abrir el codificador: con que, a que tamano y con que bits.
+ */
+public struct CaminoDelVideo: Equatable, Hashable {
+    public var codificador: CodificadorVideo
+    /**
+     * El tamano del MP4, pares.
+     */
+    public var ancho: UInt32
+    public var alto: UInt32
+    public var porSegundo: UInt32
+    public var bitsMedia: UInt32
+    public var bitsPico: UInt32
+    /**
+     * Fotogramas entre dos fotogramas clave.
+     */
+    public var grupo: UInt32
+    public var bitsAudio: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(codificador: CodificadorVideo, 
+        /**
+         * El tamano del MP4, pares.
+         */ancho: UInt32, alto: UInt32, porSegundo: UInt32, bitsMedia: UInt32, bitsPico: UInt32, 
+        /**
+         * Fotogramas entre dos fotogramas clave.
+         */grupo: UInt32, bitsAudio: UInt32) {
+        self.codificador = codificador
+        self.ancho = ancho
+        self.alto = alto
+        self.porSegundo = porSegundo
+        self.bitsMedia = bitsMedia
+        self.bitsPico = bitsPico
+        self.grupo = grupo
+        self.bitsAudio = bitsAudio
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CaminoDelVideo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaminoDelVideo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaminoDelVideo {
+        return
+            try CaminoDelVideo(
+                codificador: FfiConverterTypeCodificadorVideo.read(from: &buf), 
+                ancho: FfiConverterUInt32.read(from: &buf), 
+                alto: FfiConverterUInt32.read(from: &buf), 
+                porSegundo: FfiConverterUInt32.read(from: &buf), 
+                bitsMedia: FfiConverterUInt32.read(from: &buf), 
+                bitsPico: FfiConverterUInt32.read(from: &buf), 
+                grupo: FfiConverterUInt32.read(from: &buf), 
+                bitsAudio: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaminoDelVideo, into buf: inout [UInt8]) {
+        FfiConverterTypeCodificadorVideo.write(value.codificador, into: &buf)
+        FfiConverterUInt32.write(value.ancho, into: &buf)
+        FfiConverterUInt32.write(value.alto, into: &buf)
+        FfiConverterUInt32.write(value.porSegundo, into: &buf)
+        FfiConverterUInt32.write(value.bitsMedia, into: &buf)
+        FfiConverterUInt32.write(value.bitsPico, into: &buf)
+        FfiConverterUInt32.write(value.grupo, into: &buf)
+        FfiConverterUInt32.write(value.bitsAudio, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaminoDelVideo_lift(_ buf: RustBuffer) throws -> CaminoDelVideo {
+    return try FfiConverterTypeCaminoDelVideo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaminoDelVideo_lower(_ value: CaminoDelVideo) -> RustBuffer {
+    return FfiConverterTypeCaminoDelVideo.lower(value)
 }
 
 
@@ -20696,7 +21540,8 @@ public func FfiConverterTypeCopiaHoja_lower(_ value: CopiaHoja) -> RustBuffer {
 
 
 /**
- * Una cosa de una pestana.
+ * Una cosa de una pestana: un mensaje entero o, en «Fotos», una foto de
+ * una nota rica (`pixpin_ui::info::Cosa`).
  */
 public struct CosaDeLaFicha: Equatable, Hashable {
     public var mensaje: MensajeChat
@@ -20707,9 +21552,24 @@ public struct CosaDeLaFicha: Equatable, Hashable {
     public var posicion: UInt64
     public var esVideo: Bool
     /**
-     * El primer enlace de su texto, si lo lleva.
+     * El primer enlace de su texto, si lo lleva y es un mensaje entero: la
+     * foto de una nota es una foto aunque su nota lleve un enlace.
      */
     public var enlace: EnlaceFicha?
+    /**
+     * En una nota rica, que foto suya es (en el orden de su burbuja);
+     * `None`, el mensaje entero.
+     */
+    public var foto: UInt32?
+    /**
+     * El fichero de esa foto en este aparato, solo si esta.
+     */
+    public var rutaFoto: String?
+    /**
+     * Lo que dice de esa foto su alt, sin el ancho del editor
+     * (`planta|300`): su nombre en la previa. Vacio en un mensaje entero.
+     */
+    public var alt: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -20719,12 +21579,27 @@ public struct CosaDeLaFicha: Equatable, Hashable {
          * «Ver en el chat» salta a ella.
          */posicion: UInt64, esVideo: Bool, 
         /**
-         * El primer enlace de su texto, si lo lleva.
-         */enlace: EnlaceFicha?) {
+         * El primer enlace de su texto, si lo lleva y es un mensaje entero: la
+         * foto de una nota es una foto aunque su nota lleve un enlace.
+         */enlace: EnlaceFicha?, 
+        /**
+         * En una nota rica, que foto suya es (en el orden de su burbuja);
+         * `None`, el mensaje entero.
+         */foto: UInt32?, 
+        /**
+         * El fichero de esa foto en este aparato, solo si esta.
+         */rutaFoto: String?, 
+        /**
+         * Lo que dice de esa foto su alt, sin el ancho del editor
+         * (`planta|300`): su nombre en la previa. Vacio en un mensaje entero.
+         */alt: String) {
         self.mensaje = mensaje
         self.posicion = posicion
         self.esVideo = esVideo
         self.enlace = enlace
+        self.foto = foto
+        self.rutaFoto = rutaFoto
+        self.alt = alt
     }
 
     
@@ -20746,7 +21621,10 @@ public struct FfiConverterTypeCosaDeLaFicha: FfiConverterRustBuffer {
                 mensaje: FfiConverterTypeMensajeChat.read(from: &buf), 
                 posicion: FfiConverterUInt64.read(from: &buf), 
                 esVideo: FfiConverterBool.read(from: &buf), 
-                enlace: FfiConverterOptionTypeEnlaceFicha.read(from: &buf)
+                enlace: FfiConverterOptionTypeEnlaceFicha.read(from: &buf), 
+                foto: FfiConverterOptionUInt32.read(from: &buf), 
+                rutaFoto: FfiConverterOptionString.read(from: &buf), 
+                alt: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -20755,6 +21633,9 @@ public struct FfiConverterTypeCosaDeLaFicha: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.posicion, into: &buf)
         FfiConverterBool.write(value.esVideo, into: &buf)
         FfiConverterOptionTypeEnlaceFicha.write(value.enlace, into: &buf)
+        FfiConverterOptionUInt32.write(value.foto, into: &buf)
+        FfiConverterOptionString.write(value.rutaFoto, into: &buf)
+        FfiConverterString.write(value.alt, into: &buf)
     }
 }
 
@@ -23043,8 +23924,8 @@ public struct FichaDelChatLeida: Equatable, Hashable {
      */
     public var pestanas: [PestanaFicha]
     /**
-     * Con la que se abre: la primera que tenga algo; en un chat vacio,
-     * «Todo», que dice que no hay nada.
+     * Con la que se abre: la primera que tenga algo (los proyectos, casi
+     * siempre); sin nada, «Todo», que dice que no hay nada.
      */
     public var primera: SeccionFicha
     /**
@@ -23064,8 +23945,8 @@ public struct FichaDelChatLeida: Equatable, Hashable {
          * Las que tienen algo (y la puesta, aunque se haya vaciado), en `ORDEN`.
          */pestanas: [PestanaFicha], 
         /**
-         * Con la que se abre: la primera que tenga algo; en un chat vacio,
-         * «Todo», que dice que no hay nada.
+         * Con la que se abre: la primera que tenga algo (los proyectos, casi
+         * siempre); sin nada, «Todo», que dice que no hay nada.
          */primera: SeccionFicha, 
         /**
          * Cuantas cosas tiene el chat («24 cosas»).
@@ -24274,6 +25155,79 @@ public func FfiConverterTypeFotoNueva_lift(_ buf: RustBuffer) throws -> FotoNuev
 #endif
 public func FfiConverterTypeFotoNueva_lower(_ value: FotoNueva) -> RustBuffer {
     return FfiConverterTypeFotoNueva.lower(value)
+}
+
+
+/**
+ * Una fuente tal cual la entrega el sistema.
+ */
+public struct FuenteDeMezcla: Equatable, Hashable {
+    public var papel: PapelDeAudio
+    /**
+     * Su muestreo (el de la tarjeta: 44 100, 48 000, 96 000...).
+     */
+    public var muestreo: UInt32
+    /**
+     * Sus canales.
+     */
+    public var canales: UInt16
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(papel: PapelDeAudio, 
+        /**
+         * Su muestreo (el de la tarjeta: 44 100, 48 000, 96 000...).
+         */muestreo: UInt32, 
+        /**
+         * Sus canales.
+         */canales: UInt16) {
+        self.papel = papel
+        self.muestreo = muestreo
+        self.canales = canales
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FuenteDeMezcla: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFuenteDeMezcla: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FuenteDeMezcla {
+        return
+            try FuenteDeMezcla(
+                papel: FfiConverterTypePapelDeAudio.read(from: &buf), 
+                muestreo: FfiConverterUInt32.read(from: &buf), 
+                canales: FfiConverterUInt16.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FuenteDeMezcla, into buf: inout [UInt8]) {
+        FfiConverterTypePapelDeAudio.write(value.papel, into: &buf)
+        FfiConverterUInt32.write(value.muestreo, into: &buf)
+        FfiConverterUInt16.write(value.canales, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFuenteDeMezcla_lift(_ buf: RustBuffer) throws -> FuenteDeMezcla {
+    return try FfiConverterTypeFuenteDeMezcla.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFuenteDeMezcla_lower(_ value: FuenteDeMezcla) -> RustBuffer {
+    return FfiConverterTypeFuenteDeMezcla.lower(value)
 }
 
 
@@ -30495,6 +31449,68 @@ public func FfiConverterTypePasoAutomatizacion_lower(_ value: PasoAutomatizacion
 
 
 /**
+ * Que hacer con el video ahora: la accion, el instante del MP4 en que va
+ * (100 ns) y lo que dura un fotograma al ritmo maximo.
+ */
+public struct PasoDelVideo: Equatable, Hashable {
+    public var accion: AccionDelVideo
+    public var instante: Int64
+    public var duracion: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(accion: AccionDelVideo, instante: Int64, duracion: Int64) {
+        self.accion = accion
+        self.instante = instante
+        self.duracion = duracion
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PasoDelVideo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasoDelVideo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasoDelVideo {
+        return
+            try PasoDelVideo(
+                accion: FfiConverterTypeAccionDelVideo.read(from: &buf), 
+                instante: FfiConverterInt64.read(from: &buf), 
+                duracion: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasoDelVideo, into buf: inout [UInt8]) {
+        FfiConverterTypeAccionDelVideo.write(value.accion, into: &buf)
+        FfiConverterInt64.write(value.instante, into: &buf)
+        FfiConverterInt64.write(value.duracion, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasoDelVideo_lift(_ buf: RustBuffer) throws -> PasoDelVideo {
+    return try FfiConverterTypePasoDelVideo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasoDelVideo_lower(_ value: PasoDelVideo) -> RustBuffer {
+    return FfiConverterTypePasoDelVideo.lower(value)
+}
+
+
+/**
  * Lo que queda por leer de los documentos.
  */
 public struct PendientesDeTexto: Equatable, Hashable {
@@ -31241,6 +32257,81 @@ public func FfiConverterTypeProyectoBorrado_lift(_ buf: RustBuffer) throws -> Pr
 #endif
 public func FfiConverterTypeProyectoBorrado_lower(_ value: ProyectoBorrado) -> RustBuffer {
     return FfiConverterTypeProyectoBorrado.lower(value)
+}
+
+
+/**
+ * Un proyecto de la pestana «Proyectos».
+ */
+public struct ProyectoDeLaFicha: Equatable, Hashable {
+    public var ficha: FichaChat
+    /**
+     * El de este chat: va marcado («Este chat») y pulsarlo no sale de la
+     * isla, lleva a su «Galeria».
+     */
+    public var este: Bool
+    /**
+     * Guardado en un disco que ahora no esta: no se puede abrir.
+     */
+    public var disponible: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(ficha: FichaChat, 
+        /**
+         * El de este chat: va marcado («Este chat») y pulsarlo no sale de la
+         * isla, lleva a su «Galeria».
+         */este: Bool, 
+        /**
+         * Guardado en un disco que ahora no esta: no se puede abrir.
+         */disponible: Bool) {
+        self.ficha = ficha
+        self.este = este
+        self.disponible = disponible
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ProyectoDeLaFicha: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProyectoDeLaFicha: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProyectoDeLaFicha {
+        return
+            try ProyectoDeLaFicha(
+                ficha: FfiConverterTypeFichaChat.read(from: &buf), 
+                este: FfiConverterBool.read(from: &buf), 
+                disponible: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProyectoDeLaFicha, into buf: inout [UInt8]) {
+        FfiConverterTypeFichaChat.write(value.ficha, into: &buf)
+        FfiConverterBool.write(value.este, into: &buf)
+        FfiConverterBool.write(value.disponible, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProyectoDeLaFicha_lift(_ buf: RustBuffer) throws -> ProyectoDeLaFicha {
+    return try FfiConverterTypeProyectoDeLaFicha.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProyectoDeLaFicha_lower(_ value: ProyectoDeLaFicha) -> RustBuffer {
+    return FfiConverterTypeProyectoDeLaFicha.lower(value)
 }
 
 
@@ -34384,6 +35475,122 @@ public func FfiConverterTypeTintaDePantalla_lower(_ value: TintaDePantalla) -> R
 
 
 /**
+ * Un trozo de lo buscado dentro de un nombre, en unidades UTF-16 (las de
+ * `NSString`): va en negrita.
+ */
+public struct TramoDeLaFicha: Equatable, Hashable {
+    public var inicio: UInt32
+    public var largo: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(inicio: UInt32, largo: UInt32) {
+        self.inicio = inicio
+        self.largo = largo
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TramoDeLaFicha: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTramoDeLaFicha: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TramoDeLaFicha {
+        return
+            try TramoDeLaFicha(
+                inicio: FfiConverterUInt32.read(from: &buf), 
+                largo: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TramoDeLaFicha, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.inicio, into: &buf)
+        FfiConverterUInt32.write(value.largo, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTramoDeLaFicha_lift(_ buf: RustBuffer) throws -> TramoDeLaFicha {
+    return try FfiConverterTypeTramoDeLaFicha.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTramoDeLaFicha_lower(_ value: TramoDeLaFicha) -> RustBuffer {
+    return FfiConverterTypeTramoDeLaFicha.lower(value)
+}
+
+
+/**
+ * Lo que se escribe de un bloque de sonido: se saltan `salto` muestras del
+ * principio (pisaban lo ya escrito) y lo demas va en `desde`.
+ */
+public struct TramoDeSonido: Equatable, Hashable {
+    public var salto: UInt64
+    public var desde: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(salto: UInt64, desde: UInt64) {
+        self.salto = salto
+        self.desde = desde
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TramoDeSonido: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTramoDeSonido: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TramoDeSonido {
+        return
+            try TramoDeSonido(
+                salto: FfiConverterUInt64.read(from: &buf), 
+                desde: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TramoDeSonido, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.salto, into: &buf)
+        FfiConverterUInt64.write(value.desde, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTramoDeSonido_lift(_ buf: RustBuffer) throws -> TramoDeSonido {
+    return try FfiConverterTypeTramoDeSonido.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTramoDeSonido_lower(_ value: TramoDeSonido) -> RustBuffer {
+    return FfiConverterTypeTramoDeSonido.lower(value)
+}
+
+
+/**
  * Un toque de una formula, en UTF-16 dentro de la formula sin dolares.
  */
 public struct TramoFormula: Equatable, Hashable {
@@ -34852,104 +36059,6 @@ public func FfiConverterTypeValorDeCampo_lift(_ buf: RustBuffer) throws -> Valor
 #endif
 public func FfiConverterTypeValorDeCampo_lower(_ value: ValorDeCampo) -> RustBuffer {
     return FfiConverterTypeValorDeCampo.lower(value)
-}
-
-
-/**
- * Como se graba el video de una clase en una pantalla: lo que Windows fija
- * en `grabar_clase/video.rs`.
- */
-public struct VideoDeLaClase: Equatable, Hashable {
-    /**
-     * El tamano del MP4, en pixeles (pares).
-     */
-    public var ancho: UInt32
-    public var alto: UInt32
-    public var porSegundo: UInt32
-    /**
-     * Del H.264.
-     */
-    public var bitsPorSegundo: UInt32
-    /**
-     * Del AAC (mono, al muestreo de la nota).
-     */
-    public var bitsAudio: UInt32
-    /**
-     * Lo que se espera a la primera imagen antes de empezar en negro.
-     */
-    public var esperaPrimeroMs: Int64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * El tamano del MP4, en pixeles (pares).
-         */ancho: UInt32, alto: UInt32, porSegundo: UInt32, 
-        /**
-         * Del H.264.
-         */bitsPorSegundo: UInt32, 
-        /**
-         * Del AAC (mono, al muestreo de la nota).
-         */bitsAudio: UInt32, 
-        /**
-         * Lo que se espera a la primera imagen antes de empezar en negro.
-         */esperaPrimeroMs: Int64) {
-        self.ancho = ancho
-        self.alto = alto
-        self.porSegundo = porSegundo
-        self.bitsPorSegundo = bitsPorSegundo
-        self.bitsAudio = bitsAudio
-        self.esperaPrimeroMs = esperaPrimeroMs
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension VideoDeLaClase: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeVideoDeLaClase: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VideoDeLaClase {
-        return
-            try VideoDeLaClase(
-                ancho: FfiConverterUInt32.read(from: &buf), 
-                alto: FfiConverterUInt32.read(from: &buf), 
-                porSegundo: FfiConverterUInt32.read(from: &buf), 
-                bitsPorSegundo: FfiConverterUInt32.read(from: &buf), 
-                bitsAudio: FfiConverterUInt32.read(from: &buf), 
-                esperaPrimeroMs: FfiConverterInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: VideoDeLaClase, into buf: inout [UInt8]) {
-        FfiConverterUInt32.write(value.ancho, into: &buf)
-        FfiConverterUInt32.write(value.alto, into: &buf)
-        FfiConverterUInt32.write(value.porSegundo, into: &buf)
-        FfiConverterUInt32.write(value.bitsPorSegundo, into: &buf)
-        FfiConverterUInt32.write(value.bitsAudio, into: &buf)
-        FfiConverterInt64.write(value.esperaPrimeroMs, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeVideoDeLaClase_lift(_ buf: RustBuffer) throws -> VideoDeLaClase {
-    return try FfiConverterTypeVideoDeLaClase.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeVideoDeLaClase_lower(_ value: VideoDeLaClase) -> RustBuffer {
-    return FfiConverterTypeVideoDeLaClase.lower(value)
 }
 
 
@@ -35715,6 +36824,91 @@ public func FfiConverterTypeAccionCronometro_lift(_ buf: RustBuffer) throws -> A
 #endif
 public func FfiConverterTypeAccionCronometro_lower(_ value: AccionCronometro) -> RustBuffer {
     return FfiConverterTypeAccionCronometro.lower(value)
+}
+
+
+
+/**
+ * Que hacer con el video ahora.
+ */
+
+public enum AccionDelVideo: Equatable, Hashable {
+    
+    /**
+     * Escribir el fotograma nuevo que llego de la pantalla.
+     */
+    case nuevo
+    /**
+     * Repetir el ultimo (o uno negro si aun no hay ninguno).
+     */
+    case repetir
+    /**
+     * Nada todavia.
+     */
+    case esperar
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AccionDelVideo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAccionDelVideo: FfiConverterRustBuffer {
+    typealias SwiftType = AccionDelVideo
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AccionDelVideo {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .nuevo
+        
+        case 2: return .repetir
+        
+        case 3: return .esperar
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AccionDelVideo, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .nuevo:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .repetir:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .esperar:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAccionDelVideo_lift(_ buf: RustBuffer) throws -> AccionDelVideo {
+    return try FfiConverterTypeAccionDelVideo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAccionDelVideo_lower(_ value: AccionDelVideo) -> RustBuffer {
+    return FfiConverterTypeAccionDelVideo.lower(value)
 }
 
 
@@ -37277,6 +38471,91 @@ public func FfiConverterTypeClaseReflujo_lift(_ buf: RustBuffer) throws -> Clase
 #endif
 public func FfiConverterTypeClaseReflujo_lower(_ value: ClaseReflujo) -> RustBuffer {
     return FfiConverterTypeClaseReflujo.lower(value)
+}
+
+
+
+/**
+ * Con que se codifica (`pixpin_motor_video::Codificador`).
+ */
+
+public enum CodificadorVideo: Equatable, Hashable {
+    
+    /**
+     * El H.264 de la grafica (VideoToolbox por hardware).
+     */
+    case hardware
+    /**
+     * El H.264 por software, con la imagen aun encogida en la GPU.
+     */
+    case software
+    /**
+     * El modo sencillo: por software y en «Ligero» (el ultimo recurso).
+     */
+    case cpu
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CodificadorVideo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCodificadorVideo: FfiConverterRustBuffer {
+    typealias SwiftType = CodificadorVideo
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CodificadorVideo {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .hardware
+        
+        case 2: return .software
+        
+        case 3: return .cpu
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CodificadorVideo, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .hardware:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .software:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .cpu:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCodificadorVideo_lift(_ buf: RustBuffer) throws -> CodificadorVideo {
+    return try FfiConverterTypeCodificadorVideo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCodificadorVideo_lower(_ value: CodificadorVideo) -> RustBuffer {
+    return FfiConverterTypeCodificadorVideo.lower(value)
 }
 
 
@@ -40187,6 +41466,75 @@ public func FfiConverterTypeOrdenNota_lower(_ value: OrdenNota) -> RustBuffer {
 
 
 /**
+ * De quien es una fuente: el realce y el paso alto son solo del microfono.
+ */
+
+public enum PapelDeAudio: Equatable, Hashable {
+    
+    case microfono
+    case equipo
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PapelDeAudio: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePapelDeAudio: FfiConverterRustBuffer {
+    typealias SwiftType = PapelDeAudio
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PapelDeAudio {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .microfono
+        
+        case 2: return .equipo
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PapelDeAudio, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .microfono:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .equipo:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePapelDeAudio_lift(_ buf: RustBuffer) throws -> PapelDeAudio {
+    return try FfiConverterTypePapelDeAudio.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePapelDeAudio_lower(_ value: PapelDeAudio) -> RustBuffer {
+    return FfiConverterTypePapelDeAudio.lower(value)
+}
+
+
+
+/**
  * Lo que toca hacer ahora ([`Reloj::siguiente`]).
  */
 
@@ -40281,6 +41629,91 @@ public func FfiConverterTypePasoAuto_lift(_ buf: RustBuffer) throws -> PasoAuto 
 #endif
 public func FfiConverterTypePasoAuto_lower(_ value: PasoAuto) -> RustBuffer {
     return FfiConverterTypePasoAuto.lower(value)
+}
+
+
+
+/**
+ * Con que calidad se graba (`pixpin_motor_video::Perfil`).
+ */
+
+public enum PerfilVideo: Equatable, Hashable {
+    
+    /**
+     * 720p a 10 fps: lo minimo para leer una diapositiva.
+     */
+    case ligero
+    /**
+     * 1080p a 15 fps: el de salida.
+     */
+    case normal
+    /**
+     * La pantalla tal cual (hasta 4K) a 30 fps.
+     */
+    case nitido
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PerfilVideo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePerfilVideo: FfiConverterRustBuffer {
+    typealias SwiftType = PerfilVideo
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PerfilVideo {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .ligero
+        
+        case 2: return .normal
+        
+        case 3: return .nitido
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PerfilVideo, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .ligero:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .normal:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .nitido:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePerfilVideo_lift(_ buf: RustBuffer) throws -> PerfilVideo {
+    return try FfiConverterTypePerfilVideo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePerfilVideo_lower(_ value: PerfilVideo) -> RustBuffer {
+    return FfiConverterTypePerfilVideo.lower(value)
 }
 
 
@@ -40581,6 +42014,10 @@ public func FfiConverterTypeRellenoEstilo_lower(_ value: RellenoEstilo) -> RustB
 
 public enum SeccionFicha: Equatable, Hashable {
     
+    /**
+     * Los proyectos de la lista de chats: solo de la interfaz.
+     */
+    case proyectos
     case galeria
     case todo
     case fotos
@@ -40612,25 +42049,27 @@ public struct FfiConverterTypeSeccionFicha: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .galeria
+        case 1: return .proyectos
         
-        case 2: return .todo
+        case 2: return .galeria
         
-        case 3: return .fotos
+        case 3: return .todo
         
-        case 4: return .videos
+        case 4: return .fotos
         
-        case 5: return .archivos
+        case 5: return .videos
         
-        case 6: return .enlaces
+        case 6: return .archivos
         
-        case 7: return .voz
+        case 7: return .enlaces
         
-        case 8: return .dibujos
+        case 8: return .voz
         
-        case 9: return .fijados
+        case 9: return .dibujos
         
-        case 10: return .buzon
+        case 10: return .fijados
+        
+        case 11: return .buzon
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -40640,44 +42079,48 @@ public struct FfiConverterTypeSeccionFicha: FfiConverterRustBuffer {
         switch value {
         
         
-        case .galeria:
+        case .proyectos:
             writeInt(&buf, Int32(1))
         
         
-        case .todo:
+        case .galeria:
             writeInt(&buf, Int32(2))
         
         
-        case .fotos:
+        case .todo:
             writeInt(&buf, Int32(3))
         
         
-        case .videos:
+        case .fotos:
             writeInt(&buf, Int32(4))
         
         
-        case .archivos:
+        case .videos:
             writeInt(&buf, Int32(5))
         
         
-        case .enlaces:
+        case .archivos:
             writeInt(&buf, Int32(6))
         
         
-        case .voz:
+        case .enlaces:
             writeInt(&buf, Int32(7))
         
         
-        case .dibujos:
+        case .voz:
             writeInt(&buf, Int32(8))
         
         
-        case .fijados:
+        case .dibujos:
             writeInt(&buf, Int32(9))
         
         
-        case .buzon:
+        case .fijados:
             writeInt(&buf, Int32(10))
+        
+        
+        case .buzon:
+            writeInt(&buf, Int32(11))
         
         }
     }
@@ -43446,6 +44889,30 @@ fileprivate struct FfiConverterOptionTypeTextoElegido: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTramoDeSonido: FfiConverterRustBuffer {
+    typealias SwiftType = TramoDeSonido?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTramoDeSonido.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTramoDeSonido.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTransicionDiapositiva: FfiConverterRustBuffer {
     typealias SwiftType = TransicionDiapositiva?
 
@@ -44203,6 +45670,31 @@ fileprivate struct FfiConverterSequenceTypeCambioDeTurno: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCambioDeTurno.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCaminoDelVideo: FfiConverterRustBuffer {
+    typealias SwiftType = [CaminoDelVideo]
+
+    public static func write(_ value: [CaminoDelVideo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCaminoDelVideo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CaminoDelVideo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CaminoDelVideo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCaminoDelVideo.read(from: &buf))
         }
         return seq
     }
@@ -45311,6 +46803,31 @@ fileprivate struct FfiConverterSequenceTypeFotoNueva: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFuenteDeMezcla: FfiConverterRustBuffer {
+    typealias SwiftType = [FuenteDeMezcla]
+
+    public static func write(_ value: [FuenteDeMezcla], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFuenteDeMezcla.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FuenteDeMezcla] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FuenteDeMezcla]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFuenteDeMezcla.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeGastoMini: FfiConverterRustBuffer {
     typealias SwiftType = [GastoMini]
 
@@ -46361,6 +47878,31 @@ fileprivate struct FfiConverterSequenceTypeProyectoBorrado: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeProyectoDeLaFicha: FfiConverterRustBuffer {
+    typealias SwiftType = [ProyectoDeLaFicha]
+
+    public static func write(_ value: [ProyectoDeLaFicha], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeProyectoDeLaFicha.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProyectoDeLaFicha] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ProyectoDeLaFicha]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeProyectoDeLaFicha.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePuntoPlano: FfiConverterRustBuffer {
     typealias SwiftType = [PuntoPlano]
 
@@ -46753,6 +48295,31 @@ fileprivate struct FfiConverterSequenceTypeTextoHallado: FfiConverterRustBuffer 
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeTextoHallado.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTramoDeLaFicha: FfiConverterRustBuffer {
+    typealias SwiftType = [TramoDeLaFicha]
+
+    public static func write(_ value: [TramoDeLaFicha], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTramoDeLaFicha.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TramoDeLaFicha] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TramoDeLaFicha]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTramoDeLaFicha.read(from: &buf))
         }
         return seq
     }
@@ -47720,36 +49287,6 @@ public func capturaDeLaClaseEn(tiempos: [Int64], posicionMs: Int64) -> UInt32?  
 })
 }
 /**
- * **Cuantos fotogramas del video de la clase tocan** tras `muestras` de
- * sonido a `muestreo`: el sonido es el reloj del video, asi que las dos
- * pistas no se separan y en pausa (no llega sonido) no se escribe ninguno.
- * Si ya se llevaban `hechos` y tocan mas, se escribe solo el ultimo, que
- * empieza en `debidos - 1` (en decimas de segundo); el primero, en el cero
- * aunque llegue tarde (`escala::tramo_del_fotograma`).
- */
-public func fotogramasDebidosDeLaClase(muestras: UInt64, muestreo: UInt32) -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_pixpin_nucleo_fn_func_fotogramas_debidos_de_la_clase(
-        FfiConverterUInt64.lower(muestras),
-        FfiConverterUInt32.lower(muestreo),uniffiCallStatus
-    )
-})
-}
-/**
- * **El video de una clase en una pantalla de `ancho`x`alto` pixeles**: a
- * 10 fotogramas por segundo y como mucho 1280x720, como Windows.
- */
-public func videoDeLaClase(anchoPantalla: UInt32, altoPantalla: UInt32) -> VideoDeLaClase  {
-    return try!  FfiConverterTypeVideoDeLaClase_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_pixpin_nucleo_fn_func_video_de_la_clase(
-        FfiConverterUInt32.lower(anchoPantalla),
-        FfiConverterUInt32.lower(altoPantalla),uniffiCallStatus
-    )
-})
-}
-/**
  * La etiqueta (TXT `g`) de quien invita con ese codigo. PBKDF2: fuera del
  * hilo de la interfaz.
  */
@@ -48191,6 +49728,64 @@ public func tipoDeServicioRecibir() -> String  {
 })
 }
 /**
+ * Cuantas columnas tiene la rejilla de la isla en `ancho` puntos: de tres a
+ * cinco, las que quepan con su celda minima (`columnas_isla`).
+ */
+public func columnasDeLaFicha(ancho: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_columnas_de_la_ficha(
+        FfiConverterUInt32.lower(ancho),uniffiCallStatus
+    )
+})
+}
+/**
+ * Lo que dura un video o una nota de voz en su insignia: «0:07», «12:30»,
+ * «1:02:03»; sin duracion, nada (`duracion_corta`).
+ */
+public func duracionEnLaFicha(ms: Int64) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_duracion_en_la_ficha(
+        FfiConverterInt64.lower(ms),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Lo buscado en negrita** dentro de `texto` (`negritas` de Windows): los
+ * trozos que casan, en UTF-16. Sin nada buscado, ninguno.
+ */
+public func negritasDeLaFicha(texto: String, buscado: String) -> [TramoDeLaFicha]  {
+    return try!  FfiConverterSequenceTypeTramoDeLaFicha.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_negritas_de_la_ficha(
+        FfiConverterString.lower(texto),
+        FfiConverterString.lower(buscado),uniffiCallStatus
+    )
+})
+}
+/**
+ * **A que cosa va el foco con las flechas** desde la `actual`
+ * (`Lista::vecina` de Windows): a los lados, la de antes o la de despues;
+ * arriba y abajo, la de la fila de encima o de debajo que caiga mas cerca
+ * en horizontal, saltando los rotulos de mes. `meses` lleva la clave del
+ * mes de cada cosa, en el orden en que se ensenan (en los proyectos, todas
+ * iguales: no van por meses); `ancho`, el del contenido.
+ */
+public func vecinaEnLaFicha(meses: [Int64], cuadricula: Bool, ancho: UInt32, actual: UInt32, dx: Int32, dy: Int32) -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_vecina_en_la_ficha(
+        FfiConverterSequenceInt64.lower(meses),
+        FfiConverterBool.lower(cuadricula),
+        FfiConverterUInt32.lower(ancho),
+        FfiConverterUInt32.lower(actual),
+        FfiConverterInt32.lower(dx),
+        FfiConverterInt32.lower(dy),uniffiCallStatus
+    )
+})
+}
+/**
  * **A cuantos pixeles de ancho se pinta cada pagina**, repartiendo
  * [`PIXELES_EN_TOTAL`] en proporcion a su papel, con los topes de ancho en
  * la escala (no en cada pagina).
@@ -48422,6 +50017,16 @@ public func palabrasMagicasDe(guardadas: String?, app: String) -> [String]  {
     uniffi_pixpin_nucleo_fn_func_palabras_magicas_de(
         FfiConverterOptionString.lower(guardadas),
         FfiConverterString.lower(app),uniffiCallStatus
+    )
+})
+}
+/**
+ * Cada cuanto se pide [`MezclaDeAudio::mezclar`], en milisegundos.
+ */
+public func periodoDeLaMezclaMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_periodo_de_la_mezcla_ms(uniffiCallStatus
     )
 })
 }
@@ -48908,6 +50513,107 @@ public func claseDeModelo(ruta: String) -> ClaseDeModelo  {
         uniffiCallStatus in
     uniffi_pixpin_nucleo_fn_func_clase_de_modelo(
         FfiConverterString.lower(ruta),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Lo que se intenta, en orden**, para grabar una pantalla de
+ * `ancho`x`alto` pixeles con `perfil`: la grafica (si `hay_hardware`) a
+ * las medidas del perfil y, si no arranca, a 1080p y 720p; el procesador a
+ * las medidas del perfil; y el modo sencillo («Ligero» por software). El
+ * primero que abre es el que graba.
+ */
+public func caminosDelVideo(perfil: PerfilVideo, anchoPantalla: UInt32, altoPantalla: UInt32, hayHardware: Bool) -> [CaminoDelVideo]  {
+    return try!  FfiConverterSequenceTypeCaminoDelVideo.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_caminos_del_video(
+        FfiConverterTypePerfilVideo_lower(perfil),
+        FfiConverterUInt32.lower(anchoPantalla),
+        FfiConverterUInt32.lower(altoPantalla),
+        FfiConverterBool.lower(hayHardware),uniffiCallStatus
+    )
+})
+}
+/**
+ * La clave de un perfil (`ligero`, `normal`, `nitido`).
+ */
+public func claveDelPerfil(perfil: PerfilVideo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_clave_del_perfil(
+        FfiConverterTypePerfilVideo_lower(perfil),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Que pantalla grabar al volver a abrirla**: la de antes si sigue
+ * conectada, o la principal (`reapertura::elegir_monitor`: en una clase
+ * es mejor seguir grabando otra pantalla que una imagen congelada).
+ */
+public func pantallaDelVideo(antes: UInt32, disponibles: [UInt32], principal: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_pantalla_del_video(
+        FfiConverterUInt32.lower(antes),
+        FfiConverterSequenceUInt32.lower(disponibles),
+        FfiConverterUInt32.lower(principal),uniffiCallStatus
+    )
+})
+}
+/**
+ * El perfil de una clave guardada; lo raro, «Normal».
+ */
+public func perfilDeClave(clave: String) -> PerfilVideo  {
+    return try!  FfiConverterTypePerfilVideo_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_perfil_de_clave(
+        FfiConverterString.lower(clave),uniffiCallStatus
+    )
+})
+}
+/**
+ * El siguiente perfil al pulsar la ficha de la calidad.
+ */
+public func perfilDelVideoSiguiente(perfil: PerfilVideo) -> PerfilVideo  {
+    return try!  FfiConverterTypePerfilVideo_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_perfil_del_video_siguiente(
+        FfiConverterTypePerfilVideo_lower(perfil),uniffiCallStatus
+    )
+})
+}
+/**
+ * Lo que pesa cada calidad, para la pista con el raton encima
+ * (`clase-calidad-*-pista`).
+ */
+public func pistaDeCalidad(perfil: PerfilVideo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_pista_de_calidad(
+        FfiConverterTypePerfilVideo_lower(perfil),uniffiCallStatus
+    )
+})
+}
+/**
+ * El rotulo de la ficha de la calidad (`clase-calidad-ligero`...).
+ */
+public func rotuloDeCalidad(perfil: PerfilVideo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_rotulo_de_calidad(
+        FfiConverterTypePerfilVideo_lower(perfil),uniffiCallStatus
+    )
+})
+}
+/**
+ * «Video con la grafica…», lo que dice la barra al empezar
+ * (`clase-video-con` con `clase-codificador-*`).
+ */
+public func videoCon(codificador: CodificadorVideo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pixpin_nucleo_fn_func_video_con(
+        FfiConverterTypeCodificadorVideo_lower(codificador),uniffiCallStatus
     )
 })
 }
@@ -49498,12 +51204,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_func_captura_de_la_clase_en() != 25017) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pixpin_nucleo_checksum_func_fotogramas_debidos_de_la_clase() != 59488) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_pixpin_nucleo_checksum_func_video_de_la_clase() != 48572) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_pixpin_nucleo_checksum_func_etiqueta_de_invitacion() != 50993) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -49606,6 +51306,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_func_tipo_de_servicio_recibir() != 11481) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_func_columnas_de_la_ficha() != 58442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_duracion_en_la_ficha() != 15263) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_negritas_de_la_ficha() != 28984) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_vecina_en_la_ficha() != 26888) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_func_anchos_para_fusionar() != 21213) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -49664,6 +51376,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_palabras_magicas_de() != 23745) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_periodo_de_la_mezcla_ms() != 50738) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_mini_alarma_cambiar() != 58697) {
@@ -49781,6 +51496,30 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_clase_de_modelo() != 2579) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_caminos_del_video() != 43599) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_clave_del_perfil() != 16947) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_pantalla_del_video() != 32436) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_perfil_de_clave() != 4601) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_perfil_del_video_siguiente() != 16886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_pista_de_calidad() != 53474) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_rotulo_de_calidad() != 1330) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_func_video_con() != 55004) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_func_album_de_nota() != 59997) {
@@ -50308,10 +52047,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_recibir_envio_preguntando() != 28836) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pixpin_nucleo_checksum_method_nucleo_cosas_de_la_ficha() != 24274) {
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_cosas_de_la_ficha() != 8252) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_ficha_del_chat() != 39044) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_nucleo_proyectos_de_la_ficha() != 65358) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_nucleo_fusionar_paginas() != 41663) {
@@ -51226,6 +52968,33 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_method_marcasdellienzo_volando() != 10593) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_empujar() != 63208) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_en_pausa() != 29109) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_llevado_ms() != 25661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_mezclar() != 939) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_muestras() != 22204) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_muestreo() != 58527) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_nivel() != 53243) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_pausar() != 19800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_mezcladeaudio_terminar() != 2157) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_method_modelo3dapple_camara_de_vista() != 30250) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -51269,6 +53038,39 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_modelo3dapple_vistas_guardadas() != 45673) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_en_pausa() != 49111) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_escrito() != 63220) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_espera() != 27937) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_final_del_video() != 5692) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_otra_vuelta() != 34723) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_paso() != 1508) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_pausar() != 11050) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_reabierta() != 14583) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_reabrir_toca() != 52912) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_sonido() != 20264) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_method_ritmodelvideo_sustituye_al_repetido() != 1944) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_method_comentariosnota_abiertos() != 31184) {
@@ -51481,7 +53283,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pixpin_nucleo_checksum_constructor_marcasdellienzo_junto_al_dibujo() != 61480) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pixpin_nucleo_checksum_constructor_mezcladeaudio_nueva() != 48527) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pixpin_nucleo_checksum_constructor_modelo3dapple_abrir() != 7304) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pixpin_nucleo_checksum_constructor_ritmodelvideo_nuevo() != 40571) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pixpin_nucleo_checksum_constructor_documentooffice_abrir() != 54506) {

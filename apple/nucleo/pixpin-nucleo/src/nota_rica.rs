@@ -347,7 +347,7 @@ impl Nucleo {
     /// nota, solo si esta. La resolucion es la de los adjuntos.
     /// Nunca una ruta de red ([`es_ruta_de_red`]) ni una relativa que se
     /// salga del proyecto con `..` (eso ya lo niega `resolver`).
-    fn ruta_de_foto(&self, chat: &str, enlace: &str) -> Option<PathBuf> {
+    pub(crate) fn ruta_de_foto(&self, chat: &str, enlace: &str) -> Option<PathBuf> {
         let enlace = enlace.trim();
         if es_ruta_de_red(enlace) {
             return None;

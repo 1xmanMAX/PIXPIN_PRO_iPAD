@@ -52,6 +52,13 @@ pixpin-anki = { version = "0.1.0", path = "../pixpin-anki" }
 # La nota rica del chat: los bloques de su Markdown y el reparto del album
 # (`nota_rica`), el mismo crate que Windows (974d5ba). Puro.
 pixpin-ui = { version = "0.1.0", path = "../pixpin-ui" }
+# Los rectangulos con que `pixpin_ui::info` coloca la ficha del chat (el foco).
+pixpin-geom = { version = "0.1.0", path = "../pixpin-geom" }
+# La mezcla y el tratamiento del sonido (remuestreo con deriva, paso alto,
+# realce de la voz, limitador) del motor de audio de Windows (38204cb): lo
+# puro, para que una nota del Mac suene como una de Windows. Lo de WASAPI
+# solo se compila en Windows.
+pixpin-motor-audio = { version = "0.1.0", path = "../pixpin-motor-audio" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"

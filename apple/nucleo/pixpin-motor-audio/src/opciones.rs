@@ -71,6 +71,19 @@ pub struct Opciones {
     /// marcha).
     pub ganancia_microfono: f32,
     pub ganancia_equipo: f32,
+    /// **Quitar del microfono lo que suena por los altavoces** (el eco: en
+    /// una reunion sin cascos, la otra parte se oiria dos veces, por el
+    /// sonido del equipo y colada por el microfono). Se le pide al sistema:
+    /// en Windows, el microfono se abre como de comunicaciones
+    /// (`AudioCategory_Communications`), que activa el cancelador de eco del
+    /// controlador (o el de Windows 11 24H2, Voice Clarity), y en Windows 11 22H2+
+    /// se le dice que la referencia son los altavoces por defecto
+    /// (`IAcousticEchoCancellationControl`); sin que Windows baje el volumen
+    /// de lo demas (`SetDuckingPreference`). Cambia el sonido del microfono
+    /// (el procesado de llamadas suele llevar tambien supresion de ruido), por
+    /// eso va apagado salvo que se pida. Si no hay cancelador, no pasa nada:
+    /// [`crate::EstadisticasFuente::eco`] lo dice.
+    pub cancelar_eco: bool,
     /// Suscripciones al PCM que reciben **desde el primer marco** (ver
     /// [`crate::pcm`]).
     pub pcm: Vec<Suscripcion>,
@@ -87,6 +100,7 @@ impl Default for Opciones {
             puerta: false,
             ganancia_microfono: 1.0,
             ganancia_equipo: 1.0,
+            cancelar_eco: false,
             pcm: Vec::new(),
         }
     }

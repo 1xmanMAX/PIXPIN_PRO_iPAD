@@ -6,9 +6,11 @@
 //! La ventanita (preparar, la barra de grabar con «Captura», la zona y la
 //! pausa) es de Swift (`Grabar/GrabarClase.swift`): el microfono con
 //! AVAudioEngine y el sonido del Mac con ScreenCaptureKit, mezclados en un
-//! solo `.m4a`; con «Video de esta pantalla», ademas un MP4 (H.264 + AAC)
-//! con el mismo sonido (`Grabar/VideoDeClase.swift`, con las medidas y el
-//! reloj de [`video_de_la_clase`] y [`fotogramas_debidos_de_la_clase`]).
+//! solo `.m4a` por la mezcla del motor de audio de Windows
+//! ([`crate::mezcla_audio`]); con «Video de esta pantalla», ademas un MP4
+//! (H.264 + AAC) con el mismo sonido (`Grabar/VideoDeClase.swift`, con el
+//! perfil, la cadena de caidas y el ritmo del motor de video de Windows,
+//! [`crate::motor_video`]).
 //! Aqui entra lo ya grabado con [`Nucleo::guardar_clase`], con numeros
 //! seguidos:
 //!
@@ -46,18 +48,7 @@ pub const CAMPO_GRABACION: &str = "grabacion";
 /// El campo de la voz con su video (`{id}`).
 pub const CAMPO_VIDEO: &str = "video";
 
-/// Fotogramas por segundo del video de una reunion (`video::POR_SEGUNDO`):
-/// las diapositivas y las caras se siguen bien.
-pub const POR_SEGUNDO_VIDEO: u32 = 10;
-/// El tamano mas grande al que se graba el video (`video::TOPE`).
-pub const TOPE_VIDEO: (u32, u32) = (1280, 720);
-/// Lo que se espera al primer fotograma de la pantalla antes de empezar con
-/// uno negro (`video::ESPERA_PRIMERO`, 5 s).
-pub const ESPERA_PRIMERO_MS: i64 = 5_000;
-/// Bits por segundo del sonido del video: los 96 kbps de la nota de voz
-/// (`mp4_vivo::BYTES_POR_SEGUNDO_AAC`, 12 000 bytes).
-pub const BITS_AUDIO_VIDEO: u32 = 96_000;
-/// Las cuentas de `pixpin-record::escala` van en 100 ns.
+/// Las cuentas del reloj del video van en 100 ns.
 const UNIDADES_POR_SEGUNDO: i64 = 10_000_000;
 
 /// El minuto de una captura en el pie y en los avisos: `12:34` o
@@ -174,72 +165,13 @@ pub fn medida_de_salida(ancho: u32, alto: u32, tope_ancho: u32, tope_alto: u32) 
     ((w & !1).max(2), (h & !1).max(2))
 }
 
-/// Bits por segundo del video (`mp4::bitrate_por_defecto`): 0,1 bits por
-/// pixel y segundo, con topes.
-pub fn bits_por_segundo(ancho: u32, alto: u32, por_segundo: u32) -> u32 {
-    let pixeles_por_segundo = u64::from(ancho) * u64::from(alto) * u64::from(por_segundo);
-    (pixeles_por_segundo / 10).clamp(500_000, 20_000_000) as u32
-}
-
-/// Como se graba el video de una clase en una pantalla: lo que Windows fija
-/// en `grabar_clase/video.rs`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
-pub struct VideoDeLaClase {
-    /// El tamano del MP4, en pixeles (pares).
-    pub ancho: u32,
-    pub alto: u32,
-    pub por_segundo: u32,
-    /// Del H.264.
-    pub bits_por_segundo: u32,
-    /// Del AAC (mono, al muestreo de la nota).
-    pub bits_audio: u32,
-    /// Lo que se espera a la primera imagen antes de empezar en negro.
-    pub espera_primero_ms: i64,
-}
-
-/// **El video de una clase en una pantalla de `ancho`x`alto` pixeles**: a
-/// 10 fotogramas por segundo y como mucho 1280x720, como Windows.
-#[uniffi::export]
-pub fn video_de_la_clase(ancho_pantalla: u32, alto_pantalla: u32) -> VideoDeLaClase {
-    let (ancho, alto) = medida_de_salida(ancho_pantalla, alto_pantalla, TOPE_VIDEO.0, TOPE_VIDEO.1);
-    VideoDeLaClase {
-        ancho,
-        alto,
-        por_segundo: POR_SEGUNDO_VIDEO,
-        bits_por_segundo: bits_por_segundo(ancho, alto, POR_SEGUNDO_VIDEO),
-        bits_audio: BITS_AUDIO_VIDEO,
-        espera_primero_ms: ESPERA_PRIMERO_MS,
-    }
-}
-
 /// El instante (100 ns) al que se llega tras `muestras` de sonido a
 /// `muestreo` (`escala::tiempo_de_muestras`): el reloj del video.
-fn tiempo_de_muestras(muestras: u64, muestreo: u32) -> i64 {
+pub(crate) fn tiempo_de_muestras(muestras: u64, muestreo: u32) -> i64 {
     if muestreo == 0 {
         return 0;
     }
     (u128::from(muestras) * UNIDADES_POR_SEGUNDO as u128 / u128::from(muestreo)) as i64
-}
-
-/// Cuantos fotogramas ya tocan en `tiempo` (100 ns): los que empiezan en
-/// `tiempo` o antes; en el cero ya toca el primero
-/// (`escala::fotogramas_debidos`).
-fn fotogramas_debidos(tiempo: i64, por_segundo: u32) -> u64 {
-    if tiempo < 0 {
-        return 0;
-    }
-    (tiempo as i128 * i128::from(por_segundo) / i128::from(UNIDADES_POR_SEGUNDO)) as u64 + 1
-}
-
-/// **Cuantos fotogramas del video de la clase tocan** tras `muestras` de
-/// sonido a `muestreo`: el sonido es el reloj del video, asi que las dos
-/// pistas no se separan y en pausa (no llega sonido) no se escribe ninguno.
-/// Si ya se llevaban `hechos` y tocan mas, se escribe solo el ultimo, que
-/// empieza en `debidos - 1` (en decimas de segundo); el primero, en el cero
-/// aunque llegue tarde (`escala::tramo_del_fotograma`).
-#[uniffi::export]
-pub fn fotogramas_debidos_de_la_clase(muestras: u64, muestreo: u32) -> u64 {
-    fotogramas_debidos(tiempo_de_muestras(muestras, muestreo), POR_SEGUNDO_VIDEO)
 }
 
 /// El nombre del video en el chat: `Clase 24-10 18h05.mp4`.
@@ -573,7 +505,7 @@ mod pruebas {
     }
 
     #[test]
-    fn el_video_se_graba_al_tamano_y_ritmo_de_windows() {
+    fn el_video_se_encoge_sin_estirarse() {
         // La pantalla de siempre cabe justa en 720p.
         assert_eq!(medida_de_salida(1920, 1080, 1280, 720), (1280, 720));
         let (w, h) = medida_de_salida(1366, 768, 1280, 720);
@@ -584,28 +516,17 @@ mod pruebas {
         // Una mas pequena que el tope no se agranda; vertical, manda el alto.
         assert_eq!(medida_de_salida(800, 600, 1280, 720), (800, 600));
         assert_eq!(medida_de_salida(1080, 1920, 1280, 720), (404, 720));
-        let v = video_de_la_clase(3024, 1964);
-        assert_eq!((v.por_segundo, v.bits_audio, v.espera_primero_ms), (10, 96_000, 5_000));
-        assert!(v.ancho <= 1280 && v.alto <= 720 && v.ancho % 2 == 0 && v.alto % 2 == 0);
-        // 0,1 bits por pixel y segundo, con su suelo.
-        assert_eq!(video_de_la_clase(1920, 1080).bits_por_segundo, 921_600);
         // Caso negativo: una pantalla rota (0x0) no da un video de cero.
-        let roto = video_de_la_clase(0, 0);
-        assert_eq!((roto.ancho, roto.alto), (2, 2));
-        assert_eq!(roto.bits_por_segundo, 500_000);
+        assert_eq!(medida_de_salida(0, 0, 1280, 720), (2, 2));
     }
 
     #[test]
-    fn los_fotogramas_del_video_siguen_al_sonido() {
-        assert_eq!(fotogramas_debidos_de_la_clase(0, 48_000), 1, "en el cero ya va el primero");
-        assert_eq!(fotogramas_debidos_de_la_clase(4_799, 48_000), 1);
-        assert_eq!(fotogramas_debidos_de_la_clase(4_800, 48_000), 2);
-        assert_eq!(fotogramas_debidos_de_la_clase(48_000, 48_000), 11);
+    fn el_reloj_del_video_sigue_al_sonido() {
+        assert_eq!(tiempo_de_muestras(48_000, 48_000), UNIDADES_POR_SEGUNDO);
         // Una hora de sonido, sin desbordarse ni atrasarse.
-        assert_eq!(fotogramas_debidos_de_la_clase(48_000 * 3600, 48_000), 36_001);
+        assert_eq!(tiempo_de_muestras(48_000 * 3600, 48_000), 3600 * UNIDADES_POR_SEGUNDO);
         // Caso negativo: sin muestreo no corre el reloj.
-        assert_eq!(fotogramas_debidos_de_la_clase(48_000, 0), 1);
-        assert_eq!(fotogramas_debidos(-1, 10), 0);
+        assert_eq!(tiempo_de_muestras(48_000, 0), 0);
     }
 
     #[test]

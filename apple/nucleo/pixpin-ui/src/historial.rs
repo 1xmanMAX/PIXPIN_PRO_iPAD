@@ -70,6 +70,15 @@ pub struct Entrada {
     pub cuando: i64,
     /// El dia (local) al que pertenece, para saber donde va un separador.
     pub dia: i64,
+    /// Quien lo escribio, en un chat compartido (`conversacion::numerar`):
+    /// `0` lo mio y cada otra persona su numero. Dos seguidos de personas
+    /// distintas no se agrupan aunque vayan al mismo lado. En un chat
+    /// normal, siempre `0`.
+    pub autor: u32,
+    /// Lo alto del nombre de quien escribe, ya medido por quien pinta, si
+    /// este mensaje lo lleva cuando abre tanda (de otra persona, en un chat
+    /// compartido). `0`, sin nombre.
+    pub alto_nombre: u32,
 }
 
 /// Donde acaba cada mensaje.
@@ -78,6 +87,9 @@ pub struct Puesto {
     pub burbuja: Rect,
     /// La pildora de fecha que va justo encima, si este mensaje estrena dia.
     pub separador: Option<Rect>,
+    /// El nombre de quien lo escribio, encima de la burbuja: solo en la
+    /// primera de cada tanda de otra persona (como un grupo de Telegram).
+    pub nombre: Option<Rect>,
 }
 
 impl Puesto {
@@ -92,9 +104,11 @@ impl Puesto {
         }
     }
 
-    /// Lo alto que ocupa con su pildora, si la lleva.
+    /// Lo alto que ocupa con su pildora y su nombre, si los lleva.
     pub fn arriba(&self) -> i32 {
-        self.separador.map_or(self.burbuja.y, |s| s.y)
+        self.separador
+            .or(self.nombre)
+            .map_or(self.burbuja.y, |s| s.y)
     }
 }
 
@@ -118,12 +132,14 @@ pub fn colocar(area: Rect, entradas: &[Entrada], escala_por_cien: u32) -> (Vec<P
     let mut y = e(HUECO_GRUPO) as i32;
     let mut dia_anterior: Option<i64> = None;
     let mut mio_anterior: Option<bool> = None;
+    let mut autor_anterior: Option<u32> = None;
     let mut cuando_anterior: Option<i64> = None;
     let ancho_maximo = ancho_contenido(area, escala_por_cien) + 2 * e(RELLENO_X);
 
     for entrada in entradas {
         // Un dia nuevo estrena pildora de fecha; el primero tambien la lleva,
         // que si no el historial empieza sin decir de cuando es.
+        let mut abre_tanda = true;
         let separador = if dia_anterior != Some(entrada.dia) {
             let r = Rect {
                 x: area.x,
@@ -137,8 +153,11 @@ pub fn colocar(area: Rect, entradas: &[Entrada], escala_por_cien: u32) -> (Vec<P
             // Dos del mismo lado y del mismo rato se pegan; si cambia el lado
             // o pasa mucho tiempo se separan mas, que es lo que hace que se
             // lea de un vistazo de quien es cada tanda.
+            // En un chat compartido, ademas, de la misma persona.
             let mismo_grupo = mio_anterior == Some(entrada.mio)
+                && autor_anterior == Some(entrada.autor)
                 && cuando_anterior.is_some_and(|c| entrada.cuando - c <= RATO_MS);
+            abre_tanda = !mismo_grupo;
             y += if mismo_grupo {
                 e(HUECO) as i32
             } else {
@@ -154,13 +173,28 @@ pub fn colocar(area: Rect, entradas: &[Entrada], escala_por_cien: u32) -> (Vec<P
         } else {
             area.x + e(MARGEN) as i32
         };
+        // El nombre de quien escribe, encima de la primera de su tanda y
+        // del ancho de la columna de su lado (el nombre puede ser mas largo
+        // que una burbuja de dos palabras).
+        let nombre = (abre_tanda && !entrada.mio && entrada.alto_nombre > 0).then(|| {
+            let r = Rect {
+                x,
+                y,
+                ancho: ancho_maximo,
+                alto: entrada.alto_nombre,
+            };
+            y += entrada.alto_nombre as i32;
+            r
+        });
         puestos.push(Puesto {
             burbuja: Rect { x, y, ancho, alto },
             separador,
+            nombre,
         });
         y += alto as i32;
         dia_anterior = Some(entrada.dia);
         mio_anterior = Some(entrada.mio);
+        autor_anterior = Some(entrada.autor);
         cuando_anterior = Some(entrada.cuando);
     }
     (puestos, (y + e(HUECO_GRUPO) as i32).max(0) as u32)
@@ -247,7 +281,67 @@ mod pruebas {
             // lado, salvo donde se diga.
             cuando: dia * 86_400_000,
             dia,
+            autor: 0,
+            alto_nombre: 0,
         }
+    }
+
+    /// De otra persona (`autor`), con su nombre de 18 de alto.
+    fn de(autor: u32, dia: i64) -> Entrada {
+        Entrada {
+            autor,
+            alto_nombre: 18,
+            ..entrada(20, 100, false, dia)
+        }
+    }
+
+    #[test]
+    fn el_nombre_va_solo_encima_de_la_primera_de_cada_tanda_ajena() {
+        let a = area();
+        let (p, _) = colocar(
+            a,
+            &[
+                de(1, 1),
+                de(1, 1),
+                de(2, 1),
+                entrada(20, 100, true, 1),
+                de(2, 1),
+                de(2, 2),
+            ],
+            100,
+        );
+        let con_nombre: Vec<bool> = p.iter().map(|q| q.nombre.is_some()).collect();
+        // Ana abre (con nombre), Ana sigue (sin), Luis abre, yo nunca, Luis
+        // otra vez tras lo mio, y Luis al dia siguiente (pildora nueva).
+        assert_eq!(con_nombre, vec![true, false, true, false, true, true]);
+        // El nombre va justo encima de su burbuja, a su lado.
+        let n = p[0].nombre.unwrap();
+        assert_eq!(n.abajo(), p[0].burbuja.y);
+        assert_eq!(n.x, p[0].burbuja.x);
+        assert_eq!(p[0].arriba(), p[0].separador.unwrap().y);
+        assert_eq!(p[2].arriba(), p[2].nombre.unwrap().y);
+    }
+
+    #[test]
+    fn dos_personas_seguidas_no_se_pegan_aunque_vayan_al_mismo_lado() {
+        let a = area();
+        let sin_nombre = |autor| Entrada {
+            alto_nombre: 0,
+            ..de(autor, 1)
+        };
+        let (p, _) = colocar(a, &[sin_nombre(1), sin_nombre(1), sin_nombre(2)], 100);
+        assert_eq!(p[1].burbuja.y - p[0].burbuja.abajo(), HUECO as i32);
+        assert_eq!(p[2].burbuja.y - p[1].burbuja.abajo(), HUECO_GRUPO as i32);
+    }
+
+    #[test]
+    fn lo_mio_nunca_lleva_nombre() {
+        let mia = Entrada {
+            alto_nombre: 18,
+            ..entrada(20, 100, true, 1)
+        };
+        let (p, _) = colocar(area(), &[mia], 100);
+        assert!(p[0].nombre.is_none());
     }
 
     #[test]
@@ -407,6 +501,8 @@ mod pruebas {
             mio: true,
             cuando: base + desfase,
             dia: 10,
+            autor: 0,
+            alto_nombre: 0,
         };
         // Un minuto despues: misma tanda, pegados.
         let (juntos, _) = colocar(a, &[con(0), con(60_000)], 100);

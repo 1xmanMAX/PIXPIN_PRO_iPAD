@@ -40,6 +40,14 @@
 
 /// Constante de tiempo del control, en segundos.
 pub const CONSTANTE_S: f64 = 30.0;
+/// La de los primeros [`ARRANQUE_S`] segundos: **enganche rapido**, como el
+/// lazo de `zita-ajbridge` (`Jackclient::setloop`: 1 Hz los primeros 4 s y
+/// luego 0,05 Hz) o el de PipeWire (`spa_dll`, de `SPA_DLL_BW_MAX` a
+/// `SPA_DLL_BW_MIN`). Con 30 s desde el principio, una tarjeta a 500 ppm
+/// tardaba mas de dos minutos en quedar aprendida; asi, unos segundos.
+pub const CONSTANTE_ARRANQUE_S: f64 = 5.0;
+/// Cuanto dura el enganche rapido, en segundos de medida.
+pub const ARRANQUE_S: f64 = 30.0;
 /// Lo que se suaviza la medida del anillo, en segundos.
 pub const SUAVIZADO_S: f64 = 1.0;
 /// Lo mas que se corrige: un 0,5 %. Ningun cristal se aparta tanto; si se
@@ -47,6 +55,11 @@ pub const SUAVIZADO_S: f64 = 1.0;
 pub const TOPE: f64 = 0.005;
 /// Lo mas que cambia la correccion por segundo, en ppm.
 pub const PASO_MAXIMO_PPM_S: f64 = 200.0;
+/// Y durante el enganche rapido: un lazo rapido con el paso limitado a lo
+/// de despues se pasa de largo y oscila (el limite de paso dentro de un lazo
+/// es un retraso que crece con la correccion). 0,2 % por segundo de cambio
+/// de tono durante unos segundos no se oye (son 3 centesimas de semitono).
+pub const PASO_ARRANQUE_PPM_S: f64 = 2_000.0;
 
 /// El control de una fuente.
 #[derive(Debug, Clone)]
@@ -58,22 +71,31 @@ pub struct Deriva {
     medida: Option<f64>,
     integral: f64,
     correccion: f64,
-    kp: f64,
-    ki: f64,
+    /// Segundos medidos (para saber cuando acaba el enganche rapido).
+    medido_s: f64,
+}
+
+/// `(Kp, Ki)` de un lazo amortiguado critico con constante `t` segundos.
+fn ganancias(t: f64) -> (f64, f64) {
+    let wn = 1.0 / t;
+    (2.0 * wn, wn * wn)
 }
 
 impl Deriva {
     pub fn nueva(objetivo_marcos: usize, tasa: u32) -> Deriva {
-        let wn = 1.0 / CONSTANTE_S;
         Deriva {
             objetivo: objetivo_marcos as f64,
             tasa: f64::from(tasa.max(1)),
             medida: None,
             integral: 0.0,
             correccion: 0.0,
-            kp: 2.0 * wn,
-            ki: wn * wn,
+            medido_s: 0.0,
         }
+    }
+
+    /// Si aun esta en el enganche rapido (ver [`Deriva::observar_fina`]).
+    pub fn enganchando(&self) -> bool {
+        self.medido_s < ARRANQUE_S
     }
 
     /// La correccion de ahora, en partes por millon (positiva: la tarjeta va
@@ -96,17 +118,58 @@ impl Deriva {
 
     /// Una medida del anillo (`ocupado`, en marcos) pasados `dt` segundos
     /// desde la anterior. Devuelve el factor nuevo.
+    ///
+    /// Es la medida **gruesa**: lo que hay en el anillo justo cuando se mira,
+    /// con el diente de sierra de los paquetes (hasta 10 ms, 30 con unos
+    /// cascos Bluetooth). Con ese ruido el lazo no puede ser rapido sin que
+    /// cada paquete le de un tiron al tono, asi que va siempre a
+    /// [`CONSTANTE_S`].
     pub fn observar(&mut self, ocupado: f64, dt: f64) -> f64 {
+        self.paso(ocupado, dt, false)
+    }
+
+    /// La medida **fina**: lo que hay en el anillo *ahora*, contando lo que
+    /// la tarjeta ya capturo y aun no entrego (ver
+    /// [`crate::anillo::Productor::sellar`]). Sin diente de sierra, el lazo
+    /// se permite un enganche rapido los primeros [`ARRANQUE_S`] segundos.
+    pub fn observar_fina(&mut self, ocupado: f64, dt: f64) -> f64 {
+        self.paso(ocupado, dt, true)
+    }
+
+    fn paso(&mut self, ocupado: f64, dt: f64, fina: bool) -> f64 {
         let dt = dt.clamp(0.0, 0.5);
+        let antes = fina && self.enganchando();
+        if fina {
+            self.medido_s += dt;
+        }
+        let rapido = fina && self.enganchando();
         let m = match self.medida {
             None => ocupado,
             Some(m) => m + (ocupado - m) * (1.0 - (-dt / SUAVIZADO_S).exp()),
         };
         self.medida = Some(m);
+        let (kp, ki) = ganancias(if rapido {
+            CONSTANTE_ARRANQUE_S
+        } else {
+            CONSTANTE_S
+        });
         let x = (m - self.objetivo) / self.tasa;
-        self.integral = (self.integral + self.ki * x * dt).clamp(-TOPE, TOPE);
-        let quiere = (self.kp * x + self.integral).clamp(-TOPE, TOPE);
-        let paso = PASO_MAXIMO_PPM_S * 1e-6 * dt;
+        if antes && !rapido {
+            // Se acaba de terminar el enganche: lo que llevaba la parte
+            // proporcional rapida pasa a la integral, para que la correccion
+            // siga donde estaba (cambio de ganancias sin tiron).
+            let (kp_rapido, _) = ganancias(CONSTANTE_ARRANQUE_S);
+            let (kp_lento, _) = ganancias(CONSTANTE_S);
+            self.integral = (self.integral + (kp_rapido - kp_lento) * x).clamp(-TOPE, TOPE);
+        }
+        self.integral = (self.integral + ki * x * dt).clamp(-TOPE, TOPE);
+        let quiere = (kp * x + self.integral).clamp(-TOPE, TOPE);
+        let paso = if rapido {
+            PASO_ARRANQUE_PPM_S
+        } else {
+            PASO_MAXIMO_PPM_S
+        } * 1e-6
+            * dt;
         self.correccion += (quiere - self.correccion).clamp(-paso, paso);
         self.factor()
     }
@@ -191,5 +254,74 @@ mod pruebas {
             d.observar(2_400.0, 0.01);
         }
         assert!(d.ppm() > 500.0, "{}", d.ppm());
+    }
+
+    /// Segundos hasta que la correccion se queda a menos de 50 ppm de la
+    /// deriva de verdad (y ya no sale), con la misma simulacion, y el peor
+    /// apartamiento del anillo pasado el enganche (ms). `fina`: medir lo que
+    /// hay *ahora* (con el sello del ultimo paquete) en vez de lo que hay.
+    fn enganche(ppm: f64, fina: bool) -> (f64, f64) {
+        let tasa = 48_000.0;
+        let objetivo = 2_400.0;
+        let mut d = Deriva::nueva(objetivo as usize, 48_000);
+        let real = tasa * (1.0 + ppm * 1e-6);
+        let (mut producido, mut consumido) = (0.0, 0.0f64);
+        // El primer paquete acaba a los 10 ms de la tarjeta.
+        let mut proximo = 480.0 / real;
+        let tick = 0.015_6;
+        let mut t = 0.0;
+        let mut desde = 0.0;
+        let mut sello = 0.0;
+        let mut peor: f64 = 0.0;
+        let mut cebado = false;
+        while t < 600.0 {
+            t += tick;
+            while proximo <= t {
+                producido += 480.0;
+                sello = proximo;
+                proximo += 480.0 / real;
+            }
+            let medida = |hay: f64| if fina { hay + (t - sello) * real } else { hay };
+            if !cebado {
+                // Como el nucleo: espera su colchon y tira lo que sobre, para
+                // empezar con el anillo en su sitio (`zita-ajbridge`, SYNC2).
+                if medida(producido - consumido) < objetivo {
+                    continue;
+                }
+                consumido += medida(producido - consumido) - objetivo;
+                cebado = true;
+            }
+            let hay = producido - consumido;
+            let f = if fina {
+                d.observar_fina(hay + (t - sello) * real, tick)
+            } else {
+                d.observar(hay, tick)
+            };
+            consumido += tasa * tick * f;
+            if (d.ppm() - ppm).abs() > 50.0 {
+                desde = t;
+            }
+            if t > 60.0 {
+                peor = peor.max(((hay - objetivo) / tasa * 1000.0).abs());
+            }
+        }
+        (desde, peor)
+    }
+
+    #[test]
+    fn con_la_medida_fina_se_aprende_la_tarjeta_en_segundos() {
+        for ppm in [-500.0, -100.0, 300.0, 500.0] {
+            let (s, peor) = enganche(ppm, true);
+            assert!(s < 30.0, "{ppm} ppm: tardo {s:.0} s en engancharse");
+            // Y despues sigue igual de quieto que el lento.
+            assert!(peor < 15.0, "{ppm} ppm: se aparto {peor:.1} ms");
+            // Caso negativo: con la medida gruesa el lazo es el lento de
+            // siempre (no se le pide el enganche rapido con ruido).
+            let (lento, peor_lento) = enganche(ppm, false);
+            eprintln!(
+                "{ppm} ppm: fina {s:.1} s ({peor:.2} ms), gruesa {lento:.1} s ({peor_lento:.2} ms)"
+            );
+            assert!(lento > s, "{ppm} ppm: {lento:.0} s contra {s:.0} s");
+        }
     }
 }

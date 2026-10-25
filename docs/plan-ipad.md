@@ -148,3 +148,12 @@ solo por `nucleo/*`; nadie lo usa aun desde Swift), la nota rica revisada, el vu
 marca que aterriza, la figura que reabre el chat y la foto pegada numerada; sin conflictos
 en Rust. Esas funciones del iPad van al Mac en `dffbeef` (rama `claude/vibrant-gates-0lx4dc`),
 que aun no esta en `27b1bcd`.
+Luego, el Mac `383811e` (5 commits sobre `27b1bcd`): la ficha del chat al estilo Telegram
+(proyectos en su primera pestana, las fotos de las notas ricas en «Fotos», lo mas nuevo
+primero, por meses, la previa dentro y el teclado; en el iPad, `Chat/InfoChat.swift`),
+grabar por el motor de audio de Windows (`Voz/MezclaVoz.swift`, tal cual del Mac:
+`GrabadoraVoz` y `MicrofonoSuelto`, y por el «Grabar clase») y los crates al dia hasta
+Windows `cad5e20` (`mezcla_audio.rs`, `motor_video.rs`, `pixpin-proyecto/clase.rs`,
+`pixpin-ui/conversacion.rs`). Conflictos en Rust: `lib.rs` (los modulos de los dos) y la
+prueba del orden de la ficha (la del Mac). El motor de video no se usa en el iPad (no deja
+grabar la pantalla de otras apps). Ninguna funcion nueva del nucleo hecha aqui.

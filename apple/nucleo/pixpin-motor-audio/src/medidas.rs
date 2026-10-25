@@ -6,7 +6,7 @@
 //! Leer dos atomicos seguidos puede mezclar dos bloques distintos (el pico de
 //! uno y el RMS del siguiente); para pintar una barra da igual.
 
-use std::sync::atomic::{AtomicI64, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, Ordering};
 
 /// El nivel de un bloque, lineal de 0 a 1.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -74,6 +74,16 @@ pub struct Cuentas {
     /// Veces que se volvio a abrir el aparato (desenchufado, cambio del
     /// aparato por defecto).
     pub reaperturas: AtomicU64,
+    /// Saltos del reloj (el equipo se suspendio o el hilo estuvo congelado
+    /// mas de 2 s): ni se rellenaron ni se cuentan como grabado.
+    pub saltos: AtomicU64,
+    /// Si el microfono lleva la cancelacion de eco del sistema (ver
+    /// [`crate::Opciones::cancelar_eco`]): 0 no, 1 la categoria de
+    /// comunicaciones, 2 ademas con la referencia de los altavoces puesta.
+    pub eco: AtomicU32,
+    /// Si el sonido del equipo se mantiene despierto con un flujo de
+    /// silencio (ver `sistema/captura.rs`, `Latido`).
+    pub latido: AtomicBool,
     /// La correccion de deriva, en milesimas de ppm.
     pub milippm: AtomicI64,
     /// Marcos por segundo del anillo.
@@ -101,6 +111,9 @@ impl Cuentas {
             tirados: l(&self.tirados),
             faltaron: l(&self.faltaron),
             reaperturas: l(&self.reaperturas),
+            saltos: l(&self.saltos),
+            eco: self.eco.load(Ordering::Relaxed),
+            latido: self.latido.load(Ordering::Relaxed),
             ppm: self.milippm.load(Ordering::Relaxed) as f64 / 1000.0,
             tasa: self.tasa.load(Ordering::Relaxed),
             tasa_aparato: self.tasa_aparato.load(Ordering::Relaxed),
@@ -119,6 +132,9 @@ pub struct EstadisticasFuente {
     pub tirados: u64,
     pub faltaron: u64,
     pub reaperturas: u64,
+    pub saltos: u64,
+    pub eco: u32,
+    pub latido: bool,
     pub ppm: f64,
     pub tasa: u32,
     pub tasa_aparato: u32,

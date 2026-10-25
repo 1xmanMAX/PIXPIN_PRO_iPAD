@@ -17,13 +17,16 @@
 
 use std::cell::UnsafeCell;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 struct Anillo {
     datos: Box<[UnsafeCell<f32>]>,
     canales: usize,
     escritas: AtomicUsize,
     leidas: AtomicUsize,
+    /// Cuando acaba (en el reloj comun, 100 ns) lo ultimo que se escribio.
+    /// Cero: aun no se dijo. Ver [`Productor::sellar`].
+    sello: AtomicU64,
 }
 
 // SAFETY: cada posicion del anillo la toca a la vez como mucho un lado: el
@@ -69,6 +72,7 @@ pub fn anillo(marcos: usize, canales: usize) -> (Productor, Consumidor) {
         canales,
         escritas: AtomicUsize::new(0),
         leidas: AtomicUsize::new(0),
+        sello: AtomicU64::new(0),
     });
     (
         Productor {
@@ -113,6 +117,16 @@ impl Productor {
         })
     }
 
+    /// Dice **hasta cuando** llega lo escrito (100 ns del reloj comun: la
+    /// fecha de fin del ultimo paquete). Con eso quien lee sabe cuanto hay
+    /// en el anillo *ahora*, no solo justo despues de cada paquete: lo que
+    /// hace `zita-ajbridge` (`Jackclient::jack_process`, que interpola la
+    /// cuenta entre las dos ultimas fechas de la tarjeta) para quitarle a la
+    /// medida de la deriva el diente de sierra de los paquetes.
+    pub fn sellar(&mut self, fin: u64) {
+        self.anillo.sello.store(fin, Ordering::Release);
+    }
+
     /// Reparte `marcos` marcos en los (como mucho) dos tramos contiguos del
     /// anillo y publica la cuenta al final.
     fn copiar(&mut self, marcos: usize, mut poner: impl FnMut(*mut f32, usize, usize)) -> usize {
@@ -151,6 +165,11 @@ impl Consumidor {
             .load(Ordering::Acquire)
             .wrapping_sub(a.leidas.load(Ordering::Relaxed))
             / a.canales
+    }
+
+    /// El ultimo [`Productor::sellar`] (cero si nunca).
+    pub fn sello(&self) -> u64 {
+        self.anillo.sello.load(Ordering::Acquire)
     }
 
     /// Lee hasta llenar `destino` (en marcos enteros). Devuelve cuantos.
@@ -257,5 +276,14 @@ mod pruebas {
             }
         }
         escritor.join().unwrap();
+    }
+
+    #[test]
+    fn el_sello_viaja_del_productor_al_consumidor() {
+        let (mut p, c) = anillo(16, 1);
+        assert_eq!(c.sello(), 0);
+        p.escribir(&[1.0; 4]);
+        p.sellar(1_234);
+        assert_eq!(c.sello(), 1_234);
     }
 }

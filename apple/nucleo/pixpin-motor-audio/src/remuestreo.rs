@@ -24,10 +24,35 @@
 //!
 //! No reserva memoria al producir: el historial se reserva al crearlo para el
 //! bloque mas grande que se le va a pedir.
+//!
+//! ## Al bajar mucho de tasa
+//!
+//! Un microfono de estudio a 96 o 192 kHz que baja a 48: con los mismos 48
+//! coeficientes, la transicion del filtro (que se mide en marcos de entrada)
+//! seria 2 o 4 veces mas ancha en hercios y dejaria pasar solapamiento. Como
+//! hace speexdsp (`update_filter`, en `libspeexdsp/resample.c`: alarga
+//! `filt_len` por la relacion al bajar), el filtro se alarga con la relacion
+//! redondeada: 96 coeficientes de 96 a 48, 192 de 192 a 48. El coste por
+//! marco de **salida** crece igual, pero por marco de **entrada** es el de
+//! siempre.
+//!
+//! ## Para la CPU
+//!
+//! Las sumas van en [`CARRILES`] acumuladores independientes: una suma de
+//! coma flotante en una sola variable es una cadena de dependencias (cada
+//! suma espera a la anterior) que el compilador no puede reordenar ni
+//! vectorizar; en ocho carriles se solapan y caben en registros SSE/AVX.
+//! Nada de esto cambia el resultado entre una ejecucion y otra (el orden de
+//! las sumas es fijo), asi que la prueba de que trocear no cambia nada sigue
+//! valiendo.
 
-/// Coeficientes del filtro.
+/// Coeficientes del filtro a la misma tasa o subiendo (al bajar mucho se
+/// multiplican, ver arriba). Multiplo de [`CARRILES`].
 pub const COEFICIENTES: usize = 48;
-const MITAD: usize = COEFICIENTES / 2;
+/// Lo mas que se alarga el filtro (de 192 kHz a 48).
+pub const ALARGUE_MAXIMO: usize = 4;
+/// Acumuladores independientes de cada producto escalar.
+pub const CARRILES: usize = 8;
 /// Fases de la tabla.
 pub const FASES: usize = 1 << BITS_DE_FASE;
 const BITS_DE_FASE: u32 = 7;
@@ -56,18 +81,25 @@ fn a_fija(paso: f64) -> u64 {
     (paso * 4_294_967_296.0).round() as u64
 }
 
-fn tabla(corte: f64) -> Vec<f32> {
-    let mut t = vec![0.0f32; (FASES + 1) * COEFICIENTES];
+/// Cuantos coeficientes para ir de `entrada` a `salida` marcos por segundo.
+pub fn coeficientes_para(entrada: u32, salida: u32) -> usize {
+    let relacion = f64::from(entrada.max(1)) / f64::from(salida.max(1));
+    COEFICIENTES * (relacion.round() as usize).clamp(1, ALARGUE_MAXIMO)
+}
+
+fn tabla(corte: f64, taps: usize) -> Vec<f32> {
+    let mitad = taps / 2;
+    let mut t = vec![0.0f32; (FASES + 1) * taps];
     let i0b = bessel_i0(BETA);
+    let mut valores = vec![0.0f64; taps];
     for p in 0..=FASES {
         let f = p as f64 / FASES as f64;
-        let fila = &mut t[p * COEFICIENTES..(p + 1) * COEFICIENTES];
+        let fila = &mut t[p * taps..(p + 1) * taps];
         let mut suma = 0.0f64;
-        let mut valores = [0.0f64; COEFICIENTES];
         for (k, v) in valores.iter_mut().enumerate() {
             // Distancia del marco de entrada `k` al instante de salida.
-            let d = k as f64 - (MITAD as f64 - 1.0) - f;
-            let x = d / MITAD as f64;
+            let d = k as f64 - (mitad as f64 - 1.0) - f;
+            let x = d / mitad as f64;
             let ventana = if x.abs() >= 1.0 {
                 0.0
             } else {
@@ -80,11 +112,28 @@ fn tabla(corte: f64) -> Vec<f32> {
         }
         // Cada fase suma uno: un nivel constante sale igual, sea cual sea la
         // fase, y no aparece un zumbido a la frecuencia de la deriva.
-        for (c, v) in fila.iter_mut().zip(valores) {
+        for (c, v) in fila.iter_mut().zip(&valores) {
             *c = (v / suma) as f32;
         }
     }
     t
+}
+
+/// `Σ a[i]·b[i]` en [`CARRILES`] acumuladores (ver el comentario del modulo).
+/// Los dos del mismo largo, multiplo de [`CARRILES`].
+#[inline]
+fn producto(a: &[f32], b: &[f32]) -> f32 {
+    let mut acc = [0.0f32; CARRILES];
+    for (x, y) in a.chunks_exact(CARRILES).zip(b.chunks_exact(CARRILES)) {
+        for k in 0..CARRILES {
+            acc[k] += x[k] * y[k];
+        }
+    }
+    let mut s = 0.0;
+    for v in acc {
+        s += v;
+    }
+    s
 }
 
 /// Un remuestreador de `canales` canales intercalados.
@@ -95,6 +144,13 @@ pub struct Remuestreador {
     /// Marcos de entrada por marco de salida, en coma fija 32.32.
     paso: u64,
     tabla: Vec<f32>,
+    /// Coeficientes del filtro (ver [`coeficientes_para`]) y su mitad.
+    taps: usize,
+    mitad: usize,
+    /// Los coeficientes del marco que se esta calculando (interpolados entre
+    /// dos fases), y un canal suelto cuando hay mas de dos.
+    coef: Vec<f32>,
+    canal: Vec<f32>,
     /// Marcos de entrada pendientes, intercalados.
     historial: Vec<f32>,
     /// Donde cae el proximo marco de salida, en marcos de `historial` y en
@@ -109,6 +165,7 @@ impl Remuestreador {
     pub fn nuevo(entrada: u32, salida: u32, canales: usize, max_marcos: usize) -> Remuestreador {
         let canales = canales.max(1);
         let (entrada, salida) = (f64::from(entrada.max(1)), f64::from(salida.max(1)));
+        let taps = coeficientes_para(entrada as u32, salida as u32);
         let paso = entrada / salida;
         let corte = CORTE * (salida / entrada).min(1.0);
         let max_marcos = max_marcos.max(1);
@@ -119,8 +176,16 @@ impl Remuestreador {
             canales,
             paso_nominal: paso,
             paso: a_fija(paso),
-            tabla: tabla(corte),
-            historial: Vec::with_capacity((hueco.max(max_marcos) + 2 * COEFICIENTES) * canales),
+            tabla: tabla(corte, taps),
+            taps,
+            mitad: taps / 2,
+            coef: vec![0.0; taps],
+            canal: if canales > 2 {
+                vec![0.0; taps]
+            } else {
+                Vec::new()
+            },
+            historial: Vec::with_capacity((hueco.max(max_marcos) + 2 * taps) * canales),
             pos: 0,
             max_marcos,
         };
@@ -132,6 +197,11 @@ impl Remuestreador {
         self.canales
     }
 
+    /// Coeficientes del filtro que usa.
+    pub fn coeficientes(&self) -> usize {
+        self.taps
+    }
+
     /// Multiplica el paso nominal por `factor` (lo que da la deriva).
     pub fn ajustar(&mut self, factor: f64) {
         self.paso = a_fija(self.paso_nominal * factor);
@@ -140,8 +210,8 @@ impl Remuestreador {
     /// Vacia el historial: lo siguiente empieza de silencio.
     pub fn reiniciar(&mut self) {
         self.historial.clear();
-        self.historial.resize((MITAD - 1) * self.canales, 0.0);
-        self.pos = ((MITAD - 1) as u64) << 32;
+        self.historial.resize((self.mitad - 1) * self.canales, 0.0);
+        self.pos = ((self.mitad - 1) as u64) << 32;
     }
 
     fn marcos_en_historial(&self) -> usize {
@@ -149,45 +219,58 @@ impl Remuestreador {
     }
 
     /// Cuantos marcos de historial necesita el marco de salida en `pos`.
-    fn necesarios(pos: u64) -> usize {
-        (pos >> 32) as usize + MITAD + 1
+    fn necesarios(&self, pos: u64) -> usize {
+        (pos >> 32) as usize + self.mitad + 1
     }
 
     /// Produce un marco de salida en `fuera` y avanza.
     #[inline]
     fn un_marco(&mut self, fuera: &mut [f32]) {
+        let taps = self.taps;
+        let c = self.canales;
         let i0 = (self.pos >> 32) as usize;
         // Los 7 bits altos de la fraccion son la fase; los 16 siguientes, lo
         // que se interpola entre ella y la siguiente.
         let fraccion = self.pos & 0xFFFF_FFFF;
         let p = (fraccion >> (32 - BITS_DE_FASE)) as usize;
         let w = ((fraccion >> (32 - BITS_DE_FASE - 16)) & 0xFFFF) as f32 / 65_536.0;
-        let a = &self.tabla[p * COEFICIENTES..(p + 1) * COEFICIENTES];
-        let b = &self.tabla[(p + 1) * COEFICIENTES..(p + 2) * COEFICIENTES];
-        let mut coef = [0.0f32; COEFICIENTES];
-        for ((c, x), y) in coef.iter_mut().zip(a).zip(b) {
-            *c = x + (y - x) * w;
+        let a = &self.tabla[p * taps..(p + 1) * taps];
+        let b = &self.tabla[(p + 1) * taps..(p + 2) * taps];
+        for ((k, x), y) in self.coef.iter_mut().zip(a).zip(b) {
+            *k = x + (y - x) * w;
         }
-        let base = (i0 + 1 - MITAD) * self.canales;
-        let tramo = &self.historial[base..base + COEFICIENTES * self.canales];
-        if self.canales == 1 {
-            fuera[0] = tramo.iter().zip(&coef).map(|(x, c)| x * c).sum();
-        } else if self.canales == 2 {
-            let (mut i, mut d) = (0.0f32, 0.0f32);
-            for (m, c) in tramo.chunks_exact(2).zip(&coef) {
-                i += m[0] * c;
-                d += m[1] * c;
+        let base = (i0 + 1 - self.mitad) * c;
+        let tramo = &self.historial[base..base + taps * c];
+        match c {
+            1 => fuera[0] = producto(tramo, &self.coef),
+            2 => {
+                // Intercalado: los pares son un canal y los impares el otro,
+                // cada uno en sus carriles.
+                let mut acc = [0.0f32; CARRILES * 2];
+                for (m, k) in tramo
+                    .chunks_exact(CARRILES * 2)
+                    .zip(self.coef.chunks_exact(CARRILES))
+                {
+                    for j in 0..CARRILES {
+                        acc[2 * j] += m[2 * j] * k[j];
+                        acc[2 * j + 1] += m[2 * j + 1] * k[j];
+                    }
+                }
+                let (mut i, mut d) = (0.0f32, 0.0f32);
+                for par in acc.chunks_exact(2) {
+                    i += par[0];
+                    d += par[1];
+                }
+                fuera[0] = i;
+                fuera[1] = d;
             }
-            fuera[0] = i;
-            fuera[1] = d;
-        } else {
-            for (ch, f) in fuera.iter_mut().enumerate().take(self.canales) {
-                *f = tramo[ch..]
-                    .iter()
-                    .step_by(self.canales)
-                    .zip(&coef)
-                    .map(|(x, c)| x * c)
-                    .sum();
+            _ => {
+                for (ch, f) in fuera.iter_mut().enumerate().take(c) {
+                    for (v, x) in self.canal.iter_mut().zip(tramo[ch..].iter().step_by(c)) {
+                        *v = *x;
+                    }
+                    *f = producto(&self.canal, &self.coef);
+                }
             }
         }
         self.pos += self.paso;
@@ -195,7 +278,7 @@ impl Remuestreador {
 
     /// Tira del historial lo que ya no va a hacer falta.
     fn compactar(&mut self) {
-        let quitar = ((self.pos >> 32) as usize + 1).saturating_sub(MITAD);
+        let quitar = ((self.pos >> 32) as usize + 1).saturating_sub(self.mitad);
         let quitar = quitar.min(self.marcos_en_historial());
         if quitar > 0 {
             self.historial.drain(..quitar * self.canales);
@@ -220,7 +303,7 @@ impl Remuestreador {
                 continue;
             }
             let ultimo = self.pos + self.paso * (n - 1) as u64;
-            let hace_falta = Self::necesarios(ultimo);
+            let hace_falta = self.necesarios(ultimo);
             let hay = self.marcos_en_historial();
             if hace_falta > hay {
                 let pedir = hace_falta - hay;
@@ -250,7 +333,7 @@ impl Remuestreador {
         let c = self.canales;
         let mut n = 0;
         for fuera in salida.chunks_exact_mut(c) {
-            if Self::necesarios(self.pos) > self.marcos_en_historial() {
+            if self.necesarios(self.pos) > self.marcos_en_historial() {
                 break;
             }
             self.un_marco(fuera);
@@ -306,6 +389,61 @@ mod pruebas {
             let salida = de_una(&mut r, &entrada, 47_000, 480);
             let e = error_db(&salida, hz, 48_000.0, 0.5);
             assert!(e < -60.0, "{hz} Hz: error de {e:.1} dB");
+        }
+    }
+
+    #[test]
+    fn de_96_y_192_khz_a_48_lo_ultrasonico_no_vuelve() {
+        for (tasa, coef) in [(96_000u32, 96), (192_000, 192)] {
+            let fs = f64::from(tasa);
+            // 30 kHz no cabe en 48 kHz: sin un filtro mas largo volvia como
+            // un silbido de 18 kHz.
+            let entrada = seno(30_000.0, fs, tasa as usize, 0.9);
+            let mut r = Remuestreador::nuevo(tasa, 48_000, 1, 1_024);
+            assert_eq!(r.coeficientes(), coef);
+            let salida = de_una(&mut r, &entrada, 40_000, 480);
+            let pico = salida[400..].iter().fold(0.0f32, |m, v| m.max(v.abs()));
+            let db = 20.0 * (f64::from(pico) / 0.9).log10();
+            assert!(db < -60.0, "{tasa}: se colo a {db:.1} dB");
+            // Lo que si cabe pasa entero.
+            let entrada = seno(5_000.0, fs, tasa as usize, 0.5);
+            let mut r = Remuestreador::nuevo(tasa, 48_000, 1, 1_024);
+            let salida = de_una(&mut r, &entrada, 40_000, 480);
+            let e = error_db(&salida, 5_000.0, 48_000.0, 0.5);
+            assert!(e < -60.0, "{tasa}: 5 kHz con error de {e:.1} dB");
+        }
+        // Subir o quedarse no alarga nada.
+        assert_eq!(coeficientes_para(44_100, 48_000), COEFICIENTES);
+        assert_eq!(coeficientes_para(48_000, 44_100), COEFICIENTES);
+        assert_eq!(
+            coeficientes_para(384_000, 48_000),
+            COEFICIENTES * ALARGUE_MAXIMO
+        );
+    }
+
+    #[test]
+    fn seis_canales_salen_cada_uno_por_su_lado() {
+        // El camino general (mas de dos canales) da lo mismo que el mono.
+        let base = seno(700.0, 48_000.0, 6_000, 0.5);
+        let entrada: Vec<f32> = base
+            .iter()
+            .flat_map(|v| (0..6).map(move |k| *v * (k as f32 + 1.0) / 6.0))
+            .collect();
+        let mut r6 = Remuestreador::nuevo(48_000, 44_100, 6, 1_024);
+        let mut r1 = Remuestreador::nuevo(48_000, 44_100, 1, 1_024);
+        let mut leido = 0;
+        let mut s6 = vec![0.0; 6 * 4_000];
+        r6.producir(&mut s6, |d| {
+            let n = d.len().min(entrada.len() - leido);
+            d[..n].copy_from_slice(&entrada[leido..leido + n]);
+            leido += n;
+            n / 6
+        });
+        let s1 = de_una(&mut r1, &base, 4_000, 4_000);
+        for (m, v) in s6.chunks_exact(6).zip(&s1) {
+            for (k, x) in m.iter().enumerate() {
+                assert!((x - v * (k as f32 + 1.0) / 6.0).abs() < 1e-5);
+            }
         }
     }
 

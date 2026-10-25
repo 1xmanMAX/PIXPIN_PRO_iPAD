@@ -29,6 +29,7 @@ use crate::anillo::Consumidor;
 use crate::deriva::Deriva;
 use crate::dsp::{self, Ganancia, Limitador, PasoAlto, Puerta, Realce};
 use crate::medidas::{Cuentas, Medidor, Nivel};
+use crate::reloj::{UMBRAL_ESPERA, marcos_en};
 use crate::remuestreo::Remuestreador;
 
 /// El colchon de cada anillo.
@@ -39,6 +40,9 @@ pub const SOBRA_MS: u32 = 200;
 pub const MAX_BLOQUE_MS: u32 = 100;
 /// La frecuencia de corte del paso alto del microfono.
 pub const CORTE_PASO_ALTO_HZ: f32 = 80.0;
+/// Lo que se suaviza el adelanto medio de una fuente (ver
+/// [`Entrada::medida_fina`]), en segundos.
+const SUAVIZADO_ADELANTO_S: f64 = 5.0;
 
 /// De quien es una fuente: el realce, la puerta y el paso alto son solo del
 /// microfono.
@@ -112,6 +116,9 @@ pub struct Entrada {
     ganancia: Ganancia,
     compartido: Arc<Compartido>,
     bloque: Vec<f32>,
+    /// Lo que la tarjeta suele llevar capturado sin entregar, en marcos
+    /// (media lenta del adelanto; ver [`Entrada::medida_fina`]).
+    adelanto_medio: Option<f64>,
 }
 
 impl Entrada {
@@ -146,7 +153,37 @@ impl Entrada {
             compartido,
             anillo,
             bloque: vec![0.0; max * canales],
+            adelanto_medio: None,
         }
+    }
+
+    /// **La medida fina del anillo**: lo que hay en el y lo que la tarjeta
+    /// ya capturo pero aun no entrego (desde el sello del ultimo paquete
+    /// hasta `ahora`), menos lo que suele llevar asi (media de 5 s).
+    ///
+    /// Lo que hay en el anillo justo al mirar sube un paquete entero de
+    /// golpe y baja poco a poco (el diente de sierra: 10 ms, o 30 con unos
+    /// cascos Bluetooth); sumandole lo que lleva la tarjeta desde su ultimo
+    /// paquete, la cuenta es lisa (como la de `zita-ajbridge`). Restar la
+    /// media deja el **mismo** punto de equilibrio que la medida gruesa (el
+    /// anillo, de media, en su colchon), asi que no se gasta colchon en el
+    /// retraso de entrega de cada tarjeta.
+    ///
+    /// `None` si no hay sello (la plataforma no lo da) o no se sabe la hora.
+    fn medida_fina(&mut self, hay: usize, ahora: Option<u64>, dt: f64) -> Option<f64> {
+        let sello = self.anillo.sello();
+        let ahora = ahora?;
+        if sello == 0 {
+            return None;
+        }
+        let tope = marcos_en(UMBRAL_ESPERA, self.tasa);
+        let adelanto = marcos_en(ahora.saturating_sub(sello), self.tasa).min(tope) as f64;
+        let medio = match self.adelanto_medio {
+            None => adelanto,
+            Some(m) => m + (adelanto - m) * (1.0 - (-dt / SUAVIZADO_ADELANTO_S).exp()),
+        };
+        self.adelanto_medio = Some(medio);
+        Some(hay as f64 + adelanto - medio)
     }
 
     pub fn papel(&self) -> Papel {
@@ -159,21 +196,31 @@ impl Entrada {
             as usize
     }
 
-    /// Los `marcos` siguientes de esta fuente, ya tratados.
-    fn producir(&mut self, marcos: usize, dt: f64) -> &[f32] {
+    /// Los `marcos` siguientes de esta fuente, ya tratados. `ahora`: la hora
+    /// del reloj comun (100 ns), para la [medida fina](Entrada::medida_fina).
+    fn producir(&mut self, marcos: usize, dt: f64, ahora: Option<u64>) -> &[f32] {
         let c = self.canales;
-        let fuera = &mut self.bloque[..marcos * c];
-        let cuentas = &self.compartido.cuentas;
         let mut hay = self.anillo.disponibles();
         if !self.cebada {
             if hay < self.objetivo {
+                let fuera = &mut self.bloque[..marcos * c];
                 fuera.fill(0.0);
                 self.compartido.medidor.publicar(Nivel::default());
                 return fuera;
             }
+            // Se empieza con el anillo **justo** en su colchon, tirando lo
+            // que el ultimo paquete trajo de mas (`zita-ajbridge`, estado
+            // SYNC2: ajusta la cola una vez y luego solo sigue): si no, el
+            // lazo empezaria con hasta un paquete de error que corregir.
+            let sobra = self.anillo.descartar(hay - self.objetivo);
+            Cuentas::sumar(&self.compartido.cuentas.tirados, sobra as u64);
+            hay -= sobra;
             self.cebada = true;
             self.deriva.olvidar_medida();
         }
+        let fina = self.medida_fina(hay, ahora, dt);
+        let fuera = &mut self.bloque[..marcos * c];
+        let cuentas = &self.compartido.cuentas;
         if hay > self.objetivo + self.sobra {
             let tirados = self.anillo.descartar(hay - self.objetivo);
             Cuentas::sumar(&cuentas.tirados, tirados as u64);
@@ -181,7 +228,10 @@ impl Entrada {
             self.deriva.olvidar_medida();
         }
         if dt > 0.0 {
-            let factor = self.deriva.observar(hay as f64, dt);
+            let factor = match fina {
+                Some(m) => self.deriva.observar_fina(m, dt),
+                None => self.deriva.observar(hay as f64, dt),
+            };
             self.remuestreador.ajustar(factor);
             cuentas
                 .milippm
@@ -279,12 +329,19 @@ impl Nucleo {
     /// `dt`: segundos de pared desde la medida anterior de la deriva (cero si
     /// es otro trozo de la misma vuelta).
     pub fn mezclar(&mut self, marcos: usize, dt: f64) -> &[i16] {
+        self.mezclar_en(marcos, dt, None)
+    }
+
+    /// Lo mismo sabiendo la hora del reloj comun (`ahora`, 100 ns: el QPC en
+    /// Windows, `CLOCK_MONOTONIC` en Android), con la que cada fuente que
+    /// selle su anillo se mide fina (ver [`crate::deriva::Deriva::observar_fina`]).
+    pub fn mezclar_en(&mut self, marcos: usize, dt: f64, ahora: Option<u64>) -> &[i16] {
         let marcos = marcos.min(self.max_bloque());
         let n = marcos * self.canales;
         let suma = &mut self.suma[..n];
         suma.fill(0.0);
         for e in &mut self.entradas {
-            let b = e.producir(marcos, dt);
+            let b = e.producir(marcos, dt, ahora);
             for (s, v) in suma.iter_mut().zip(b) {
                 *s += v;
             }
@@ -321,6 +378,8 @@ mod pruebas {
         marco: u64,
         senal: Box<dyn FnMut(u64, f64) -> f32>,
         callada: bool,
+        /// Marcos por paquete (480: 10 ms; 1 440: unos cascos Bluetooth).
+        paquete: usize,
     }
 
     impl Tarjeta {
@@ -336,24 +395,28 @@ mod pruebas {
                 marco: 0,
                 senal,
                 callada: false,
+                paquete: 480,
             }
         }
 
         /// Entrega lo que su reloj haya capturado hasta `t`.
         fn hasta(&mut self, t: f64) {
             let c = self.productor.canales();
-            let mut paquete = vec![0.0f32; 480 * c];
-            while self.siguiente + 480.0 / self.tasa_real <= t {
+            let p = self.paquete as f64;
+            let mut paquete = vec![0.0f32; self.paquete * c];
+            while self.siguiente + p / self.tasa_real <= t {
                 for m in paquete.chunks_exact_mut(c) {
                     let instante = self.marco as f64 / self.tasa_real;
                     let v = (self.senal)(self.marco, instante);
                     m.fill(v);
                     self.marco += 1;
                 }
+                self.siguiente += p / self.tasa_real;
                 if !self.callada {
                     self.productor.escribir(&paquete);
+                    // Como la toma: hasta donde llega, en el reloj comun.
+                    self.productor.sellar((self.siguiente * 1e7) as u64);
                 }
-                self.siguiente += 480.0 / self.tasa_real;
             }
         }
     }
@@ -377,6 +440,18 @@ mod pruebas {
         nucleo: &mut Nucleo,
         tarjetas: &mut [Tarjeta],
         segundos: f64,
+        cada: impl FnMut(&[i16], u64),
+    ) -> u64 {
+        correr_con(nucleo, tarjetas, segundos, false, cada)
+    }
+
+    /// Como `correr`; con `fino`, pasandole la hora al nucleo (la medida
+    /// fina de la deriva).
+    fn correr_con(
+        nucleo: &mut Nucleo,
+        tarjetas: &mut [Tarjeta],
+        segundos: f64,
+        fino: bool,
         mut cada: impl FnMut(&[i16], u64),
     ) -> u64 {
         let tick = 0.015_6;
@@ -392,7 +467,8 @@ mod pruebas {
             let mut quedan = toca as usize;
             while quedan > 0 {
                 let n = quedan.min(nucleo.max_bloque());
-                let b = nucleo.mezclar(n, dt);
+                let ahora = fino.then_some((t * 1e7) as u64);
+                let b = nucleo.mezclar_en(n, dt, ahora);
                 cada(b, producidos);
                 producidos += n as u64;
                 quedan -= n;
@@ -418,12 +494,12 @@ mod pruebas {
 
     /// El retraso de cada chasquido en la salida respecto a cuando sono, en
     /// ms.
-    fn retrasos(ppm: f64, segundos: f64) -> Vec<f64> {
+    fn retrasos(ppm: f64, segundos: f64, fino: bool) -> Vec<f64> {
         let (e, k, _) = entrada(Papel::Equipo, ppm, Tratamiento::default(), chasquidos(), 1);
         let mut nucleo = Nucleo::nuevo(FS, 1, vec![e], Arc::new(Medidor::default()));
         let mut tarjetas = [k];
         let mut picos: Vec<(u64, i16)> = Vec::new();
-        correr(&mut nucleo, &mut tarjetas, segundos, |b, desde| {
+        correr_con(&mut nucleo, &mut tarjetas, segundos, fino, |b, desde| {
             for (i, v) in b.iter().enumerate() {
                 if *v > 3_000 {
                     let j = desde + i as u64;
@@ -451,10 +527,19 @@ mod pruebas {
 
     #[test]
     fn diez_minutos_con_relojes_separados_siguen_a_la_par() {
+        diez_minutos(false);
+    }
+
+    #[test]
+    fn diez_minutos_a_la_par_tambien_con_la_medida_fina() {
+        diez_minutos(true);
+    }
+
+    fn diez_minutos(fino: bool) {
         // +-400 ppm durante 10 minutos son 0,24 s de deriva cada una sin
         // corregir (0,48 s entre las dos): mas que una hora a 70 ppm.
-        let rapida = retrasos(400.0, 600.0);
-        let lenta = retrasos(-400.0, 600.0);
+        let rapida = retrasos(400.0, 600.0, fino);
+        let lenta = retrasos(-400.0, 600.0, fino);
         assert!(
             rapida.len() >= 110 && lenta.len() >= 110,
             "{} {}",
@@ -478,6 +563,35 @@ mod pruebas {
         for (a, b) in rapida[12..].iter().zip(&lenta[12..]) {
             assert!((a - b).abs() < 20.0, "{a:.1} contra {b:.1}");
         }
+    }
+
+    #[test]
+    fn unos_cascos_bluetooth_se_enganchan_pronto_y_no_se_quedan_sin_nada() {
+        // Paquetes de 30 ms y el cristal a +300 ppm: con la medida fina la
+        // deriva se aprende en medio minuto y el anillo no se vacia nunca.
+        let (e, mut k, comp) = entrada(
+            Papel::Microfono,
+            300.0,
+            Tratamiento::default(),
+            Box::new(|_, _| 0.25),
+            1,
+        );
+        k.paquete = 1_440;
+        let mut nucleo = Nucleo::nuevo(FS, 1, vec![e], Arc::new(Medidor::default()));
+        let mut tarjetas = [k];
+        let hechos = correr_con(&mut nucleo, &mut tarjetas, 30.0, true, |_, _| {});
+        let ppm = comp.cuentas.foto().ppm;
+        assert!((ppm - 300.0).abs() < 60.0, "a los 30 s: {ppm:.0} ppm");
+        let faltaron = comp.cuentas.faltaron.load(Ordering::Relaxed);
+        // Y cinco minutos mas sin un solo hueco.
+        let mut ceros = 0u64;
+        correr_desde_con(&mut nucleo, &mut tarjetas, 30.0, 330.0, hechos, true, |b| {
+            ceros += b.iter().filter(|v| **v == 0).count() as u64;
+        });
+        assert_eq!(comp.cuentas.faltaron.load(Ordering::Relaxed), faltaron);
+        assert_eq!(ceros, 0);
+        let ppm = comp.cuentas.foto().ppm;
+        assert!((ppm - 300.0).abs() < 30.0, "a los 5 min: {ppm:.0} ppm");
     }
 
     #[test]
@@ -515,7 +629,19 @@ mod pruebas {
         tarjetas: &mut [Tarjeta],
         t0: f64,
         t1: f64,
+        producidos: u64,
+        cada: impl FnMut(&[i16]),
+    ) -> u64 {
+        correr_desde_con(nucleo, tarjetas, t0, t1, producidos, false, cada)
+    }
+
+    fn correr_desde_con(
+        nucleo: &mut Nucleo,
+        tarjetas: &mut [Tarjeta],
+        t0: f64,
+        t1: f64,
         mut producidos: u64,
+        fino: bool,
         mut cada: impl FnMut(&[i16]),
     ) -> u64 {
         let antes = producidos;
@@ -531,7 +657,7 @@ mod pruebas {
             let mut dt = tick;
             while quedan > 0 {
                 let n = quedan.min(nucleo.max_bloque());
-                cada(nucleo.mezclar(n, dt));
+                cada(nucleo.mezclar_en(n, dt, fino.then_some((t * 1e7) as u64)));
                 producidos += n as u64;
                 quedan -= n;
                 dt = 0.0;

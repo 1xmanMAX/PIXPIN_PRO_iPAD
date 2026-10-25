@@ -14,6 +14,8 @@ pub mod chat;
 /// Un color por tipo de archivo (`ColorDeExtension` del movil, v0.98.4).
 pub mod color_de_extension;
 pub mod confirmar;
+/// Un chat compartido como conversacion: de quien es cada mensaje.
+pub mod conversacion;
 pub mod evento_anotador;
 pub mod historial;
 pub mod hoja_compartir;

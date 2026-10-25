@@ -11,8 +11,10 @@
 // El microfono (`MicrofonoSuelto`) es lo de `GrabadoraVoz` sin el chat:
 // abre la sesion de sonido de grabar (iOS), graba a un fichero con el
 // nombre que le den, cuenta lo llevado contando muestras y al parar da la
-// `NotaGrabada`. Se puede pausar (grabar una clase) y, si una llamada o
-// Siri lo cortan, vuelve a grabar solo al acabar la interrupcion.
+// `NotaGrabada`. Graba por la mezcla de Windows (`MicrofonoConMezcla`); el
+// motor de sonido solo existe mientras graba. Se puede pausar (grabar una
+// clase) y, si una llamada o Siri lo cortan, vuelve a grabar solo al acabar
+// la interrupcion.
 
 import AVFoundation
 import PixPinCore
@@ -143,49 +145,44 @@ enum Ventanita {
 /// chat sino a un `.m4a` suelto que luego entra con su nombre.
 @MainActor
 final class MicrofonoSuelto {
-    private var motor: AVAudioEngine?
-    private var escritor: EscritorVoz?
+    private var microfono: MicrofonoConMezcla?
     private(set) var desde: Date?
     /// En pausa a proposito (no por una llamada).
     private(set) var enPausa = false
     private var vigia: NSObjectProtocol?
 
-    var grabando: Bool { motor != nil }
+    var grabando: Bool { microfono != nil }
 
     /// Lo llevado, contando muestras (lo que de verdad se grabo: la pausa
     /// no cuenta).
-    var llevadoMs: Int64 { escritor?.llevadoMs ?? 0 }
+    var llevadoMs: Int64 { microfono?.llevadoMs ?? 0 }
 
     /// Pide el permiso (la primera vez sale el aviso del sistema) y empieza
     /// a grabar en `fichero`. Lanza si no hay permiso o microfono.
     func empezar(en fichero: URL) async throws {
-        guard motor == nil else { return }
+        guard microfono == nil else { return }
         guard await GrabadoraVoz.permisoMicrofono() else { throw ErrorVoz.sinPermisoMicrofono }
         guard GrabadoraVoz.compartida.estado == .quieta else { throw ErrorVoz.sinMicrofono }
         ReproductorVoz.compartido.pausar()
         let sesion = AVAudioSession.sharedInstance()
         try sesion.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
         try sesion.setActive(true)
-        let motor = AVAudioEngine()
-        let entrada = motor.inputNode
-        let formato = entrada.outputFormat(forBus: 0)
-        guard formato.sampleRate > 0, formato.channelCount > 0 else {
-            MicrofonoSuelto.soltarSesion()
-            throw ErrorVoz.sinMicrofono
-        }
-        let escritor = try EscritorVoz(url: fichero, muestreoDeEntrada: formato.sampleRate)
-        MicrofonoSuelto.instalarGrifo(en: entrada, formato: formato, escritor: escritor)
-        motor.prepare()
+        let m: MicrofonoConMezcla
         do {
-            try motor.start()
+            m = try MicrofonoConMezcla(url: fichero)
         } catch {
-            entrada.removeTap(onBus: 0)
+            MicrofonoSuelto.soltarSesion()
+            throw error
+        }
+        do {
+            try m.empezar()
+        } catch {
+            _ = m.terminar()
             try? FileManager.default.removeItem(at: fichero)
             MicrofonoSuelto.soltarSesion()
             throw error
         }
-        self.motor = motor
-        self.escritor = escritor
+        microfono = m
         enPausa = false
         desde = Date()
         vigilarInterrupciones()
@@ -193,56 +190,53 @@ final class MicrofonoSuelto {
 
     /// Para un rato sin cerrar el fichero (lo pausado no se graba).
     func pausar() {
-        guard let motor, !enPausa else { return }
-        motor.pause()
+        guard let microfono, !enPausa else { return }
+        microfono.pausar(true)
         enPausa = true
     }
 
     /// Sigue grabando tras `pausar`. `false` si el microfono no volvio.
     @discardableResult
     func seguir() -> Bool {
-        guard let motor, enPausa else { return true }
+        guard let microfono, enPausa else { return true }
         do {
             try AVAudioSession.sharedInstance().setActive(true)
-            try motor.start()
-            enPausa = false
-            return true
         } catch {
             return false
         }
+        guard microfono.volverAArrancar() else { return false }
+        microfono.pausar(false)
+        enPausa = false
+        return true
     }
 
     /// Para y cierra el fichero (fuera del hilo principal: escribir el
     /// indice del MPEG-4 tarda). `nil` si no grababa.
     func parar() async -> NotaGrabada? {
-        guard let motor, let escritor else { return nil }
-        motor.inputNode.removeTap(onBus: 0)
-        motor.stop()
-        self.motor = nil
-        self.escritor = nil
+        guard let microfono else { return nil }
+        self.microfono = nil
         desde = nil
         enPausa = false
         dejarDeVigilar()
+        let nota = await Task.detached(priority: .userInitiated) { microfono.terminar() }.value
         MicrofonoSuelto.soltarSesion()
-        return await Task.detached(priority: .userInitiated) { escritor.terminar() }.value
+        return nota
     }
 
     /// Para y tira lo grabado: no se guarda a escondidas.
     func cancelar() {
-        guard let motor, let escritor else { return }
-        motor.inputNode.removeTap(onBus: 0)
-        motor.stop()
-        self.motor = nil
-        self.escritor = nil
+        guard let microfono else { return }
+        self.microfono = nil
         desde = nil
         enPausa = false
         dejarDeVigilar()
+        try? FileManager.default.removeItem(at: microfono.terminar().url)
         MicrofonoSuelto.soltarSesion()
-        try? FileManager.default.removeItem(at: escritor.terminar().url)
     }
 
-    /// Una llamada o Siri paran el motor; al acabar se sigue grabando (si
-    /// no estaba en pausa a proposito).
+    /// Una llamada o Siri paran el motor: mientras dura, la mezcla esta en
+    /// pausa (el reloj no corre); al acabar se sigue grabando (si no estaba
+    /// en pausa a proposito).
     private func vigilarInterrupciones() {
         dejarDeVigilar()
         vigia = NotificationCenter.default.addObserver(
@@ -251,9 +245,16 @@ final class MicrofonoSuelto {
             let tipo = (aviso.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
                 .flatMap(AVAudioSession.InterruptionType.init(rawValue:))
             MainActor.assumeIsolated {
-                guard let self, let motor = self.motor, tipo == .ended, !self.enPausa else { return }
-                try? AVAudioSession.sharedInstance().setActive(true)
-                try? motor.start()
+                guard let self, let microfono = self.microfono else { return }
+                switch tipo {
+                case .began?:
+                    microfono.pausar(true)
+                case .ended?:
+                    try? AVAudioSession.sharedInstance().setActive(true)
+                    if microfono.volverAArrancar() { microfono.pausar(self.enPausa) }
+                default:
+                    break
+                }
             }
         }
     }
@@ -261,13 +262,6 @@ final class MicrofonoSuelto {
     private func dejarDeVigilar() {
         if let vigia { NotificationCenter.default.removeObserver(vigia) }
         vigia = nil
-    }
-
-    private nonisolated static func instalarGrifo(en nodo: AVAudioInputNode, formato: AVAudioFormat,
-                                                   escritor: EscritorVoz) {
-        nodo.installTap(onBus: 0, bufferSize: 4096, format: formato) { bloque, _ in
-            try? escritor.escribir(bloque)
-        }
     }
 
     /// La sesion vuelve a la de escuchar (para oir la toma al momento).

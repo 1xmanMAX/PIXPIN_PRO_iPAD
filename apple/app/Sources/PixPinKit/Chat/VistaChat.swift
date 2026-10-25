@@ -863,6 +863,13 @@ struct CabeceraChat: View {
             .frame(height: 44)
             .background(Paleta.chat.pildora, in: Capsule())
             .overlay(Capsule().strokeBorder(Paleta.chat.islaBorde, lineWidth: 1))
+            // Tocar el nombre abre la ficha del chat (como el Mac y Telegram:
+            // proyectos, fotos, videos, archivos y enlaces).
+            .contentShape(Capsule())
+            .onTapGesture { informacion?() }
+            .hoverEffect(.highlight)
+            .accessibilityAddTraits(informacion != nil ? .isButton : [])
+            .accessibilityHint(informacion != nil ? "Proyectos, fotos, vídeos, archivos y enlaces del chat" : "")
             Spacer(minLength: 0)
             HStack(spacing: 2) {
                 Button(action: buscar) {

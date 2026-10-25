@@ -6,11 +6,15 @@
 // dentro del proyecto), se guarda en el chat como `VOZ` y se pasa a texto en
 // el aparato. Una a la vez en toda la app.
 //
+// El sonido pasa por la mezcla del motor de audio de Windows
+// (`MicrofonoConMezcla`, Windows 06f842c): paso alto y realce de la voz,
+// como una nota grabada en el PC.
+//
 // Rendimiento (§4bis): el motor de sonido solo existe mientras se graba; el
-// grifo escribe cada bloque al codificador AAC del sistema sin guardar el
-// sonido en memoria; los picos son 256 enteros como mucho. Nada de
-// temporizadores: lo que se ensena del tiempo lo pinta un `TimelineView`
-// solo mientras se graba.
+// grifo da cada bloque entero al nucleo y una cola lo escribe al
+// codificador AAC del sistema sin guardar el sonido en memoria; los picos
+// son 256 enteros como mucho. Lo que se ensena del tiempo lo pinta un
+// `TimelineView` solo mientras se graba.
 
 import AVFoundation
 import Foundation
@@ -32,8 +36,7 @@ public final class GrabadoraVoz: ObservableObject {
     /// pasarla a texto. El microfono flotante ofrece con ella la llamada.
     public var alGuardar: (@MainActor (MensajeChat?) -> Void)?
 
-    private var motor: AVAudioEngine?
-    private var escritor: EscritorVoz?
+    private var microfono: MicrofonoConMezcla?
 
     public init() {}
 
@@ -74,26 +77,28 @@ public final class GrabadoraVoz: ObservableObject {
             almacen.ponerError("No se pudo abrir el micrófono: \(error.localizedDescription)")
             return
         }
-        let motor = AVAudioEngine()
-        let entrada = motor.inputNode
-        let formato = entrada.outputFormat(forBus: 0)
-        guard formato.sampleRate > 0, formato.channelCount > 0 else {
-            almacen.ponerError("No hay ningún micrófono.")
-            return
-        }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("pixpin-voz-\(UUID().uuidString).\(FormatoVoz.extensionFichero)")
+        let m: MicrofonoConMezcla
         do {
-            let escritor = try EscritorVoz(url: url, muestreoDeEntrada: formato.sampleRate)
-            GrabadoraVoz.instalarGrifo(en: entrada, formato: formato, escritor: escritor)
-            motor.prepare()
-            try motor.start()
-            self.motor = motor
-            self.escritor = escritor
+            m = try MicrofonoConMezcla(url: url)
+        } catch ErrorVoz.sinMicrofono {
+            GrabadoraVoz.soltarMicrofono()
+            almacen.ponerError("No hay ningún micrófono.")
+            return
+        } catch {
+            GrabadoraVoz.soltarMicrofono()
+            try? FileManager.default.removeItem(at: url)
+            almacen.ponerError("No se pudo grabar: \(error.localizedDescription)")
+            return
+        }
+        do {
+            try m.empezar()
+            microfono = m
             estado = .grabando(chat: chat, desde: Date())
         } catch {
-            entrada.removeTap(onBus: 0)
-            motor.stop()
+            _ = m.terminar()
+            GrabadoraVoz.soltarMicrofono()
             try? FileManager.default.removeItem(at: url)
             almacen.ponerError("No se pudo grabar: \(error.localizedDescription)")
         }
@@ -101,17 +106,14 @@ public final class GrabadoraVoz: ObservableObject {
 
     /// Para, guarda la nota en su chat y la pasa a texto.
     public func parar(almacen: Almacen) async {
-        guard case let .grabando(chat, _) = estado, let motor, let escritor else { return }
-        motor.inputNode.removeTap(onBus: 0)
-        motor.stop()
-        self.motor = nil
-        self.escritor = nil
-        GrabadoraVoz.soltarMicrofono()
+        guard case let .grabando(chat, _) = estado, let microfono else { return }
+        self.microfono = nil
         estado = .guardando
         defer { estado = .quieta }
 
         // Cerrar el fichero escribe el indice del MPEG-4: fuera del principal.
-        let nota = await Task.detached(priority: .userInitiated) { escritor.terminar() }.value
+        let nota = await Task.detached(priority: .userInitiated) { microfono.terminar() }.value
+        GrabadoraVoz.soltarMicrofono()
         defer { try? FileManager.default.removeItem(at: nota.url) }
         let avisar = alGuardar
         alGuardar = nil
@@ -129,28 +131,16 @@ public final class GrabadoraVoz: ObservableObject {
 
     /// Para sin guardar nada (al cerrar la ventana del chat, por ejemplo).
     public func cancelar() {
-        guard case .grabando = estado, let motor, let escritor else { return }
-        motor.inputNode.removeTap(onBus: 0)
-        motor.stop()
-        self.motor = nil
-        self.escritor = nil
-        GrabadoraVoz.soltarMicrofono()
+        guard case .grabando = estado, let microfono else { return }
+        self.microfono = nil
         estado = .quieta
-        let url = escritor.terminar().url
+        let url = microfono.terminar().url
+        GrabadoraVoz.soltarMicrofono()
         try? FileManager.default.removeItem(at: url)
     }
 
-    /// El grifo del microfono, fuera del actor principal: AVAudioEngine lo
-    /// llama en su propio hilo con cada bloque.
-    private nonisolated static func instalarGrifo(en nodo: AVAudioInputNode, formato: AVAudioFormat,
-                                                   escritor: EscritorVoz) {
-        nodo.installTap(onBus: 0, bufferSize: 4096, format: formato) { bloque, _ in
-            try? escritor.escribir(bloque)
-        }
-    }
-
     /// Suelta el microfono: la sesion vuelve a la de escuchar (iOS).
-    private static func soltarMicrofono() {
+    static func soltarMicrofono() {
         let sesion = AVAudioSession.sharedInstance()
         try? sesion.setActive(false, options: .notifyOthersOnDeactivation)
         try? sesion.setCategory(.playback, mode: .spokenAudio)

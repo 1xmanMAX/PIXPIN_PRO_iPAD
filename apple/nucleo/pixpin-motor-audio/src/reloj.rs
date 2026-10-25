@@ -24,8 +24,28 @@ pub const CIEN_NS_POR_SEGUNDO: u64 = 10_000_000;
 
 /// Un paquete que empieza mas tarde que esto de donde acabo el anterior es
 /// un hueco de verdad. 20 ms: por encima del temblor de las fechas (un par de
-/// ms) y por debajo de lo que se nota.
+/// ms) y por debajo de lo que se nota. Es el del **sonido del equipo**, que
+/// calla de verdad (no manda paquetes) y cuyo hueco hay que poner entero.
 pub const UMBRAL_HUECO: u64 = 200_000;
+
+/// El del **microfono**, que no calla nunca: entrega sin parar y un hueco
+/// sin marca de discontinuidad casi siempre es temblor de las fechas (un
+/// microfono USB o Bluetooth las da con 10-30 ms de baile). 70 ms, el
+/// `TS_SMOOTHING_THRESHOLD` de OBS (`libobs/obs-source.c`): por debajo, se
+/// pega a lo anterior como si fuera seguido. Lo que se equivoque aqui lo
+/// absorbe la deriva, que mantiene el anillo en su nivel.
+pub const UMBRAL_HUECO_MICROFONO: u64 = 700_000;
+
+/// Con `AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY` (Windows tiro algo porque no
+/// se leyo a tiempo) el hueco es seguro: se pone desde 1 ms.
+pub const UMBRAL_DISCONTINUIDAD: u64 = 10_000;
+
+/// **Un salto del reloj**: un hueco mayor que esto no es silencio sino que
+/// el equipo se suspendio (la tapa del portatil) o el proceso estuvo
+/// congelado. 2 s, el `MAX_TS_VAR` de OBS. No se rellena: se empieza de
+/// nuevo desde ahi, como si hubiera sido una pausa (la mezcla hace lo mismo,
+/// ver [`avance_de_mezcla`]), en vez de meter una hora de silencio en la nota.
+pub const SALTO_MAXIMO: u64 = 20_000_000;
 
 /// Sin paquetes durante esto, se empieza a poner silencio al paso del
 /// reloj. 60 ms: mas que el periodo del aparato mas lento que se ve en la
@@ -50,6 +70,15 @@ pub fn duracion_de(marcos: u64, tasa: u32) -> u64 {
     (u128::from(marcos) * u128::from(CIEN_NS_POR_SEGUNDO) / u128::from(tasa)) as u64
 }
 
+/// Lo que avanza el reloj de la mezcla en una vuelta de `dt` (100 ns):
+/// `dt`, o nada si es un [salto](SALTO_MAXIMO) (el equipo se suspendio o el
+/// proceso estuvo congelado). Con un salto, quien mezcla lo trata como una
+/// pausa: tira lo que haya y vuelve a cebar, en vez de sacar de golpe la hora
+/// que estuvo dormido.
+pub fn avance_de_mezcla(dt: u64) -> Option<u64> {
+    (dt <= SALTO_MAXIMO).then_some(dt)
+}
+
 /// **El relleno de silencio** de una fuente, a la tasa con la que esa fuente
 /// escribe en su anillo.
 #[derive(Debug, Clone)]
@@ -63,21 +92,65 @@ pub struct Relleno {
     /// Silencio puesto de mas (el sonido llego antes de lo que se supuso):
     /// se le quita al principio de lo siguiente que llegue.
     exceso: u64,
+    /// Desde cuanto un hueco entre paquetes es de verdad.
+    umbral: u64,
+    /// El siguiente paquete viene despues de una discontinuidad marcada.
+    roto: bool,
+    /// Saltos del reloj vistos (ver [`SALTO_MAXIMO`]).
+    saltos: u64,
 }
 
 impl Relleno {
     /// Para una fuente arrancada en `inicio` (100 ns de QPC).
     pub fn nuevo(tasa: u32, inicio: u64) -> Relleno {
+        Relleno::con_umbral(tasa, inicio, UMBRAL_HUECO)
+    }
+
+    /// Con otro umbral de hueco (ver [`UMBRAL_HUECO_MICROFONO`]).
+    pub fn con_umbral(tasa: u32, inicio: u64, umbral: u64) -> Relleno {
         Relleno {
             tasa: tasa.max(1),
             fin: inicio,
             puesto: 0,
             exceso: 0,
+            umbral,
+            roto: false,
+            saltos: 0,
         }
     }
 
     pub fn tasa(&self) -> u32 {
         self.tasa
+    }
+
+    /// Cuantos saltos del reloj se han visto.
+    pub fn saltos(&self) -> u64 {
+        self.saltos
+    }
+
+    /// Donde acaba lo ultimo que llego, por su fecha (100 ns).
+    pub fn fin(&self) -> u64 {
+        self.fin
+    }
+
+    /// Hasta donde llega lo escrito en el anillo, contando el silencio
+    /// puesto al paso del reloj (100 ns): lo que se sella en el anillo.
+    pub fn hasta(&self) -> u64 {
+        self.fin + duracion_de(self.puesto, self.tasa)
+    }
+
+    /// El paquete siguiente viene marcado con discontinuidad (o es el
+    /// primero de un aparato vuelto a abrir): su hueco se cree desde 1 ms.
+    pub fn discontinuidad(&mut self) {
+        self.roto = true;
+    }
+
+    /// Empieza de nuevo en `ahora`, olvidando lo puesto (un salto del reloj).
+    fn saltar(&mut self, ahora: u64) {
+        self.fin = ahora;
+        self.puesto = 0;
+        self.exceso = 0;
+        self.saltos += 1;
     }
 
     /// Llega un paquete fechado en `inicio` que dura `duracion` (los dos en
@@ -86,7 +159,19 @@ impl Relleno {
     /// que [`Relleno::recortar`] se lo quite al paquete.
     pub fn paquete(&mut self, inicio: u64, duracion: u64) -> u64 {
         let hueco = inicio.saturating_sub(self.fin);
-        let hace_falta = if hueco > UMBRAL_HUECO {
+        let umbral = if std::mem::take(&mut self.roto) {
+            UMBRAL_DISCONTINUIDAD
+        } else {
+            self.umbral
+        };
+        if hueco > SALTO_MAXIMO + duracion_de(self.puesto, self.tasa) {
+            // Ni el silencio puesto al paso del reloj lo cubria: el hilo no
+            // corrio (suspension). Se sigue desde aqui.
+            self.saltar(inicio);
+            self.fin = inicio + duracion;
+            return 0;
+        }
+        let hace_falta = if hueco > umbral {
             marcos_en(hueco, self.tasa)
         } else {
             0
@@ -118,6 +203,12 @@ impl Relleno {
     pub fn espera(&mut self, ahora: u64) -> u64 {
         let atraso = ahora.saturating_sub(self.fin);
         if atraso <= UMBRAL_ESPERA {
+            return 0;
+        }
+        if atraso > SALTO_MAXIMO + duracion_de(self.puesto, self.tasa) + MARGEN_ESPERA {
+            // Llevaba mas de dos segundos sin poner nada, y se pone cada
+            // 10 ms: este hilo no corrio. No es silencio que rellenar.
+            self.saltar(ahora);
             return 0;
         }
         let hasta = marcos_en(atraso - MARGEN_ESPERA, self.tasa);
@@ -218,5 +309,73 @@ mod pruebas {
             t += 10 * MS + 10;
         }
         assert_eq!(silencio, 0);
+    }
+
+    #[test]
+    fn el_microfono_aguanta_el_baile_de_las_fechas_y_el_equipo_no() {
+        // Un paquete que llega fechado 40 ms tarde sin marca: en el
+        // microfono es temblor (se pega); en el equipo, un hueco de verdad.
+        let mut m = Relleno::con_umbral(FS, 0, UMBRAL_HUECO_MICROFONO);
+        let mut e = Relleno::nuevo(FS, 0);
+        m.paquete(0, 10 * MS);
+        e.paquete(0, 10 * MS);
+        assert_eq!(m.paquete(50 * MS, 10 * MS), 0);
+        assert_eq!(e.paquete(50 * MS, 10 * MS), 1_920);
+        // Con la marca de discontinuidad, el microfono tambien lo pone.
+        m.discontinuidad();
+        assert_eq!(m.paquete(100 * MS, 10 * MS), 1_920);
+        // Y la marca vale para un solo paquete.
+        assert_eq!(m.paquete(150 * MS, 10 * MS), 0);
+    }
+
+    #[test]
+    fn una_suspension_no_mete_una_hora_de_silencio() {
+        let mut r = Relleno::nuevo(FS, 0);
+        let mut t = 0;
+        let mut puesto = 0;
+        // Un segundo normal, esperando cada 10 ms.
+        while t < 1_000 * MS {
+            r.paquete(t, 10 * MS);
+            t += 10 * MS;
+            puesto += r.espera(t);
+        }
+        assert_eq!(puesto, 0);
+        // El equipo duerme una hora: ni una vuelta del hilo.
+        t += 3_600 * 1_000 * MS;
+        assert_eq!(r.espera(t), 0, "no se rellena la suspension");
+        assert_eq!(r.saltos(), 1);
+        // Al volver, lo que llega cae seguido, sin hueco.
+        assert_eq!(r.paquete(t, 10 * MS), 0);
+        assert_eq!(r.espera(t + 15 * MS), 0);
+        // Un paquete fechado una hora despues sin que el hilo esperase
+        // (la otra forma de verlo) tambien es un salto.
+        let mut r = Relleno::nuevo(FS, 0);
+        r.paquete(0, 10 * MS);
+        assert_eq!(r.paquete(3_600 * 1_000 * MS, 10 * MS), 0);
+        assert_eq!(r.saltos(), 1);
+    }
+
+    #[test]
+    fn un_silencio_largo_del_equipo_no_es_un_salto() {
+        // Diez segundos callado con el hilo dando vueltas: se rellena todo,
+        // sin confundirlo con una suspension.
+        let mut r = Relleno::nuevo(FS, 0);
+        r.paquete(0, 10 * MS);
+        let mut puesto = 0;
+        let mut t = 10 * MS;
+        while t < 10_000 * MS {
+            t += 10 * MS;
+            puesto += r.espera(t);
+        }
+        puesto += r.paquete(t, 10 * MS);
+        assert_eq!(r.saltos(), 0);
+        assert_eq!(puesto, marcos_en(t - 10 * MS, FS));
+    }
+
+    #[test]
+    fn la_mezcla_no_cuenta_los_saltos() {
+        assert_eq!(avance_de_mezcla(156_000), Some(156_000));
+        assert_eq!(avance_de_mezcla(SALTO_MAXIMO), Some(SALTO_MAXIMO));
+        assert_eq!(avance_de_mezcla(SALTO_MAXIMO + 1), None);
     }
 }

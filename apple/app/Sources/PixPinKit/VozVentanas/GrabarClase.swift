@@ -19,6 +19,14 @@
 //    de Windows y el Mac no se puede en el iPad (no deja grabar otras apps).
 // 4. **Pasar a texto**, con el dictado del iPad; «Dejarlo sin texto» lo
 //    corta (luego se puede pedir con «Pasar a texto» en la nota).
+//
+// El sonido pasa por **el motor de audio de Windows** (38204cb y 06f842c,
+// `MicrofonoConMezcla` de `Voz/MezclaVoz.swift`, como el Mac): remuestreo a
+// 48 kHz con la deriva de la tarjeta, paso alto y realce de la voz, y el
+// limitador; en pausa (o mientras una llamada corta el microfono) el reloj
+// no corre, asi que los minutos de las fotos casan con lo grabado. El motor
+// de video nuevo (perfiles Ligero/Normal/Nítido, cdad692) no tiene uso aqui:
+// el iPad no deja grabar la pantalla de otras apps.
 
 import PhotosUI
 import PixPinCore

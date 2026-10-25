@@ -14,16 +14,35 @@
 //! Como en Windows (`indices_de_la_seccion` de `ventana_chat.rs`): las
 //! lecciones no salen (ni su mensaje ni sus fotos y audios), y la galeria
 //! son las hojas del `proyecto.json` (por su codigo unico), no una clase.
+//!
+//! La segunda pasada de Windows (99f918a, 2439c5c, 8c92ba4: la cara y el
+//! teclado del panel de medios de Telegram):
+//!
+//! - **Lo mas nuevo primero**, como Telegram (los rotulos de mes los pone
+//!   Swift, con la hora de este Mac).
+//! - **Los proyectos viven aqui**, en la primera pestana, con la que se
+//!   abre la isla: cada proyecto de la lista de chats, en su orden
+//!   ([`Nucleo::proyectos_de_la_ficha`]). No son mensajes: no se guarda ni
+//!   viaja nada.
+//! - **Las fotos de las notas ricas** (`![…](pixpin:files/…)`) salen en
+//!   «Fotos» cada una como una cosa mas, en el sitio de su nota
+//!   (`pixpin_ui::info::con_las_fotos_de_las_notas`).
+//! - El foco del teclado se mueve con las mismas cuentas que en Windows
+//!   ([`vecina_en_la_ficha`], `pixpin_ui::info::Lista::vecina`).
 
 use pixpin_proyecto::almacen::{self, Indice};
-use pixpin_proyecto::cuaderno::{self, Mensaje, Seccion};
+use pixpin_proyecto::cuaderno::{self, Clase, Mensaje, Seccion};
+use pixpin_ui::info as ui;
+use pixpin_ui::resaltado;
 
-use crate::chats::{MensajeChat, validar_chat};
+use crate::chats::{FichaChat, MensajeChat, validar_chat};
 use crate::{ErrorNucleo, Nucleo};
 
 /// Una pestana de la ficha (`cuaderno::Seccion`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum SeccionFicha {
+    /// Los proyectos de la lista de chats: solo de la interfaz.
+    Proyectos,
     Galeria,
     Todo,
     Fotos,
@@ -36,9 +55,11 @@ pub enum SeccionFicha {
     Buzon,
 }
 
-/// En que orden salen las pestanas (`ORDEN` de Windows): primero lo que se
-/// mira, luego lo que se lee, y «Todo» y el buzon al final.
-pub const ORDEN: [SeccionFicha; 10] = [
+/// En que orden salen las pestanas (`ORDEN` de Windows): los proyectos
+/// delante (es con la que se abre la isla), luego lo que se mira, lo que se
+/// lee, y «Todo» y el buzon al final.
+pub const ORDEN: [SeccionFicha; 11] = [
+    SeccionFicha::Proyectos,
     SeccionFicha::Galeria,
     SeccionFicha::Fotos,
     SeccionFicha::Videos,
@@ -54,6 +75,7 @@ pub const ORDEN: [SeccionFicha; 10] = [
 impl SeccionFicha {
     fn del_cuaderno(self) -> Seccion {
         match self {
+            SeccionFicha::Proyectos => Seccion::Proyectos,
             SeccionFicha::Galeria => Seccion::Galeria,
             SeccionFicha::Todo => Seccion::Todo,
             SeccionFicha::Fotos => Seccion::Fotos,
@@ -83,8 +105,8 @@ pub struct PestanaFicha {
 pub struct FichaDelChatLeida {
     /// Las que tienen algo (y la puesta, aunque se haya vaciado), en `ORDEN`.
     pub pestanas: Vec<PestanaFicha>,
-    /// Con la que se abre: la primera que tenga algo; en un chat vacio,
-    /// «Todo», que dice que no hay nada.
+    /// Con la que se abre: la primera que tenga algo (los proyectos, casi
+    /// siempre); sin nada, «Todo», que dice que no hay nada.
     pub primera: SeccionFicha,
     /// Cuantas cosas tiene el chat («24 cosas»).
     pub cosas: u32,
@@ -104,7 +126,8 @@ pub struct EnlaceFicha {
     pub de_que: String,
 }
 
-/// Una cosa de una pestana.
+/// Una cosa de una pestana: un mensaje entero o, en «Fotos», una foto de
+/// una nota rica (`pixpin_ui::info::Cosa`).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CosaDeLaFicha {
     pub mensaje: MensajeChat,
@@ -112,8 +135,36 @@ pub struct CosaDeLaFicha {
     /// «Ver en el chat» salta a ella.
     pub posicion: u64,
     pub es_video: bool,
-    /// El primer enlace de su texto, si lo lleva.
+    /// El primer enlace de su texto, si lo lleva y es un mensaje entero: la
+    /// foto de una nota es una foto aunque su nota lleve un enlace.
     pub enlace: Option<EnlaceFicha>,
+    /// En una nota rica, que foto suya es (en el orden de su burbuja);
+    /// `None`, el mensaje entero.
+    pub foto: Option<u32>,
+    /// El fichero de esa foto en este aparato, solo si esta.
+    pub ruta_foto: Option<String>,
+    /// Lo que dice de esa foto su alt, sin el ancho del editor
+    /// (`planta|300`): su nombre en la previa. Vacio en un mensaje entero.
+    pub alt: String,
+}
+
+/// Un proyecto de la pestana «Proyectos».
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProyectoDeLaFicha {
+    pub ficha: FichaChat,
+    /// El de este chat: va marcado («Este chat») y pulsarlo no sale de la
+    /// isla, lleva a su «Galeria».
+    pub este: bool,
+    /// Guardado en un disco que ahora no esta: no se puede abrir.
+    pub disponible: bool,
+}
+
+/// Un trozo de lo buscado dentro de un nombre, en unidades UTF-16 (las de
+/// `NSString`): va en negrita.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct TramoDeLaFicha {
+    pub inicio: u32,
+    pub largo: u32,
 }
 
 /// Si un mensaje es de una leccion (`lecciones::almacen::es_de_leccion` de
@@ -128,7 +179,7 @@ fn es_de_leccion(m: &Mensaje) -> bool {
 
 /// **Que mensajes son de una seccion**, por su sitio en `mensajes`: el
 /// `indices_de_la_seccion` de Windows. `hojas` son los codigos unicos de las
-/// hojas del proyecto (para la galeria).
+/// hojas del proyecto (para la galeria). Los proyectos no son mensajes.
 pub fn de_la_seccion(
     mensajes: &[Mensaje],
     seccion: SeccionFicha,
@@ -145,6 +196,43 @@ pub fn de_la_seccion(
         .filter(|(_, m)| !m.en_buzon && m.uid.as_deref().is_some_and(|u| hojas.contains(u)))
         .map(|(n, _)| n)
         .collect()
+}
+
+/// Si la burbuja de `m` es una nota (`nota_rica::es_nota` de Windows): ni
+/// una mini-app ni lo que escribe el asistente.
+fn es_nota(m: &Mensaje) -> bool {
+    matches!(m.clase, None | Some(Clase::Nota))
+        && m.miniapp.is_none()
+        && !crate::asistente::chat::es_del_asistente(m)
+}
+
+/// **Todo lo de la seccion, lo mas nuevo primero** (`cosas_de` de Windows):
+/// sus mensajes y, en «Fotos», tambien cada foto de las notas ricas, en el
+/// sitio de su nota y en el orden de su burbuja.
+pub fn cosas_de(
+    mensajes: &[Mensaje],
+    seccion: SeccionFicha,
+    hojas: &std::collections::BTreeSet<String>,
+) -> Vec<ui::Cosa> {
+    let suyos = de_la_seccion(mensajes, seccion, hojas);
+    let mut v = if seccion != SeccionFicha::Fotos {
+        suyos.into_iter().map(ui::Cosa::entera).collect()
+    } else {
+        // Las notas, de las de «Todo» (sin buzon ni lecciones), y solo las
+        // que la burbuja pinta como nota rica.
+        let notas: Vec<usize> = de_la_seccion(mensajes, SeccionFicha::Todo, hojas)
+            .into_iter()
+            .filter(|n| {
+                let m = &mensajes[*n];
+                m.texto.contains("![") && es_nota(m)
+            })
+            .collect();
+        ui::con_las_fotos_de_las_notas(&suyos, &notas, |n| {
+            ui::fotos_de_la_nota(&mensajes[n].texto).len()
+        })
+    };
+    v.sort_by_key(|c| (std::cmp::Reverse(c.mensaje), c.foto));
+    v
 }
 
 /// Las pestanas que salen, con su cuenta: las que tienen algo y, aunque
@@ -178,10 +266,70 @@ pub fn primera(cuentas: &[(SeccionFicha, usize)]) -> SeccionFicha {
 /// Si lo buscado con la lupa de la ficha esta en su texto o en su nombre,
 /// sin mirar mayusculas ni tildes (`hay_coincidencia` de Windows).
 pub fn casa_con(m: &Mensaje, buscado: &str) -> bool {
-    let aguja = crate::buscar::puntos::normalizar(buscado.trim());
-    aguja.is_empty()
-        || crate::buscar::puntos::normalizar(&m.resumen()).contains(&aguja)
-        || crate::buscar::puntos::normalizar(&m.nombre).contains(&aguja)
+    buscado.trim().is_empty()
+        || resaltado::hay_coincidencia(&m.resumen(), buscado)
+        || resaltado::hay_coincidencia(&m.nombre, buscado)
+}
+
+/// El nombre de una foto de nota: lo que dice su alt, sin el ancho del
+/// editor (`planta|300`).
+fn alt_sin_ancho(alt: &str) -> String {
+    alt.split('|').next().unwrap_or_default().trim().to_string()
+}
+
+/// **Lo buscado en negrita** dentro de `texto` (`negritas` de Windows): los
+/// trozos que casan, en UTF-16. Sin nada buscado, ninguno.
+#[uniffi::export]
+pub fn negritas_de_la_ficha(texto: String, buscado: String) -> Vec<TramoDeLaFicha> {
+    if buscado.trim().is_empty() {
+        return Vec::new();
+    }
+    resaltado::coincidencias(&texto, &buscado)
+        .into_iter()
+        .filter_map(|t| {
+            let (inicio, largo) = t.en_utf16(&texto);
+            (largo > 0).then_some(TramoDeLaFicha { inicio, largo })
+        })
+        .collect()
+}
+
+/// Cuantas columnas tiene la rejilla de la isla en `ancho` puntos: de tres a
+/// cinco, las que quepan con su celda minima (`columnas_isla`).
+#[uniffi::export]
+pub fn columnas_de_la_ficha(ancho: u32) -> u32 {
+    ui::columnas_isla(ancho, 100).0
+}
+
+/// **A que cosa va el foco con las flechas** desde la `actual`
+/// (`Lista::vecina` de Windows): a los lados, la de antes o la de despues;
+/// arriba y abajo, la de la fila de encima o de debajo que caiga mas cerca
+/// en horizontal, saltando los rotulos de mes. `meses` lleva la clave del
+/// mes de cada cosa, en el orden en que se ensenan (en los proyectos, todas
+/// iguales: no van por meses); `ancho`, el del contenido.
+#[uniffi::export]
+pub fn vecina_en_la_ficha(
+    meses: Vec<i64>,
+    cuadricula: bool,
+    ancho: u32,
+    actual: u32,
+    dx: i32,
+    dy: i32,
+) -> Option<u32> {
+    let area = pixpin_geom::Rect {
+        x: 0,
+        y: 0,
+        ancho,
+        alto: 1,
+    };
+    let lista = ui::lista_isla(area, &meses, cuadricula, ui::ISLA_FILA, 100);
+    lista.vecina(actual as usize, dx, dy).map(|n| n as u32)
+}
+
+/// Lo que dura un video o una nota de voz en su insignia: «0:07», «12:30»,
+/// «1:02:03»; sin duracion, nada (`duracion_corta`).
+#[uniffi::export]
+pub fn duracion_en_la_ficha(ms: i64) -> String {
+    ui::duracion_corta(ms)
 }
 
 /// Lo que la puntuacion suele dejar pegado al final sin ser de la direccion.
@@ -267,12 +415,12 @@ fn recortar_lo_pegado(crudo: &str) -> &str {
     &crudo[..fin]
 }
 
+/// Los mensajes de un chat, su posicion en el y los codigos de sus hojas.
+type ParaLaFicha = (Vec<Mensaje>, Vec<u64>, std::collections::BTreeSet<String>);
+
 impl Nucleo {
     /// Los mensajes del chat con su posicion, y los codigos de sus hojas.
-    fn leer_para_la_ficha(
-        &self,
-        chat: &str,
-    ) -> Result<(Vec<Mensaje>, Vec<u64>, std::collections::BTreeSet<String>), ErrorNucleo> {
+    fn leer_para_la_ficha(&self, chat: &str) -> Result<ParaLaFicha, ErrorNucleo> {
         validar_chat(chat)?;
         let (mut mensajes, mut posiciones) = (Vec::new(), Vec::new());
         for (n, m) in self.mensajes_en_orden(chat)?.into_iter().enumerate() {
@@ -297,15 +445,23 @@ impl Nucleo {
         actual: Option<SeccionFicha>,
     ) -> Result<FichaDelChatLeida, ErrorNucleo> {
         let (mensajes, _, hojas) = self.leer_para_la_ficha(&chat)?;
+        let indice = Indice::leer_si_esta(self.ruta())?;
+        let proyectos = indice.ordenadas().len();
         let cuentas: Vec<(SeccionFicha, usize)> = ORDEN
             .iter()
-            .map(|s| (*s, de_la_seccion(&mensajes, *s, &hojas).len()))
+            .map(|s| {
+                let n = match s {
+                    SeccionFicha::Proyectos => proyectos,
+                    _ => cosas_de(&mensajes, *s, &hojas).len(),
+                };
+                (*s, n)
+            })
             .collect();
         let cosas = cuentas
             .iter()
             .find(|(s, _)| *s == SeccionFicha::Todo)
             .map_or(0, |(_, n)| *n) as u32;
-        let codigo = Indice::leer_si_esta(self.ruta())?
+        let codigo = indice
             .buscar(&chat)
             .map(|f| f.codigo_unico())
             .unwrap_or_default();
@@ -317,8 +473,9 @@ impl Nucleo {
         })
     }
 
-    /// **Lo que ensena una pestana** de la ficha, del mas antiguo al mas
-    /// nuevo, con lo `buscado` con su lupa ya filtrado (vacio: todo).
+    /// **Lo que ensena una pestana** de la ficha, lo mas nuevo primero, con
+    /// lo `buscado` con su lupa ya filtrado (vacio: todo). Los proyectos van
+    /// aparte ([`Nucleo::proyectos_de_la_ficha`]).
     pub fn cosas_de_la_ficha(
         &self,
         chat: String,
@@ -326,17 +483,56 @@ impl Nucleo {
         buscado: String,
     ) -> Result<Vec<CosaDeLaFicha>, ErrorNucleo> {
         let (mensajes, posiciones, hojas) = self.leer_para_la_ficha(&chat)?;
-        Ok(de_la_seccion(&mensajes, seccion, &hojas)
+        Ok(cosas_de(&mensajes, seccion, &hojas)
             .into_iter()
-            .filter(|&n| casa_con(&mensajes[n], &buscado))
-            .map(|n| {
-                let m = &mensajes[n];
+            .filter(|c| casa_con(&mensajes[c.mensaje], &buscado))
+            .map(|c| {
+                let m = &mensajes[c.mensaje];
+                let (ruta_foto, alt) = match c.foto {
+                    Some(k) => ui::fotos_de_la_nota(&m.texto)
+                        .into_iter()
+                        .nth(k)
+                        .map(|f| {
+                            let ruta = self
+                                .ruta_de_foto(&chat, &f.enlace)
+                                .map(|r| r.display().to_string());
+                            (ruta, alt_sin_ancho(&f.alt))
+                        })
+                        .unwrap_or_default(),
+                    None => (None, String::new()),
+                };
                 CosaDeLaFicha {
-                    posicion: posiciones[n],
-                    es_video: cuaderno::es_video(m),
-                    enlace: primer_enlace(&m.texto),
+                    posicion: posiciones[c.mensaje],
+                    es_video: c.foto.is_none() && cuaderno::es_video(m),
+                    enlace: c.foto.is_none().then(|| primer_enlace(&m.texto)).flatten(),
+                    foto: c.foto.map(|k| k as u32),
+                    ruta_foto,
+                    alt,
                     mensaje: MensajeChat::from(m.clone()),
                 }
+            })
+            .collect())
+    }
+
+    /// **Los proyectos de la pestana «Proyectos»**: los de la lista de
+    /// chats, en su orden («Mensajes guardados» y el asistente delante, aunque
+    /// sean viejos), con lo `buscado` en su nombre (vacio: todos).
+    pub fn proyectos_de_la_ficha(
+        &self,
+        chat: String,
+        buscado: String,
+    ) -> Result<Vec<ProyectoDeLaFicha>, ErrorNucleo> {
+        let indice = Indice::leer_si_esta(self.ruta())?;
+        Ok(indice
+            .ordenadas()
+            .into_iter()
+            .filter(|f| {
+                buscado.trim().is_empty() || resaltado::hay_coincidencia(&f.nombre, &buscado)
+            })
+            .map(|f| ProyectoDeLaFicha {
+                este: f.id == chat,
+                disponible: pixpin_proyecto::ubicacion::disponible(f),
+                ficha: FichaChat::from(f),
             })
             .collect())
     }
@@ -345,7 +541,7 @@ impl Nucleo {
 #[cfg(test)]
 mod pruebas {
     use super::*;
-    use pixpin_proyecto::cuaderno::{Clase, Sello};
+    use pixpin_proyecto::cuaderno::Sello;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -386,12 +582,11 @@ mod pruebas {
         assert!(sitio(SeccionFicha::Fotos) < sitio(SeccionFicha::Archivos));
         assert!(sitio(SeccionFicha::Videos) < sitio(SeccionFicha::Enlaces));
         assert_eq!(ORDEN[ORDEN.len() - 1], SeccionFicha::Buzon);
-        // Cada una de la ficha es una del cuaderno distinta (menos la de
-        // los proyectos, que no es de mensajes y esta ficha aun no la lleva).
+        // Los proyectos, delante: la isla se abre en ellos (2439c5c).
+        assert_eq!(ORDEN[0], SeccionFicha::Proyectos);
+        assert_eq!(ORDEN[1], SeccionFicha::Galeria);
+        // Cada una de la ficha es una del cuaderno distinta.
         for s in cuaderno::Seccion::TODAS {
-            if s == cuaderno::Seccion::Proyectos {
-                continue;
-            }
             assert_eq!(ORDEN.iter().filter(|x| x.del_cuaderno() == s).count(), 1);
         }
     }
@@ -424,8 +619,12 @@ mod pruebas {
         assert_eq!(
             primera(&[]),
             SeccionFicha::Todo,
-            "un chat vacio abre «Todo»"
+            "sin nada de nada se abre «Todo»"
         );
+        // Con proyectos, se abre en ellos.
+        let con = [(SeccionFicha::Proyectos, 2), (SeccionFicha::Fotos, 3)];
+        assert_eq!(primera(&con), SeccionFicha::Proyectos);
+        assert!(!pestanas(&con, None)[0].cuadricula);
     }
 
     #[test]
@@ -492,15 +691,22 @@ mod pruebas {
             0,
             "sin proyecto.json no hay hojas"
         );
+        assert!(cuenta(SeccionFicha::Proyectos) >= 1, "al menos este chat");
         assert_eq!(f.cosas, 6, "todo menos el buzon y la leccion");
-        assert_eq!(f.primera, SeccionFicha::Fotos);
+        assert_eq!(
+            f.primera,
+            SeccionFicha::Proyectos,
+            "se abre en los proyectos"
+        );
         assert!(!f.codigo.is_empty());
 
         let videos = n
             .cosas_de_la_ficha(chat.clone(), SeccionFicha::Videos, String::new())
             .unwrap();
         assert!(videos.iter().all(|c| c.es_video));
-        assert_eq!(videos[0].mensaje.nombre, "paseo.MOV");
+        // Lo mas nuevo primero, como Telegram.
+        assert_eq!(videos[0].mensaje.nombre, "clase.mp4");
+        assert_eq!(videos[1].mensaje.nombre, "paseo.MOV");
         // La posicion es la de las paginas del chat: lleva al mismo mensaje.
         let todo = n.mensajes(chat.clone(), 0, 100).unwrap().mensajes;
         for c in &videos {
@@ -525,15 +731,133 @@ mod pruebas {
     }
 
     #[test]
-    fn un_chat_sin_nada_abre_todo_y_no_falla() {
+    fn las_fotos_de_las_notas_salen_en_fotos_en_el_sitio_de_su_nota() {
+        let (n, d, chat) = nucleo("notas");
+        let carpeta = almacen::carpeta(&d, &chat);
+        let nota = cuaderno::Mensaje::nota(
+            "# Obra\n\n![planta|300](pixpin:files/a.png)\n\nver https://ejemplo.com\n\n![](pixpin:files/b.png)",
+            &sello(&chat, 2),
+        );
+        for m in [
+            adjunto(&chat, 1, Clase::Imagen, "vieja.jpg"),
+            nota,
+            adjunto(&chat, 3, Clase::Imagen, "nueva.jpg"),
+        ] {
+            cuaderno::anadir(&carpeta, &m).unwrap();
+        }
+        let fotos = n
+            .cosas_de_la_ficha(chat.clone(), SeccionFicha::Fotos, String::new())
+            .unwrap();
+        let que: Vec<_> = fotos
+            .iter()
+            .map(|c| (c.mensaje.nombre.as_str(), c.foto))
+            .collect();
+        assert_eq!(
+            que,
+            [
+                ("nueva.jpg", None),
+                ("", Some(0)),
+                ("", Some(1)),
+                ("vieja.jpg", None)
+            ]
+        );
+        assert_eq!(fotos[1].alt, "planta", "sin el ancho del editor");
+        assert!(fotos[1].enlace.is_none(), "la foto es una foto");
+        assert!(fotos[1].ruta_foto.is_none(), "no esta en el aparato");
+        let f = n.ficha_del_chat(chat.clone(), None).unwrap();
+        let fotos_n = f
+            .pestanas
+            .iter()
+            .find(|p| p.seccion == SeccionFicha::Fotos)
+            .unwrap()
+            .cuenta;
+        assert_eq!(fotos_n, 4);
+        assert_eq!(f.cosas, 3, "«Todo» cuenta mensajes");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn los_proyectos_son_los_de_la_lista_y_el_de_este_chat_va_marcado() {
+        let (n, d, chat) = nucleo("proyectos");
+        let otro = n.crear_chat("Puente Sur".into()).unwrap();
+        let p = n
+            .proyectos_de_la_ficha(chat.clone(), String::new())
+            .unwrap();
+        let lista: Vec<_> = n.chats().unwrap().into_iter().map(|f| f.id).collect();
+        assert_eq!(
+            p.iter().map(|x| x.ficha.id.clone()).collect::<Vec<_>>(),
+            lista,
+            "en el orden de la lista de chats"
+        );
+        assert!(p.iter().find(|x| x.ficha.id == chat).unwrap().este);
+        assert!(!p.iter().find(|x| x.ficha.id == otro.id).unwrap().este);
+        assert!(p.iter().all(|x| x.disponible));
+        let p = n
+            .proyectos_de_la_ficha(chat.clone(), "puente".into())
+            .unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].ficha.id, otro.id);
+        // Ningun mensaje es de los proyectos.
+        assert!(
+            n.cosas_de_la_ficha(chat, SeccionFicha::Proyectos, String::new())
+                .unwrap()
+                .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn el_foco_salta_los_meses_como_en_windows() {
+        // 400 de ancho: tres columnas.
+        assert_eq!(columnas_de_la_ficha(400), 3);
+        assert_eq!(columnas_de_la_ficha(2000), 5);
+        // Dos fotos de un mes y cuatro del siguiente.
+        let meses = vec![2, 2, 1, 1, 1, 1];
+        assert_eq!(
+            vecina_en_la_ficha(meses.clone(), true, 400, 0, 1, 0),
+            Some(1)
+        );
+        assert_eq!(vecina_en_la_ficha(meses.clone(), true, 400, 0, -1, 0), None);
+        // Abajo, la de la fila de debajo mas cerca: el mes siguiente.
+        assert_eq!(
+            vecina_en_la_ficha(meses.clone(), true, 400, 1, 0, 1),
+            Some(3)
+        );
+        assert_eq!(
+            vecina_en_la_ficha(meses.clone(), true, 400, 2, 0, 1),
+            Some(5)
+        );
+        assert_eq!(
+            vecina_en_la_ficha(meses.clone(), true, 400, 2, 0, -1),
+            Some(0)
+        );
+        assert_eq!(vecina_en_la_ficha(meses, true, 400, 0, 0, -1), None);
+        // En filas, arriba y abajo de una en una.
+        assert_eq!(vecina_en_la_ficha(vec![0; 3], false, 400, 1, 0, 1), Some(2));
+        assert_eq!(duracion_en_la_ficha(7_000), "0:07");
+        assert_eq!(duracion_en_la_ficha(0), "");
+        let t = negritas_de_la_ficha("Casa Lima".into(), "lima".into());
+        assert_eq!(
+            t,
+            [TramoDeLaFicha {
+                inicio: 5,
+                largo: 4
+            }]
+        );
+        assert!(negritas_de_la_ficha("Casa".into(), " ".into()).is_empty());
+    }
+
+    #[test]
+    fn un_chat_sin_nada_abre_en_los_proyectos_y_no_falla() {
         let (n, d, chat) = nucleo("vacio");
         let f = n.ficha_del_chat(chat.clone(), None).unwrap();
-        assert!(f.pestanas.is_empty());
-        assert_eq!(f.primera, SeccionFicha::Todo);
+        let s: Vec<_> = f.pestanas.iter().map(|p| p.seccion).collect();
+        assert_eq!(s, [SeccionFicha::Proyectos], "solo los proyectos");
+        assert_eq!(f.primera, SeccionFicha::Proyectos);
         let f = n
             .ficha_del_chat(chat.clone(), Some(SeccionFicha::Todo))
             .unwrap();
-        assert_eq!(f.pestanas.len(), 1);
+        assert_eq!(f.pestanas.len(), 2);
         assert!(
             n.cosas_de_la_ficha(chat, SeccionFicha::Fotos, String::new())
                 .unwrap()

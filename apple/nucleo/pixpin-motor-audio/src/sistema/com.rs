@@ -9,7 +9,9 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows::Win32::System::Threading::{
-    AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateEventW,
+    AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateEventW, GetCurrentThread,
+    SetThreadPriority, THREAD_PRIORITY, THREAD_PRIORITY_HIGHEST, THREAD_PRIORITY_NORMAL,
+    THREAD_PRIORITY_TIME_CRITICAL,
 };
 use windows::core::{PCWSTR, w};
 
@@ -86,29 +88,45 @@ impl Drop for Evento {
 ///
 /// Con «Pro Audio» el planificador le da al hilo de captura prioridad casi
 /// de tiempo real: aunque otra aplicacion se coma la CPU (un i3 compilando,
-/// el antivirus), el anillo de la tarjeta se vacia a tiempo. Si MMCSS no
-/// esta (servicio parado), se sigue con prioridad normal: graba igual, solo
-/// que con menos margen.
-pub(crate) struct Mmcss(Option<HANDLE>);
+/// el antivirus), el anillo de la tarjeta se vacia a tiempo.
+///
+/// Si MMCSS no esta (el servicio «Programador de clases multimedia»
+/// parado, o una version recortada de Windows), se sube la prioridad del
+/// hilo a mano, como hace cpal (`boost_current_thread_priority` en
+/// `src/host/wasapi/stream.rs`): `THREAD_PRIORITY_TIME_CRITICAL` para la
+/// captura, `THREAD_PRIORITY_HIGHEST` para la mezcla. Y si tampoco, se sigue
+/// con la normal: graba igual, con menos margen.
+pub(crate) enum Mmcss {
+    Tarea(HANDLE),
+    Hilo,
+    Nada,
+}
 
 impl Mmcss {
     pub(crate) fn pro_audio() -> Mmcss {
-        Mmcss::con(w!("Pro Audio"))
+        Mmcss::con(w!("Pro Audio"), THREAD_PRIORITY_TIME_CRITICAL)
     }
 
     pub(crate) fn audio() -> Mmcss {
-        Mmcss::con(w!("Audio"))
+        Mmcss::con(w!("Audio"), THREAD_PRIORITY_HIGHEST)
     }
 
-    fn con(tarea: PCWSTR) -> Mmcss {
+    fn con(tarea: PCWSTR, respaldo: THREAD_PRIORITY) -> Mmcss {
         let mut indice = 0u32;
         // SAFETY: `tarea` es una cadena estatica terminada en cero e
         // `indice` un local vivo; el HANDLE devuelto se suelta en `Drop`.
         match unsafe { AvSetMmThreadCharacteristicsW(tarea, &mut indice) } {
-            Ok(h) => Mmcss(Some(h)),
+            Ok(h) => Mmcss::Tarea(h),
             Err(e) => {
-                tracing::debug!(?e, "sin prioridad de audio (MMCSS)");
-                Mmcss(None)
+                // SAFETY: el pseudo-HANDLE del hilo actual no se cierra; subir
+                // la prioridad propia no necesita permisos especiales.
+                let hilo = unsafe { SetThreadPriority(GetCurrentThread(), respaldo) };
+                tracing::debug!(?e, a_mano = hilo.is_ok(), "sin prioridad de audio (MMCSS)");
+                if hilo.is_ok() {
+                    Mmcss::Hilo
+                } else {
+                    Mmcss::Nada
+                }
             }
         }
     }
@@ -116,12 +134,17 @@ impl Mmcss {
 
 impl Drop for Mmcss {
     fn drop(&mut self) {
-        if let Some(h) = self.0.take() {
+        match std::mem::replace(self, Mmcss::Nada) {
             // SAFETY: el HANDLE salio de `AvSetMmThreadCharacteristicsW` en
             // este mismo hilo y no se ha soltado antes.
-            unsafe {
+            Mmcss::Tarea(h) => unsafe {
                 let _ = AvRevertMmThreadCharacteristics(h);
-            }
+            },
+            // SAFETY: este guardia vive y muere en el hilo que subio.
+            Mmcss::Hilo => unsafe {
+                let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+            },
+            Mmcss::Nada => {}
         }
     }
 }

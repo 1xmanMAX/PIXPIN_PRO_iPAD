@@ -8,16 +8,12 @@
 //! `IMFMediaEngine`. Mono a 96 kbps para las notas de voz (lo mas bajo que
 //! admite el codificador de Windows), estereo a 128.
 //!
-//! Va en **su propio hilo**, suscrito al PCM como cualquier otro: codificar
-//! AAC cuesta lo suyo en un i3 y no puede retrasar la mezcla. Su cola es
-//! larga (decenas de segundos) para no perder nada; si aun asi se le tira un
-//! bloque, el hueco se escribe como silencio y la duracion sigue siendo la
-//! buena.
+//! Esto es solo la [`SalidaAac`] de Windows: el hilo, la cola larga y tapar
+//! con silencio lo que se pierda son de [`crate::plataforma::escribir_aac`],
+//! igual en todas las plataformas.
 
 use std::os::windows::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::sync_channel;
-use std::thread::JoinHandle;
+use std::path::Path;
 
 use windows::Win32::Media::MediaFoundation::{
     IMFAttributes, IMFSinkWriter, MF_E_INVALIDMEDIATYPE, MF_E_TOPO_CODEC_NOT_FOUND,
@@ -31,15 +27,9 @@ use windows::Win32::Media::MediaFoundation::{
 use windows::core::PCWSTR;
 
 use super::com::ComDelHilo;
-use crate::pcm::Receptor;
+use crate::plataforma::SalidaAac;
 use crate::reloj::duracion_de;
 use crate::{ErrorMotor, en};
-
-/// Bloques en cola hacia el codificador: unos 30-45 s.
-pub(crate) const CAPACIDAD: usize = 3_000;
-
-/// Lo mas que se escribe de silencio de una vez al tapar un hueco.
-const TROZO_DE_SILENCIO: u64 = 48_000;
 
 /// Bytes por segundo del AAC. El codificador de Windows solo admite 12 000,
 /// 16 000, 20 000 o 24 000 (96 a 192 kbps).
@@ -47,58 +37,23 @@ fn bytes_por_segundo(canales: u16) -> u32 {
     if canales == 1 { 12_000 } else { 16_000 }
 }
 
-/// Arranca el hilo que escribe `ruta` con lo que llegue por `receptor`, y
-/// espera a que el fichero este abierto (que falte el codificador se sabe
-/// aqui). El hilo devuelve los marcos escritos.
-pub(crate) fn lanzar(
-    ruta: PathBuf,
-    muestreo: u32,
-    canales: u16,
-    receptor: Receptor,
-) -> Result<JoinHandle<Result<u64, ErrorMotor>>, ErrorMotor> {
-    let (avisar, abierto) = sync_channel::<Result<(), ErrorMotor>>(1);
-    let hilo = std::thread::Builder::new()
-        .name("pixpin-m4a".into())
-        .spawn(move || {
-            let _com = ComDelHilo::nuevo();
-            arrancar_media_foundation();
-            let escritor = match Escritor::abrir(&ruta, muestreo, canales) {
-                Ok(e) => {
-                    let _ = avisar.send(Ok(()));
-                    e
-                }
-                Err(e) => {
-                    let _ = avisar.send(Err(e.clone()));
-                    return Err(e);
-                }
-            };
-            drop(avisar);
-            escritor.escribir_todo(&receptor)
-        })
-        .map_err(|_| ErrorMotor::HiloCaido)?;
-    match abierto.recv() {
-        Ok(Ok(())) => Ok(hilo),
-        Ok(Err(e)) => {
-            let _ = hilo.join();
-            Err(e)
-        }
-        Err(_) => {
-            let _ = hilo.join();
-            Err(ErrorMotor::HiloCaido)
-        }
-    }
-}
-
-struct Escritor {
+/// Un `.m4a` abierto, en el hilo que lo abrio.
+///
+/// El orden de los campos es el orden en que se sueltan: el COM, el ultimo.
+pub(crate) struct Escritor {
     escritor: IMFSinkWriter,
     flujo: u32,
     muestreo: u32,
     canales: u16,
     escritos: u64,
+    _com: ComDelHilo,
 }
 
 impl Escritor {
-    fn abrir(ruta: &Path, muestreo: u32, canales: u16) -> Result<Escritor, ErrorMotor> {
+    /// Abre `ruta` en el hilo que llama (COM y Media Foundation incluidos).
+    pub(crate) fn abrir(ruta: &Path, muestreo: u32, canales: u16) -> Result<Escritor, ErrorMotor> {
+        let com = ComDelHilo::nuevo();
+        arrancar_media_foundation();
         let ancha: Vec<u16> = ruta
             .as_os_str()
             .encode_wide()
@@ -188,48 +143,13 @@ impl Escritor {
                 muestreo,
                 canales,
                 escritos: 0,
+                _com: com,
             })
         }
     }
+}
 
-    /// Escribe todo lo que llegue hasta que se cierre la cola, y cierra el
-    /// fichero. Devuelve los marcos escritos.
-    fn escribir_todo(mut self, receptor: &Receptor) -> Result<u64, ErrorMotor> {
-        let mut ceros: Vec<i16> = Vec::new();
-        let mut fallo = None;
-        while let Some(bloque) = receptor.recibir() {
-            if fallo.is_some() {
-                // Ya no se puede escribir, pero se sigue vaciando la cola para
-                // que la mezcla no cuente perdidas que no son.
-                continue;
-            }
-            // Un hueco (la cola se lleno y se tiro algo): silencio, para que
-            // lo de despues caiga en su sitio.
-            while bloque.posicion > self.escritos && fallo.is_none() {
-                let n = (bloque.posicion - self.escritos).min(TROZO_DE_SILENCIO);
-                ceros.clear();
-                ceros.resize(n as usize * self.canales as usize, 0);
-                if let Err(e) = self.escribir(&ceros) {
-                    fallo = Some(e);
-                }
-            }
-            if fallo.is_none()
-                && let Err(e) = self.escribir(&bloque.muestras)
-            {
-                fallo = Some(e);
-            }
-            receptor.devolver(bloque);
-        }
-        // SAFETY: escritor vivo y en escritura; `Finalize` cierra el indice
-        // del MPEG-4, sin el cual el fichero no se puede abrir.
-        let cerrado = unsafe { self.escritor.Finalize() }.map_err(en("cerrar el .m4a (Finalize)"));
-        if let Some(e) = fallo {
-            return Err(e);
-        }
-        cerrado?;
-        Ok(self.escritos)
-    }
-
+impl SalidaAac for Escritor {
     /// Un bloque intercalado de 16 bits al fichero.
     fn escribir(&mut self, muestras: &[i16]) -> Result<(), ErrorMotor> {
         if muestras.is_empty() {
@@ -271,6 +191,12 @@ impl Escritor {
         }
         self.escritos += marcos;
         Ok(())
+    }
+
+    fn cerrar(&mut self) -> Result<(), ErrorMotor> {
+        // SAFETY: escritor vivo y en escritura; `Finalize` cierra el indice
+        // del MPEG-4, sin el cual el fichero no se puede abrir.
+        unsafe { self.escritor.Finalize() }.map_err(en("cerrar el .m4a (Finalize)"))
     }
 }
 
