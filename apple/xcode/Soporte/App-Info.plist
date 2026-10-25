@@ -98,6 +98,18 @@
 			</array>
 		</dict>
 	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Excalifont-Regular.ttf</string>
+		<string>Nunito-Regular.ttf</string>
+		<string>Nunito-Bold.ttf</string>
+		<string>LilitaOne-Regular.ttf</string>
+		<string>ComicShanns-Regular.ttf</string>
+		<string>WorkSans-Regular.ttf</string>
+		<string>Fraunces-SemiBold.ttf</string>
+		<string>Caveat-Medium.ttf</string>
+		<string>Caveat-Bold.ttf</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

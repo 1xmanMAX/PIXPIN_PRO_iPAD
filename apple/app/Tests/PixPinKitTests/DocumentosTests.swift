@@ -8,7 +8,8 @@ final class DocumentosTests: XCTestCase {
             VisorDeDocumento.para(URL(fileURLWithPath: "/tmp/" + nombre), deUnChat: chat)
         }
         XCTAssertEqual(visor("Tema 3.PDF"), .lector)
-        XCTAssertEqual(visor("informe.docx"), .lector)
+        XCTAssertEqual(visor("informe.docx"), .reflujo)
+        XCTAssertEqual(visor("plantilla.docm"), .reflujo)
         XCTAssertEqual(visor("clase.pptx"), .lector)
         XCTAssertEqual(visor("cuentas.xlsx"), .hoja)
         XCTAssertEqual(visor("datos.csv"), .hoja)
@@ -20,7 +21,9 @@ final class DocumentosTests: XCTestCase {
         XCTAssertEqual(visor("apuntes.md"), .texto)
         XCTAssertEqual(visor("leeme.txt"), .texto)
         XCTAssertEqual(visor("antiguo.doc"), .vistaRapida)
-        XCTAssertEqual(visor("libro.epub"), .vistaRapida)
+        XCTAssertEqual(visor("libro.epub"), .reflujo)
+        XCTAssertEqual(visor("datos.csv", chat: false), .tablaSuelta)
+        XCTAssertEqual(visor("datos.tsv", chat: false), .tablaSuelta)
     }
 
     func testLetrasYReferenciasComoExcel() {

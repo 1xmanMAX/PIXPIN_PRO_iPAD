@@ -2,7 +2,8 @@
 // del modelo (Local / Claude Haiku / DeepSeek), que cambia el MISMO ajuste
 // que Ajustes → Asistente → Motor, al instante; y «Conversación nueva», una
 // nota del asistente que corta el contexto que se le manda (lo de antes
-// sigue a la vista y viaja como siempre).
+// sigue a la vista y viaja como siempre); y «Borrar chat», que vacia el
+// chat «Asistente» (sus mensajes y sus adjuntos) tras preguntar.
 
 import PixPinCore
 import SwiftUI
@@ -12,6 +13,7 @@ struct CabeceraDelAsistente: View {
     let almacen: Almacen
     let chat: String
     @State private var motor = ""
+    @State private var preguntarBorrar = false
 
     static let motores: [(id: String, nombre: String)] = [("", "En el iPad"), ("claude", "Claude Haiku"),
                                                            ("deepseek", "DeepSeek")]
@@ -49,6 +51,19 @@ struct CabeceraDelAsistente: View {
             }
             .buttonStyle(.borderless)
             .help("Lo de arriba ya no se le manda al asistente")
+            Button(role: .destructive) {
+                preguntarBorrar = true
+            } label: {
+                Label("Borrar chat", systemImage: "trash")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .help("Borra todos los mensajes del chat «Asistente»")
+        }
+        .confirmationDialog("Borrar chat", isPresented: $preguntarBorrar, titleVisibility: .visible) {
+            Button("Borrar chat", role: .destructive) { borrarChat() }
+        } message: {
+            Text("Se borran todos los mensajes del chat «Asistente» (los adjuntos con ellos). ¿Seguir?")
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .task { motor = (try? almacen.nucleo.ajustes().asistenteMotor) ?? "" }
@@ -73,6 +88,37 @@ struct CabeceraDelAsistente: View {
             almacen.anadir([m], en: chat)
             NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
         }
+    }
+
+    /// **Vacia el chat** (`Accion::BorrarChat` de Windows): para lo que este
+    /// contestando y borra todos sus mensajes salvo los del sistema
+    /// (`auto-…`), con su marca para que no vuelvan al sincronizar.
+    private func borrarChat() {
+        let (nucleo, chat) = (almacen.nucleo, chat)
+        AsistenteEnElChat.compartido.parar(chat)
+        Task {
+            let ids = await Task.detached(priority: .userInitiated) { CabeceraDelAsistente.idsParaBorrar(nucleo, chat) }.value
+            guard !ids.isEmpty else { return }
+            await almacen.borrar(mensajes: ids, en: chat)
+            await almacen.abrir(chat: chat)
+        }
+    }
+
+    /// Todos los mensajes del chat menos los del sistema.
+    nonisolated static func idsParaBorrar(_ nucleo: Nucleo, _ chat: String) -> [String] {
+        var ids: [String] = []
+        var desde: UInt64 = 0
+        while let p = try? nucleo.mensajes(chat: chat, desde: desde, cuantos: 500), !p.mensajes.isEmpty {
+            ids += sinLosDelSistema(p.mensajes.map(\.id))
+            desde += UInt64(p.mensajes.count)
+            if desde >= p.total { break }
+        }
+        return ids
+    }
+
+    /// Los de sistema (`cuaderno::es_de_sistema`) no se borran.
+    nonisolated static func sinLosDelSistema(_ ids: [String]) -> [String] {
+        ids.filter { !$0.hasPrefix("auto-") }
     }
 
     /// El «beep» del Mac: en el iPad, la vibracion de error.
