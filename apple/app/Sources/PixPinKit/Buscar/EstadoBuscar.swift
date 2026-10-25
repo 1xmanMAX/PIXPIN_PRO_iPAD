@@ -310,11 +310,11 @@ public func rotuloPrincipal(_ f: FilaBuscar) -> String {
     }
 }
 
-/// «Ver en el chat»: lo que vive en un mensaje de un chat (no el chat
-/// mismo: Intro ya lo abre).
+/// «Ver en el chat»: lo que vive en un mensaje de un chat, el mensaje
+/// mismo tambien (`botones_de` de Windows); no el chat: Intro ya lo abre.
 public func tieneVerEnChat(_ f: FilaBuscar) -> Bool {
     guard let r = f.resultado else { return false }
-    return r.chat != nil && r.posicion != nil && r.clase != .chat && r.clase != .mensaje
+    return r.chat != nil && r.posicion != nil && r.clase != .chat
 }
 
 /// Si ⌘C copia algo de la fila.

@@ -385,7 +385,7 @@ final class AsistenteIPadPedidosTests: XCTestCase {
         h.registrar(almacen: a, sincro: nil)
         let nav = Navegacion.compartida
         nav.cerrarVisor()
-        XCTAssertTrue(h.abrir(enlace: URL(string: "pixpinmax://nota_nueva?texto=Hola%20iPad")!))
+        XCTAssertTrue(h.abrir(enlace: URL(string: "pixpinmax://nota?texto=Hola%20iPad")!))
         XCTAssertFalse(h.abrir(enlace: URL(string: "https://example.com")!), "no es nuestro")
         // El pedido se hace en una tarea: se espera a que abra el visor.
         for _ in 0 ..< 100 where nav.visor == nil { try await Task.sleep(for: .milliseconds(20)) }

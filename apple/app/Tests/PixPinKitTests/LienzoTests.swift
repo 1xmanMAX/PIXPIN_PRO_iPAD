@@ -231,8 +231,11 @@ final class LienzoEditorTests: XCTestCase {
         let caja = try XCTUnwrap(ed.caja())
         XCTAssertEqual(caja.x1 - caja.x0, 300, accuracy: 1, "a su tamano, sin reducir")
         XCTAssertEqual(caja.y1 - caja.y0, 200, accuracy: 1)
-        XCTAssertEqual(ed.imagenes().count, 1)
         XCTAssertTrue(try ed.guardar())
+        // `imagenes()` es lo que habia al abrir: la foto se ve al volver a
+        // abrir lo guardado (su fichero en `imagenes/` y su entrada en `files`).
+        let otra = try EditorLienzo.deFichero(ruta: carpeta.appendingPathComponent("f.excalidraw").path, crear: false)
+        XCTAssertEqual(otra.imagenes().count, 1)
         // Caso negativo: lo que no es una imagen no entra.
         let texto = carpeta.appendingPathComponent("nota.png")
         try Data("hola".utf8).write(to: texto)

@@ -98,18 +98,19 @@ final class AjustesFilasIPadTests: XCTestCase {
         let m = ModeloAjustes(nucleo: nucleo, defaults: defaults)
         await m.cargar()
         m.cambiar { $0.sincroPresencia = false; $0.sincroLoMioManda = !m.fabrica.sincroLoMioManda }
-        m.fijar(diasCaducidad: 7)
+        // 7 es lo de fabrica (`dias_caducidad_de_fabrica`): no seria un cambio.
+        m.fijar(diasCaducidad: 30)
         XCTAssertTrue(FilasAjustes.hayCambios(en: .sincro, m))
         XCTAssertTrue(FilasAjustes.hayCambios(en: .general, m))
         let pasos = m.historial.count
         FilasAjustes.restablecer(.sincro, m)
         XCTAssertFalse(FilasAjustes.hayCambios(en: .sincro, m))
         // Caso negativo: lo de General sigue como estaba.
-        XCTAssertEqual(m.diasCaducidad, 7)
+        XCTAssertEqual(m.diasCaducidad, 30)
         XCTAssertEqual(m.historial.count, pasos + 1, "un solo paso de «Deshacer»")
         m.deshacer()
         XCTAssertFalse(m.valores.sincroPresencia)
         await m.guardar()
-        XCTAssertEqual(try nucleo.ajustes().diasCaducidad, 7)
+        XCTAssertEqual(try nucleo.ajustes().diasCaducidad, 30)
     }
 }

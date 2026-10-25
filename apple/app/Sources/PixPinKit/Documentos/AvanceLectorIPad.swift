@@ -43,7 +43,10 @@ final class AvanceLectorIPad: ObservableObject {
             return 0
         }
         antes = ahora
-        sobra += porSegundo * CGFloat(min(max(ahora - a, 0), 0.1))
+        // En milesimas enteras, como alla (`ahora_ms`): 10.1 - 10 no da
+        // justo una decima en coma flotante y se perderia medio pixel.
+        let dt = min((max(ahora - a, 0) * 1000).rounded() / 1000, 0.1)
+        sobra += porSegundo * CGFloat(dt)
         let n = (sobra / pixel).rounded(.down) * pixel
         sobra -= n
         return n
