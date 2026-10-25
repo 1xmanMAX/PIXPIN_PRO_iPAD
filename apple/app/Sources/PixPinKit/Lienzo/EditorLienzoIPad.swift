@@ -122,7 +122,7 @@ final class CargaLienzoIPad: ObservableObject {
     private var pedido = false
 
     func abrir(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?,
-               fondo pedido: FuenteFondoLienzo? = nil) async {
+               fondo fondoPedido: FuenteFondoLienzo? = nil) async {
         guard !pedido else { return }
         pedido = true
         let nucleo = almacen.nucleo
@@ -130,7 +130,7 @@ final class CargaLienzoIPad: ObservableObject {
         var referencia: String?
         var nombre = mensaje?.nombre ?? ""
         var fotoSuelta: URL?
-        var fuenteFondo = pedido
+        var fuenteFondo = fondoPedido
         if let m = mensaje, m.clase == "DIBUJO", let r = m.referencia, !r.isEmpty {
             referencia = r
             if fuenteFondo == nil {

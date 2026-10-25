@@ -232,6 +232,25 @@ struct ListaProyectos<Menu: View>: View {
     @State private var marcados: Set<String> = []
     @State private var preguntarBorrar = false
     @State private var verBorrados = false
+
+    /// El «…» de la lista: elegir varios, proyectos borrados y la biblioteca de audio.
+    private var menuMas: some View {
+        SwiftUI.Menu {
+            Button("Elegir varios", systemImage: "checkmark.circle") { empezarAMarcar(nil) }
+            Button("Proyectos borrados…", systemImage: "trash.slash") { verBorrados = true }
+            Button("Biblioteca de audio", systemImage: "music.note.list") {
+                BibliotecaAudio.abrir(almacen: almacen)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Paleta.chat.circuloIcono)
+                .frame(width: 38, height: 38)
+                .background(Paleta.chat.circulo, in: Circle())
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("Más")
+    }
     @ObservedObject private var logos = LogosProyecto.compartidos
 
     private func casa(_ c: FichaChat) -> Bool {
@@ -261,21 +280,7 @@ struct ListaProyectos<Menu: View>: View {
                 BotonRedondoLista(simbolo: "arrow.triangle.2.circlepath", ayuda: "Sincronizar") {
                     Navegacion.compartida.seccion = .aparatos
                 }
-                Menu {
-                    Button { empezarAMarcar(nil) } label: { Label("Elegir varios", systemImage: "checkmark.circle") }
-                    Button { verBorrados = true } label: { Label("Proyectos borrados…", systemImage: "trash.slash") }
-                    Button { BibliotecaAudio.abrir(almacen: almacen) } label: {
-                        Label("Biblioteca de audio", systemImage: "music.note.list")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Paleta.chat.circuloIcono)
-                        .frame(width: 38, height: 38)
-                        .background(Paleta.chat.circulo, in: Circle())
-                        .contentShape(Circle())
-                }
-                .accessibilityLabel("Más")
+                menuMas
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 7)

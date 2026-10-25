@@ -65,7 +65,7 @@ struct TemaBarraLienzo {
         activoIcono: hex(0xe0dfff), tecla: hex(0x7a7a7a), separador: hex(0x2e2d39),
         menuElegida: hex(0x4f4d6f), menuIconoElegido: hex(0xb2aeff))
 
-    static func de(_ modelo: ModeloEditorLienzo) -> TemaBarraLienzo {
+    @MainActor static func de(_ modelo: ModeloEditorLienzo) -> TemaBarraLienzo {
         modelo.verOscuro ? oscuro : claro
     }
 }

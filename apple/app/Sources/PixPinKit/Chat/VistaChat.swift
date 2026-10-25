@@ -14,6 +14,7 @@
 
 import PhotosUI
 import PixPinCore
+import GameController
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -52,7 +53,6 @@ public struct VistaChat: View {
     /// Elegir un proyecto o una pagina de un proyecto para adjuntar.
     @State private var eligiendoProyecto: Bool?
     /// ⇧ pulsada en el teclado del iPad: un toque marca el tramo.
-    @State private var conMayus = false
     /// El panel Información del chat.
     @State private var verInfo = false
 
@@ -208,7 +208,6 @@ public struct VistaChat: View {
             .ignoresSafeArea()
         }
         .background { atajos }
-        .onModifierKeysChanged(mask: .shift) { _, nuevas in conMayus = nuevas.contains(.shift) }
         .sheet(isPresented: $verInfo) {
             VistaInfoChat(almacen: almacen, chat: chat, titulo: ficha?.nombre ?? "")
         }
@@ -378,7 +377,7 @@ public struct VistaChat: View {
     private func toque(_ m: MensajeChat) {
         // ⇧ + toque (teclado del iPad): todo lo de entre el ultimo tocado y
         // este, como Mayus+clic en Windows (`marcar.rs`).
-        if conMayus {
+        if mayusPulsada() {
             withAnimation(.easeOut(duration: 0.15)) { menu.eleccion.tramo(hasta: m.id, en: idsCargados) }
             return
         }
@@ -920,4 +919,14 @@ struct PapelChat: View {
         LinearGradient(colors: [Paleta.proyectos.papelArriba, Paleta.proyectos.papelAbajo],
                        startPoint: .top, endPoint: .bottom)
     }
+}
+
+/// Si el teclado del iPad tiene Mayus pulsada ahora mismo (⇧+toque marca un
+/// tramo, como ⇧-clic en Windows). En iOS SwiftUI no da los modificadores al
+/// tocar; el teclado fisico si los dice por GameController.
+@MainActor
+func mayusPulsada() -> Bool {
+    guard let teclado = GCKeyboard.coalesced?.keyboardInput else { return false }
+    return teclado.button(forKeyCode: .leftShift)?.isPressed == true
+        || teclado.button(forKeyCode: .rightShift)?.isPressed == true
 }

@@ -40,7 +40,7 @@ extension Almacen {
         let r = await Task.detached(priority: .userInitiated) { () -> Result<MensajeChat, Error> in
             var png: Data?
             if let pintar = nucleo.paginaPorPintar(hacia: chat, desde: desde, hoja: hoja) {
-                png = ElegirProyecto.pintar(pdf: URL(fileURLWithPath: pintar.pdf), pagina: Int(pintar.pagina))
+                png = PaginasDeProyectoChat.pintar(pdf: URL(fileURLWithPath: pintar.pdf), pagina: Int(pintar.pagina))
             }
             return Result { try nucleo.adjuntarPagina(hacia: chat, desde: desde, hoja: hoja, png: png) }
         }.value
@@ -55,7 +55,7 @@ extension Almacen {
     }
 }
 
-enum ElegirProyecto {
+enum PaginasDeProyectoChat {
     /// La hoja `pagina` de un PDF en PNG, a 1600 de ancho sobre blanco.
     nonisolated static func pintar(pdf: URL, pagina: Int, ancho: CGFloat = 1600) -> Data? {
         guard let doc = PDFDocument(url: pdf), let p = doc.page(at: pagina) else { return nil }
@@ -162,7 +162,7 @@ private struct PaginasDelProyecto: View {
                 } else {
                     List(paginas, id: \.hoja) { p in
                         Button { elegir(p) } label: {
-                            Label(ElegirProyecto.rotulo(p), systemImage: p.esLienzo ? "scribble.variable" : "doc.richtext")
+                            Label(PaginasDeProyectoChat.rotulo(p), systemImage: p.esLienzo ? "scribble.variable" : "doc.richtext")
                         }
                     }
                 }

@@ -23,6 +23,7 @@
 import CoreGraphics
 import Foundation
 import PixPinCore
+import SwiftUI
 import UIKit
 
 /// Las herramientas que el doble toque del Pencil alterna (los nombres del
