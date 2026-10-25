@@ -117,6 +117,11 @@ targets:
       - target: AppPixPin
       - package: PixPinIPad
         product: PixPinKit
+      # El nucleo es una biblioteca dinamica dentro de la app: las pruebas la
+      # enlazan tambien (sin copiarla), si no sus simbolos no se encuentran.
+      - package: PixPinCore
+        product: PixPinCore
+        embed: false
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
