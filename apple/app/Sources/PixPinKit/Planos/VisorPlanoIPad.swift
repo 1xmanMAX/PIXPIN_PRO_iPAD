@@ -1,21 +1,1108 @@
-// HUECO: lo rellena la parte de la app que le toca (ver docs/plan-ipad.md).
-// Mantener la firma publica (`init`) tal cual: la usa `Raiz/RaizIPad.swift`.
+// El visor de planos DWG y DXF del iPad (`ventana.rs` de Windows,
+// `VisorPlano.swift` del Mac) con Metal y el tacto:
+//
+// - pellizcar acerca donde estan los dedos, uno o dos dedos mueven el plano
+//   (midiendo o marcando, dos), doble toque lo ve entero;
+// - la regla con enganche (`Plano.enganchar`): cada toque pone un punto (o
+//   se arrastra un dedo y se suelta donde se quiere); doble toque o «✓» la
+//   guarda como cota en la capa que viaja;
+// - los marcos para imprimir (arrastrar), las capas (encender y apagar) y
+//   el modo noche comun (`ModoNoche`);
+// - anotar a mano con el Apple Pencil (`AnotarPlanoIPad.swift`).
+//
+// **Solo se pinta cuando algo cambia** (§4bis): la `MTKView` esta parada
+// (`isPaused`) y pinta al pedirselo (`enableSetNeedsDisplay`). Lo de encima
+// (cotas, la mira, la tinta) va en una vista transparente con Core Graphics,
+// que tambien se pinta solo al cambiar.
+//
+// Las coordenadas: la camara del plano (`CamaraPlano`) cuenta los pixeles
+// desde abajo a la izquierda (la y del dibujo sube); UIKit los cuenta desde
+// arriba, asi que aqui se da la vuelta a la y al pasar de uno a otro.
 
+import Metal
+import MetalKit
 import PixPinCore
 import SwiftUI
+import UIKit
 
+/// Que hacen el dedo y el lapiz en el visor.
+public enum ModoVisorPlano: String, CaseIterable, Sendable {
+    /// Arrastrar mueve el plano.
+    case mover
+    /// Cada toque pone un punto de la regla (con enganche); doble toque la
+    /// termina y la guarda como cota.
+    case medir
+    /// Arrastrar dibuja un marco para imprimir.
+    case marco
+}
+
+/// **El estado del visor de un plano**: lo leido, las capas, lo anotado y lo
+/// que se esta midiendo. La vista de Metal lo pinta.
+@MainActor
+final class VisorPlano: ObservableObject {
+    @Published private(set) var datos: PlanoEnTarjeta?
+    @Published private(set) var error: String?
+    @Published private(set) var capas: [CapaPlano] = []
+    @Published private(set) var anotado = AnotadoPlano(cotas: [], marcos: [])
+    @Published var modo: ModoVisorPlano = .mover {
+        didSet {
+            guard modo != oldValue else { return }
+            // Medir y marcar no van a la vez que anotar.
+            if modo != .mover, anotador != nil { terminarDeAnotar() }
+            vista?.cambioDeModo()
+        }
+    }
+    /// El panel de las capas.
+    @Published var verCapas = false
+    /// La medida de la regla en curso (o una ayuda), para la barra.
+    @Published private(set) var medida = ""
+    /// Cuantos puntos lleva la regla en curso.
+    @Published private(set) var puntosEnCurso = 0
+    /// Anotando con el lapiz encima.
+    @Published private(set) var anotando = false
+    @Published private(set) var herramientaTinta: HerramientaTintaPlano = .lapiz
+    @Published private(set) var puedeDeshacerTinta = false
+    /// Se ha visto un Apple Pencil: desde entonces solo el pinta (la palma no).
+    @Published var vistoLapiz = false
+
+    let titulo: String
+    let ruta: String
+    /// Los grupos que se ven.
+    private(set) var visibles: Set<UInt32> = []
+    /// Lo anotado con el lapiz (la capa del lienzo), para verlo.
+    private(set) var tinta: LienzoLeido?
+    private(set) var encaje: EncajePlano?
+    /// Los textos de cada tramo de cada cota.
+    private(set) var etiquetas: [[String]] = []
+    weak var vista: VistaPlanoMetal?
+    private(set) var anotador: AnotadorPlanoIPad?
+
+    init(ruta: String, titulo: String) {
+        self.ruta = ruta
+        self.titulo = titulo
+    }
+
+    /// El fondo: el modo noche comun de los visores.
+    var oscuro: Bool { ModoNoche.compartido.activo }
+
+    /// Lee el plano fuera del hilo principal y lo sube a la tarjeta.
+    func cargar(nucleo: Nucleo) {
+        guard datos == nil, error == nil else { return }
+        guard let motor = MotorMetal.compartido else {
+            error = "Este iPad no tiene una tarjeta gráfica con Metal."
+            return
+        }
+        let ruta = self.ruta
+        Task {
+            let hecho = await Task.detached(priority: .userInitiated) { () -> Result<PlanoEnTarjeta, Error> in
+                Result { try PlanoEnTarjeta.cargar(ruta: ruta, nucleo: nucleo, motor: motor) }
+            }.value
+            switch hecho {
+            case let .success(d): self.poner(d)
+            case let .failure(e): self.error = "No se pudo abrir el plano: \(e)"
+            }
+        }
+    }
+
+    private func poner(_ d: PlanoEnTarjeta) {
+        datos = d
+        visibles = Set(d.plano.gruposVisibles())
+        capas = d.plano.capas()
+        anotado = d.plano.anotado()
+        rehacerEtiquetas()
+        leerTinta()
+        vista?.alLlegarElPlano()
+    }
+
+    /// Lo anotado con el lapiz (aqui, en Windows o en Android) se ve encima.
+    private func leerTinta() {
+        guard let d = datos else { return }
+        let ruta = d.plano.rutaDeLaCapa()
+        encaje = d.plano.encaje()
+        guard FileManager.default.fileExists(atPath: ruta) else {
+            tinta = nil
+            vista?.repintar()
+            return
+        }
+        Task {
+            let leida = await Task.detached(priority: .utility) { () -> LienzoLeido? in
+                guard let l = try? Lienzo.deFichero(ruta: ruta) else { return nil }
+                return try? leerLienzo(l.plano())
+            }.value
+            self.tinta = leida
+            self.vista?.repintar()
+        }
+    }
+
+    private func rehacerEtiquetas() {
+        guard let p = datos?.plano else { etiquetas = []; return }
+        etiquetas = anotado.cotas.map { c in
+            zip(c.puntos, c.puntos.dropFirst()).map { a, b in p.textoDeMedida(distancia: hypot(b.x - a.x, b.y - a.y)) }
+        }
+    }
+
+    // MARK: Capas
+
+    func ponerCapa(_ nombre: String, encendida: Bool) {
+        guard let p = datos?.plano, p.ponerCapa(nombre: nombre, encendida: encendida) else { return }
+        visibles = Set(p.gruposVisibles())
+        capas = p.capas()
+        vista?.repintar()
+    }
+
+    func todasLasCapas(_ encendidas: Bool) {
+        guard let p = datos?.plano else { return }
+        for c in capas { _ = p.ponerCapa(nombre: c.nombre, encendida: encendidas) }
+        visibles = Set(p.gruposVisibles())
+        capas = p.capas()
+        vista?.repintar()
+    }
+
+    // MARK: Regla, cotas y marcos
+
+    /// El texto de una medida (con la unidad del plano).
+    func texto(_ d: Double) -> String { datos?.plano.textoDeMedida(distancia: d) ?? String(format: "%.3f", d) }
+
+    func ponerMedida(_ t: String, puntos: Int) {
+        if medida != t { medida = t }
+        if puntosEnCurso != puntos { puntosEnCurso = puntos }
+    }
+
+    /// Guarda en la capa (la que viaja) una cota nueva.
+    func anadirCota(_ puntos: [PuntoPlano]) {
+        guard puntos.count >= 2 else { return }
+        var a = anotado
+        a.cotas.append(CotaPlano(puntos: puntos))
+        guardar(a)
+    }
+
+    func anadirMarco(_ c: CajaPlano) {
+        var a = anotado
+        a.marcos.append(c)
+        guardar(a)
+    }
+
+    func borrarCotas() {
+        var a = anotado
+        a.cotas = []
+        guardar(a)
+    }
+
+    func borrarMarcos() {
+        var a = anotado
+        a.marcos = []
+        guardar(a)
+    }
+
+    func quitarUltimoMarco() {
+        guard !anotado.marcos.isEmpty else { return }
+        var a = anotado
+        a.marcos.removeLast()
+        guardar(a)
+    }
+
+    /// Una ficha de abajo: mira el marco `i` entero, con un margen.
+    func irAMarco(_ i: Int) {
+        guard i < anotado.marcos.count, let v = vista else { return }
+        let m = anotado.marcos[i]
+        let ancho = max(m.x1 - m.x0, (m.y1 - m.y0) * v.anchoPx / max(v.altoPx, 1)) * 1.1
+        v.mirar(centroX: (m.x0 + m.x1) / 2, centroY: (m.y0 + m.y1) / 2, ancho: ancho)
+    }
+
+    /// Lo anotado se ve al momento y se escribe fuera del hilo principal.
+    private func guardar(_ a: AnotadoPlano) {
+        guard let p = datos?.plano else { return }
+        anotado = a
+        rehacerEtiquetas()
+        vista?.repintar()
+        Task.detached(priority: .utility) {
+            _ = try? p.guardarAnotado(anotado: a)
+            await MainActor.run { NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil) }
+        }
+    }
+
+    func encuadrar() { vista?.encuadrar() }
+
+    // MARK: Anotar con el lapiz
+
+    func alternarAnotar() {
+        if anotador != nil { terminarDeAnotar() } else { empezarAnotar() }
+    }
+
+    private func empezarAnotar() {
+        guard let d = datos else { return }
+        if modo != .mover { modo = .mover }
+        do {
+            let a = try AnotadorPlanoIPad(plano: d.plano)
+            a.herramienta(herramientaTinta)
+            anotador = a
+            anotando = true
+            puedeDeshacerTinta = a.puedeDeshacer
+            vista?.alCambiarAnotar()
+        } catch {
+            NSLog("PixPin planos: no se puede anotar: \(error)")
+        }
+    }
+
+    func elegirTinta(_ h: HerramientaTintaPlano) {
+        herramientaTinta = h
+        anotador?.herramienta(h)
+    }
+
+    /// El doble toque del Pencil: la goma, y otra vez lo de antes.
+    func alternarGoma() {
+        if herramientaTinta == .borrador {
+            elegirTinta(antesDeLaGoma)
+        } else {
+            antesDeLaGoma = herramientaTinta
+            elegirTinta(.borrador)
+        }
+    }
+
+    private var antesDeLaGoma: HerramientaTintaPlano = .lapiz
+
+    func deshacerTinta() {
+        guard let a = anotador else { return }
+        a.deshacer()
+        puedeDeshacerTinta = a.puedeDeshacer
+        vista?.repintar()
+    }
+
+    /// Tras un trazo: se puede deshacer.
+    func alTrazar() {
+        puedeDeshacerTinta = anotador?.puedeDeshacer ?? false
+    }
+
+    /// Termina de anotar: guarda y vuelve a leer lo anotado (las cotas y los
+    /// marcos pudieron cambiar con el lienzo).
+    func terminarDeAnotar() {
+        guard let a = anotador else { return }
+        // Mientras se guarda, lo anotado sigue a la vista.
+        tinta = a.leido
+        anotador = nil
+        anotando = false
+        vista?.alCambiarAnotar()
+        Task {
+            await a.terminar()
+            if let p = self.datos?.plano {
+                self.anotado = p.anotado()
+                self.rehacerEtiquetas()
+            }
+            self.leerTinta()
+        }
+    }
+}
+
+// MARK: - La vista de Metal
+
+/// **El plano en Metal.** Una `MTKView` parada que pinta solo al cambiar
+/// algo; los gestos mueven la camara (`CamaraPlano`).
+final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInteractionDelegate {
+    let visor: VisorPlano
+    private let motor: MotorMetal
+    private let pintor: PintorPlano
+    private(set) var camara = CamaraPlano(centroX: 0, centroY: 0, px: 1) {
+        didSet { seguirAnotador() }
+    }
+    private var encuadrado = false
+    let encima = CapaEncimaPlano()
+
+    // La regla y el marco.
+    private(set) var cadena: [PuntoPlano] = []
+    private(set) var mira: Enganche?
+    private(set) var marcoEnCurso: (PuntoPlano, PuntoPlano)?
+
+    // Los gestos.
+    private let mover = UIPanGestureRecognizer()
+    private let herramienta = UIPanGestureRecognizer()
+    private let pellizco = UIPinchGestureRecognizer()
+    private let toque = UITapGestureRecognizer()
+    private let dobleToque = UITapGestureRecognizer()
+    private var ultimoMover: CGPoint?
+    private var dedosMover = 0
+    /// El trazo del lapiz en curso.
+    private weak var trazando: UITouch?
+
+    init(visor: VisorPlano, motor: MotorMetal) {
+        self.visor = visor
+        self.motor = motor
+        pintor = PintorPlano(motor: motor, color: .bgra8Unorm, muestras: motor.muestras)
+        super.init(frame: CGRect(x: 0, y: 0, width: 800, height: 600), device: motor.dispositivo)
+        colorPixelFormat = .bgra8Unorm
+        depthStencilPixelFormat = .invalid
+        sampleCount = motor.muestras
+        isPaused = true
+        enableSetNeedsDisplay = true
+        autoResizeDrawable = true
+        isMultipleTouchEnabled = true
+        encima.vista = self
+        encima.frame = bounds
+        encima.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(encima)
+
+        mover.addTarget(self, action: #selector(alMover(_:)))
+        herramienta.addTarget(self, action: #selector(alArrastrarHerramienta(_:)))
+        herramienta.maximumNumberOfTouches = 1
+        pellizco.addTarget(self, action: #selector(alPellizcar(_:)))
+        toque.addTarget(self, action: #selector(alTocar(_:)))
+        dobleToque.addTarget(self, action: #selector(alDobleToque(_:)))
+        dobleToque.numberOfTapsRequired = 2
+        for g in [mover, herramienta, pellizco, toque, dobleToque] as [UIGestureRecognizer] {
+            g.delegate = self
+            g.delaysTouchesEnded = false
+            addGestureRecognizer(g)
+        }
+        // Con raton o trackpad, la rueda mueve el plano.
+        mover.allowedScrollTypesMask = .continuous
+        // El doble toque del Pencil (o apretarlo): goma y vuelta.
+        let lapiz = UIPencilInteraction()
+        lapiz.delegate = self
+        addInteraction(lapiz)
+        visor.vista = self
+        try? pintor.preparar()
+        actualizarGestos()
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError("init(coder:) no se usa") }
+
+    /// Pinta otra vez (y lo de encima).
+    func repintar() {
+        setNeedsDisplay()
+        encima.setNeedsDisplay()
+    }
+
+    /// Al mover la camara con los dedos: el plano y lo de encima, ya.
+    private func repintarYa() {
+        draw()
+        encima.setNeedsDisplay()
+    }
+
+    /// Pixeles por punto de la pantalla.
+    var escala: Double {
+        bounds.width > 0 && drawableSize.width > 0 ? Double(drawableSize.width) / Double(bounds.width) : Double(contentScaleFactor)
+    }
+
+    var anchoPx: Double { drawableSize.width > 0 ? Double(drawableSize.width) : Double(bounds.width * contentScaleFactor) }
+    var altoPx: Double { drawableSize.height > 0 ? Double(drawableSize.height) : Double(bounds.height * contentScaleFactor) }
+
+    /// El punto del dibujo bajo un punto de la vista (y hacia abajo).
+    func aDibujo(_ p: CGPoint) -> PuntoPlano {
+        camara.aDibujo(x: Double(p.x) * escala, y: Double(bounds.height - p.y) * escala, ancho: anchoPx, alto: altoPx)
+    }
+
+    /// El punto de la vista (y hacia abajo) de un punto del dibujo.
+    func aVista(_ p: PuntoPlano) -> CGPoint {
+        let q = camara.aPixel(p, ancho: anchoPx, alto: altoPx)
+        let e = escala
+        return CGPoint(x: q.x / e, y: bounds.height - q.y / e)
+    }
+
+    func alLlegarElPlano() {
+        encuadrado = false
+        encuadrar()
+    }
+
+    func encuadrar() {
+        guard let d = visor.datos, bounds.width > 0, bounds.height > 0 else { return }
+        camara = CamaraPlano.encuadrar(d.resumen.cajaUtil, ancho: anchoPx, alto: altoPx)
+        encuadrado = true
+        repintar()
+    }
+
+    /// Mira a `(centroX, centroY)` con `ancho` del dibujo a lo ancho.
+    func mirar(centroX: Double, centroY: Double, ancho: Double) {
+        guard anchoPx > 0, ancho > 0 else { return }
+        camara = CamaraPlano(centroX: centroX, centroY: centroY, px: ancho / anchoPx)
+        encuadrado = true
+        repintar()
+    }
+
+    func cambioDeModo() {
+        cadena = []
+        mira = nil
+        marcoEnCurso = nil
+        visor.ponerMedida(ayuda(), puntos: 0)
+        actualizarGestos()
+        repintar()
+    }
+
+    func alCambiarAnotar() {
+        cancelarTrazo()
+        seguirAnotador()
+        actualizarGestos()
+        repintar()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if !encuadrado { encuadrar() }
+        seguirAnotador()
+        repintar()
+    }
+
+    // MARK: Pintar
+
+    override func draw(_ rect: CGRect) {
+        let oscuro = visor.oscuro
+        clearColor = oscuro ? MTLClearColor(red: 0.13, green: 0.15, blue: 0.19, alpha: 1)
+            : MTLClearColor(red: 0.99, green: 0.988, blue: 0.976, alpha: 1)
+        guard let pasada = currentRenderPassDescriptor, let dibujable = currentDrawable,
+              let cb = motor.cola.makeCommandBuffer(),
+              let enc = cb.makeRenderCommandEncoder(descriptor: pasada) else { return }
+        if let d = visor.datos {
+            do {
+                try pintor.pintar(d, visibles: visor.visibles, camara: camara, ancho: anchoPx, alto: altoPx,
+                                  oscuro: oscuro, en: enc)
+            } catch {
+                NSLog("PixPin planos: \(error)")
+            }
+        }
+        enc.endEncoding()
+        cb.present(dibujable)
+        cb.commit()
+    }
+
+    // MARK: Gestos
+
+    /// Que gesto atiende que segun el modo: moviendo, uno o dos dedos mueven;
+    /// midiendo o marcando, un dedo es la herramienta y dos mueven;
+    /// anotando, el lapiz pinta (fuera de los gestos) y dos dedos mueven.
+    private func actualizarGestos() {
+        let dedos: [NSNumber] = [NSNumber(value: UITouch.TouchType.direct.rawValue),
+                                 NSNumber(value: UITouch.TouchType.indirectPointer.rawValue),
+                                 NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        let todos = dedos + [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        let anotando = visor.anotando
+        for g in [mover, herramienta, pellizco, toque, dobleToque] as [UIGestureRecognizer] {
+            g.allowedTouchTypes = anotando ? dedos : todos
+        }
+        // Anotando sin Pencil, un dedo pinta: mover pide dos.
+        let unDedoMueve = visor.modo == .mover && !(anotando && !visor.vistoLapiz)
+        mover.minimumNumberOfTouches = unDedoMueve ? 1 : 2
+        mover.maximumNumberOfTouches = 2
+        herramienta.isEnabled = visor.modo != .mover && !anotando
+        toque.isEnabled = visor.modo == .medir && !anotando
+        dobleToque.isEnabled = !(anotando && !visor.vistoLapiz)
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otro: UIGestureRecognizer) -> Bool {
+        // Pellizcar y mover a la vez (el plano sigue a los dos dedos).
+        (g === pellizco && otro === mover) || (g === mover && otro === pellizco)
+    }
+
+    /// Acercar `factor` dejando quieto el punto `p` de la vista.
+    private func zoom(_ factor: Double, en p: CGPoint) {
+        camara = camara.zoom(factor, x: Double(p.x) * escala, y: Double(bounds.height - p.y) * escala,
+                             ancho: anchoPx, alto: altoPx)
+        encuadrado = true
+        repintarYa()
+    }
+
+    @objc private func alMover(_ g: UIPanGestureRecognizer) {
+        let p = g.translation(in: self)
+        switch g.state {
+        case .began:
+            ultimoMover = p
+            dedosMover = g.numberOfTouches
+        case .changed:
+            // Al poner o quitar un dedo el centro salta: no se mueve.
+            if g.numberOfTouches != dedosMover {
+                dedosMover = g.numberOfTouches
+                ultimoMover = p
+                return
+            }
+            let a = ultimoMover ?? p
+            // La y de la pantalla baja; la de la camara sube.
+            camara = camara.mover(dx: Double(p.x - a.x) * escala, dy: -Double(p.y - a.y) * escala)
+            ultimoMover = p
+            encuadrado = true
+            repintarYa()
+        default:
+            ultimoMover = nil
+        }
+    }
+
+    @objc private func alPellizcar(_ g: UIPinchGestureRecognizer) {
+        guard g.state == .began || g.state == .changed else { return }
+        zoom(Double(g.scale), en: g.location(in: self))
+        g.scale = 1
+    }
+
+    @objc private func alDobleToque(_ g: UITapGestureRecognizer) {
+        if visor.modo == .medir {
+            // El primer toque del doble ya puso su punto: se guarda la cota.
+            terminarCadena()
+        } else {
+            encuadrar()
+        }
+    }
+
+    @objc private func alTocar(_ g: UITapGestureRecognizer) {
+        guard visor.modo == .medir, visor.datos != nil else { return }
+        let m = enganche(g.location(in: self))
+        let q = PuntoPlano(x: m.x, y: m.y)
+        if cadena.last != q { cadena.append(q) }
+        mira = m
+        actualizarMedida()
+        encima.setNeedsDisplay()
+    }
+
+    /// Un dedo midiendo (la mira sigue al dedo y el punto va donde se
+    /// suelta) o marcando (el marco de la esquina de inicio al dedo).
+    @objc private func alArrastrarHerramienta(_ g: UIPanGestureRecognizer) {
+        guard visor.datos != nil else { return }
+        let p = g.location(in: self)
+        switch visor.modo {
+        case .mover:
+            return
+        case .medir:
+            switch g.state {
+            case .began, .changed:
+                mira = enganche(p)
+                actualizarMedida()
+            case .ended:
+                let m = enganche(p)
+                mira = m
+                let q = PuntoPlano(x: m.x, y: m.y)
+                if cadena.last != q { cadena.append(q) }
+                actualizarMedida()
+            default:
+                break
+            }
+        case .marco:
+            switch g.state {
+            case .began:
+                // Desde donde empezo el dedo, no desde donde se reconocio.
+                let t = g.translation(in: self)
+                let m = enganche(CGPoint(x: p.x - t.x, y: p.y - t.y))
+                let q = PuntoPlano(x: m.x, y: m.y)
+                marcoEnCurso = (q, q)
+            case .changed:
+                guard let a = marcoEnCurso?.0 else { return }
+                let m = enganche(p)
+                mira = m
+                marcoEnCurso = (a, PuntoPlano(x: m.x, y: m.y))
+            case .ended:
+                if case let (a, b)? = marcoEnCurso {
+                    let c = CajaPlano(x0: min(a.x, b.x), y0: min(a.y, b.y), x1: max(a.x, b.x), y1: max(a.y, b.y))
+                    // Un toque sin arrastrar no es un marco.
+                    if (c.x1 - c.x0) / camara.px > 8 && (c.y1 - c.y0) / camara.px > 8 { visor.anadirMarco(c) }
+                }
+                marcoEnCurso = nil
+                mira = nil
+            default:
+                marcoEnCurso = nil
+                mira = nil
+            }
+        }
+        encima.setNeedsDisplay()
+    }
+
+    /// El enganche de la regla bajo el dedo (a 14 puntos de la pantalla: el
+    /// dedo es menos preciso que el raton).
+    private func enganche(_ p: CGPoint) -> Enganche {
+        let d = aDibujo(p)
+        guard let plano = visor.datos?.plano else { return Enganche(x: d.x, y: d.y, tipo: .libre) }
+        let radio = 14 * escala * camara.px
+        return plano.enganchar(x: d.x, y: d.y, radio: radio, desde: cadena.last)
+    }
+
+    private func ayuda() -> String {
+        switch visor.modo {
+        case .medir: "Toca los puntos · doble toque: guardar la cota"
+        case .marco: "Arrastra para poner un marco"
+        case .mover: ""
+        }
+    }
+
+    private func actualizarMedida() {
+        var puntos = cadena
+        if let m = mira {
+            let q = PuntoPlano(x: m.x, y: m.y)
+            if puntos.last != q { puntos.append(q) }
+        }
+        guard puntos.count >= 2 else {
+            visor.ponerMedida(ayuda(), puntos: cadena.count)
+            return
+        }
+        var total = 0.0
+        for (a, b) in zip(puntos, puntos.dropFirst()) { total += hypot(b.x - a.x, b.y - a.y) }
+        let ultimo = hypot(puntos[puntos.count - 1].x - puntos[puntos.count - 2].x,
+                           puntos[puntos.count - 1].y - puntos[puntos.count - 2].y)
+        visor.ponerMedida(puntos.count > 2 ? "\(visor.texto(ultimo)) · total \(visor.texto(total))" : visor.texto(ultimo),
+                          puntos: cadena.count)
+    }
+
+    /// Guarda la regla en curso como cota.
+    func terminarCadena() {
+        var puntos = cadena
+        // El segundo toque de un doble toque cae casi en el mismo sitio.
+        while puntos.count >= 2 {
+            let a = aVista(puntos[puntos.count - 1]), b = aVista(puntos[puntos.count - 2])
+            if hypot(a.x - b.x, a.y - b.y) < 12 { puntos.removeLast() } else { break }
+        }
+        cadena = []
+        mira = nil
+        if puntos.count >= 2 { visor.anadirCota(puntos) }
+        actualizarMedida()
+        encima.setNeedsDisplay()
+    }
+
+    func quitarUltimoPunto() {
+        guard !cadena.isEmpty else { return }
+        cadena.removeLast()
+        mira = nil
+        actualizarMedida()
+        encima.setNeedsDisplay()
+    }
+
+    func soltarLoDeAMedias() {
+        cadena = []
+        mira = nil
+        marcoEnCurso = nil
+        actualizarMedida()
+        encima.setNeedsDisplay()
+    }
+
+    // MARK: El lapiz (anotando)
+
+    /// Unidades del dibujo por punto de la pantalla.
+    var unidadesPorPunto: Double { camara.px * escala }
+
+    private func seguirAnotador() {
+        guard let a = visor.anotador, a.encaje.u > 0, unidadesPorPunto > 0 else { return }
+        a.escalaDeLoNuevo(zoom: a.encaje.u / unidadesPorPunto)
+    }
+
+    /// Un punto de la vista en la capa del plano.
+    private func aCapa(_ p: CGPoint, encaje e: EncajePlano) -> (x: Double, y: Double) {
+        let d = aDibujo(p)
+        return ((d.x - e.ceroX) / e.u, (e.ceroY - d.y) / e.u)
+    }
+
+    private func puedePintar(_ t: UITouch, _ event: UIEvent?) -> Bool {
+        guard visor.anotando else { return false }
+        if t.type == .pencil { return true }
+        return !visor.vistoLapiz && t.type == .direct && (event?.allTouches?.count ?? 1) == 1
+    }
+
+    private func mandar(_ fase: FasePuntero, _ t: UITouch, _ event: UIEvent?) {
+        guard let a = visor.anotador, a.encaje.u > 0, unidadesPorPunto > 0 else { return }
+        let zoom = a.encaje.u / unidadesPorPunto
+        let toques = (fase == .mover ? event?.coalescedTouches(for: t) : nil) ?? [t]
+        for c in toques {
+            let q = aCapa(c.location(in: self), encaje: a.encaje)
+            let presion: Float? = c.type == .pencil && c.maximumPossibleForce > 0
+                ? Float(c.force / c.maximumPossibleForce) : nil
+            a.puntero(fase, x: q.x, y: q.y, presion: presion, zoom: zoom)
+        }
+        encima.setNeedsDisplay()
+        if fase == .soltar { visor.alTrazar() }
+    }
+
+    func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        guard visor.anotando else { return }
+        visor.alternarGoma()
+    }
+
+    private func cancelarTrazo() {
+        guard trazando != nil else { return }
+        trazando = nil
+        visor.anotador?.puntero(.cancelar, x: 0, y: 0, presion: nil, zoom: 1)
+        encima.setNeedsDisplay()
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard visor.anotando else { return }
+        for t in touches {
+            if t.type == .pencil, !visor.vistoLapiz {
+                visor.vistoLapiz = true
+                actualizarGestos()
+            }
+            if trazando == nil, puedePintar(t, event) {
+                trazando = t
+                mandar(.pulsar, t, event)
+            } else if trazando != nil, t.type != .pencil, trazando?.type != .pencil {
+                // Un segundo dedo: era para mover, no para pintar.
+                cancelarTrazo()
+            }
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        guard let t = trazando, touches.contains(t) else { return }
+        mandar(.mover, t, event)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        guard let t = trazando, touches.contains(t) else { return }
+        mandar(.soltar, t, event)
+        trazando = nil
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        guard let t = trazando, touches.contains(t) else { return }
+        cancelarTrazo()
+    }
+}
+
+// MARK: - Lo de encima
+
+/// **Lo que va encima del plano**, con Core Graphics: lo anotado con el
+/// lapiz, las cotas (naranja, como Windows y Android), los marcos para
+/// imprimir (azul), la regla en curso y la mira del enganche. No recibe los
+/// toques: los atiende la vista de Metal.
+final class CapaEncimaPlano: UIView {
+    weak var vista: VistaPlanoMetal?
+
+    static let naranja = UIColor(red: 1, green: 0x8A / 255.0, blue: 0, alpha: 1)
+    static let azul = UIColor(red: 0x3D / 255.0, green: 0x8B / 255.0, blue: 1, alpha: 1)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) no se usa") }
+
+    override func draw(_ rect: CGRect) {
+        guard let v = vista, let ctx = UIGraphicsGetCurrentContext() else { return }
+        let visor = v.visor
+        if let a = visor.anotador {
+            // Anotando, la capa entera (tambien las cotas y los marcos) la
+            // pinta el lienzo.
+            let s = v.unidadesPorPunto
+            guard a.encaje.u > 0, s > 0 else { return }
+            let t = PintorTintaPlano.transformacion(camara: v.camara, s: s, encaje: a.encaje, tamano: bounds.size)
+            let origen = CGPoint.zero.applying(t.inverted())
+            a.releer(origen: origen, zoom: a.encaje.u / s, tamano: bounds.size)
+            if let l = a.leido { pintarCapa(l, a.encaje, v, ctx) }
+            return
+        }
+        if let t = visor.tinta, let e = visor.encaje { pintarCapa(t, e, v, ctx) }
+        // Los marcos para imprimir, con su numero abajo a la izquierda.
+        ctx.setLineWidth(1.2)
+        ctx.setStrokeColor(CapaEncimaPlano.azul.cgColor)
+        ctx.setLineDash(phase: 0, lengths: [6, 4])
+        for m in visor.anotado.marcos { ctx.stroke(rect(v, m)) }
+        if case let (a, b)? = v.marcoEnCurso {
+            ctx.stroke(rect(v, CajaPlano(x0: min(a.x, b.x), y0: min(a.y, b.y), x1: max(a.x, b.x), y1: max(a.y, b.y))))
+        }
+        ctx.setLineDash(phase: 0, lengths: [])
+        for (i, m) in visor.anotado.marcos.enumerated() {
+            let r = rect(v, m)
+            let t = "\(i + 1)" as NSString
+            let atr: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+                                                      .foregroundColor: UIColor.white]
+            let tam = t.size(withAttributes: atr)
+            let caja = CGRect(x: r.minX, y: r.maxY - 16, width: max(16, tam.width + 6), height: 16)
+            ctx.setFillColor(CapaEncimaPlano.azul.cgColor)
+            ctx.fill(caja)
+            t.draw(at: CGPoint(x: caja.midX - tam.width / 2, y: caja.midY - tam.height / 2), withAttributes: atr)
+        }
+        // Las cotas guardadas y la regla en curso.
+        for (k, c) in visor.anotado.cotas.enumerated() {
+            cadena(v, c.puntos, textos: k < visor.etiquetas.count ? visor.etiquetas[k] : [], ctx: ctx)
+        }
+        if !v.cadena.isEmpty {
+            var puntos = v.cadena
+            if let m = v.mira, visor.modo == .medir {
+                let q = PuntoPlano(x: m.x, y: m.y)
+                if puntos.last != q { puntos.append(q) }
+            }
+            let textos = zip(puntos, puntos.dropFirst()).map { a, b in visor.texto(hypot(b.x - a.x, b.y - a.y)) }
+            cadena(v, puntos, textos: textos, ctx: ctx)
+        }
+        if let m = v.mira, visor.modo != .mover { pintarMira(v.aVista(PuntoPlano(x: m.x, y: m.y)), m.tipo, ctx) }
+    }
+
+    /// La capa del lienzo en su sitio, con la camara del plano.
+    private func pintarCapa(_ l: LienzoLeido, _ e: EncajePlano, _ v: VistaPlanoMetal, _ ctx: CGContext) {
+        let s = v.unidadesPorPunto
+        guard e.u > 0, s > 0 else { return }
+        ctx.saveGState()
+        ctx.concatenate(PintorTintaPlano.transformacion(camara: v.camara, s: s, encaje: e, tamano: bounds.size))
+        PintorTintaPlano.pintar(l, en: ctx)
+        ctx.restoreGState()
+    }
+
+    private func rect(_ v: VistaPlanoMetal, _ c: CajaPlano) -> CGRect {
+        let a = v.aVista(PuntoPlano(x: c.x0, y: c.y0)), b = v.aVista(PuntoPlano(x: c.x1, y: c.y1))
+        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
+    }
+
+    /// Una cadena de cotas: la raya, sus puntos y cada medida en su tramo.
+    private func cadena(_ v: VistaPlanoMetal, _ puntos: [PuntoPlano], textos: [String], ctx: CGContext) {
+        let q = puntos.map { v.aVista($0) }
+        guard q.count >= 2 else {
+            if let p = q.first { marca(p, ctx) }
+            return
+        }
+        ctx.setStrokeColor(CapaEncimaPlano.naranja.cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.addLines(between: q)
+        ctx.strokePath()
+        for p in q { marca(p, ctx) }
+        let atributos: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: UIColor.white,
+            .backgroundColor: CapaEncimaPlano.naranja.withAlphaComponent(0.9),
+        ]
+        for (i, t) in textos.enumerated() where i + 1 < q.count {
+            let m = CGPoint(x: (q[i].x + q[i + 1].x) / 2, y: (q[i].y + q[i + 1].y) / 2)
+            let s = NSAttributedString(string: " \(t) ", attributes: atributos)
+            let tam = s.size()
+            s.draw(at: CGPoint(x: m.x - tam.width / 2, y: m.y - tam.height - 3))
+        }
+    }
+
+    private func marca(_ p: CGPoint, _ ctx: CGContext) {
+        ctx.setFillColor(CapaEncimaPlano.naranja.cgColor)
+        ctx.fillEllipse(in: CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7))
+    }
+
+    /// La mira: un cuadrado en un punto, una escuadra en la perpendicular,
+    /// una cruz en la raya y un circulo libre (las marcas de AutoCAD).
+    private func pintarMira(_ p: CGPoint, _ tipo: TipoEnganche, _ ctx: CGContext) {
+        let r: CGFloat = 8
+        ctx.setLineWidth(1.5)
+        ctx.setStrokeColor(UIColor.systemGreen.cgColor)
+        switch tipo {
+        case .punto:
+            ctx.stroke(CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+        case .perpendicular:
+            ctx.addLines(between: [CGPoint(x: p.x - r, y: p.y - r), CGPoint(x: p.x - r, y: p.y + r), CGPoint(x: p.x + r, y: p.y + r)])
+            ctx.addLines(between: [CGPoint(x: p.x - r, y: p.y), CGPoint(x: p.x, y: p.y), CGPoint(x: p.x, y: p.y + r)])
+            ctx.strokePath()
+        case .enLaRaya:
+            ctx.addLines(between: [CGPoint(x: p.x - r, y: p.y - r), CGPoint(x: p.x + r, y: p.y + r)])
+            ctx.addLines(between: [CGPoint(x: p.x - r, y: p.y + r), CGPoint(x: p.x + r, y: p.y - r)])
+            ctx.strokePath()
+        case .libre:
+            ctx.setStrokeColor(UIColor.secondaryLabel.cgColor)
+            ctx.strokeEllipse(in: CGRect(x: p.x - r / 2, y: p.y - r / 2, width: r, height: r))
+        }
+    }
+}
+
+// MARK: - SwiftUI
+
+/// La vista de Metal dentro de SwiftUI.
+struct LienzoMetalPlano: UIViewRepresentable {
+    let visor: VisorPlano
+    let motor: MotorMetal
+    /// Solo para que SwiftUI repinte al cambiar el modo noche.
+    let oscuro: Bool
+
+    func makeUIView(context _: Context) -> VistaPlanoMetal { VistaPlanoMetal(visor: visor, motor: motor) }
+    func updateUIView(_ v: VistaPlanoMetal, context _: Context) { v.repintar() }
+}
+
+/// **El visor de un plano** (DWG, DXF...) a pantalla completa: la barra
+/// comun arriba (mover, medir, marcos, anotar, ver entero, capas), el plano
+/// en Metal y las capas en un panel flotante.
 public struct VisorPlanoIPad: View {
     let url: URL
     let titulo: String
     let nucleo: Nucleo
-    public init(url: URL, titulo: String, nucleo: Nucleo) { self.url = url; self.titulo = titulo; self.nucleo = nucleo }
-    public var body: some View { VStack { BarraVisorIPad(tipo: "Plano", icono: "square.grid.3x3", titulo: titulo); Spacer() } }
+    @StateObject private var visor: VisorPlano
+    @ObservedObject private var noche = ModoNoche.compartido
+
+    public init(url: URL, titulo: String, nucleo: Nucleo) {
+        self.url = url
+        self.titulo = titulo
+        self.nucleo = nucleo
+        _visor = StateObject(wrappedValue: VisorPlano(ruta: url.path, titulo: titulo))
+    }
+
+    public var body: some View {
+        ZStack(alignment: .top) {
+            Color(white: noche.activo ? 0.15 : 0.98).ignoresSafeArea()
+            contenido.ignoresSafeArea()
+            VStack(spacing: 8) {
+                BarraVisorIPad(tipo: "Plano", icono: "square.grid.3x3", titulo: titulo) { botones }
+                if visor.anotando { HerramientasTintaPlano(visor: visor) }
+                if !visor.medida.isEmpty { etiquetaDeMedida }
+                Spacer(minLength: 0)
+                if visor.datos != nil && (!visor.anotado.marcos.isEmpty || visor.modo == .marco) {
+                    fichasDeMarcos.frame(maxWidth: .infinity, alignment: .leading).padding(14)
+                }
+            }
+            if visor.verCapas && visor.datos != nil {
+                PanelFlotantePlano(alto: min(420, 60 + CGFloat(visor.capas.count) * 44)) { panelCapas }
+            }
+        }
+        .onAppear { visor.cargar(nucleo: nucleo) }
+        .onDisappear { if visor.anotando { visor.terminarDeAnotar() } }
+        .onChange(of: noche.activo) { _, _ in visor.vista?.repintar() }
+    }
+
+    @ViewBuilder private var botones: some View {
+        Group {
+            Button { visor.modo = .mover } label: { Image(systemName: "hand.raised") }
+                .foregroundStyle(visor.modo == .mover && !visor.anotando ? Paleta.v2.acento : Color.primary)
+                .help("Mover")
+            Button { visor.modo = visor.modo == .medir ? .mover : .medir } label: { Image(systemName: "ruler") }
+                .foregroundStyle(visor.modo == .medir ? Paleta.v2.acento : Color.primary)
+                .keyboardShortcut("m", modifiers: [])
+                .help("Medir (M)")
+            Button { visor.modo = visor.modo == .marco ? .mover : .marco } label: { Image(systemName: "rectangle.dashed") }
+                .foregroundStyle(visor.modo == .marco ? Paleta.v2.acento : Color.primary)
+                .keyboardShortcut("i", modifiers: [])
+                .help("Marcos para imprimir (I)")
+            Button { visor.alternarAnotar() } label: { Image(systemName: "pencil.tip.crop.circle") }
+                .foregroundStyle(visor.anotando ? Paleta.v2.acento : Color.primary)
+                .keyboardShortcut("a", modifiers: [])
+                .help("Anotar con el lápiz (A)")
+            Button { visor.encuadrar() } label: { Image(systemName: "viewfinder") }
+                .keyboardShortcut("f", modifiers: [])
+                .help("Ver el plano entero (F)")
+            Button { visor.verCapas.toggle() } label: { Image(systemName: "square.3.layers.3d") }
+                .foregroundStyle(visor.verCapas ? Paleta.v2.acento : Color.primary)
+                .help("Capas")
+            Menu {
+                Button { Navegacion.compartida.abrir(.modelo3d(url: url, titulo: titulo)) } label: {
+                    Label("Ver en 3D", systemImage: "cube")
+                }
+                Divider()
+                Button(role: .destructive) { visor.borrarCotas() } label: { Label("Borrar las cotas", systemImage: "ruler") }
+                    .disabled(visor.anotado.cotas.isEmpty)
+                Button(role: .destructive) { visor.borrarMarcos() } label: {
+                    Label("Borrar los marcos", systemImage: "rectangle.dashed")
+                }
+                .disabled(visor.anotado.marcos.isEmpty)
+            } label: { Image(systemName: "ellipsis.circle") }
+        }
+        .disabled(visor.datos == nil)
+    }
+
+    /// La medida de la regla (o la ayuda del modo), con deshacer y guardar.
+    private var etiquetaDeMedida: some View {
+        HStack(spacing: 12) {
+            Text(visor.medida).font(.callout.monospacedDigit()).lineLimit(1)
+            if visor.modo == .medir && visor.puntosEnCurso > 0 {
+                Button { visor.vista?.quitarUltimoPunto() } label: { Image(systemName: "arrow.uturn.backward") }
+                    .help("Quitar el último punto")
+                Button { visor.vista?.soltarLoDeAMedias() } label: { Image(systemName: "xmark.circle") }
+                    .help("Soltar la regla")
+                if visor.puntosEnCurso >= 2 {
+                    Button { visor.vista?.terminarCadena() } label: { Image(systemName: "checkmark.circle.fill") }
+                        .help("Guardar la cota")
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+    }
+
+    private var fichasDeMarcos: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(visor.anotado.marcos.indices), id: \.self) { i in
+                Button { visor.irAMarco(i) } label: {
+                    Text("\(i + 1)").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(Color(uiColor: CapaEncimaPlano.azul)))
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Quitar el último marco", role: .destructive) { visor.quitarUltimoMarco() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var contenido: some View {
+        if let error = visor.error {
+            ContentUnavailableView("No se puede ver el plano", systemImage: "exclamationmark.triangle",
+                                   description: Text(error))
+        } else if let motor = MotorMetal.compartido {
+            ZStack {
+                LienzoMetalPlano(visor: visor, motor: motor, oscuro: noche.activo)
+                if visor.datos == nil { ProgressView("Leyendo el plano…") }
+            }
+        } else {
+            ContentUnavailableView("Sin Metal", systemImage: "cpu",
+                                   description: Text("Este iPad no tiene una tarjeta gráfica con Metal."))
+        }
+    }
+
+    private var panelCapas: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Capas").font(.headline)
+                Spacer()
+                Button("Todas") { visor.todasLasCapas(true) }
+                Button("Ninguna") { visor.todasLasCapas(false) }
+            }
+            .buttonStyle(.borderless)
+            .padding(12)
+            List(visor.capas, id: \.nombre) { c in
+                Toggle(isOn: Binding(get: { c.encendida }, set: { visor.ponerCapa(c.nombre, encendida: $0) })) {
+                    Text(c.enElPlano ? c.nombre : "\(c.nombre) (apagada en el plano)")
+                        .foregroundStyle(c.enElPlano ? .primary : .secondary)
+                        .lineLimit(1)
+                }
+                .listRowBackground(Color.clear)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
+    }
 }
 
-public struct Visor3DIPad: View {
-    let url: URL
-    let titulo: String
-    let nucleo: Nucleo
-    public init(url: URL, titulo: String, nucleo: Nucleo) { self.url = url; self.titulo = titulo; self.nucleo = nucleo }
-    public var body: some View { VStack { BarraVisorIPad(tipo: "Modelo 3D", icono: "cube", titulo: titulo); Spacer() } }
+/// Las herramientas del lapiz sobre el plano: lapiz, resaltador, goma,
+/// deshacer y «Listo».
+struct HerramientasTintaPlano: View {
+    @ObservedObject var visor: VisorPlano
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ForEach(HerramientaTintaPlano.allCases) { h in
+                Button { visor.elegirTinta(h) } label: { Image(systemName: h.simbolo) }
+                    .foregroundStyle(visor.herramientaTinta == h ? Paleta.v2.acento : Color.primary)
+                    .help(h.titulo)
+            }
+            Divider().frame(height: 20)
+            Button { visor.deshacerTinta() } label: { Image(systemName: "arrow.uturn.backward") }
+                .disabled(!visor.puedeDeshacerTinta)
+                .keyboardShortcut("z", modifiers: .command)
+                .help("Deshacer")
+            Button("Listo") { visor.alternarAnotar() }.fontWeight(.semibold)
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.separator.opacity(0.5)))
+    }
+}
+
+/// Un panel que flota arriba a la derecha, bajo la barra del visor: las
+/// capas del plano o los niveles del modelo, solo al pedirlos.
+struct PanelFlotantePlano<Contenido: View>: View {
+    var alto: CGFloat = 420
+    @ViewBuilder let contenido: () -> Contenido
+
+    var body: some View {
+        contenido()
+            .frame(width: 300)
+            .frame(height: alto)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+            .padding(.top, 64)
+            .padding(.trailing, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
 }

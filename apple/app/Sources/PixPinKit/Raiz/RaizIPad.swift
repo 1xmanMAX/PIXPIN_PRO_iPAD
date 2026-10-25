@@ -32,6 +32,8 @@ public struct RaizIPad: View {
             .fullScreenCover(item: $nav.visor) { visor in
                 VistaDelVisor(visor: visor, almacen: almacen)
                     .overlay { CapaPines(almacen: almacen) }
+                    .environmentObject(entorno)
+                    .environmentObject(nav)
             }
         }
         .environmentObject(entorno)
