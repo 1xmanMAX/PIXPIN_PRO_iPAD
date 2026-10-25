@@ -3,7 +3,7 @@
 La app de iPad es **la misma PixPin** que Windows, Mac y Android: el mismo formato de
 proyectos, la misma sincronización por la Wi‑Fi y la misma cara. Se construye sobre el
 **mismo núcleo de Rust** que el Mac (`apple/nucleo`, copiado de PIXPIN_PRO_MAC
-`apple/nucleo` en e96241c) y reutiliza tal cual las piezas de Swift del Mac que no tocan
+`apple/nucleo` en e96241c y puesto al día con `apple/herramientas/traer-del-mac.py`, ver «Traer el Mac») y reutiliza tal cual las piezas de Swift del Mac que no tocan
 AppKit. Lo de AppKit se reescribe con **SwiftUI + UIKit** pensado para el tacto y el
 **Apple Pencil**.
 
@@ -90,3 +90,56 @@ Un enlace `pixpinmax://` llega a `AbrirDesdeFuera.alEnlace`.
 | Atajos globales | Atajos de teclado dentro de la app (teclado del iPad) y App Intents (Siri, Atajos) |
 | Sincronizar siempre | **Mientras la app está abierta** (iOS cierra la red al pasar a segundo plano); al volver se sincroniza con quien esté. Un PC o Mac encendido hace de punto de encuentro |
 | Ratón | Tacto, **Apple Pencil** (presión, inclinación, doble toque/apretar para cambiar herramienta, la palma no pinta) y trackpad |
+
+## Traer el Mac
+
+El iPad lleva **el mismo código del Mac** (el núcleo de Rust entero y el Swift que no toca
+AppKit), así que se sincroniza con los mismos protocolos que Mac, Windows y Android. Para
+ponerse al día con el Mac hay una herramienta, a imagen de `portar-de-windows.py` del Mac:
+
+```
+git -C ../PIXPIN_PRO_MAC fetch
+apple/herramientas/traer-del-mac.py                 # la punta más reciente del Mac
+apple/herramientas/traer-del-mac.py ../PIXPIN_PRO_MAC origin/main   # o un commit/rama
+apple/herramientas/traer-del-mac.py --sin-enlaces   # sin regenerar los enlaces de Swift
+```
+
+- **Base** = el Mac en el commit de `apple/docs/mac-traido.txt`; **ipad** = lo de aquí;
+  **nuevo** = el Mac en el commit pedido. Sin commit, la punta más reciente (por fecha) entre
+  `origin/main`, `origin/mac-desarrollo` y las `origin/claude/*` (menos
+  `claude/vibrant-gates-0lx4dc`); dice cuál eligió. El repo del Mac es `$PIXPIN_MAC` o
+  `../PIXPIN_PRO_MAC`.
+- **`apple/nucleo/**`, `apple/Cargo.toml`, `apple/rust-toolchain.toml`**: lo que el iPad no
+  tocó se toma del Mac; lo que el Mac no tocó se queda; si cambiaron los dos, `git merge-file`
+  (los `.rs` pasan antes por `rustfmt` los tres, para que el formato no salga como
+  conflicto). Los conflictos quedan marcados `<<<<<<< ipad … ======= … >>>>>>> mac`.
+- **`apple/por-adaptar/**`** y `docs/protocolo-pedidos.md` (las pruebas de `pixpin-ia` lo leen con `include_str!`): manda el Mac.
+- **`apple/Cargo.lock`**: el del Mac y luego `cargo update --workspace`.
+- **`apple/PixPinCore/Sources/**`**: no se fusiona; se regenera al final con UniFFI si no
+  quedan conflictos en Rust (si quedan, dice el comando).
+- **Swift** (`apple/app/Sources/PixPinKit/**`): lo que existe en el iPad con la misma ruta (lo
+  copiado sin AppKit) se fusiona a tres bandas igual; lo nuevo o cambiado que el iPad no tiene
+  se copia tal cual si no importa nada solo del Mac (AppKit, Carbon, ScreenCaptureKit…), no
+  choca con un fichero o un tipo del iPad y no usa tipos del Mac que el iPad no tenga; si no,
+  va al informe para portarlo a mano. Un fichero que el Mac creó y el iPad ya tenía suyo
+  con la misma ruta también va al informe. Las pruebas y `Sources/PixPin` solo se listan.
+- Al acabar: el informe en `apple/target/traer-del-mac.json` (tomado, fusión, conflicto,
+  `swift_a_portar` con el porqué…), el commit apuntado en `mac-traido.txt` y la lista de
+  conflictos en pantalla.
+
+Después: resolver los conflictos (**donde el Mac y el iPad hicieron lo mismo gana el Mac**, que
+es el que sigue a Windows; lo que solo tiene el iPad se conserva sin duplicar módulos ni
+funciones exportadas; si una función del iPad desaparece porque el Mac trae la suya, se
+cambian las llamadas de Swift), `cd apple && CARGO_INCREMENTAL=0 cargo test -p pixpin-nucleo
+-- --test-threads=2`, regenerar los enlaces si hizo falta y portar el Swift del informe
+(UIKit/SwiftUI, con los mismos textos).
+
+**Traído el 25-oct-2026**: el Mac `2a49a4c` (rama `claude/pixpin-mac-windows-sync-rrmx84`,
+26 commits sobre `e96241c`). Funciones del núcleo que el iPad tiene y el Mac no (para
+llevarlas al Mac): `proyectos.rs` (renombrar, archivar e `importar_proyecto`), `aparatos::olvidar_direccion`,
+`ia_conectar_con` (`asistente/conexiones.rs`), el ángulo del lienzo
+(`cambiar_letra_de_angulo`, `alternar_angulo_recto`), `ajustes_organizar.rs`,
+`zona_al_chat.rs`, `magia.rs`, `editor_tabla.rs`, `fusionar_paginas.rs`, `letras_lienzo.rs`,
+`hojas/suelto.rs` y `hojas/graficos.rs`, `notas/comentarios_nativos.rs` y `notas/nativo_md.rs`,
+`apuntar_tarea_con_imagenes_en` (`tareas.rs`) y la ficha de clase del horario
+(`horario/ventana_mac.rs`: `FichaDeClase`).

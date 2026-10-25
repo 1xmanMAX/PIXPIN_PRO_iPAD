@@ -273,6 +273,8 @@ final class ModeloCarpeta: ObservableObject {
     let almacen: Almacen
     @Published private(set) var nombre = ""
     @Published private(set) var paginas: [PaginaDeCarpeta] = []
+    /// La carpeta leida entera (para su PDF).
+    private(set) var carpeta: CarpetaDePaginas?
     @Published private(set) var cargada = false
     @Published private(set) var noEsta = false
     @Published var aviso: String?
@@ -294,6 +296,7 @@ final class ModeloCarpeta: ObservableObject {
             (try? nucleo.carpetaDePaginas(chat: chat, id: id)) ?? nil
         }.value
         cargada = true
+        carpeta = c
         guard let c else {
             noEsta = true
             paginas = []
@@ -372,6 +375,8 @@ struct VistaCarpeta: View {
     @State private var renombrando: PaginaDeCarpeta?
     @State private var titulo = ""
     @State private var arrastrada: String?
+    @State private var compartiendo: CosasACompartir?
+    @State private var exportando = false
 
     init(chat: String, carpeta: String, almacen: Almacen, cerrar: @escaping () -> Void) {
         _modelo = StateObject(wrappedValue: ModeloCarpeta(chat: chat, id: carpeta, almacen: almacen))
@@ -397,7 +402,7 @@ struct VistaCarpeta: View {
                     }
                     ToolbarItemGroup(placement: .primaryAction) {
                         Button { exportar() } label: { Label("Exportar PDF", systemImage: "doc.richtext") }
-                            .disabled(modelo.vivas.isEmpty)
+                            .disabled(modelo.vivas.isEmpty || exportando)
                         Button { nuevaPagina() } label: { Label("Nueva página", systemImage: "plus") }
                             .disabled(modelo.noEsta || modelo.trabajando)
                             .keyboardShortcut("n", modifiers: .command)
@@ -411,6 +416,9 @@ struct VistaCarpeta: View {
                 .animation(.easeOut(duration: 0.15), value: modelo.aviso)
         }
         .task { await modelo.recargar() }
+        .sheet(item: $compartiendo) { c in
+            ActividadCompartir(cosas: c.cosas).ignoresSafeArea()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in
             _ = Task<Void, Never> { await modelo.recargar() }
         }
@@ -548,15 +556,26 @@ struct VistaCarpeta: View {
         }
     }
 
-    /// **«Exportar PDF»**: la hoja de compartir con las paginas en su orden
-    /// (PDF, imprimir, guardar en Archivos), con el nombre de la carpeta.
+    /// **«Exportar PDF»** (Windows y el Mac, `PdfDeCarpeta`): una pagina
+    /// por elemento y, de cada lienzo, lo que va sobre su plantilla o sus
+    /// marcos; con el titulo de cada pagina en el indice. Sale en la hoja de
+    /// compartir (Archivos, AirDrop, imprimir).
     private func exportar() {
-        let paginas = modelo.mensajesEnOrden
-        guard !paginas.isEmpty else {
-            modelo.avisar("No se pudo exportar: no hay ninguna página con algo dentro")
+        guard let carpeta = modelo.carpeta, !modelo.vivas.isEmpty else {
+            modelo.avisar(PdfDeCarpeta.noSeExporto)
             return
         }
-        HojaCompartir.abrir(.mensajes(chat: modelo.chat, titulo: modelo.nombre, paginas), almacen: modelo.almacen)
+        exportando = true
+        modelo.avisar("Exportando el PDF…")
+        _ = Task<Void, Never> {
+            let url = await PdfDeCarpeta.exportar(carpeta, chat: modelo.chat, almacen: modelo.almacen)
+            exportando = false
+            guard let url else {
+                modelo.avisar(PdfDeCarpeta.noSeExporto)
+                return
+            }
+            compartiendo = CosasACompartir(cosas: [url])
+        }
     }
 }
 

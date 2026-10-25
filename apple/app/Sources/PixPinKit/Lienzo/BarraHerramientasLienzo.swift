@@ -369,20 +369,14 @@ struct MenuFigurasLienzo: View {
             Button("Plano de funciones") { modelo.estamparInstrumento(2) }
             Button("Recta de funciones") { modelo.estamparInstrumento(1) }
             Button("Espacio xyz") { modelo.estamparInstrumento(3) }
-            let guardadas = modelo.figurasGuardadas()
-            if !guardadas.isEmpty {
+            // Las figuras de serie y las propias, en su galeria (como el Mac
+            // y Windows, 22-oct: una ventana grande en vez de submenus; son
+            // muchas). Lo elegido se inserta en medio de lo que se ve.
+            if let nucleo = modelo.nucleo {
                 Divider()
-                ForEach(guardadas, id: \.id) { f in
-                    Button(f.nombre) { modelo.estamparGuardada(f.id) }
-                }
-            }
-            if modelo.nucleo != nil {
-                Divider()
+                Button("Figuras…") { VistaFiguras.abrir(nucleo: nucleo, destino: modelo, paraElChat: nil) }
                 if modelo.hayElegidos {
                     Button("Guardar lo elegido como figura…") { modelo.guardarComoFigura() }
-                }
-                ForEach(guardadas, id: \.id) { f in
-                    Button("Quitar «\(f.nombre)»", role: .destructive) { modelo.quitarFigura(f.id) }
                 }
             }
         } label: {

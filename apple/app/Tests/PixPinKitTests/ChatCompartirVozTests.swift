@@ -180,18 +180,23 @@ final class ChatCompartirVozTests: XCTestCase {
         XCTAssertEqual(TarjetasDeEnlace.sitio(URL(string: "https://www.pixpin.app/x")!), "pixpin.app")
     }
 
-    func testLasPestanasDeInformacion() {
-        let v = [mensaje("1", clase: "IMAGEN", cuando: 1), mensaje("2", clase: "VOZ", cuando: 3),
-                 mensaje("3", clase: "DIBUJO", cuando: 2), mensaje("4", fijado: true, enBuzon: true)]
-        XCTAssertEqual(PestanaInfo.filtrar(v, .todo).map(\.id), ["2", "3", "1", "4"], "lo mas nuevo arriba")
-        XCTAssertEqual(PestanaInfo.filtrar(v, .fotos).map(\.id), ["1"])
-        XCTAssertEqual(PestanaInfo.filtrar(v, .voz).map(\.id), ["2"])
-        XCTAssertEqual(PestanaInfo.filtrar(v, .dibujos).map(\.id), ["3"])
-        XCTAssertEqual(PestanaInfo.filtrar(v, .fijados).map(\.id), ["4"])
-        XCTAssertEqual(PestanaInfo.filtrar(v, .buzon).map(\.id), ["4"])
-        XCTAssertTrue(PestanaInfo.filtrar(v, .archivos).isEmpty)
-        XCTAssertEqual(PestanaInfo.allCases.map(\.titulo), ["Todo", "Fotos", "Archivos", "Voz", "Dibujos",
-                                                            "Fijados", "Buzón"])
+    func testLaFichaDelChatCuentaLosEnlacesComoElNucleo() throws {
+        let carpeta = try carpetaTemporalZona("ficha")
+        defer { try? FileManager.default.removeItem(at: carpeta) }
+        let nucleo = try Nucleo.abrir(raiz: carpeta.path, nombreDelAparato: "iPad")
+        let chat = try nucleo.crearChat(nombre: "Casa Lima").id
+        _ = try nucleo.escribirNota(chat: chat, texto: "mira https://github.com/forge/pixpin", respondeA: nil)
+        _ = try nucleo.escribirNota(chat: chat, texto: "sin enlace", respondeA: nil)
+        let f = try nucleo.fichaDelChat(chat: chat, actual: nil)
+        XCTAssertEqual(f.cosas, 2)
+        XCTAssertEqual(f.pestanas.first { $0.seccion == .enlaces }?.cuenta, 1)
+        // Caso negativo: sin videos no sale «Vídeos 0».
+        XCTAssertNil(f.pestanas.first { $0.seccion == .videos })
+        let enlaces = try nucleo.cosasDeLaFicha(chat: chat, seccion: .enlaces, buscado: "")
+        XCTAssertEqual(enlaces.first?.enlace?.donde, "github.com")
+        XCTAssertTrue(try nucleo.cosasDeLaFicha(chat: chat, seccion: .enlaces, buscado: "nada-de-esto").isEmpty)
+        XCTAssertEqual(TextosFicha.rotulo(.videos), "Vídeos")
+        XCTAssertEqual(TextosFicha.resumen(cosas: 1, codigo: ""), "1 cosa")
     }
 
     // MARK: Proyectos

@@ -82,6 +82,10 @@ final class LienzoHerramientasTests: XCTestCase {
             default: break
             }
         }
+        // El marco no va en la barra (Windows 22-oct y el Mac): lo pone el
+        // boton del riel de la derecha (`RielMarcasLienzo`) o la C.
+        XCTAssertFalse(alcanzables.contains("marco"))
+        alcanzables.insert("marco")
         XCTAssertEqual(alcanzables, Set(HerramientaLienzo.todas.map(\.id)), "ninguna se queda sin boton")
         XCTAssertTrue(BotonBarraLienzo.barraIPad.contains(.deshacer))
         XCTAssertTrue(BotonBarraLienzo.barraIPad.contains(.rehacer))

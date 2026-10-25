@@ -108,7 +108,7 @@ struct IslaDeEscribir: View {
     /// Esc con la caja vacia: `true` si alguien lo uso.
     let escaparVacio: () -> Bool
     /// ⌘V con algo que no es texto: `true` si se adjunto.
-    let pegarAdjuntos: () -> Bool
+    let pegarAdjuntos: (UITextView) -> Bool
     let adjuntar: (AccionAdjuntar) -> Void
     @Environment(\.escalaChat) private var f
     @ObservedObject private var grabadora = GrabadoraVoz.compartida
@@ -188,7 +188,7 @@ struct IslaDeEscribir: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Adjuntar")
         .popover(isPresented: $hoja, arrowEdge: .bottom) {
-            HojaAdjuntarChat { accion in
+            HojaAdjuntarChat(esAsistente: almacen.chats.first(where: { $0.id == chat })?.esAsistente == true) { accion in
                 hoja = false
                 // Una vuelta despues: que el globo ya se haya ido (un
                 // selector de fotos o de archivos no sale encima de otro).
@@ -253,12 +253,18 @@ enum AccionAdjuntar: Hashable {
     /// Una ventanita de la voz (conversación, teleprónter, pronunciar,
     /// grabar clase): `VozEnElChat.abrir`.
     case voz(HerramientaDeVoz)
+    /// Una figura de la biblioteca, elegida en su galeria, a un lienzo del
+    /// chat (en el del asistente, para que la mejore), y pedirle una nueva
+    /// al asistente (`para_el_asistente`, como el Mac).
+    case figura, pedirFigura
+    /// Una carpeta de paginas (26-oct-2026): un cuaderno con nombre.
+    case carpeta
 
     static func == (a: AccionAdjuntar, b: AccionAdjuntar) -> Bool {
         switch (a, b) {
         case (.foto, .foto), (.archivo, .archivo), (.lienzo, .lienzo), (.nota, .nota),
              (.tareas, .tareas), (.tabla, .tabla), (.camara, .camara), (.proyecto, .proyecto),
-             (.pagina, .pagina): true
+             (.pagina, .pagina), (.figura, .figura), (.pedirFigura, .pedirFigura), (.carpeta, .carpeta): true
         case let (.pegar(x), .pegar(y)): x == y
         case let (.mini(x), .mini(y)): x == y
         case let (.voz(x), .voz(y)): x == y
@@ -280,12 +286,18 @@ enum AccionAdjuntar: Hashable {
         case .pagina: h.combine(9)
         case let .mini(m): h.combine(10); h.combine(m)
         case let .voz(v): h.combine(11); h.combine(v)
+        case .figura: h.combine(12)
+        case .pedirFigura: h.combine(13)
+        case .carpeta: h.combine(14)
         }
     }
 }
 
 /// Las baldosas de la hoja de adjuntar, con los colores de Windows.
 struct HojaAdjuntarChat: View {
+    /// En el chat del asistente, primero lo de las figuras (la hoja
+    /// `delAsistente` del Mac).
+    var esAsistente = false
     let elegir: (AccionAdjuntar) -> Void
 
     private static let baldosas: [(AccionAdjuntar, String, String, UInt32)] = [
@@ -303,6 +315,10 @@ struct HojaAdjuntarChat: View {
     private static let chips: [(AccionAdjuntar, String, String)] = [
         (.proyecto, "Proyecto entero", "folder"),
         (.pagina, "Página de un proyecto", "doc.richtext"),
+        // Una figura de la biblioteca (Windows 1d50a7c): abre la galeria de
+        // las figuras para elegirla viendola, con su boton «Adjuntar».
+        (.figura, "Figura", "paintpalette"),
+        (.carpeta, "Carpeta de páginas", "book"),
         (.mini("contador"), "Contador", "plus.forwardslash.minus"),
         (.mini("ruleta"), "Ruleta", "circle.dashed"),
         (.mini("gastos"), "Gastos", "eurosign.circle"),
@@ -314,6 +330,17 @@ struct HojaAdjuntarChat: View {
         (.voz(.pronunciar), HerramientaDeVoz.pronunciar.rotulo, HerramientaDeVoz.pronunciar.simbolo),
         (.voz(.clase), HerramientaDeVoz.clase.rotulo, HerramientaDeVoz.clase.simbolo),
     ]
+
+    /// Los chips de esta hoja: en la del asistente, primero «Figura» y
+    /// «Pedir una figura nueva».
+    private var chips: [(AccionAdjuntar, String, String)] {
+        guard esAsistente else { return Self.chips }
+        let figuras: [(AccionAdjuntar, String, String)] = [
+            (.figura, "Figura", "paintpalette"),
+            (.pedirFigura, "Pedir una figura nueva", "wand.and.stars"),
+        ]
+        return figuras + Self.chips.filter { $0.0 != .figura }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -344,8 +371,8 @@ struct HojaAdjuntarChat: View {
             Text("Más").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 6, alignment: .leading)],
                       alignment: .leading, spacing: 6) {
-                ForEach(Self.chips.indices, id: \.self) { i in
-                    let (accion, rotulo, simbolo) = Self.chips[i]
+                ForEach(chips.indices, id: \.self) { i in
+                    let (accion, rotulo, simbolo) = chips[i]
                     Button { elegir(accion) } label: {
                         Label(rotulo, systemImage: simbolo)
                             .font(.system(size: 13))
@@ -387,7 +414,7 @@ struct CampoDeEscribir: UIViewRepresentable {
     var foco: Int
     let enviar: () -> Void
     let escaparVacio: () -> Bool
-    let pegarAdjuntos: () -> Bool
+    let pegarAdjuntos: (UITextView) -> Bool
 
     func makeCoordinator() -> Coordinador { Coordinador(self) }
 
@@ -409,7 +436,10 @@ struct CampoDeEscribir: UIViewRepresentable {
         let c = context.coordinator
         tv.alEnviar = { [weak c] in c?.padre.enviar() }
         tv.alEscaparVacio = { [weak c] in _ = c?.padre.escaparVacio() }
-        tv.alPegar = { [weak c] in c?.padre.pegarAdjuntos() ?? false }
+        tv.alPegar = { [weak c, weak tv] in
+            guard let tv else { return false }
+            return c?.padre.pegarAdjuntos(tv) ?? false
+        }
         tv.alCambiar = { [weak c, weak tv] in
             guard let tv else { return }
             c?.padre.texto = tv.text

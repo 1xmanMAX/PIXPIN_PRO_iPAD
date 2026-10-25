@@ -202,10 +202,12 @@ extension ModeloEditorLienzo {
         }
     }
 
-    /// **Guardar lo elegido como figura**, con su nombre.
+    /// **Guardar lo elegido como figura**, con su nombre (como el Mac: una
+    /// plantilla de serie trae ya el suyo con su categoria,
+    /// `nombrePropuestoDeFigura`).
     func guardarComoFigura() {
-        guard let vista, let nucleo else { return }
-        CajetinesLienzo.pedir("Guardar como figura", nil, campos: [("Nombre", "", false)],
+        guard let vista, let nucleo, editor.cuantosElegidos() > 0 else { return }
+        CajetinesLienzo.pedir("Guardar como figura", nil, campos: [("Nombre", editor.nombrePropuestoDeFigura(), false)],
                               boton: "Guardar", desde: vista) { [weak self] v in
             guard let self, let nombre = v.first, !nombre.trimmingCharacters(in: .whitespaces).isEmpty else { return }
             _ = try? nucleo.guardarFigura(editor: self.editor, nombre: nombre)

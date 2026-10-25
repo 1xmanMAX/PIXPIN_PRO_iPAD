@@ -20,7 +20,8 @@ Zonas:
   `rustfmt` —o el de `$RUSTFMT`— los tres, para que el formato no salga como
   conflicto). Lo borrado en el iPad que el Mac cambio se lista y no vuelve.
 - `apple/por-adaptar/**`: no se compila; ahi manda el Mac (se copia tal cual,
-  tambien los crates que el iPad no tenia).
+  tambien los crates que el iPad no tenia). Igual `docs/protocolo-pedidos.md`,
+  que las pruebas de `pixpin-ia` leen con `include_str!`.
 - `apple/Cargo.lock`: se toma el del Mac y luego `cargo update --workspace`
   (sin red, `--offline`) para que encaje con los crates del iPad.
 - `apple/PixPinCore/Sources/**`: no se fusiona; se regenera con UniFFI al final
@@ -56,6 +57,9 @@ APUNTE = os.path.join(APPLE, 'docs', 'mac-traido.txt')
 KIT = 'apple/app/Sources/PixPinKit'
 FUSION = ('apple/nucleo', 'apple/Cargo.toml', 'apple/rust-toolchain.toml')
 MANDA_MAC = ('apple/por-adaptar',)
+# Lo de fuera de `apple/` que el nucleo lee al compilar sus pruebas
+# (`include_str!` de `pixpin-ia/src/acciones.rs`): manda el Mac.
+DE_FUERA = ('docs/protocolo-pedidos.md',)
 SOLO_LISTAR = ('apple/app/Tests', 'apple/app/Sources/PixPin')
 SOLO_MAC = re.compile(r'^\s*(@preconcurrency\s+)?import\s+(AppKit|Cocoa|Carbon|ScreenCaptureKit|IOKit|ServiceManagement|QuickLookUI|CoreWLAN|SystemConfiguration|OSAKit|ApplicationServices)\b', re.M)
 TIPO = re.compile(r'^(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|internal|private|fileprivate|final|open|nonisolated)\s+)*(?:struct|class|enum|protocol|actor|typealias)\s+(\w+)', re.M)
@@ -153,7 +157,9 @@ def main():
     tmp = tempfile.mkdtemp(prefix='traer-')
     for cual, commit in (('base', base), ('nuevo', nuevo)):
         os.makedirs(os.path.join(tmp, cual))
-        tar = subprocess.run(['git', '-C', mac, 'archive', commit, 'apple'], check=True, capture_output=True).stdout
+        hay = [f for f in DE_FUERA if subprocess.run(['git', '-C', mac, 'cat-file', '-e', f'{commit}:{f}'],
+                                                     capture_output=True).returncode == 0]
+        tar = subprocess.run(['git', '-C', mac, 'archive', commit, 'apple', *hay], check=True, capture_output=True).stdout
         subprocess.run(['tar', '-x', '-C', os.path.join(tmp, cual)], input=tar, check=True)
 
     informe = {k: [] for k in ('tomado', 'nuevo', 'fusion', 'conflicto', 'borrado', 'borrado_en_ipad_cambia_en_mac',
@@ -209,6 +215,13 @@ def main():
             continue
         if any(rel.startswith(z + '/') for z in SOLO_LISTAR):
             informe['pruebas_y_app_del_mac'].append(rel)
+
+    for rel in DE_FUERA:
+        n, i = ruta('nuevo', rel), os.path.join(IPAD, rel)
+        if existe(n) and not igual(i, n):
+            os.makedirs(os.path.dirname(i), exist_ok=True)
+            shutil.copy(n, i)
+            informe['por_adaptar'].append(rel)
 
     # Los crates de por-adaptar que el iPad no tenia (el Mac no los toco desde
     # la base, asi que no salen en el diff): tambien vienen.

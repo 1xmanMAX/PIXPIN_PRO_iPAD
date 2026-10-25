@@ -295,7 +295,13 @@ public struct VistaChat: View {
         BarraEscucharSuelta().padding(.horizontal, MedidasIsla.margenX).padding(.top, 4)
         IslaDeEscribir(borrador: $borrador, chat: chat, almacen: almacen, foco: focoCaja,
                        enviar: enviar, escaparVacio: escaparVacio,
-                       pegarAdjuntos: { EntradaDeFicheros.pegar(en: chat, almacen: almacen) },
+                       pegarAdjuntos: { [menu] campo in
+                           // Con texto escrito, una foto va dentro de lo
+                           // escrito: sale una sola nota (`Chat/NotaRica.swift`).
+                           EntradaDeFicheros.pegarEnLaNota(en: chat, almacen: almacen, campo: campo,
+                                                           avisar: { menu.avisar($0) })
+                               || EntradaDeFicheros.pegar(en: chat, almacen: almacen)
+                       },
                        adjuntar: adjuntar)
             .environment(\.escalaChat, f)
     }
@@ -700,7 +706,26 @@ public struct VistaChat: View {
             Task { await EntradaDeFicheros.soltar(proveedores, en: chat, almacen: almacen) }
         case let .voz(herramienta):
             VozEnElChat.abrir(herramienta, chat: chat, almacen: almacen, borrador: borrador)
+        case .figura:
+            FigurasChat.elegirParaAdjuntar(chat: chat, almacen: almacen, avisar: { [menu] in menu.avisar($0) },
+                                           empezar: empezarCaja)
+        case .pedirFigura:
+            empezarCaja("Hazme una figura de ")
+        case .carpeta:
+            // Nace con el nombre listo para escribirlo, como el Mac.
+            let menu = self.menu
+            Task {
+                guard let c = await AccionesCarpeta.crear(en: chat, con: nil, almacen: almacen) else { return }
+                menu.escritura = .renombrar(c)
+            }
         }
+    }
+
+    /// Lo que empieza la caja (las figuras del asistente): solo si estaba
+    /// vacia, y con el foco en ella.
+    private func empezarCaja(_ texto: String) {
+        if borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { borrador = texto }
+        focoCaja += 1
     }
 
     /// Crea un mensaje con el nucleo (fuera del hilo principal), lo pone al

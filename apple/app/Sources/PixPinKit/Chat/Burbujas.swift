@@ -62,9 +62,15 @@ struct BurbujaChat: View {
         case "NOTA" where BurbujaHojaNota.esHoja(mensaje):
             BurbujaHojaNota(mensaje: mensaje)
         case "NOTA":
-            Text(textoResaltado(mensaje.texto, aguja: aguja))
-                .tint(Paleta.chat.enviar)
-                .fixedSize(horizontal: false, vertical: true)
+            // Con formato o fotos, entera como un Markdown pequeno
+            // (`Chat/NotaRica.swift`, como el Mac); una llana, su texto.
+            if let rica = NotasRicas.compartidas.pura(mensaje.texto) {
+                BurbujaNotaRica(mensaje: mensaje, chat: chat, almacen: almacen, pura: rica)
+            } else {
+                Text(textoResaltado(mensaje.texto, aguja: aguja))
+                    .tint(Paleta.chat.enviar)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // Con una direccion web, su tarjeta (`Chat/TarjetaEnlace.swift`).
             if let enlace = TarjetasDeEnlace.primerEnlace(mensaje.texto) {
                 TarjetaEnlace(url: enlace)
