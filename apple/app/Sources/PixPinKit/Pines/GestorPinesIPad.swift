@@ -24,6 +24,7 @@
 // Rendimiento: las fotos se leen con ImageIO ya reducidas al tamano de la
 // pantalla y fuera del hilo principal; el PNG de una captura tambien.
 
+import AVKit
 import AVFoundation
 import PDFKit
 import PixPinCore

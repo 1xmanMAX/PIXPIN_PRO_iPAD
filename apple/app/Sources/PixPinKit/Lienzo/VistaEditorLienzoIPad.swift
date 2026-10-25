@@ -600,7 +600,7 @@ public final class VistaEditorLienzoIPad: UIView, UIKeyInput, UIPencilInteractio
         setNeedsDisplay()
     }
 
-    public func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    override public func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         // Con el Pencil apoyado, la palma no mueve la vista.
         if g === encima { return true }
         return !(toque != nil && toqueEsPencil)

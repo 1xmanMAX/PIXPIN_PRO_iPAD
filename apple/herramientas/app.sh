@@ -37,7 +37,7 @@ sys.exit(1)'
 correr() {
     local registro="$1"; shift
     if ! xcodebuild "$@" > "$registro" 2>&1; then
-        grep -E "error:|Test Case.*failed|XCTAssert|fatal" "$registro" | sort -u | head -300 || true
+        grep -E "error:|Test Case.*failed|XCTAssert|fatal" "$registro" | sort -u | head -1500 || true
         tail -40 "$registro"
         echo "==> Fallo (registro entero: $registro)" >&2
         return 1
@@ -50,8 +50,11 @@ comun=(-project xcode/PixPin.xcodeproj -scheme AppPixPin -derivedDataPath "$DERI
 
 case "${1:-simulador}" in
 simulador)
+    # Fichero a fichero y sin pararse al primer error: asi una pasada de la
+    # CI ensena todos los errores, no solo los primeros.
     correr "$DIST/simulador.log" build "${comun[@]}" -configuration Debug -sdk iphonesimulator \
-        -destination "generic/platform=iOS Simulator"
+        -destination "generic/platform=iOS Simulator" -continueBuildingAfterErrors \
+        SWIFT_COMPILATION_MODE=singlefile
     app="$DERIVADOS/Build/Products/Debug-iphonesimulator/PixPin.app"
     (cd "$(dirname "$app")" && rm -f "$DIST/PixPin-simulador.zip" && zip -qry "$DIST/PixPin-simulador.zip" PixPin.app)
     echo "==> $DIST/PixPin-simulador.zip"
