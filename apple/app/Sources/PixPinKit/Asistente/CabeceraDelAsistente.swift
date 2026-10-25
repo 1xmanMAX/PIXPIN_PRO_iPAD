@@ -6,17 +6,18 @@
 
 import PixPinCore
 import SwiftUI
+import UIKit
 
 struct CabeceraDelAsistente: View {
     let almacen: Almacen
     let chat: String
     @State private var motor = ""
 
-    static let motores: [(id: String, nombre: String)] = [("", "Local"), ("claude", "Claude Haiku"),
+    static let motores: [(id: String, nombre: String)] = [("", "En el iPad"), ("claude", "Claude Haiku"),
                                                            ("deepseek", "DeepSeek")]
 
     static func nombre(de motor: String) -> String {
-        motores.first { $0.id == motor }?.nombre ?? "Local"
+        motores.first { $0.id == motor }?.nombre ?? "En el iPad"
     }
 
     var body: some View {
@@ -35,7 +36,8 @@ struct CabeceraDelAsistente: View {
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Color.accentColor.opacity(0.15), in: Capsule())
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.borderless)
             .fixedSize()
             .help("Quién contesta (el mismo ajuste que Ajustes → Asistente)")
             Spacer()
@@ -59,7 +61,7 @@ struct CabeceraDelAsistente: View {
             try almacen.nucleo.guardarAjustes(nuevos: a)
             motor = nuevo
         } catch {
-            NSSound.beep()
+            CabeceraDelAsistente.pitar()
         }
     }
 
@@ -67,9 +69,14 @@ struct CabeceraDelAsistente: View {
         let (nucleo, chat) = (almacen.nucleo, chat)
         Task {
             guard let m = try? await Task.detached(operation: { try nucleo.iaConversacionNueva(chat: chat) }).value
-            else { return NSSound.beep() }
+            else { return CabeceraDelAsistente.pitar() }
             almacen.anadir([m], en: chat)
             NotificationCenter.default.post(name: .pixpinCambioLocal, object: nil)
         }
+    }
+
+    /// El «beep» del Mac: en el iPad, la vibracion de error.
+    static func pitar() {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
     }
 }

@@ -1,10 +1,12 @@
-// El motor por omision en Mac: **Foundation Models** (el modelo de Apple en
-// el aparato, gratis y sin red), solo en macOS 26 con Apple Intelligence.
+// El motor por omision en Mac y iPad: **Foundation Models** (el modelo de
+// Apple en el aparato, gratis y sin red), solo en macOS 26 / iPadOS 26 con
+// Apple Intelligence.
 //
-// La CI compila con Xcode 16.4 (SDK de macOS 15), donde el framework no
-// existe: todo lo suyo va dentro de `#if canImport(FoundationModels)` y
-// `@available(macOS 26, *)`, y fuera solo quedan dos funciones que dicen
-// «no esta» (`motorAppleDisponible`, `preguntarAApple`).
+// La CI compila con Xcode 16.4 (SDK de iOS 18), donde el framework no
+// existe: todo lo suyo va dentro de `#if compiler(>=6.2) &&
+// canImport(FoundationModels)` y `@available(iOS 26, macOS 26, *)`, y fuera
+// solo quedan dos funciones que dicen «no esta» (`motorAppleDisponible`,
+// `preguntarAApple`).
 //
 // Las herramientas son las de siempre, sin copiar nada a Swift: el JSON
 // Schema de `iaCatalogoPara` (el nucleo de Rust, `pixpin_ia::puente`) se
@@ -16,10 +18,10 @@
 import Foundation
 import PixPinCore
 
-#if canImport(FoundationModels)
+#if compiler(>=6.2) && canImport(FoundationModels)
 import FoundationModels
 
-@available(macOS 26, *)
+@available(iOS 26, macOS 26, *)
 enum MotorApple {
     static var disponible: Bool {
         if case .available = SystemLanguageModel.default.availability { return true }
@@ -99,7 +101,7 @@ enum MotorApple {
 
 /// Una herramienta de PixPin para Foundation Models: los argumentos llegan
 /// como `GeneratedContent` y se pasan tal cual (su JSON) al puente.
-@available(macOS 26, *)
+@available(iOS 26, macOS 26, *)
 struct HerramientaPixPin: Tool {
     typealias Arguments = GeneratedContent
     typealias Output = String
@@ -156,7 +158,7 @@ final class Recolector: @unchecked Sendable {
         }
         elementos.append(contentsOf: nuevos as [Any])
         let resumen = nuevos.isEmpty
-            ? "\(nombre): esta herramienta aún no se puede hacer en PixPin para Mac"
+            ? "\(nombre): esta herramienta aún no se puede hacer con Apple Intelligence"
             : "dibujadas \(nuevos.count) figuras"
         hechas.append(HerramientaUsada(nombre: nombre, ok: !nuevos.isEmpty, resumen: resumen))
         return resumen
@@ -192,16 +194,16 @@ func textoConHistorial(_ pedido: String, historial: [MensajeIa]) -> String {
 
 /// Si Foundation Models esta disponible en este Mac ahora mismo.
 func motorAppleDisponible() -> Bool {
-    #if canImport(FoundationModels)
-    if #available(macOS 26, *) { return MotorApple.disponible }
+    #if compiler(>=6.2) && canImport(FoundationModels)
+    if #available(iOS 26, macOS 26, *) { return MotorApple.disponible }
     #endif
     return false
 }
 
 /// Un turno con Foundation Models; `nil` si no existe en este sistema.
 func preguntarAApple(_ pedido: String, historial: [MensajeIa]) async throws -> RespuestaIa? {
-    #if canImport(FoundationModels)
-    if #available(macOS 26, *) { return try await MotorApple.preguntar(pedido, historial: historial) }
+    #if compiler(>=6.2) && canImport(FoundationModels)
+    if #available(iOS 26, macOS 26, *) { return try await MotorApple.preguntar(pedido, historial: historial) }
     #endif
     return nil
 }

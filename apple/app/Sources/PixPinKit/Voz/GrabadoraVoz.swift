@@ -60,15 +60,25 @@ public final class GrabadoraVoz: ObservableObject {
     public func empezar(en chat: String, almacen: Almacen) async {
         guard estado == .quieta else { return }
         guard await GrabadoraVoz.permisoMicrofono() else {
-            almacen.ponerError("PixPin no tiene permiso para el microfono (Ajustes del Sistema > Privacidad y seguridad > Microfono).")
+            almacen.ponerError("PixPin no tiene permiso para el micrófono (Ajustes > Privacidad y seguridad > Micrófono).")
             return
         }
         ReproductorVoz.compartido.parar()
+        // iOS: la sesion de sonido para grabar (si no, el motor no tiene
+        // entrada). Al acabar se vuelve a la de escuchar.
+        do {
+            let sesion = AVAudioSession.sharedInstance()
+            try sesion.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+            try sesion.setActive(true)
+        } catch {
+            almacen.ponerError("No se pudo abrir el micrófono: \(error.localizedDescription)")
+            return
+        }
         let motor = AVAudioEngine()
         let entrada = motor.inputNode
         let formato = entrada.outputFormat(forBus: 0)
         guard formato.sampleRate > 0, formato.channelCount > 0 else {
-            almacen.ponerError("No hay ningun microfono.")
+            almacen.ponerError("No hay ningún micrófono.")
             return
         }
         let url = FileManager.default.temporaryDirectory
@@ -96,6 +106,7 @@ public final class GrabadoraVoz: ObservableObject {
         motor.stop()
         self.motor = nil
         self.escritor = nil
+        GrabadoraVoz.soltarMicrofono()
         estado = .guardando
         defer { estado = .quieta }
 
@@ -123,6 +134,7 @@ public final class GrabadoraVoz: ObservableObject {
         motor.stop()
         self.motor = nil
         self.escritor = nil
+        GrabadoraVoz.soltarMicrofono()
         estado = .quieta
         let url = escritor.terminar().url
         try? FileManager.default.removeItem(at: url)
@@ -137,11 +149,18 @@ public final class GrabadoraVoz: ObservableObject {
         }
     }
 
+    /// Suelta el microfono: la sesion vuelve a la de escuchar (iOS).
+    private static func soltarMicrofono() {
+        let sesion = AVAudioSession.sharedInstance()
+        try? sesion.setActive(false, options: .notifyOthersOnDeactivation)
+        try? sesion.setCategory(.playback, mode: .spokenAudio)
+    }
+
     /// El permiso del microfono (el aviso del sistema solo la primera vez).
     nonisolated static func permisoMicrofono() async -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized: return true
-        case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted: return true
+        case .undetermined: return await AVAudioApplication.requestRecordPermission()
         default: return false
         }
     }

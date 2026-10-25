@@ -62,6 +62,17 @@ public final class ReproductorVoz: NSObject, ObservableObject {
 
     override public init() { super.init() }
 
+    /// iOS: la sesion de sonido para escuchar (suena aunque el iPad este en
+    /// silencio, como un reproductor, y sigue con la app de fondo si se
+    /// pide en el Info.plist).
+    static func sesionDeEscuchar() {
+        let s = AVAudioSession.sharedInstance()
+        if s.category != .playback {
+            try? s.setCategory(.playback, mode: .spokenAudio)
+        }
+        try? s.setActive(true)
+    }
+
     // MARK: Lo que se lee
 
     /// Hay algo cargado: la barra solo se pinta entonces.
@@ -137,6 +148,7 @@ public final class ReproductorVoz: NSObject, ObservableObject {
     public func seguir() {
         guard let r = reproductor else { return }
         LeerEnVoz.compartida.pausarSiLee()
+        ReproductorVoz.sesionDeEscuchar()
         r.rate = velocidad
         sonando = mudo ? true : r.play()
         alDia()

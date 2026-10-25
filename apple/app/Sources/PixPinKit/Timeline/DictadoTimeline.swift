@@ -35,10 +35,14 @@ public final class DictadoTimeline: ObservableObject {
 
     private func empezar() async {
         guard await DictadoTimeline.permiso() else {
-            rotulo = "PixPin no tiene permiso para el micrófono (Ajustes del Sistema > Privacidad y seguridad)."
+            rotulo = "PixPin no tiene permiso para el micrófono (Ajustes > PixPin > Micrófono)."
             return
         }
         ReproductorVoz.compartido.parar()
+        // iPad: la sesion de audio tiene que dejar grabar.
+        try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default,
+                                                         options: [.defaultToSpeaker, .allowBluetooth])
+        try? AVAudioSession.sharedInstance().setActive(true)
         let motor = AVAudioEngine()
         let entrada = motor.inputNode
         let formato = entrada.outputFormat(forBus: 0)
@@ -57,7 +61,7 @@ public final class DictadoTimeline: ObservableObject {
             self.escritor = escritor
             desde = Date()
             grabando = true
-            rotulo = "🎙 Te escucho… pulsa el micrófono (o ⌘⇧M) para terminar"
+            rotulo = "🎙 Te escucho… toca el micrófono (o ⌘⇧M) para terminar"
         } catch {
             entrada.removeTap(onBus: 0)
             motor.stop()

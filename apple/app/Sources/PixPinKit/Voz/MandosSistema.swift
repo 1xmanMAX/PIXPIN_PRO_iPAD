@@ -70,7 +70,9 @@ final class MandosDelSistema {
         dueno = nil
         guard !apagados else { return }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        #if os(macOS) || targetEnvironment(macCatalyst)
         MPNowPlayingInfoCenter.default().playbackState = .stopped
+        #endif
     }
 
     /// Lo que suena, al dia (solo si es del dueno).
@@ -87,7 +89,9 @@ final class MandosDelSistema {
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = s.posicion
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        #if os(macOS) || targetEnvironment(macCatalyst)
         MPNowPlayingInfoCenter.default().playbackState = s.sonando ? .playing : .paused
+        #endif
     }
 
     /// Los manejadores, una vez: mandan al dueno de ese momento.

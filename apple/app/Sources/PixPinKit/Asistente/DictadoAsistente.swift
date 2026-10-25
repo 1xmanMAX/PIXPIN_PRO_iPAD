@@ -27,11 +27,11 @@ final class DictadoAsistente: ObservableObject {
         guard !escuchando else { return }
         aviso = nil
         guard await GrabadoraVoz.permisoMicrofono() else {
-            aviso = "Falta el permiso del micrófono (Ajustes del Sistema → Privacidad)."
+            aviso = "Falta el permiso del micrófono (Ajustes → Privacidad y seguridad → Micrófono)."
             return
         }
         guard await TranscriptorVoz.autorizar(), let reconocedor = TranscriptorVoz.reconocedorLocal() else {
-            aviso = "Este Mac no puede pasar la voz a texto sin internet (o falta el permiso)."
+            aviso = "Este aparato no puede pasar la voz a texto sin internet (o falta el permiso)."
             return
         }
         antes = caja.isEmpty ? "" : caja + " "
@@ -41,6 +41,17 @@ final class DictadoAsistente: ObservableObject {
         pedido.shouldReportPartialResults = true
         pedido.addsPunctuation = true
         pedido.taskHint = .dictation
+        #if os(iOS)
+        // En el iPad el microfono pide su sesion de audio antes del motor.
+        do {
+            let sesion = AVAudioSession.sharedInstance()
+            try sesion.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+            try sesion.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            aviso = "No se pudo abrir el micrófono."
+            return
+        }
+        #endif
         let motor = AVAudioEngine()
         let nodo = motor.inputNode
         DictadoAsistente.instalarGrifo(en: nodo, pedido: pedido)
@@ -85,6 +96,9 @@ final class DictadoAsistente: ObservableObject {
         motor = nil
         pedido = nil
         tarea = nil
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
         let f = alAcabar
         alAcabar = nil
         f?(texto.trimmingCharacters(in: .whitespacesAndNewlines))

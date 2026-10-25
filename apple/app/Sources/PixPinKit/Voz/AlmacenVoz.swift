@@ -59,7 +59,7 @@ extension Almacen {
             return await ponerTranscripcion(segmentos, en: m.id, chat: chat) != nil
         } catch {
             if idioma != nil, (error as? ErrorVoz) == .sinReconocedor {
-                ponerError("Este Mac no tiene el reconocimiento de voz sin conexión para ese idioma. Actívalo en Ajustes del Sistema > Teclado > Dictado.")
+                ponerError("Este iPad no tiene el reconocimiento de voz sin conexión para ese idioma. Actívalo en Ajustes > General > Teclado > Dictado.")
             } else {
                 ponerError(TranscriptorVoz.explicar(error))
             }
@@ -73,9 +73,9 @@ extension TranscriptorVoz {
     public static func explicar(_ error: Error) -> String {
         switch error as? ErrorVoz {
         case .sinPermisoTranscribir?:
-            return "PixPin no tiene permiso para reconocer voz (Ajustes del Sistema > Privacidad y seguridad > Reconocimiento de voz)."
+            return "PixPin no tiene permiso para reconocer voz (Ajustes > Privacidad y seguridad > Reconocimiento de voz)."
         case .sinReconocedor?:
-            return "Este Mac no tiene el reconocimiento de voz sin conexion para espanol. Activalo en Ajustes del Sistema > Teclado > Dictado."
+            return "Este iPad no tiene el reconocimiento de voz sin conexión para español. Actívalo en Ajustes > General > Teclado > Dictado."
         default:
             return "No se pudo pasar a texto: \(error.localizedDescription)"
         }

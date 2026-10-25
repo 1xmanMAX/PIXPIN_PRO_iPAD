@@ -2,6 +2,9 @@
 // etiqueta, «para repasar») por paginas; a la derecha la ficha para
 // escribirla o repasarla. Como la pestana «Lecciones» del timeline de
 // Windows y la ficha «Nueva leccion».
+//
+// iPad: del Mac; los adjuntos se abren con `AbrirAdjuntoLeccion`
+// (`VistaLeccionesIPad.swift`) en vez de las acciones de fichero del chat.
 
 import PixPinCore
 import SwiftUI
@@ -332,7 +335,7 @@ struct AdjuntosDeLeccion: View {
         if m.clase == "IMAGEN" {
             Group {
                 if let url {
-                    MiniaturaVista(url: url, lado: 110).accionesDeFichero(url: url, nombre: m.nombre)
+                    MiniaturaVista(url: url, lado: 110).modifier(AbrirAdjuntoLeccion(url: url, nombre: m.nombre))
                 } else {
                     Label("Aún no ha llegado", systemImage: "photo").font(.caption).foregroundStyle(.secondary)
                         .frame(width: 110, height: 80)
@@ -349,7 +352,7 @@ struct AdjuntosDeLeccion: View {
             .frame(width: 160, alignment: .leading)
             .padding(6)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-            .modifier(AccionesSiHay(url: url, nombre: m.nombre))
+            .modifier(AbrirAdjuntoLeccion(url: url, nombre: m.nombre))
         }
     }
 
