@@ -240,13 +240,13 @@ public struct VentanaDeVisor: View {
             guard let chat = p.chat, let mensaje else { return nil }
             return .hoja(chat: chat, mensaje: mensaje)
         case .plano:
-            return url.map { .plano(url: $0, titulo: titulo) }
+            return url.map { Visor.plano(url: $0, titulo: titulo) }
         case .modelo3d:
-            return url.map { .modelo3d(url: $0, titulo: titulo) }
+            return url.map { Visor.modelo3d(url: $0, titulo: titulo) }
         case .medio:
-            return url.map { .medio(url: $0, titulo: titulo) }
+            return url.map { Visor.medio(url: $0, titulo: titulo) }
         case .vistaRapida:
-            return url.map { .vistaRapida(url: $0) }
+            return url.map { Visor.vistaRapida(url: $0) }
         }
     }
 

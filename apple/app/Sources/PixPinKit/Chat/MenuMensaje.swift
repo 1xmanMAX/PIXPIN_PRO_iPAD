@@ -9,7 +9,9 @@
 //   Abrir en el editor de notas y lo propio de cada burbuja (Pasar a texto
 //   en una nota de voz, Abrir...);
 // - mandarlo a otro sitio y acordarse: Reenviar (a que proyecto), Compartir…
-//   (la hoja del sistema) y Recordarmelo (o Quitar el recordatorio);
+//   (la hoja con formatos, `Compartir/HojaCompartirIPad.swift`), Imprimir…
+//   y Recordarmelo (o Quitar el recordatorio);
+// - Escuchar: el mensaje en voz alta (`Voz/LeerEnVoz.swift`);
 // - «Mas»: Cambiar el nombre, Fijar arriba, Guardar esto (lo del buzon),
 //   Ver comentarios y Elegir varios;
 // - Borrar, en rojo y aparte, preguntando antes.

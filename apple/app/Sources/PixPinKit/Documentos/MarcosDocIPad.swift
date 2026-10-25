@@ -22,6 +22,20 @@ struct MarcoDoc: Codable, Equatable {
     var vista: String?
 
     var rect: CGRect { CGRect(x: caja[0], y: caja[1], width: caja[2] - caja[0], height: caja[3] - caja[1]) }
+
+    init(caja: [Double], parte: UInt32 = 0, vista: String? = nil) {
+        self.caja = caja
+        self.parte = parte
+        self.vista = vista
+    }
+
+    /// Lo que falte (un marco de antes sin `parte`) va con su valor de siempre.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        caja = (try? c.decode([Double].self, forKey: .caja)) ?? []
+        parte = (try? c.decodeIfPresent(UInt32.self, forKey: .parte)) ?? 0
+        vista = try? c.decodeIfPresent(String.self, forKey: .vista)
+    }
 }
 
 @MainActor

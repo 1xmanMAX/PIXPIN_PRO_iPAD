@@ -37,6 +37,8 @@ public struct EditorLienzoIPad: View {
     let fondo: FuenteFondoLienzo?
 
     @StateObject private var carga = CargaLienzoIPad()
+    /// La navegacion de ESTA ventana (con Stage Manager cada una lleva la suya).
+    @EnvironmentObject private var nav: Navegacion
 
     public init(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?,
                 fondo: FuenteFondoLienzo? = nil) {
@@ -61,6 +63,7 @@ public struct EditorLienzoIPad: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .listo(modelo):
                 EditorLienzoVistaIPad(modelo: modelo)
+                    .onAppear { if modelo.alCerrar == nil { modelo.alCerrar = { [nav] in nav.cerrarVisor() } } }
             }
             BarraVisorIPad(tipo: "Lienzo", icono: "scribble.variable", titulo: carga.titulo ?? tituloDePartida,
                            alFijar: fijarComoPin) {

@@ -409,7 +409,9 @@ extension HacerPedidos {
                                    pila: (x: Float, y: Float)?, nucleo: Nucleo) throws -> (x: Float, y: Float) {
         let editor = try nucleo.editarLienzo(chat: chat, dibujo: referencia)
         defer { editor.cerrado() }
-        var (x, y) = sitioDeLaPila(caja: editor.caja(), pila: pila)
+        let sitio = sitioDeLaPila(caja: editor.caja(), pila: pila)
+        let x = sitio.0
+        var y = sitio.1
         for url in fotos {
             guard let png = ImagenPegadaLienzo.png(de: .fichero(url)),
                   let tam = ImagenPegadaLienzo.tamano(de: png) else { continue }

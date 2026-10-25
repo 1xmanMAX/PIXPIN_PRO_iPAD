@@ -65,7 +65,7 @@ public final class RecogedorCompartido {
         escribirLista = Task {
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
-            await Task.detached(priority: .utility) {
+            _ = await Task.detached(priority: .utility) {
                 try? BuzonCompartido.escribirProyectos(lista, en: raiz)
             }.value
         }

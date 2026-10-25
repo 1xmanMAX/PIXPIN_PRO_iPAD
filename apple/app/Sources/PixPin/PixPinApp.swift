@@ -7,6 +7,8 @@ import SwiftUI
 
 @main
 struct PixPinApp: App {
+    /// Las acciones rapidas del icono (mantener pulsado PixPin en la pantalla de inicio).
+    @UIApplicationDelegateAdaptor(DelegadoAppIPad.self) private var delegado
     @StateObject private var entorno = EntornoApp()
     /// La fase de TODA la app (todas las ventanas juntas): con Stage Manager
     /// una ventana puede irse al fondo mientras otra sigue delante, y la
@@ -20,11 +22,14 @@ struct PixPinApp: App {
         SincroDeFondo.activar()
         LienzoDelIPad.activar()
         AsistenteDelIPad.activar()
+        // El buzon de la extension de Compartir y los datos de los widgets.
+        SistemaDelIPad.activar()
     }
 
     var body: some Scene {
         WindowGroup {
             RaizIPad(entorno: entorno)
+                .conVentanasDeVisor()
         }
         .onChange(of: fase, initial: true) { _, nueva in
             switch nueva {
@@ -35,6 +40,10 @@ struct PixPinApp: App {
         }
         .backgroundTask(.appRefresh(SincroDeFondo.identificador)) {
             await SincroDeFondo.alDespertar()
+        }
+        // Un visor en su propia ventana (Stage Manager).
+        WindowGroup(id: VentanasDeVisor.grupo, for: PeticionVentana.self) { $peticion in
+            VentanaDeVisor(peticion: peticion, entorno: entorno)
         }
     }
 }

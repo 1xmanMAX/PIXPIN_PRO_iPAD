@@ -60,9 +60,10 @@ public enum AbrirFicheroDeFuera {
     public static func abrir(_ url: URL, en guardados: String, almacen: Almacen) async {
         defer { borrarSiEsDelBuzonDeEntrada(url) }
         let nav = Navegacion.compartida
-        let cabeza = url.pathExtension.lowercased() == "xml"
-            ? await Task.detached(priority: .userInitiated) { leerCabeza(url) }.value
-            : nil
+        var cabeza: Data?
+        if url.pathExtension.lowercased() == "xml" {
+            cabeza = await Task.detached(priority: .userInitiated) { AbrirFicheroDeFuera.leerCabeza(url) }.value
+        }
         switch destino(de: url, cabeza: cabeza) {
         case .lienzo:
             if await abrirComoLienzo(url, en: guardados, almacen: almacen) { return }

@@ -344,6 +344,28 @@ final class ModeloTextoNota: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: tarea)
     }
 
+    /// **Buscar** en el texto (el buscador del sistema, ⌘F).
+    func buscar() {
+        vista?.findInteraction?.presentFindNavigator(showingReplace: false)
+    }
+
+    /// De que nota es la voz (`LeerEnVoz.suena`).
+    var claveDeVoz: String { "nota\u{0}\(ObjectIdentifier(self).hashValue)" }
+
+    /// **Escuchar** desde el renglon del cursor; si ya suena, pausa o sigue.
+    /// `false` si no hay nada que leer o el iPad no tiene voz.
+    @discardableResult
+    func escuchar(clave: String) -> Bool {
+        let voz = LeerEnVoz.compartida
+        if voz.suena(clave) {
+            voz.alternar()
+            return true
+        }
+        let desde = vista?.selectedRange.location ?? 0
+        return VozDeLaNotaIPad.escuchar(texto: texto, desde: desde, clave: clave,
+                                        titulo: titulo.isEmpty ? "Nota" : titulo, vista: vista)
+    }
+
     /// Escribe si cambio (al cerrar, ya).
     func guardarYa() {
         pendiente?.cancel()
@@ -433,6 +455,8 @@ struct TextoNotaIPad: UIViewRepresentable {
         v.smartDashesType = .no
         v.alwaysBounceVertical = true
         v.keyboardDismissMode = .interactive
+        // Buscar (y reemplazar) del sistema: ⌘F, ⌘G.
+        v.isFindInteractionEnabled = true
         v.text = modelo.textoInicial
         v.delegate = context.coordinator
         let toque = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinador.toque(_:)))
@@ -521,7 +545,11 @@ struct EditorTextoIPad: View {
     var fichero: URL?
     let alCerrar: () -> Void
     @ObservedObject private var noche = ModoNoche.compartido
+    @ObservedObject private var voz = LeerEnVoz.compartida
     @EnvironmentObject private var nav: Navegacion
+    @State private var sinVoz = false
+
+    private var claveVoz: String { fichero?.path ?? modelo.claveDeVoz }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -535,6 +563,14 @@ struct EditorTextoIPad: View {
                                alCerrar()
                                nav.cerrarVisor()
                            }) {
+                Button { modelo.buscar() } label: { Image(systemName: "magnifyingglass") }
+                    .help("Buscar (⌘F)")
+                Button {
+                    if !modelo.escuchar(clave: claveVoz) { sinVoz = true }
+                } label: {
+                    Image(systemName: voz.suena(claveVoz) && voz.leyendo ? "speaker.wave.2.fill" : "speaker.wave.2")
+                }
+                .help("Escuchar desde el cursor")
                 ShareLink(item: modelo.texto) { Image(systemName: "square.and.arrow.up") }
                     .help("Compartir el texto")
             }
@@ -544,6 +580,14 @@ struct EditorTextoIPad: View {
             }
             TextoNotaIPad(modelo: modelo)
                 .ignoresSafeArea(.container, edges: .bottom)
+                .overlay(alignment: .bottom) {
+                    BarraEscuchar(voz: voz, clave: { claveVoz }).padding(.bottom, 16)
+                }
+        }
+        .alert("No se puede escuchar", isPresented: $sinVoz) {
+            Button("Aceptar", role: .cancel) {}
+        } message: {
+            Text("La nota no tiene texto que leer o el iPad no tiene voz para su idioma (Ajustes › Accesibilidad › Contenido leído).")
         }
         .background(Color(uiColor: .systemBackground).ignoresSafeArea())
         .modifier(NocheDelVisor(activo: noche.activo))
