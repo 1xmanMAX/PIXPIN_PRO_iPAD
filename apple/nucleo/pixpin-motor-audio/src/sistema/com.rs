@@ -134,7 +134,10 @@ impl Mmcss {
 
 impl Drop for Mmcss {
     fn drop(&mut self) {
-        match std::mem::replace(self, Mmcss::Nada) {
+        // Sobre `self` y no sobre un `mem::replace`: el valor viejo que
+        // devolveria seria un `Mmcss` temporal que al soltarse volveria a
+        // llamar a este `drop`, sin fin (desbordaba la pila del microfono).
+        match *self {
             // SAFETY: el HANDLE salio de `AvSetMmThreadCharacteristicsW` en
             // este mismo hilo y no se ha soltado antes.
             Mmcss::Tarea(h) => unsafe {
