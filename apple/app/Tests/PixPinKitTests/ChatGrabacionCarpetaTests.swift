@@ -60,7 +60,8 @@ final class ChatGrabacionCarpetaTests: XCTestCase {
                        "al ir a ella desde su carpeta, si se ve")
         XCTAssertEqual(ClaseEnElChat.deUnaClase(carpeta, chat: chat, nucleo: almacen.nucleo)?.voz, voz.id)
         // Su ventana: lo grabado en el orden del tiempo, con su minuto.
-        let leida = try XCTUnwrap(await CarpetasDelChat.leer(carpeta.id, chat: chat, almacen: almacen))
+        let leer = await CarpetasDelChat.leer(carpeta.id, chat: chat, almacen: almacen)
+        let leida = try XCTUnwrap(leer)
         XCTAssertTrue(leida.grabacion)
         XCTAssertEqual(leida.voz, voz.id)
         XCTAssertFalse(leida.paginas.contains { $0.adjunto })
