@@ -8,6 +8,11 @@
 // - Una nota o una mini-app tiene dentro botones y cajas de texto, asi que
 //   se arrastra por su asa de arriba y cambia de tamano por la esquina.
 // - Un toque lo trae delante y ensena su barra.
+// - Al arrastrar salen las guias azules de los demas pines y al soltar se
+//   pega a ellas (el iman de Windows).
+// - Un PDF pasa de pagina desde su barra (◀ 3 / 12 ▶).
+// - El asa de la mano de la barra lo arrastra a otra app (Split View o
+//   Slide Over): la foto, el fichero o el texto.
 
 import AVFoundation
 import SwiftUI
@@ -147,9 +152,16 @@ struct VistaPinIPad: View {
     private var arrastrar: some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .global)
             .updating($arrastre) { v, estado, _ in estado = v.translation }
-            .onChanged { _ in if gestor.elegido != pin.id { gestor.elegir(pin) } }
+            .onChanged { v in
+                if gestor.elegido != pin.id { gestor.elegir(pin) }
+                gestor.guiar(pin, centro: CGPoint(x: pin.centro.x + v.translation.width,
+                                                  y: pin.centro.y + v.translation.height))
+            }
             .onEnded { v in
-                pin.centro = CGPoint(x: pin.centro.x + v.translation.width, y: pin.centro.y + v.translation.height)
+                let suelto = CGPoint(x: pin.centro.x + v.translation.width, y: pin.centro.y + v.translation.height)
+                let pegado = gestor.iman(pin, centro: suelto)
+                if pegado != suelto { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                pin.centro = pegado
                 gestor.cambio(pin)
             }
     }
@@ -197,6 +209,16 @@ struct BarraPinIPad: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            if let paginas = pin.paginas {
+                boton("chevron.left", "Página anterior") { gestor.pasarPagina(pin, -1) }
+                    .disabled(!paginas.hayAnterior)
+                Text(paginas.rotulo)
+                    .font(.callout.monospacedDigit())
+                    .frame(minWidth: 56)
+                boton("chevron.right", "Página siguiente") { gestor.pasarPagina(pin, 1) }
+                    .disabled(!paginas.haySiguiente)
+                separador
+            }
             if pin.esImagen {
                 boton("minus", "Más pequeño") { zoom(1 / 1.25) }
                 Text("\(Int((pin.escala * 100).rounded())) %")
@@ -215,6 +237,7 @@ struct BarraPinIPad: View {
                 }
             }
             mas
+            asaArrastrarFuera
             separador
             boton("arrow.down.right.and.arrow.up.left", "Minimizar") { withAnimation(.snappy) { gestor.minimizar(pin) } }
             boton("xmark", "Cerrar") { withAnimation(.snappy) { gestor.cerrar(pin) } }
@@ -244,9 +267,30 @@ struct BarraPinIPad: View {
         .accessibilityLabel(ayuda)
     }
 
+    /// La mano: mantener y arrastrar lleva el pin a otra app.
+    private var asaArrastrarFuera: some View {
+        Image(systemName: "hand.draw")
+            .font(.system(size: 17, weight: .medium))
+            .frame(width: 40, height: 36)
+            .contentShape(Rectangle())
+            .onDrag { gestor.proveedorArrastre(pin) }
+            .help("Arrastrar a otra app")
+            .accessibilityLabel("Arrastrar a otra app")
+    }
+
     /// «…»: lo que no cabe en la barra.
     private var mas: some View {
         Menu {
+            if pin.paginas != nil {
+                Section("Páginas") {
+                    Button { gestor.pinearPagina(de: pin) } label: {
+                        Label("Pinear esta página", systemImage: "doc.on.doc")
+                    }
+                    Button { gestor.pinearTodasLasPaginas(de: pin) } label: {
+                        Label("Pinear todas las páginas", systemImage: "square.stack")
+                    }
+                }
+            }
             if pin.esImagen {
                 Button { gestor.guardarEnFotos(pin) } label: { Label("Guardar en Fotos", systemImage: "square.and.arrow.down") }
                 Section("Girar") {

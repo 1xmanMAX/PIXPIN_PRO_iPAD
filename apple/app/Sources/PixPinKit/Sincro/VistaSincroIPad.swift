@@ -179,6 +179,10 @@ struct CuerpoSincro: View {
             } header: {
                 Text("Más")
             }
+
+            if !sincro.recordadas.isEmpty {
+                SeccionDireccionesRecordadas(sincro: sincro)
+            }
         }
         .formStyle(.grouped)
     }
@@ -200,6 +204,21 @@ struct CuerpoSincro: View {
                 Label("«Dejarse encontrar» está apagado en Ajustes: desde aquí puedes sincronizar, "
                     + "pero tus otros aparatos no encontrarán este iPad.", systemImage: "eye.slash")
                     .foregroundStyle(Paleta.v2.naranja)
+            }
+            if sincro.codigoLegible == nil, sincro.hayCompartidos, sincro.presencia {
+                Label("Sin grupo, pero estás en chats compartidos: este iPad escucha y se anuncia para que esas personas lo encuentren.",
+                      systemImage: "person.2.wave.2")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            if let linea = lineaAutomatica {
+                Label(linea, systemImage: "clock.arrow.2.circlepath")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            if sincro.fallosAuto > 0 {
+                Label(sincro.fallosAuto == 1 ? "La última sincronización sola falló."
+                    : "La sincronización sola lleva \(sincro.fallosAuto) fallos seguidos.",
+                      systemImage: "exclamationmark.arrow.circlepath")
+                    .font(.callout).foregroundStyle(Paleta.v2.naranja)
             }
             if let fase = sincro.fase {
                 HStack(alignment: .top) {
@@ -224,6 +243,17 @@ struct CuerpoSincro: View {
 
     private var hayAlguien: Bool { sincro.filas.contains { $0.direccion != nil } }
 
+    /// Con quien va la sincronizacion sola ahora (el reloj): «Sincronizando
+    /// sola con PC-Casa y Móvil». `nil` si esta apagada o no hay nadie.
+    private var lineaAutomatica: String? {
+        guard sincro.automatica, sincro.presencia, !sincro.bajoConsumo else { return nil }
+        let todos = sincro.conQuienAuto + sincro.personasQueContestan.map { "\($0) (chat compartido)" }
+        guard !todos.isEmpty else { return nil }
+        let lista = todos.count == 1 ? todos[0]
+            : todos.dropLast().joined(separator: ", ") + " y " + (todos.last ?? "")
+        return "Sincronizando sola con \(lista)."
+    }
+
     private var iconoDeEstado: String {
         if sincro.ocupado { return "arrow.triangle.2.circlepath" }
         if sincro.error != nil { return "exclamationmark.triangle.fill" }
@@ -240,7 +270,9 @@ struct CuerpoSincro: View {
     /// «Sincronizado hace 5 min con PC-Casa», «Sin grupo todavía»…
     private func frasePrincipal(ahora: Int64) -> String {
         if sincro.ocupado { return "Sincronizando…" }
-        guard sincro.codigoLegible != nil else { return "Sin grupo todavía" }
+        guard sincro.codigoLegible != nil else {
+            return sincro.hayCompartidos ? "Sin grupo · en chats compartidos" : "Sin grupo todavía"
+        }
         let ultima = sincro.filas.max { $0.ultimaVez < $1.ultimaVez }
         let disponibles = sincro.filas.filter { $0.direccion != nil }.count
         guard let ultima, ultima.ultimaVez > 0 else {
@@ -434,6 +466,63 @@ struct HojaQRGrupo: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Listo") { cerrar() } }
             }
+        }
+    }
+}
+
+/// **Las direcciones recordadas** (`sincro/direcciones.txt`, el fichero del
+/// movil): donde contesto cada aparato del grupo y cada persona de un chat
+/// compartido la ultima vez. Es lo que se prueba antes que Bonjour. «Probar»
+/// mira si contesta ahi ahora.
+struct SeccionDireccionesRecordadas: View {
+    @ObservedObject var sincro: Sincronizador
+    @State private var abierta = false
+    @State private var probadas: [String: Bool] = [:]
+    @State private var probando: Set<String> = []
+
+    var body: some View {
+        Section {
+            DisclosureGroup("Direcciones recordadas (\(sincro.recordadas.count))", isExpanded: $abierta) {
+                ForEach(sincro.recordadas) { d in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(d.nombre ?? "Aparato desconocido")
+                            Text("\(d.direccion.host):\(String(d.direccion.puerto))"
+                                + (d.esDelGrupo ? "" : d.nombre == nil ? "" : " · chat compartido"))
+                                .font(.caption.monospaced()).foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        Spacer()
+                        if probando.contains(d.id) {
+                            ProgressView().controlSize(.small)
+                        } else if let si = probadas[d.id] {
+                            Image(systemName: si ? "checkmark.circle.fill" : "xmark.circle")
+                                .foregroundStyle(si ? Paleta.v2.verde : .secondary)
+                                .accessibilityLabel(si ? "Contesta" : "No contesta")
+                        }
+                        Button("Probar") { probar(d) }
+                            .disabled(probando.contains(d.id))
+                    }
+                }
+            }
+            .buttonStyle(.borderless)
+        } footer: {
+            Text("Donde contestó cada uno la última vez. Se prueba antes que buscar en la Wi‑Fi; si cambia, se apunta sola la nueva.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func probar(_ d: DireccionConNombre) {
+        probando.insert(d.id)
+        let nucleo = sincro.nucleo
+        let dir = d.direccion
+        Task {
+            let si = await Task.detached(priority: .utility) {
+                nucleo.sondearDireccion(host: dir.host, puerto: dir.puerto)
+            }.value
+            probando.remove(d.id)
+            probadas[d.id] = si
+            if si { sincro.mirarRecordadas() }
         }
     }
 }

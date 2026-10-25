@@ -213,10 +213,9 @@ public enum AbrirDesdeFuera {
             defer { if accedido { url.stopAccessingSecurityScopedResource() } }
             await almacen.cargarChats()
             guard let guardados = almacen.chats.first(where: \.esGuardados)?.id else { return }
-            let hechos = await almacen.adjuntar(urls: [url], en: guardados)
-            if let m = hechos.first, let r = m.ruta, let destino = await almacen.url(deRuta: r, en: guardados) {
-                Navegacion.compartida.abrirFichero(destino, titulo: m.nombre, chat: guardados, mensaje: m)
-            }
+            // Cada tipo a su sitio (`.excalidraw` como lienzo, LandXML al
+            // 3D, `.pixpin`...): `Sistema/AbrirFicheroDeFuera.swift`.
+            await AbrirFicheroDeFuera.abrir(url, en: guardados, almacen: almacen)
         }
     }
 }

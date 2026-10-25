@@ -187,9 +187,21 @@ public final class ModeloCompartidos: ObservableObject {
         defer { trabajando = false }
         var hechos: [String] = []
         let nucleo = self.nucleo
+        // iPad: tambien en su direccion recordada (la que apunto la ultima
+        // vuelta), por si Bonjour no la ensena.
+        let recordadas = await Task.detached(priority: .utility) { nucleo.direccionesRecordadas() }.value
         for p in otros {
-            guard let v = sincro.vecinos.todos.first(where: { $0.id == p.id }),
-                  let d = await Vecinos.sondear(v.punto) else { continue }
+            var donde: Direccion?
+            if let v = sincro.vecinos.todos.first(where: { $0.id == p.id }) {
+                donde = await Vecinos.sondear(v.punto)
+            }
+            if donde == nil, let r = recordadas.first(where: { $0.id == p.id }) {
+                let si = await Task.detached(priority: .utility) {
+                    nucleo.sondearDireccion(host: r.host, puerto: r.puerto)
+                }.value
+                if si { donde = Direccion(host: r.host, puerto: r.puerto) }
+            }
+            guard let d = donde else { continue }
             aviso = "Sincronizando con \(p.nombre)…"
             let id = p.id
             let chat = c.chat

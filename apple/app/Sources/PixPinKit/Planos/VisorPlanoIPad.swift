@@ -555,7 +555,7 @@ final class VisorPlano: ObservableObject {
 
 /// **El plano en Metal.** Una `MTKView` parada que pinta solo al cambiar
 /// algo; los gestos mueven la camara (`CamaraPlano`).
-final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInteractionDelegate {
+final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInteractionDelegate, UIKeyInput {
     let visor: VisorPlano
     private let motor: MotorMetal
     private let pintor: PintorPlano
@@ -687,6 +687,7 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
 
     func alCambiarAnotar() {
         cancelarTrazo()
+        ajustarTeclado()
         seguirAnotador()
         actualizarGestos()
         repintar()
@@ -945,18 +946,58 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
         return !visor.vistoLapiz && t.type == .direct && (event?.allTouches?.count ?? 1) == 1
     }
 
+    private func modificadores(_ evento: UIEvent?) -> UInt32 {
+        guard let f = evento?.modifierFlags else { return 0 }
+        var m: UInt32 = 0
+        if f.contains(.shift) { m |= 1 }
+        if f.contains(.alternate) { m |= 2 }
+        return m
+    }
+
     private func mandar(_ fase: FasePuntero, _ t: UITouch, _ event: UIEvent?) {
         guard let a = visor.anotador, a.encaje.u > 0, unidadesPorPunto > 0 else { return }
         let zoom = a.encaje.u / unidadesPorPunto
         let toques = (fase == .mover ? event?.coalescedTouches(for: t) : nil) ?? [t]
+        let mods = modificadores(event)
         for c in toques {
-            let q = aCapa(c.location(in: self), encaje: a.encaje)
+            let punto = c.type == .pencil ? c.preciseLocation(in: self) : c.location(in: self)
+            let q = aCapa(punto, encaje: a.encaje)
             let presion: Float? = c.type == .pencil && c.maximumPossibleForce > 0
                 ? Float(c.force / c.maximumPossibleForce) : nil
-            a.puntero(fase, x: q.x, y: q.y, presion: presion, zoom: zoom)
+            a.puntero(fase, x: q.x, y: q.y, presion: presion, modificadores: mods, zoom: zoom)
         }
         encima.setNeedsDisplay()
-        if fase == .soltar { visor.alTrazar() }
+        if fase == .pulsar || fase == .soltar {
+            a.trasCambio()
+            ajustarTeclado()
+        }
+        if fase == .soltar { atenderPeticion(a) }
+    }
+
+    /// Tras soltar con una herramienta de medir del lienzo: el cajetin que
+    /// pida (calibrar, dictar la cota). La foto de una zona no se hace aqui
+    /// (sobre un plano no tiene sentido): se suelta la peticion.
+    private func atenderPeticion(_ a: AnotadorPlanoIPad) {
+        guard let peticion = a.editor.tomarPeticion() else { return }
+        let editor = a.editor
+        switch peticion {
+        case .zona:
+            break
+        case let .calibrar(largoPx):
+            CajetinesLienzo.calibrar(unidades: editor.unidadesDeMedida(), desde: self) { [weak self, weak a] valor, unidad in
+                if editor.calibrar(largoPx: largoPx, valor: valor, unidad: unidad) {
+                    a?.trasCambio()
+                    self?.encima.setNeedsDisplay()
+                }
+            }
+        case let .dictarCota(id, largo, grados, unidad):
+            CajetinesLienzo.dictarCota(largo: largo, grados: grados, unidad: unidad, desde: self) { [weak self, weak a] l, g in
+                if editor.dictarCota(id: id, largo: l, grados: g) {
+                    a?.trasCambio()
+                    self?.encima.setNeedsDisplay()
+                }
+            }
+        }
     }
 
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
@@ -981,6 +1022,7 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
             }
             if trazando == nil, puedePintar(t, event) {
                 trazando = t
+                if visor.modeloAnotar?.desplegado != nil { visor.modeloAnotar?.desplegado = nil }
                 mandar(.pulsar, t, event)
             } else if trazando != nil, t.type != .pencil, trazando?.type != .pencil {
                 // Un segundo dedo: era para mover, no para pintar.
@@ -1006,6 +1048,77 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
         super.touchesCancelled(touches, with: event)
         guard let t = trazando, touches.contains(t) else { return }
         cancelarTrazo()
+    }
+
+    // MARK: El teclado (el texto del lienzo)
+
+    private var escribiendo: Bool { visor.anotador?.editor.escribiendo() ?? false }
+
+    override var canBecomeFirstResponder: Bool { escribiendo }
+
+    /// El teclado sale mientras se escribe un texto y se va al terminar.
+    func ajustarTeclado() {
+        if escribiendo, !isFirstResponder {
+            becomeFirstResponder()
+        } else if !escribiendo, isFirstResponder {
+            resignFirstResponder()
+        }
+    }
+
+    var hasText: Bool { true }
+
+    func insertText(_ text: String) {
+        guard let a = visor.anotador, a.editor.escribiendo() else { return }
+        let hecho = text == "\n" ? a.editor.tecla(nombre: "entrar") : a.editor.teclear(texto: text)
+        if hecho {
+            a.trasCambio()
+            encima.setNeedsDisplay()
+        }
+        ajustarTeclado()
+    }
+
+    func deleteBackward() {
+        guard let a = visor.anotador, a.editor.tecla(nombre: "retroceso") else { return }
+        a.trasCambio()
+        encima.setNeedsDisplay()
+    }
+
+    var autocorrectionType: UITextAutocorrectionType = .no
+    var spellCheckingType: UITextSpellCheckingType = .no
+    var smartQuotesType: UITextSmartQuotesType = .no
+    var smartDashesType: UITextSmartDashesType = .no
+
+    /// Las flechas, Inicio, Fin, Suprimir y Esc del teclado fisico mientras
+    /// se escribe.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var usadas = false
+        if let a = visor.anotador, a.editor.escribiendo() {
+            for p in presses {
+                guard let k = p.key else { continue }
+                let nombre: String? = switch k.keyCode {
+                case .keyboardLeftArrow: "izquierda"
+                case .keyboardRightArrow: "derecha"
+                case .keyboardHome: "inicio"
+                case .keyboardEnd: "fin"
+                case .keyboardDeleteForward: "suprimir"
+                case .keyboardEscape: "escape"
+                default: nil
+                }
+                if let nombre {
+                    usadas = true
+                    if a.editor.tecla(nombre: nombre) { a.trasCambio() }
+                }
+            }
+            encima.setNeedsDisplay()
+            ajustarTeclado()
+        }
+        if !usadas { super.pressesBegan(presses, with: event) }
+    }
+
+    /// Lo que se ve ahora, en el dibujo (para imprimir sin marcos).
+    func cajaVisible() -> CajaPlano {
+        let mx = anchoPx / 2 * camara.px, my = altoPx / 2 * camara.px
+        return CajaPlano(x0: camara.centroX - mx, y0: camara.centroY - my, x1: camara.centroX + mx, y1: camara.centroY + my)
     }
 }
 
@@ -1043,10 +1156,24 @@ final class CapaEncimaPlano: UIView {
             let t = PintorTintaPlano.transformacion(camara: v.camara, s: s, encaje: a.encaje, tamano: bounds.size)
             let origen = CGPoint.zero.applying(t.inverted())
             a.releer(origen: origen, zoom: a.encaje.u / s, tamano: bounds.size)
-            if let l = a.leido { pintarCapa(l, a.encaje, v, ctx) }
+            if let l = a.leido {
+                pintarCapa(l, a.encaje, v, ctx, imagen: a.modelo.imagenes(escala: CGFloat(a.encaje.u / s) * contentScaleFactor))
+            }
             return
         }
         if let t = visor.tinta, let e = visor.encaje { pintarCapa(t, e, v, ctx) }
+        // El texto hallado: un recuadro amarillo alrededor de su sitio.
+        if let h = visor.hallado {
+            let p = v.aVista(PuntoPlano(x: h.x, y: h.y))
+            let alto = max(CGFloat(h.alto / v.unidadesPorPunto), 6)
+            let ancho = max(alto * CGFloat(max(h.texto.count, 1)) * 0.6, 12)
+            let r = CGRect(x: p.x - 4, y: p.y - alto - 4, width: ancho + 8, height: alto + 8)
+            ctx.setFillColor(UIColor.systemYellow.withAlphaComponent(0.25).cgColor)
+            ctx.fill(r)
+            ctx.setStrokeColor(UIColor.systemOrange.cgColor)
+            ctx.setLineWidth(2)
+            ctx.stroke(r)
+        }
         // Los marcos para imprimir, con su numero abajo a la izquierda.
         ctx.setLineWidth(1.2)
         ctx.setStrokeColor(CapaEncimaPlano.azul.cgColor)
@@ -1083,13 +1210,16 @@ final class CapaEncimaPlano: UIView {
         if let m = v.mira, visor.modo != .mover { pintarMira(v.aVista(PuntoPlano(x: m.x, y: m.y)), m.tipo, ctx) }
     }
 
-    /// La capa del lienzo en su sitio, con la camara del plano.
-    private func pintarCapa(_ l: LienzoLeido, _ e: EncajePlano, _ v: VistaPlanoMetal, _ ctx: CGContext) {
+    /// La capa del lienzo en su sitio, con la camara del plano y el pintor
+    /// del lienzo (formas, flechas, textos, imagenes...).
+    private func pintarCapa(_ l: LienzoLeido, _ e: EncajePlano, _ v: VistaPlanoMetal, _ ctx: CGContext,
+                            imagen: @escaping (UInt64) -> CGImage? = { _ in nil }) {
         let s = v.unidadesPorPunto
         guard e.u > 0, s > 0 else { return }
+        let t = PintorTintaPlano.transformacion(camara: v.camara, s: s, encaje: e, tamano: bounds.size)
         ctx.saveGState()
-        ctx.concatenate(PintorTintaPlano.transformacion(camara: v.camara, s: s, encaje: e, tamano: bounds.size))
-        PintorTintaPlano.pintar(l, en: ctx)
+        ctx.concatenate(t)
+        PintorLienzo(lienzo: l, imagen: imagen).pintar(en: ctx, limites: bounds.applying(t.inverted()))
         ctx.restoreGState()
     }
 

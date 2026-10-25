@@ -12,6 +12,11 @@
 // pines, sus barras, las burbujas del borde y el panel reciben toques; lo
 // demas pasa a la app de debajo.
 //
+// Tambien pinta las guias azules de alinear pines, la pila de capturas
+// (abajo a la izquierda) y la cuenta atras de «Capturar PixPin en 3 s».
+// Al arrancar enchufa los ganchos del chat: «Pinear» un fichero o una lista
+// de tareas viva desde el menu de un mensaje.
+//
 // Firma intacta: `CapaPines(almacen:)` (la usa `Raiz/RaizIPad.swift`).
 
 import PixPinCore
@@ -23,6 +28,8 @@ public struct CapaPines: View {
     @ObservedObject private var gestor = GestorPinesIPad.compartido
     @ObservedObject private var nav = Navegacion.compartida
     @ObservedObject private var avisos = AvisosMini.compartido
+    @ObservedObject private var pila = PilaCapturasIPad.compartida
+    @ObservedObject private var capturador = CapturadorIPad.compartido
     /// Dentro del visor (una presentacion a pantalla completa).
     @Environment(\.isPresented) private var presentada
 
@@ -43,6 +50,28 @@ public struct CapaPines: View {
                         VistaPinIPad(pin: pin, gestor: gestor)
                             .transition(.scale(scale: 0.85).combined(with: .opacity))
                     }
+                    ForEach(Array(gestor.guias.enumerated()), id: \.offset) { _, g in
+                        let m = ReglasGuias.marco(de: g, grosor: 2)
+                        Rectangle()
+                            .fill(Paleta.v2.acento.opacity(0.92))
+                            .frame(width: m.width, height: m.height)
+                            .position(x: m.midX, y: m.midY)
+                            .allowsHitTesting(false)
+                    }
+                    VistaPilaCapturas(pila: pila)
+                        .padding(.leading, 16)
+                        .padding(.bottom, 16)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomLeading)
+                    if let n = capturador.cuentaAtras {
+                        Text("\(n)")
+                            .font(.system(size: 96, weight: .bold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .frame(width: 180, height: 180)
+                            .background(Color.black.opacity(0.55), in: Circle())
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
                     BurbujasPines(gestor: gestor)
                         .frame(width: geo.size.width, height: geo.size.height, alignment: .trailing)
                     if gestor.panelAbierto {
@@ -58,6 +87,7 @@ public struct CapaPines: View {
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             .animation(.snappy, value: gestor.panelAbierto)
+            .animation(.snappy, value: pila.visible)
             .onAppear {
                 gestor.arrancar(almacen: almacen)
                 if activa { gestor.area = geo.size }
@@ -78,6 +108,14 @@ public struct CapaPines: View {
         guard !apuntado else { return }
         apuntado = true
         Arranque.apuntar { entorno in
+            // «Pinear» desde el menu de un mensaje del chat.
+            GanchosChat.pinearFichero = { url, _ in
+                if !GestorPinesIPad.compartido.pinear(url: url) { avisarFalloPin() }
+            }
+            GanchosChat.pinearTareas = { chat, mensaje, documento in
+                GestorPinesIPad.compartido.pinearMiniapp(chat: chat, mensaje: mensaje, miniapp: "tareas",
+                                                         documento: documento)
+            }
             guard let almacen = entorno.almacen else { return }
             GestorPinesIPad.compartido.arrancar(almacen: almacen)
         }
