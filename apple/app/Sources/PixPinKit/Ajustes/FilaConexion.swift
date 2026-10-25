@@ -111,6 +111,8 @@ func textoDeFalloAlConectar(_ e: Error) -> String {
 final class SesionWebConexion: NSObject, ASWebAuthenticationPresentationContextProviding {
     static let compartida = SesionWebConexion()
     private var sesion: ASWebAuthenticationSession?
+    /// La de ahora (las que se cierran despues no tocan a la nueva).
+    private var actual: UUID?
     /// La cerro PixPin (llego el permiso), no el usuario.
     private var cerrandoYo = false
 
@@ -118,10 +120,13 @@ final class SesionWebConexion: NSObject, ASWebAuthenticationPresentationContextP
     /// aqui: sin esquema propio, la hoja se cierra con `cerrar()`.
     func abrir(_ url: URL) {
         cerrar()
+        let marca = UUID()
+        actual = marca
+        cerrandoYo = false
         let s = ASWebAuthenticationSession(url: url, callbackURLScheme: nil) { _, error in
             let cancelada = error != nil
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { SesionWebConexion.compartida.acabo(cancelada: cancelada) }
+                MainActor.assumeIsolated { SesionWebConexion.compartida.acabo(marca, cancelada: cancelada) }
             }
         }
         s.presentationContextProvider = self
@@ -131,11 +136,14 @@ final class SesionWebConexion: NSObject, ASWebAuthenticationPresentationContextP
         sesion = s
         if !s.start() {
             sesion = nil
+            actual = nil
             iaCancelarConexion()
         }
     }
 
-    private func acabo(cancelada: Bool) {
+    private func acabo(_ marca: UUID, cancelada: Bool) {
+        guard marca == actual else { return }
+        actual = nil
         let yo = cerrandoYo
         cerrandoYo = false
         sesion = nil
@@ -147,6 +155,8 @@ final class SesionWebConexion: NSObject, ASWebAuthenticationPresentationContextP
     func cerrar() {
         guard let s = sesion else { return }
         cerrandoYo = true
+        sesion = nil
+        actual = nil
         s.cancel()
     }
 

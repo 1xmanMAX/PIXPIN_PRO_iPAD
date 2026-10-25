@@ -405,6 +405,7 @@ struct AtajosLienzo: View {
             atajo("v", .command) { modelo.vista?.pegarDelPortapapeles() }
             atajo("p", .command) { modelo.imprimir() }
             atajo("s", [.command, .shift]) { modelo.compartir() }
+            atajo("c", [.command, .shift]) { modelo.copiarComoPNG() }
         }
         .frame(width: 0, height: 0)
         .opacity(0)

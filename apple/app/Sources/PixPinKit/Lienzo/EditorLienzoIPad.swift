@@ -13,6 +13,11 @@
 //   la foto puesta de imagen, para anotarla;
 // - nada: un lienzo nuevo en el chat («Lienzo nuevo» del Mac).
 //
+// **El fondo fijo** (`FondoLienzo.swift`): el dibujo de una hoja-pagina del
+// proyecto (la `PAGINA` del chat, que llega como el `DIBUJO` de su
+// referencia con el id de la pagina) se abre encima de su pagina del PDF,
+// como en Windows y el Mac; y quien lo abra puede dar otro (`fondo:`).
+//
 // Abrir el editor (leer el `.excalidraw`) va fuera del hilo principal. Se
 // guarda solo, 1 s despues del ultimo cambio, al cerrar y al irse la app al
 // fondo.
@@ -27,11 +32,16 @@ public struct EditorLienzoIPad: View {
     let chat: String
     let mensaje: MensajeChat?
     let foto: URL?
+    /// Un fondo fijo para el lienzo (una pagina de PDF, una foto) que no se
+    /// mueve ni se guarda en el dibujo.
+    let fondo: FuenteFondoLienzo?
 
     @StateObject private var carga = CargaLienzoIPad()
 
-    public init(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?) {
+    public init(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?,
+                fondo: FuenteFondoLienzo? = nil) {
         self.almacen = almacen; self.chat = chat; self.mensaje = mensaje; self.foto = foto
+        self.fondo = fondo
     }
 
     public var body: some View {
@@ -58,6 +68,7 @@ public struct EditorLienzoIPad: View {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                     }
                     .help("Ver todo el dibujo")
+                    BotonDedoLienzo(modelo: modelo)
                     Button { modelo.compartir() } label: { Image(systemName: "square.and.arrow.up") }
                         .help("Compartir…")
                 }
@@ -65,7 +76,7 @@ public struct EditorLienzoIPad: View {
         }
         .task {
             LienzoDelIPad.activar()
-            await carga.abrir(almacen: almacen, chat: chat, mensaje: mensaje, foto: foto)
+            await carga.abrir(almacen: almacen, chat: chat, mensaje: mensaje, foto: foto, fondo: fondo)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
             if case let .listo(modelo) = carga.estado { modelo.guardarAhora(terminarTexto: false) }
@@ -96,7 +107,8 @@ final class CargaLienzoIPad: ObservableObject {
     /// Ya se pidio abrir: volver a aparecer no crea otro lienzo nuevo.
     private var pedido = false
 
-    func abrir(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?) async {
+    func abrir(almacen: Almacen, chat: String, mensaje: MensajeChat?, foto: URL?,
+               fondo pedido: FuenteFondoLienzo? = nil) async {
         guard !pedido else { return }
         pedido = true
         let nucleo = almacen.nucleo
@@ -104,8 +116,19 @@ final class CargaLienzoIPad: ObservableObject {
         var referencia: String?
         var nombre = mensaje?.nombre ?? ""
         var fotoSuelta: URL?
+        var fuenteFondo = pedido
         if let m = mensaje, m.clase == "DIBUJO", let r = m.referencia, !r.isEmpty {
             referencia = r
+            if fuenteFondo == nil {
+                // El dibujo de una hoja-pagina: se abre sobre su pagina.
+                let id = m.id
+                let hoja = await Task.detached(priority: .userInitiated) {
+                    try? nucleo.hojaDePagina(chat: chat, id: id)
+                }.value ?? nil
+                if let hoja, CargaLienzoIPad.esSuDibujo(hoja.dibujo, r) {
+                    fuenteFondo = FuenteFondoLienzo.de(hoja)
+                }
+            }
         } else if let m = mensaje ?? fotoDelChat(foto, almacen: almacen, chat: chat), m.clase == "IMAGEN" {
             let id = m.id
             referencia = await Task.detached(priority: .userInitiated) {
@@ -142,7 +165,8 @@ final class CargaLienzoIPad: ObservableObject {
             let t = nombre.isEmpty ? (fotoSuelta?.lastPathComponent ?? "Lienzo") : nombre
             titulo = t
             let modelo = ModeloEditorLienzo(editor: editor, referencia: referencia, fotos: fotos,
-                                            nucleo: nucleo, titulo: t)
+                                            nucleo: nucleo, titulo: t,
+                                            fondo: fuenteFondo.flatMap { FondoLienzo($0) }, chat: chat)
             if fotoSuelta != nil {
                 // Con la foto puesta, a anotarla con el lapiz; y la foto se
                 // guarda ya (el editor sabe que tiene cambios sin guardar).
@@ -154,6 +178,14 @@ final class CargaLienzoIPad: ObservableObject {
         case let .failure(e):
             estado = .fallo("\(e)")
         }
+    }
+
+    /// Si `dibujo` (el de la hoja-pagina: su id o su fichero) es el lienzo
+    /// `referencia`, o la hoja aun no tenia ninguno apuntado.
+    nonisolated static func esSuDibujo(_ dibujo: String?, _ referencia: String) -> Bool {
+        guard let dibujo, !dibujo.isEmpty else { return true }
+        let fichero = (dibujo as NSString).lastPathComponent
+        return fichero == referencia || (fichero as NSString).deletingPathExtension == referencia
     }
 
     /// El mensaje `IMAGEN` del chat (de lo cargado) cuyo fichero es `foto`.
@@ -252,5 +284,20 @@ struct EditorLienzoVistaIPad: View {
                 }
             }
         }
+    }
+}
+
+/// **«Dibujar con el dedo»** en la barra del visor (el de Notas): la mano
+/// llena, el dedo pinta aunque se use el Apple Pencil.
+struct BotonDedoLienzo: View {
+    @ObservedObject var modelo: ModeloEditorLienzo
+
+    var body: some View {
+        Button { modelo.dedoPintaSiempre.toggle() } label: {
+            Image(systemName: modelo.dedoPintaSiempre ? "hand.draw.fill" : "hand.draw")
+        }
+        .help(modelo.dedoPintaSiempre ? "El dedo pinta (tócalo para que mueva la vista)"
+              : "Dibujar con el dedo")
+        .accessibilityLabel("Dibujar con el dedo")
     }
 }

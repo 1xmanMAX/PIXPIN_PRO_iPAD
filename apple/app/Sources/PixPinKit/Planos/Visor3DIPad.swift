@@ -359,6 +359,7 @@ final class VisorModelo3D: ObservableObject {
 
     func alternarMarcos3D() {
         if modeloAnotar != nil { terminarAnotar() }
+        objectWillChange.send()
         marcos3d.activo.toggle()
         vista?.alCambiarAnotar()
     }
@@ -381,6 +382,8 @@ final class VisorModelo3D: ObservableObject {
             info.outputType = .photo
             if let h = hojas.first { info.orientation = h.size.width >= h.size.height ? .landscape : .portrait }
             impresora.printInfo = info
+            impresora.printPageRenderer = nil
+            impresora.printingItem = nil
             impresora.printingItems = hojas
             _ = impresora.present(from: CGRect(x: v.bounds.maxX - 60, y: 60, width: 1, height: 1), in: v,
                                   animated: true, completionHandler: nil)
@@ -441,8 +444,14 @@ final class VistaModeloMetal: MTKView, UIGestureRecognizerDelegate {
     let visor: VisorModelo3D
     private let motor: MotorMetal
     private let muestras: Int
-    private(set) var camara = Camara3d(objetivo: Punto3d(x: 0, y: 0, z: 0), rumbo: -0.8, altura: 0.5, dist: 10)
+    private(set) var camara = Camara3d(objetivo: Punto3d(x: 0, y: 0, z: 0), rumbo: -0.8, altura: 0.5, dist: 10) {
+        didSet { visor.alMoverLaCamara() }
+    }
     var radio = 10.0
+    /// La tinta del marcador que es la vista de ahora (y anotar encima).
+    let tinta = CapaTintaMarcador3DIPad()
+    /// Lo que se pidio fotografiar: se lee tras el siguiente pintado.
+    private var pedidoDeFoto: ((CGImage?) -> Void)?
     private var encuadrado = false
     let encima = CapaEncimaModelo()
     /// El punto sobre el que se gira mientras se arrastra (Windows lo ensena).
@@ -472,10 +481,15 @@ final class VistaModeloMetal: MTKView, UIGestureRecognizerDelegate {
         enableSetNeedsDisplay = true
         autoResizeDrawable = true
         isMultipleTouchEnabled = true
+        // Para leer lo pintado (la foto de la vista).
+        framebufferOnly = false
         encima.vista = self
         encima.frame = bounds
         encima.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(encima)
+        tinta.frame = bounds
+        tinta.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(tinta)
 
         arrastre.addTarget(self, action: #selector(alArrastrar(_:)))
         arrastre.maximumNumberOfTouches = 2
@@ -499,6 +513,52 @@ final class VistaModeloMetal: MTKView, UIGestureRecognizerDelegate {
     func repintar() {
         setNeedsDisplay()
         encima.setNeedsDisplay()
+        tinta.setNeedsDisplay()
+    }
+
+    /// Volver a una camara guardada (un marcador, un marco).
+    func ponerCamara(_ c: Camara3d) {
+        encuadrado = true
+        camara = c
+        repintar()
+    }
+
+    /// Anotando o poniendo marcos, los dedos no mueven el modelo (salir de
+    /// la vista del marcador dejaria de verse lo anotado).
+    func alCambiarAnotar() {
+        let quieto = visor.modeloAnotar != nil || visor.marcos3d.activo
+        for g in [arrastre, pellizco, toque, dobleToque] as [UIGestureRecognizer] { g.isEnabled = !quieto }
+        repintar()
+    }
+
+    /// **La foto de lo que se ve** (pinta una vez y lee el dibujable).
+    func foto(_ listo: @escaping @MainActor (CGImage?) -> Void) {
+        pedidoDeFoto = { img in MainActor.assumeIsolated { listo(img) } }
+        draw()
+    }
+
+    /// Copia lo pintado a la memoria y, al terminar la tarjeta, lo da como
+    /// imagen (BGRA, el formato de la vista).
+    private func leerFoto(_ t: MTLTexture, _ cb: MTLCommandBuffer, _ listo: @escaping (CGImage?) -> Void) {
+        let w = t.width, h = t.height, fila = w * 4
+        guard let bufer = motor.dispositivo.makeBuffer(length: fila * h, options: .storageModeShared),
+              let blit = cb.makeBlitCommandEncoder() else { return listo(nil) }
+        blit.copy(from: t, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: w, height: h, depth: 1), to: bufer, destinationOffset: 0,
+                  destinationBytesPerRow: fila, destinationBytesPerImage: fila * h)
+        blit.endEncoding()
+        cb.addCompletedHandler { _ in
+            let datos = Data(bytes: bufer.contents(), count: fila * h)
+            let img = CGDataProvider(data: datos as CFData).flatMap { prov -> CGImage? in
+                guard let espacio = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+                return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: fila,
+                               space: espacio,
+                               bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue
+                                   | CGImageAlphaInfo.noneSkipFirst.rawValue),
+                               provider: prov, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+            }
+            DispatchQueue.main.async { listo(img) }
+        }
     }
 
     private func repintarYa() {
@@ -611,6 +671,10 @@ final class VistaModeloMetal: MTKView, UIGestureRecognizerDelegate {
             }
         }
         enc.endEncoding()
+        if let pedido = pedidoDeFoto {
+            pedidoDeFoto = nil
+            leerFoto(dibujable.texture, cb, pedido)
+        }
         cb.present(dibujable)
         cb.commit()
     }
@@ -949,16 +1013,77 @@ public struct Visor3DIPad: View {
         ZStack(alignment: .top) {
             Color(white: noche.activo ? 0.15 : 0.96).ignoresSafeArea()
             contenido.ignoresSafeArea()
+            if visor.datos != nil {
+                CapaMarcos3DIPad(visor: visor, marcos: visor.marcos3d, marcadores: visor.marcadores)
+                    .ignoresSafeArea()
+            }
+            if let m = visor.modeloAnotar {
+                BarrasLienzoEncima(modelo: m, arriba: 58) { visor.vista?.tinta.setNeedsDisplay() }
+            }
             BarraVisorIPad(tipo: "Modelo 3D", icono: "cube", titulo: titulo) { botones }
             if visor.verPanel && visor.datos != nil {
                 PanelFlotantePlano(alto: 520) { panel }
             }
+            if visor.preparando {
+                ProgressView("Preparando…")
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .onAppear { visor.cargar() }
+        .onDisappear { if visor.modeloAnotar != nil { visor.terminarAnotar() } }
         .onChange(of: noche.activo) { _, _ in visor.vista?.repintar() }
     }
 
     @ViewBuilder private var botones: some View {
+        Group {
+            botonesDeVista
+            botonesDeMarcar
+            menuMas
+        }
+        .disabled(visor.datos == nil)
+    }
+
+    /// Marcador, anotar encima y los marcos numerados.
+    @ViewBuilder private var botonesDeMarcar: some View {
+        Button { visor.ponerMarcador() } label: { Image(systemName: "bookmark") }
+            .keyboardShortcut("m", modifiers: .command)
+            .help("Marcador aquí (⌘M)")
+        Button { visor.alternarAnotar() } label: { Image(systemName: "pencil.tip.crop.circle") }
+            .foregroundStyle(visor.modeloAnotar != nil ? Paleta.v2.acento : Color.primary)
+            .help(visor.modeloAnotar != nil ? "Terminar de anotar" : "Anotar sobre esta vista")
+        Button { visor.alternarMarcos3D() } label: { Image(systemName: "rectangle.dashed") }
+            .foregroundStyle(visor.marcos3d.activo ? Paleta.v2.acento : Color.primary)
+            .help("Marcos para imprimir")
+    }
+
+    /// Exportar e imprimir.
+    private var menuMas: some View {
+        Menu {
+            Button { visor.imprimirMarcos3D() } label: {
+                Label(visor.marcos3d.lista.isEmpty ? "Imprimir lo que se ve…" : "Imprimir los marcos…", systemImage: "printer")
+            }
+            .keyboardShortcut("p", modifiers: .command)
+            Divider()
+            Button { visor.exportar(jpg: false) } label: { Label("Exportar lo que se ve (PNG)", systemImage: "photo") }
+                .keyboardShortcut("e", modifiers: .command)
+            Button { visor.exportar(jpg: true) } label: { Label("Exportar lo que se ve (JPG)", systemImage: "photo.fill") }
+            Button { visor.exportar(jpg: nil) } label: { Label("Exportar el original", systemImage: "doc") }
+            if !visor.marcos3d.lista.isEmpty {
+                Divider()
+                Button(role: .destructive) { visor.marcos3d.quitarUltimo() } label: {
+                    Label("Quitar el último marco", systemImage: "delete.left")
+                }
+                Button(role: .destructive) { visor.marcos3d.borrar() } label: {
+                    Label("Borrar los marcos", systemImage: "rectangle.dashed")
+                }
+            }
+        } label: { Image(systemName: "ellipsis.circle") }
+    }
+
+    /// Ver entero, planta, aristas, caja, aislar, vistas y el panel.
+    @ViewBuilder private var botonesDeVista: some View {
         Group {
             Button { visor.encuadrar() } label: { Image(systemName: "viewfinder") }
                 .keyboardShortcut("f", modifiers: [])
@@ -1068,5 +1193,101 @@ public struct Visor3DIPad: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+    }
+}
+
+/// **La capa de los marcos y los marcadores sobre el modelo**: con los
+/// marcos puestos, arrastrar pone uno con la vista de ahora; se ven los de
+/// la vista de ahora (azules, numerados) y, abajo a la izquierda, sus fichas
+/// y las de los marcadores (redondas), que llevan a su vista.
+struct CapaMarcos3DIPad: View {
+    @ObservedObject var visor: VisorModelo3D
+    @ObservedObject var marcos: Marcos3D
+    @ObservedObject var marcadores: MarcadoresDeVista
+    @State private var arrastre: (CGPoint, CGPoint)?
+
+    private static let azul = Color(uiColor: CapaEncimaPlano.azul)
+
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .topLeading) {
+                if marcos.activo {
+                    Color.black.opacity(0.001)
+                        .gesture(DragGesture(minimumDistance: 1)
+                            .onChanged { arrastre = ($0.startLocation, $0.location) }
+                            .onEnded { v in
+                                arrastre = nil
+                                poner(v.startLocation, v.location, en: g.size)
+                            })
+                }
+                TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                    recuadros(en: g.size)
+                }
+                .allowsHitTesting(false)
+                if let (a, b) = arrastre {
+                    Rectangle().stroke(CapaMarcos3DIPad.azul, lineWidth: 1)
+                        .frame(width: abs(a.x - b.x), height: abs(a.y - b.y))
+                        .offset(x: min(a.x, b.x), y: min(a.y, b.y))
+                        .allowsHitTesting(false)
+                }
+                fichas
+                    .padding(14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+        }
+    }
+
+    private func poner(_ a: CGPoint, _ b: CGPoint, en tamano: CGSize) {
+        guard abs(a.x - b.x) > 8, abs(a.y - b.y) > 8, let c = visor.vista?.camara, let e = visor.estado3d() else { return }
+        marcos.poner(caja: Marcos3D.caja(a, b, en: tamano), camara: c, estado: e)
+    }
+
+    /// Los marcos de la vista de ahora.
+    private func recuadros(en tamano: CGSize) -> some View {
+        let camara = visor.vista?.camara
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(marcos.lista.enumerated()), id: \.element.id) { i, m in
+                if let camara, mismaCamara3d(camara, m.camara) {
+                    let r = Marcos3D.rect(m.caja, en: tamano)
+                    Rectangle().stroke(CapaMarcos3DIPad.azul, lineWidth: 1.2)
+                        .frame(width: r.width, height: r.height).offset(x: r.minX, y: r.minY)
+                    Text("\(i + 1)").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 16, height: 16).background(CapaMarcos3DIPad.azul)
+                        .offset(x: r.minX, y: r.minY)
+                }
+            }
+        }
+        .frame(width: tamano.width, height: tamano.height, alignment: .topLeading)
+    }
+
+    private var fichas: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(marcos.lista.enumerated()), id: \.element.id) { i, m in
+                Button { visor.aplicar(estado: m.estado) } label: {
+                    Text("\(i + 1)").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(CapaMarcos3DIPad.azul))
+                }
+                .buttonStyle(.plain)
+                .help("Ir al marco \(i + 1)")
+                .contextMenu { Button("Quitar el último marco", role: .destructive) { marcos.quitarUltimo() } }
+            }
+            if marcos.activo {
+                Text("Arrastra: un marco con esta vista · ⌘P imprime")
+                    .font(.system(size: 12)).foregroundStyle(.white)
+                    .padding(.horizontal, 10).frame(height: 30)
+                    .background(Capsule().fill(Color(white: 0.08, opacity: 0.9)))
+            }
+            ForEach(Array(marcadores.del3d.enumerated()), id: \.element.id) { i, m in
+                Button { visor.irAMarcador(i) } label: {
+                    Text("\(i + 1)").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(Color(white: 0.12, opacity: 0.7)))
+                }
+                .buttonStyle(.plain)
+                .help("Marcador \(i + 1)")
+                .contextMenu { Button("Quitar", role: .destructive) { visor.quitarMarcador(m.id) } }
+            }
+        }
     }
 }

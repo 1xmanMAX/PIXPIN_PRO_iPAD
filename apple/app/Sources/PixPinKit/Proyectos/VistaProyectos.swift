@@ -15,6 +15,7 @@
 // timeline o un enlace lo cambian y aqui se ve (y `saltoAMensaje` lo
 // atiende el chat).
 
+import PhotosUI
 import PixPinCore
 import SwiftUI
 
@@ -28,6 +29,10 @@ public struct VistaProyectos: View {
     @State private var estrecho = false
     /// El proyecto que se va a borrar, mientras se pregunta.
     @State private var aBorrar: FichaChat?
+    /// El proyecto al que se le elige la imagen de logo.
+    @State private var logoPara: FichaChat?
+    @State private var fotoLogo: [PhotosPickerItem] = []
+    @ObservedObject private var logos = LogosProyecto.compartidos
 
     public init(almacen: Almacen) { self.almacen = almacen }
 
@@ -35,9 +40,24 @@ public struct VistaProyectos: View {
         HStack(spacing: 0) {
             if !estrecho || nav.chatAbierto == nil {
                 ListaProyectos(almacen: almacen, elegido: $nav.chatAbierto) { chat in
+                    // Compartir con formatos: sus hojas en PDF, HTML, PNG...,
+                    // los originales y el proyecto entero como `.pixpin`.
+                    Button { HojaCompartir.abrir(.proyectos([chat]), almacen: almacen) } label: {
+                        Label("Compartir…", systemImage: "square.and.arrow.up")
+                    }
+                    if !chat.esAsistente {
+                        Button { logoPara = chat } label: {
+                            Label("Poner imagen de logo…", systemImage: "photo.circle")
+                        }
+                        if logos.tiene(chat.id) {
+                            Button {
+                                Task { await logos.quitar(chat.id, nucleo: almacen.nucleo) }
+                            } label: { Label("Quitar imagen de logo", systemImage: "circle.slash") }
+                        }
+                    }
                     if !chat.esGuardados, !chat.esAsistente {
                         Button(role: .destructive) { aBorrar = chat } label: {
-                            Label("Borrar", systemImage: "trash")
+                            Label("Borrar proyecto", systemImage: "trash")
                         }
                     }
                 }
@@ -83,7 +103,23 @@ public struct VistaProyectos: View {
             Text("Se borra también en tus otros aparatos la próxima vez que sincronices. "
                 + "Queda una copia en la papelera de PixPin por si te arrepientes.")
         }
+        .photosPicker(isPresented: Binding(get: { logoPara != nil }, set: { if !$0, fotoLogo.isEmpty { logoPara = nil } }),
+                      selection: $fotoLogo, maxSelectionCount: 1, matching: .images)
+        .onChange(of: fotoLogo) { _, elegidas in
+            guard let item = elegidas.first, let chat = logoPara else { return }
+            fotoLogo = []
+            logoPara = nil
+            let (logos, nucleo, almacen) = (self.logos, almacen.nucleo, self.almacen)
+            Task {
+                guard let datos = try? await item.loadTransferable(type: Data.self),
+                      await logos.poner(chat.id, datos: datos, nucleo: nucleo) else {
+                    almacen.ponerError("No se pudo poner esa imagen de logo")
+                    return
+                }
+            }
+        }
         .task {
+            CompartirDelIPad.activar()
             await almacen.cargarChats()
             // El chat «Asistente», fijo detras de «Mensajes guardados».
             await almacen.asegurarAsistente()
@@ -128,6 +164,12 @@ struct ListaProyectos<Menu: View>: View {
     @State private var creando = false
     @State private var nuevo = ""
     @State private var verArchivados = false
+    /// «Elegir varios»: los marcados (para compartirlos o borrarlos juntos).
+    @State private var marcando = false
+    @State private var marcados: Set<String> = []
+    @State private var preguntarBorrar = false
+    @State private var verBorrados = false
+    @ObservedObject private var logos = LogosProyecto.compartidos
 
     private func casa(_ c: FichaChat) -> Bool {
         let f = filtro.trimmingCharacters(in: .whitespaces)
@@ -156,6 +198,18 @@ struct ListaProyectos<Menu: View>: View {
                 BotonRedondoLista(simbolo: "arrow.triangle.2.circlepath", ayuda: "Sincronizar") {
                     Navegacion.compartida.seccion = .aparatos
                 }
+                Menu {
+                    Button { empezarAMarcar(nil) } label: { Label("Elegir varios", systemImage: "checkmark.circle") }
+                    Button { verBorrados = true } label: { Label("Proyectos borrados…", systemImage: "trash.slash") }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Paleta.chat.circuloIcono)
+                        .frame(width: 38, height: 38)
+                        .background(Paleta.chat.circulo, in: Circle())
+                        .contentShape(Circle())
+                }
+                .accessibilityLabel("Más")
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 7)
@@ -206,8 +260,28 @@ struct ListaProyectos<Menu: View>: View {
         }
         .background(Paleta.proyectos.lista.ignoresSafeArea())
         .overlay(alignment: .bottomTrailing) {
-            BotonProyectoNuevo { creando = true }
-                .padding(16)
+            if !marcando {
+                BotonProyectoNuevo { creando = true }
+                    .padding(16)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if marcando { barraDeMarcados }
+        }
+        .confirmationDialog(marcados.count == 1 ? "¿Borrar 1 proyecto?" : "¿Borrar \(marcados.count) proyectos?",
+                            isPresented: $preguntarBorrar, titleVisibility: .visible) {
+            Button("Borrar los marcados", role: .destructive, action: borrarMarcados)
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se borran también en tus otros aparatos la próxima vez que sincronices. "
+                + "Queda una copia en la papelera de PixPin por si te arrepientes.")
+        }
+        .sheet(isPresented: $verBorrados) {
+            NavigationStack {
+                VistaCopias(nucleo: almacen.nucleo) { [almacen] in Task { await almacen.cargarChats() } }
+                    .navigationTitle("Proyectos borrados")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
         }
         .alert("Proyecto nuevo", isPresented: $creando) {
             TextField("Nombre", text: $nuevo)
@@ -218,13 +292,94 @@ struct ListaProyectos<Menu: View>: View {
     }
 
     private func fila(_ chat: FichaChat) -> some View {
-        FilaProyecto(chat: chat, elegida: chat.id == elegido)
-            .id(chat.id)
-            .onTapGesture { elegido = chat.id }
-            .contextMenu {
-                Button { elegido = chat.id } label: { Label("Abrir", systemImage: "bubble.left") }
-                menu(chat)
+        let marcado = marcados.contains(chat.id)
+        return HStack(spacing: 0) {
+            if marcando {
+                Image(systemName: marcado ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(marcado ? Paleta.proyectos.filaElegida : Paleta.proyectos.apagado)
+                    .padding(.leading, 10)
+                    .opacity(sePuedeMarcar(chat) ? 1 : 0.3)
             }
+            FilaProyecto(chat: chat, elegida: !marcando && chat.id == elegido, logo: logos.logo(chat.id))
+        }
+        .id(chat.id)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if marcando {
+                guard sePuedeMarcar(chat) else { return }
+                if marcado { marcados.remove(chat.id) } else { marcados.insert(chat.id) }
+            } else {
+                elegido = chat.id
+            }
+        }
+        .onAppear { logos.mirar(chat.id, nucleo: almacen.nucleo) }
+        .contextMenu {
+            Button { elegido = chat.id } label: { Label("Abrir", systemImage: "bubble.left") }
+            menu(chat)
+            if sePuedeMarcar(chat) {
+                Button { empezarAMarcar(chat.id) } label: { Label("Elegir varios", systemImage: "checkmark.circle") }
+            }
+        }
+    }
+
+    /// «Mensajes guardados» y el asistente no se borran ni se marcan.
+    private func sePuedeMarcar(_ c: FichaChat) -> Bool { !c.esGuardados && !c.esAsistente }
+
+    private func empezarAMarcar(_ id: String?) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            marcando = true
+            marcados = id.map { [$0] } ?? []
+        }
+    }
+
+    private func dejarDeMarcar() {
+        withAnimation(.easeOut(duration: 0.15)) {
+            marcando = false
+            marcados = []
+        }
+    }
+
+    /// Los marcados, en el orden de la lista.
+    private var fichasMarcadas: [FichaChat] { almacen.chats.filter { marcados.contains($0.id) } }
+
+    /// La barra de lo marcado, abajo: cuantos, Compartir y Borrar.
+    private var barraDeMarcados: some View {
+        HStack(spacing: 14) {
+            Text(marcados.count == 1 ? "1 marcado" : "\(marcados.count) marcados")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Paleta.proyectos.texto)
+            Spacer()
+            Button {
+                HojaCompartir.abrir(.proyectos(fichasMarcadas), almacen: almacen)
+            } label: { Label("Compartir", systemImage: "square.and.arrow.up") }
+                .disabled(marcados.isEmpty)
+            Button(role: .destructive) { preguntarBorrar = true } label: {
+                Label("Borrar los marcados", systemImage: "trash")
+            }
+            .foregroundStyle(.red)
+            .disabled(marcados.isEmpty)
+            Button("Cancelar", action: dejarDeMarcar)
+                .keyboardShortcut(.cancelAction)
+        }
+        .labelStyle(.iconOnly)
+        .font(.system(size: 17))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Paleta.proyectos.lista)
+        .overlay(alignment: .top) { Paleta.proyectos.separador.frame(height: 1) }
+    }
+
+    /// «Borrar los marcados» (`proyecto-borrar-varios`): uno tras otro, y si
+    /// el abierto estaba entre ellos, se cierra.
+    private func borrarMarcados() {
+        let ids = fichasMarcadas.filter(sePuedeMarcar).map(\.id)
+        if let e = elegido, ids.contains(e) { elegido = nil }
+        dejarDeMarcar()
+        let almacen = self.almacen
+        Task {
+            for id in ids { await almacen.borrarProyecto(id) }
+        }
     }
 
     private func crear() {
@@ -319,6 +474,8 @@ struct BotonProyectoNuevo: View {
 struct FilaProyecto: View {
     let chat: FichaChat
     let elegida: Bool
+    /// La imagen de logo, si tiene (`LogoProyecto.swift`).
+    var logo: UIImage?
 
     /// La segunda linea: la ultima del chat, sin la sintaxis de la nota
     /// (`# `, `**`, `- [ ]`) ni caracteres de control; si no hay, las hojas.
@@ -332,13 +489,7 @@ struct FilaProyecto: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(Paleta.avatar(chat.id))
-                Text(Paleta.iniciales(chat.nombre))
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 46, height: 46)
+            AvatarProyecto(chat: chat, logo: logo, lado: 46)
             VStack(alignment: .leading, spacing: 5) {
                 Text(chat.nombre)
                     .font(.system(size: 15, weight: .semibold))

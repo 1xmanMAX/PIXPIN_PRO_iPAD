@@ -177,6 +177,7 @@ public struct VistaGaleria: View {
                     .background(Paleta.v2.caja, in: RoundedRectangle(cornerRadius: 10))
             }
             .foregroundStyle(Paleta.v2.texto)
+            BotonCabecera(icono: "pin", rotulo: "Pinear") { pinear(nombres) }
             BotonCabecera(icono: "checkmark.seal", rotulo: "Conservar") { conservar(nombres) }
             BotonCabecera(icono: "trash", rotulo: "Borrar") { borrar(nombres) }
             BotonCabecera(icono: "xmark", ayuda: "Soltar", tenue: true) { soltarEleccion() }
@@ -217,8 +218,14 @@ public struct VistaGaleria: View {
                 Label("Vista rápida", systemImage: "eye")
             }
         }
+        Button { pinear(nombres) } label: { Label("Pinear", systemImage: "pin") }
         ShareLink(items: urls(nombres)) { Label("Compartir…", systemImage: "square.and.arrow.up") }
         Button { copiar(nombres) } label: { Label("Copiar", systemImage: "doc.on.doc") }
+        // «Guardar como…» y «Mostrar en la carpeta» de Windows: en iOS, el
+        // selector de Archivos (con copia).
+        Button { SalidasDeLaHoja.guardar(urls(nombres)) { _ in } } label: {
+            Label("Guardar en Archivos…", systemImage: "folder")
+        }
         Menu {
             ForEach(proyectos.chats, id: \.id) { chat in
                 Button(chat.nombre) { mandar(nombres, a: chat) }
@@ -276,6 +283,17 @@ public struct VistaGaleria: View {
 
     private func urls(_ nombres: [String]) -> [URL] {
         nombres.compactMap { n in modelo.capturas.first { $0.nombre == n }.map(modelo.url(de:)) }
+    }
+
+    /// **Pinear** (`galeria-pinear`): cada una a la capa de pines.
+    private func pinear(_ nombres: [String]) {
+        let hechas = urls(nombres).filter { GestorPinesIPad.compartido.pinear(url: $0) }.count
+        if hechas == 0 {
+            modelo.avisar("No se pudo pinear")
+        } else {
+            modelo.avisar(hechas == 1 ? "Pineada" : "\(hechas) pineadas en la pantalla")
+            soltarEleccion()
+        }
     }
 
     /// Abrir: una foto en Vista Rapida, un video en su reproductor (el

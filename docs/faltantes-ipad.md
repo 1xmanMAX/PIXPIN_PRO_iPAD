@@ -225,26 +225,28 @@ Varias zonas dejaron un gancho (`static var …: ((…) -> Void)?`) para que otr
 | Función (Windows) | Windows | Mac | Estado iPad | Debería ir en | Nota |
 |---|---|---|---|---|---|
 | Pines **encima de otras apps** | `crates/pixpin-pin` | `Pines/Pin.swift` | ⛔ | — | Alternativa hecha: capa de pines dentro de la app y **PiP** para vídeo (`Pines/VideoPin.swift`) |
-| **Pin de PDF** con su página (pasar de página en el pin) | `crates/pixpin-pin`, `lector_pin.rs` | `Pines/Pin.swift` | 🟡 | `Pines/GestorPinesIPad.swift:304` | Hoy se pinea la primera página como foto |
-| Guías azules para alinear e imán al soltar | `crates/pixpin-pin/src/guias.rs` | `Pines/Guias.swift` | ❌ | `Pines/VistaPin.swift` + `Pines/ReglasCapa.swift` | |
-| Arrastrar un pin a otra app (`Ctrl`+arrastrar) | `crates/pixpin-pin` | `Pines/Pin.swift` | ❌ | `Pines/VistaPin.swift` (`onDrag`) | Con Split View es la alternativa iOS natural |
+| **Pin de PDF** con su página (pasar de página en el pin) | `crates/pixpin-pin`, `lector_pin.rs` | `Pines/Pin.swift` | ✅ | `Pines/GestorPinesIPad.swift` (`pinear(pdf:pagina:)`, `pinear(documentoPdf:pagina:)`), `Pines/VistaPin.swift` | Barra ◀ 3 / 12 ▶, «Pinear esta página» / «Pinear todas las páginas»; la página vuelve al arrancar (`UserDefaults`, el índice de Windows no la tiene) |
+| Guías azules para alinear e imán al soltar | `crates/pixpin-pin/src/guias.rs` | `Pines/Guias.swift` | ✅ | `Pines/GuiasPin.swift`, `Pines/VistaPin.swift`, `Pines/CapaPines.swift` | Sin el «Alt = sin guías» (no hay modificador al arrastrar con el dedo) |
+| Arrastrar un pin a otra app (`Ctrl`+arrastrar) | `crates/pixpin-pin` | `Pines/Pin.swift` | ✅ | `Pines/VistaPin.swift` (asa de la mano de la barra, `onDrag`) | Lleva la foto que se ve, el fichero o el texto |
 | Anotar el pin con las herramientas del lienzo | `crates/pixpin-pin` (`Anotar`) | `Pines/Anotar.swift` | 🟡 | `Pines/VistaPin.swift` | Anota con el editor de captura (5 herramientas), no con el lienzo |
-| Pin de audio (reproductor flotante) | `reproductor.rs` | `Pines/Pin.swift` | 🟡 | `Pines/GestorPinesIPad.swift` (`video … soloAudio`) | Hay `soloAudio`; falta su barra propia y la cola |
+| Pin de audio (reproductor flotante) | `reproductor.rs` | `Pines/Pin.swift` | 🟡 | `Pines/VideoPin.swift` | Barra propia hecha (por dónde va, ±15 s, velocidad); falta la cola |
 | Dejar pasar el clic (`Ctrl T`) | `crates/pixpin-pin` | `Pines/Pin.swift` | ⛔ | — | En una capa táctil dentro de la app no tiene sentido; la opacidad sí está |
-| Devolver el último pin cerrado (`pines devolver_ultimo`) | `pines.rs` | `Pines/GestorPines.swift` | 🟡 | `Pines/PanelAbiertos.swift` | Hay deshacer al cerrar todos |
+| Devolver el último pin cerrado (`pines devolver_ultimo`) | `pines.rs` | `Pines/GestorPines.swift` | ✅ | `Pines/GestorPinesIPad.swift` (`devolverUltimoCerrado()`), `Pines/PanelAbiertos.swift` | En el panel (⇧⌘T), en «Nuevo pin» y en el botón de pines |
 | Foto, nota, mini-apps (tareas, contador, ruleta, gastos, relojes), filtros, giro, opacidad, grupos, panel «Pines abiertos», se guardan y vuelven | — | — | ✅ | — | |
+| «Pinear» desde el menú del mensaje (ganchos `GanchosChat.pinearFichero` y `pinearTareas`) | — | — | ✅ | `Pines/CapaPines.swift` (`Arranque.apuntar`) | |
+| «Fijar como pin» de los visores | — | — | ✅ (API) | `Pines/GestorPinesIPad.swift` | `pinear(url:)`, `pinear(pdf:pagina:)`, `pinear(documentoPdf:pagina:)`, `pinearSoloPagina(pdf:pagina:)`, `pinear(imagen:)`, `pinearLoQueSeVe()`; falta que cada visor ponga su `alFijar` |
 
 ### 8.2 Captura
 
 | Función (Windows) | Windows | Mac | Estado iPad | Debería ir en | Nota |
 |---|---|---|---|---|---|
 | Capturar una zona, ventana o pantalla de otras apps | `captura2/`, `crates/pixpin-capture` | `Captura/Capturador.swift` | ⛔ | — | Alternativa hecha: cámara, escáner (VisionKit), Fotos, pegar y «Capturar PixPin» (`Captura/CapturadorIPad.swift`). Falta la **extensión de Compartir** (§9), que es por donde llega una captura de pantalla del sistema |
-| **Recortar a una zona** después (medidas exactas, 16:9 · 4:3 · 1:1, repetir la última zona `R`) | `captura2/` | `Captura/MedidasCaptura.swift`, `GeometriaCaptura.swift` | ❌ | `Captura/EditorCapturaIPad.swift` | El editor anota la foto entera; no recorta |
-| Lupa con el color en HEX/RGB (`C` lo copia) | `captura2/` | `Captura/VistaCaptura.swift` | ❌ | `Captura/EditorCapturaIPad.swift` | Con el Pencil encima (hover) o mantener el dedo |
-| Pila de capturas de la esquina | `pila_capturas.rs`, `crates/pixpin-pila` | `Captura/PilaCapturas.swift` | ❌ | `Captura/` + `Pines/CapaPines.swift` | Alternativa: miniaturas de las últimas en la capa de pines |
-| Captura con retardo (cuenta atrás) | `cuenta_atras.rs` | `Captura/CuentaAtras.swift` | 🟡 | `Captura/CapturadorIPad.swift` | Solo tendría sentido para «Capturar PixPin» (menús abiertos) |
+| **Recortar a una zona** después (medidas exactas, 16:9 · 4:3 · 1:1, repetir la última zona `R`) | `captura2/` | `Captura/MedidasCaptura.swift`, `GeometriaCaptura.swift` | ✅ | `Captura/EditorCapturaIPad.swift`, `Captura/RecorteCaptura.swift` | ⌘6; mover la zona arrastrando desde dentro, An × Al, volver a la foto entera; lo anotado se recorta con la foto |
+| Lupa con el color en HEX/RGB (`C` lo copia) | `captura2/` | `Captura/VistaCaptura.swift` | ✅ | `Captura/LupaCaptura.swift`, `Captura/EditorCapturaIPad.swift` | Cuentagotas (⌘7) o el Pencil por encima al recortar; también sale al elegir la zona; tocar el texto cambia HEX / RGB |
+| Pila de capturas de la esquina | `pila_capturas.rs`, `crates/pixpin-pila` | `Captura/PilaCapturas.swift` | ✅ | `Captura/PilaCapturasIPad.swift` + `Pines/CapaPines.swift` | «Copiar» apila (10 s, o armada con un toque; tope 24); se pegan todas juntas; mantener: copiar todas, pinear, anotar, quitar |
+| Captura con retardo (cuenta atrás) | `cuenta_atras.rs` | `Captura/CuentaAtras.swift` | ✅ | `Captura/CapturadorIPad.swift` | «Capturar PixPin en 3 s» (el número sale en la capa de pines; otra vez lo cancela) |
 | Captura con scroll (larga) | `scroll.rs` | `Captura/CapturaConScroll.swift`, `CosidoScroll.swift` | ⛔ | — | De la propia app: chat o timeline entero como imagen larga |
-| Grabar GIF / vídeo de la zona | `gif.rs`, `grabador.rs`, `crates/pixpin-record` | `Captura/GrabadorGif.swift`, `Grabar/` | ⛔ / ❌ | `Captura/` | Otras apps: la grabación de pantalla del Centro de control (y luego al chat por Compartir). De la propia app: ReplayKit (`RPScreenRecorder`) |
+| Grabar GIF / vídeo de la zona | `gif.rs`, `grabador.rs`, `crates/pixpin-record` | `Captura/GrabadorGif.swift`, `Grabar/` | ⛔ / 🟡 | `Captura/GrabadorIPad.swift` | Otras apps: la grabación de pantalla del Centro de control. De la propia app: «Grabar PixPin» con ReplayKit, a la galería como `.mp4` (botón rojo para parar). Falta el GIF y elegir zona |
 | Pin en vivo (copia una zona en tiempo real) | `pin_vivo.rs` | `Pines/PinEnVivo.swift` | ⛔ | — | Sin alternativa razonable |
 | Anotador de pantalla (anotar encima de todo y guardarlo) | `anotador_al_chat.rs`, `overlay.rs` | `Captura/AnotadorPantalla.swift` | ⛔ / ❌ | `Captura/` | Alternativa: anotar encima de PixPin y guardar en «Mensajes guardados»; `pantallaAnotadaAlChat`, `ponerAlDiaPantallaAnotada` y `EditorLienzo.tintaDePantalla` sin usar |
 | Gestos con Alt | `captura2/` | `Captura/GestosAlt.swift` | ⛔ | — | Alternativa: apretar el Apple Pencil Pro / atajos ⌘ |

@@ -35,6 +35,42 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>Proyecto de PixPin</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.1xmanmax.pixpin.proyecto</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Dibujo de PixPin</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.1xmanmax.pixpin.dibujo</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Dibujo de Excalidraw</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.excalidraw.excalidraw</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Documento</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -54,6 +90,11 @@
 				<string>com.autodesk.dwg</string>
 				<string>com.autodesk.dxf</string>
 				<string>org.buildingsmart.ifc</string>
+				<string>net.daringfireball.markdown</string>
+				<string>public.html</string>
+				<string>public.xml</string>
+				<string>com.autodesk.rvt</string>
+				<string>org.landxml.landxml</string>
 			</array>
 		</dict>
 	</array>
@@ -110,5 +151,211 @@
 	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Proyecto de PixPin</string>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.1xmanmax.pixpin.proyecto</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>pixpin</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Dibujo de PixPin</string>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.1xmanmax.pixpin.dibujo</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>pixpin2d</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Dibujo de Excalidraw</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.excalidraw.excalidraw</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>excalidraw</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.excalidraw+json</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Texto Markdown</string>
+			<key>UTTypeIdentifier</key>
+			<string>net.daringfireball.markdown</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>md</string>
+					<string>markdown</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>text/markdown</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Plano de AutoCAD</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.autodesk.dwg</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>dwg</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Plano DXF</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.autodesk.dxf</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>dxf</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Modelo IFC</string>
+			<key>UTTypeIdentifier</key>
+			<string>org.buildingsmart.ifc</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ifc</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Modelo de Revit</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.autodesk.rvt</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>rvt</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>LandXML de Civil 3D</string>
+			<key>UTTypeIdentifier</key>
+			<string>org.landxml.landxml</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>landxml</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>io.github.1xmanmax.pixpin.capturar</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Capturar</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>camera.viewfinder</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Foto, escáner o Fotos</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>io.github.1xmanmax.pixpin.nota</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Nueva nota</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>square.and.pencil</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>io.github.1xmanmax.pixpin.buscar</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Buscar</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>magnifyingglass</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>io.github.1xmanmax.pixpin.sincronizar</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Sincronizar</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>arrow.triangle.2.circlepath</string>
+		</dict>
+	</array>
 </dict>
 </plist>

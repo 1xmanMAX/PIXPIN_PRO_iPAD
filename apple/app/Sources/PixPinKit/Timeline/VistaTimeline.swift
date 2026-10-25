@@ -24,6 +24,7 @@ public struct VistaTimeline: View {
     @State private var detalle: DetalleMomento?
     @State private var exportado: FicheroExportado?
     @State private var exportando = false
+    @State private var preguntarFormato = false
     @Environment(\.horizontalSizeClass) private var clase
 
     public init(almacen: Almacen) {
@@ -39,8 +40,14 @@ public struct VistaTimeline: View {
                                   eleccion: Binding(get: { modelo.pestana },
                                                     set: { p in _ = Task<Void, Never> { await modelo.cambiar(a: p) } }))
                 if modelo.pestana != .lecciones {
-                    BotonCabecera(icono: "square.and.arrow.up", ayuda: "Exportar lo que se ve") { exportar() }
-                        .disabled(exportando)
+                    BotonCabecera(icono: exportando ? "hourglass" : "square.and.arrow.up", ayuda: "Exportar lo que se ve") {
+                        preguntarFormato = true
+                    }
+                    .disabled(exportando)
+                    .confirmationDialog("Exportar lo que se ve", isPresented: $preguntarFormato) {
+                        Button("Como página web (HTML)") { exportar(pdf: false) }
+                        Button("Como PDF") { exportar(pdf: true) }
+                    }
                 }
             }
             HStack(spacing: 0) {
@@ -65,8 +72,9 @@ public struct VistaTimeline: View {
             await modelo.recargar()
         }
         .onDisappear { dictado.cancelar() }
-        .sheet(item: $detalle) { d in
-            VistaDetalleMomento(modelo: modelo, lista: d.lista, indice: d.indice, foto: d.foto) { m in
+        .fullScreenCover(item: $detalle) { d in
+            // La historia, como Instagram (Windows `timeline/ventana/historia.rs`).
+            VistaHistoria(modelo: modelo, lista: d.lista, indice: d.indice, foto: d.foto) { m in
                 detalle = nil
                 _ = Task<Void, Never> { await modelo.corregir(m) }
             }
@@ -154,17 +162,24 @@ public struct VistaTimeline: View {
         detalle = DetalleMomento(lista: i == nil ? [m] : lista, indice: i ?? 0, foto: foto)
     }
 
-    /// «Exportar»: la pagina HTML de lo que se ve, a un fichero para
-    /// compartir.
-    private func exportar() {
+    /// «Exportar»: la pagina HTML de lo que se ve (o esa pagina impresa en
+    /// PDF), a un fichero para compartir.
+    private func exportar(pdf: Bool) {
         exportando = true
         Task {
             defer { exportando = false }
             do {
                 let p = try await modelo.paginaParaExportar()
-                let nombre = p.nombre.isEmpty ? "timeline.html" : p.nombre
+                var nombre = p.nombre.isEmpty ? "timeline.html" : p.nombre
+                let datos: Data
+                if pdf {
+                    datos = try await PdfDelTimeline.hacer(html: p.html)
+                    nombre = (nombre as NSString).deletingPathExtension + ".pdf"
+                } else {
+                    datos = Data(p.html.utf8)
+                }
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent(nombre)
-                try Data(p.html.utf8).write(to: url, options: .atomic)
+                try datos.write(to: url, options: .atomic)
                 exportado = FicheroExportado(url: url, cuantos: p.cuantos)
             } catch {
                 modelo.avisar("No se pudo exportar")
@@ -194,7 +209,8 @@ struct HojaExportado: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Image(systemName: "doc.richtext").font(.system(size: 40)).foregroundStyle(Paleta.v2.acento)
+            Image(systemName: fichero.url.pathExtension == "pdf" ? "doc.text" : "doc.richtext")
+                .font(.system(size: 40)).foregroundStyle(Paleta.v2.acento)
             Text(fichero.url.lastPathComponent).font(.headline)
             Text(fichero.cuantos == 1 ? "1 momento" : "\(fichero.cuantos) momentos")
                 .foregroundStyle(.secondary)
@@ -483,7 +499,16 @@ struct MenuMomento: View {
         Button { UIPasteboard.general.string = MenuMomento.texto(momento) } label: {
             Label("Copiar el texto", systemImage: "doc.on.doc")
         }
+        Button {
+            Task {
+                guard let url = await TarjetaHistoria.png(momento) else { return modelo.avisar("No se pudo hacer la imagen") }
+                SalidasDeLaHoja.compartir([url], desde: nil) { _ in }
+            }
+        } label: { Label("Compartir como imagen…", systemImage: "photo") }
         let fotos = momento.fotos.map { URL(fileURLWithPath: $0) }
+        if let primera = fotos.first {
+            Button { GestorPinesIPad.compartido.pinear(url: primera) } label: { Label("Pinear la foto", systemImage: "pin") }
+        }
         if fotos.isEmpty {
             ShareLink(item: MenuMomento.texto(momento)) { Label("Compartir…", systemImage: "square.and.arrow.up") }
         } else {

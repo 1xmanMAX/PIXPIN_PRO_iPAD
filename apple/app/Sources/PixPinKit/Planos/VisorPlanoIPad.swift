@@ -314,10 +314,13 @@ final class VisorPlano: ObservableObject {
             info.outputType = .general
             if let m = marcos.first { info.orientation = (m.x1 - m.x0) >= (m.y1 - m.y0) ? .landscape : .portrait }
             impresora.printInfo = info
+            impresora.printingItem = nil
+            impresora.printingItems = nil
             impresora.printPageRenderer = ImpresoraPlano(datos: d, visibles: self.visibles, marcos: marcos,
                                                          encima: self.encimaParaPapel(), lamina: lamina)
+            // Al cerrar, fuera el pintor: la hoja de imprimir es compartida.
             _ = impresora.present(from: CGRect(x: v.bounds.maxX - 60, y: 60, width: 1, height: 1), in: v,
-                                  animated: true, completionHandler: nil)
+                                  animated: true) { c, _, _ in c.printPageRenderer = nil }
         }
     }
 
