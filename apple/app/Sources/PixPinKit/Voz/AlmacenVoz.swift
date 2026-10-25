@@ -50,12 +50,20 @@ extension Almacen {
 
     /// Pasa a texto una nota de voz que ya esta en el chat (la grabada aqui
     /// al acabar, o una que llego sin texto) y lo guarda. `idioma`: el que
-    /// se practicaba en Pronunciar (`en-US`), que manda. Devuelve si salio.
+    /// se practicaba en Pronunciar (`en-US`), que manda; sin el, tambien se
+    /// prueba el segundo idioma de los ajustes (`DosIdiomasVoz`). Devuelve
+    /// si salio.
     @discardableResult
     public func transcribir(_ m: MensajeChat, en chat: String, idioma: String? = nil) async -> Bool {
         guard m.clase == "VOZ", let ruta = m.ruta, let url = await url(deRuta: ruta, en: chat) else { return false }
         do {
-            let segmentos = try await TranscriptorVoz.transcribir(url, idioma: idioma.map(Locale.init(identifier:)))
+            // Sin idioma pedido, con el segundo de los ajustes si lo hay.
+            let segmentos: [SegmentoVoz]
+            if let idioma {
+                segmentos = try await TranscriptorVoz.transcribir(url, idioma: Locale(identifier: idioma))
+            } else {
+                segmentos = try await DosIdiomasVoz.transcribir(url, nucleo: nucleo)
+            }
             return await ponerTranscripcion(segmentos, en: m.id, chat: chat) != nil
         } catch {
             if idioma != nil, (error as? ErrorVoz) == .sinReconocedor {

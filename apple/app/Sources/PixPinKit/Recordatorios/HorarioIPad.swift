@@ -153,9 +153,12 @@ final class ModeloSemana: ObservableObject {
         bloques = semana?.bloques() ?? []
         let nucleo = self.nucleo
         let d = desfaseLocalMs()
+        let antelacion = antelacionDelHorario()
         Task {
             let v = await Task.detached(priority: .utility) { nucleo.avisosDelHorario(desfaseMs: d) }.value
-            self.proximas = Array(v.prefix(8))
+            // Con los eventos del calendario del iPad, si esta encendido.
+            let delIPad = CalendarioDelIPad.compartido.avisos(antelacion: antelacion, evitando: v)
+            self.proximas = Array((v + delIPad).sorted { $0.cuandoUtcMs < $1.cuandoUtcMs }.prefix(8))
         }
     }
 
@@ -213,6 +216,56 @@ final class ModeloSemana: ObservableObject {
     func asignatura(de b: BloqueHorario) -> Int? {
         asignaturas.firstIndex { $0.nombre == b.nombre }
     }
+
+    /// La ficha de la clase `i` (aula, nota y aviso).
+    func ficha(de i: Int) -> FichaDeClase? {
+        semana?.fichaDeClase(i: UInt32(i))
+    }
+
+    /// Lo que avisa una clase sin aviso propio.
+    func antelacionDelHorario() -> UInt32 {
+        semana?.antelacionDelHorario() ?? 10
+    }
+}
+
+/// Lo que se edita en la ficha (Windows `Edicion`): una clase entera o el
+/// aula de una asignatura.
+enum EdicionHorario: Identifiable, Equatable {
+    case clase(Int)
+    case asignatura(Int)
+
+    var id: String {
+        switch self {
+        case let .clase(i): "c\(i)"
+        case let .asignatura(i): "a\(i)"
+        }
+    }
+}
+
+/// Lo escrito en la ficha, como lo lee Windows al guardarla (puro: se
+/// prueba solo).
+enum TextoFichaClase {
+    /// El aviso: los minutos del principio («15», «15 min»); vacio o sin
+    /// numero, el del horario; como mucho un dia.
+    static func minutos(_ escrito: String) -> UInt32? {
+        let t = escrito.trimmingCharacters(in: .whitespacesAndNewlines)
+        let numero = String(t.prefix { $0.isASCII && $0.isNumber })
+        guard !numero.isEmpty, let n = UInt32(numero.prefix(6)) else { return nil }
+        return min(n, 24 * 60)
+    }
+
+    /// Las notas: una por linea, sin las vacias.
+    static func notas(_ escrito: String) -> [String] {
+        escrito.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// El aula: vacia es ninguna.
+    static func aula(_ escrito: String) -> String? {
+        let t = escrito.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
 }
 
 // MARK: - La vista
@@ -228,6 +281,10 @@ struct VistaHorarioIPad: View {
     /// El bloque que se esta alargando y donde va su borde.
     @State private var alargando: (Int, Int)?
     @State private var editandoTexto = false
+    /// La ficha abierta (aula, nota y aviso de una clase; aula de una
+    /// asignatura).
+    @State private var editando: EdicionHorario?
+    @ObservedObject private var calendario = CalendarioDelIPad.compartido
     @Environment(\.horizontalSizeClass) private var clase
 
     init(nucleo: Nucleo, cerrar: @escaping () -> Void) {
@@ -245,6 +302,15 @@ struct VistaHorarioIPad: View {
                 BotonCabecera(icono: "mic", rotulo: clase == .compact ? "" : "Nota de voz",
                               ayuda: "Nota de voz para la próxima clase") {
                     HorarioIPad.grabarParaLaProxima(nucleo: modelo.nucleo)
+                }
+                BotonCabecera(icono: "calendar.badge.clock", rotulo: clase == .compact ? "" : "Calendario del iPad",
+                              ayuda: calendario.activo ? "Dejar de avisar de los eventos del calendario del iPad"
+                                  : "Avisar también de los eventos del calendario del iPad",
+                              activo: calendario.activo) {
+                    _ = Task<Void, Never> {
+                        await calendario.alternar()
+                        modelo.releer()
+                    }
                 }
                 BotonCabecera(icono: "doc.plaintext", ayuda: "Editar como texto…") { editandoTexto = true }
                 BotonCabecera(icono: "xmark", ayuda: "Cerrar") { cerrar() }
@@ -269,6 +335,8 @@ struct VistaHorarioIPad: View {
         .overlay(alignment: .bottom) {
             if let e = modelo.error {
                 AvisoAbajo(texto: e, esError: true)
+            } else if calendario.sinPermiso {
+                AvisoAbajo(texto: "Sin permiso para el calendario: dalo en Ajustes › PixPin › Calendarios", esError: true)
             } else if let d = modelo.deshacer {
                 AvisoAbajo(texto: d) { modelo.hacerDeshacer() }
                     .task(id: d) {
@@ -281,6 +349,9 @@ struct VistaHorarioIPad: View {
         }
         .sheet(isPresented: $editandoTexto) {
             HojaTextoHorario(inicial: modelo.texto() ?? "") { modelo.escribir($0) }
+        }
+        .sheet(item: $editando) { ed in
+            fichaDe(ed)
         }
         .onReceive(NotificationCenter.default.publisher(for: .pixpinTrajoCambios)) { _ in modelo.releer() }
     }
@@ -361,6 +432,7 @@ struct VistaHorarioIPad: View {
         }
         .contextMenu {
             Button("Ponerla en la semana") { elegida = i }
+            Button("Aula…") { editando = .asignatura(i) }
             Button("Otro color") { modelo.cambiar { $0.cambiarColor(i: UInt32(i)) } }
             Button("Borrar", role: .destructive) {
                 if elegida == i { elegida = nil }
@@ -519,8 +591,13 @@ struct VistaHorarioIPad: View {
             Text(b.nombre).font(.caption.bold()).foregroundStyle(.white)
                 .padding(6).background(color, in: RoundedRectangle(cornerRadius: 6))
         }
+        .onTapGesture {
+            // Con una asignatura elegida el toque es para la semana.
+            if elegida == nil { editando = .clase(i) }
+        }
         .contextMenu {
             Text("\(ReglasHorario.dias[Int(b.dia) % 7]) \(ReglasHorario.tramo(inicio, Int(b.fin)))")
+            Button("Aula, nota y aviso…") { editando = .clase(i) }
             if let a = modelo.asignatura(de: b) {
                 Button("Otro color") { modelo.cambiar { $0.cambiarColor(i: UInt32(a)) } }
             }
@@ -531,6 +608,34 @@ struct VistaHorarioIPad: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(b.nombre), \(ReglasHorario.dias[Int(b.dia) % 7]) de \(ReglasHorario.tramo(inicio, Int(b.fin)))")
         .offset(x: ancho * CGFloat(b.dia) + 2, y: y0)
+    }
+
+    /// La hoja de la ficha de `ed`, con lo que tiene.
+    @ViewBuilder private func fichaDe(_ ed: EdicionHorario) -> some View {
+        switch ed {
+        case let .clase(i):
+            if i < modelo.bloques.count {
+                let b = modelo.bloques[i]
+                let f = modelo.ficha(de: i)
+                FichaClaseIPad(titulo: b.nombre,
+                               subtitulo: "\(ReglasHorario.dias[Int(b.dia) % 7]) \(ReglasHorario.tramo(Int(b.inicio), Int(b.fin)))",
+                               soloAula: false, aula: f?.aula ?? b.aula ?? "", nota: (f?.notas ?? []).joined(separator: "\n"),
+                               avisar: f?.antelacion.map { String($0) } ?? "",
+                               antelacionDelHorario: modelo.antelacionDelHorario()) { aula, nota, avisar in
+                    let nueva = FichaDeClase(aula: TextoFichaClase.aula(aula), notas: TextoFichaClase.notas(nota),
+                                             antelacion: TextoFichaClase.minutos(avisar))
+                    modelo.cambiar { $0.ponerFichaDeClase(i: UInt32(i), ficha: nueva) }
+                }
+            }
+        case let .asignatura(i):
+            if i < modelo.asignaturas.count {
+                let a = modelo.asignaturas[i]
+                FichaClaseIPad(titulo: a.nombre, subtitulo: "", soloAula: true, aula: a.aula ?? "", nota: "",
+                               avisar: "", antelacionDelHorario: modelo.antelacionDelHorario()) { aula, _, _ in
+                    modelo.cambiar { $0.ponerAulaDeAsignatura(i: UInt32(i), aula: TextoFichaClase.aula(aula)) }
+                }
+            }
+        }
     }
 
     /// El asa de abajo de una clase: tirar de ella la alarga o la acorta en
@@ -553,6 +658,73 @@ struct VistaHorarioIPad: View {
                     }
             )
             .accessibilityLabel("Alargar o acortar")
+    }
+}
+
+// MARK: - La ficha de una clase
+
+/// **La ficha de una clase** (Windows: la tarjeta de la clase elegida):
+/// aula, la nota que lee la voz al contestar la llamada y los minutos de
+/// antes del aviso (vacio: los de todo el horario). De una asignatura, solo
+/// el aula.
+struct FichaClaseIPad: View {
+    let titulo: String
+    let subtitulo: String
+    let soloAula: Bool
+    let antelacionDelHorario: UInt32
+    let guardar: (String, String, String) -> Void
+    @State private var aula: String
+    @State private var nota: String
+    @State private var avisar: String
+    @Environment(\.dismiss) private var cerrar
+
+    init(titulo: String, subtitulo: String, soloAula: Bool, aula: String, nota: String, avisar: String,
+         antelacionDelHorario: UInt32, guardar: @escaping (String, String, String) -> Void) {
+        self.titulo = titulo
+        self.subtitulo = subtitulo
+        self.soloAula = soloAula
+        self.antelacionDelHorario = antelacionDelHorario
+        self.guardar = guardar
+        _aula = State(initialValue: aula)
+        _nota = State(initialValue: nota)
+        _avisar = State(initialValue: avisar)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Aula") {
+                    TextField("Aula", text: $aula)
+                        .textInputAutocapitalization(.characters)
+                }
+                if !soloAula {
+                    Section("Nota para la voz (lo que lee la llamada)") {
+                        TextField("Nota", text: $nota, axis: .vertical)
+                            .lineLimit(3 ... 6)
+                    }
+                    Section("Avisar (minutos antes)") {
+                        TextField("\(antelacionDelHorario) (el de todo el horario)", text: $avisar)
+                            .keyboardType(.numberPad)
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Paleta.v2.fondo)
+            .navigationTitle(subtitulo.isEmpty ? titulo : "\(titulo) · \(subtitulo)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { cerrar() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        guardar(aula, nota, avisar)
+                        cerrar()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .environment(\.colorScheme, .dark)
+        .presentationDetents([.medium, .large])
     }
 }
 

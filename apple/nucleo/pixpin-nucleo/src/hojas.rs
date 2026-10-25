@@ -40,6 +40,10 @@ use pixpin_proyecto::{almacen, cuaderno, importar_hojas, portapapeles_tabla, vis
 
 use crate::chats::validar_chat;
 
+mod graficos;
+mod suelto;
+pub use graficos::{GraficoHoja, RejillaTinta, SerieGrafico};
+
 // Iguales que los de Windows (su estilo, sin rustfmt): asi se comparan facil.
 #[rustfmt::skip]
 mod editor;
@@ -144,6 +148,13 @@ enum Origen {
         proyecto: String,
         aparato: String,
     },
+    /// **Un libro suelto** (fuera de un chat: el visor de hojas de Windows,
+    /// `visor_hoja::lanzar`): sus hojas leidas para ver y editar aqui, pero
+    /// **el archivo no cambia** y no hay chat donde dejar las tablas;
+    /// guardar no escribe nada. Lo editado sale con
+    /// [`HojaDeCalculo::como_xlsx`] (una copia, con los valores ya
+    /// calculados) o adjuntando el libro a un chat.
+    Suelto { ruta: PathBuf },
 }
 
 struct Estado {
@@ -488,6 +499,7 @@ impl HojaDeCalculo {
     pub fn ruta_original(&self) -> Option<String> {
         match &self.tomar().origen {
             Origen::Libro { ruta, .. } => ruta.as_ref().map(|r| r.display().to_string()),
+            Origen::Suelto { ruta } => Some(ruta.display().to_string()),
             _ => None,
         }
     }
@@ -497,8 +509,9 @@ impl HojaDeCalculo {
     /// Una vez por hoja abierta.
     pub fn aviso_al_editar(&self) -> bool {
         let mut g = self.tomar();
-        let primera = matches!(g.origen, Origen::Libro { .. })
-            && g.editor.hojas.iter().any(|h| h.id_mensaje.is_none());
+        let primera = matches!(g.origen, Origen::Suelto { .. })
+            || (matches!(g.origen, Origen::Libro { .. })
+                && g.editor.hojas.iter().any(|h| h.id_mensaje.is_none()));
         if g.avisado || !primera {
             return false;
         }
@@ -566,6 +579,8 @@ impl HojaDeCalculo {
         };
         let carpeta = match &st.origen {
             Origen::Chat { carpeta } | Origen::Libro { carpeta, .. } => carpeta.clone(),
+            // Suelto: el archivo no cambia y no hay chat (ver `Origen`).
+            Origen::Suelto { .. } => return Ok(false),
             Origen::DelMovil { archivo } => {
                 // Una tabla del movil se guarda en SU fichero, el que viaja.
                 for h in ed.hojas.iter_mut().filter(|h| h.tocada) {

@@ -22,6 +22,7 @@
 
 import CoreGraphics
 import Foundation
+import PhotosUI
 import PixPinCore
 import SwiftUI
 import UIKit
@@ -229,6 +230,32 @@ struct BarrasLienzoEncima: View {
             // Tras el cambio (objectWillChange llega antes).
             DispatchQueue.main.async { alCambiar() }
         }
+    }
+}
+
+// MARK: - Meter una imagen anotando
+
+/// **El boton de imagen de la barra del lienzo** sobre un visor (el plano,
+/// un marcador 3D): el selector de Fotos que abre `pidiendoImagen` y la
+/// foto elegida a `meter`, que la pega en el centro de lo que se ve. No
+/// ocupa nada ni recibe toques.
+struct ImagenAlAnotar: View {
+    @ObservedObject var modelo: ModeloEditorLienzo
+    let meter: (Data) -> Void
+    @State private var elegida: PhotosPickerItem?
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .photosPicker(isPresented: $modelo.pidiendoImagen, selection: $elegida, matching: .images)
+            .onChange(of: elegida) { _, item in
+                guard let item else { return }
+                elegida = nil
+                _ = Task<Void, Never> {
+                    if let datos = try? await item.loadTransferable(type: Data.self) { meter(datos) }
+                }
+            }
     }
 }
 

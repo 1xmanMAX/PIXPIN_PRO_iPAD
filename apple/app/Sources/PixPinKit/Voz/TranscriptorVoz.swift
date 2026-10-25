@@ -16,6 +16,12 @@ import PixPinCore
 import Speech
 
 public enum TranscriptorVoz {
+    /// Lo reconocido de una nota y lo seguro que estaba el reconocedor.
+    struct Reconocido: Sendable {
+        var segmentos: [SegmentoVoz]
+        var confianza: Double
+    }
+
     /// El idioma preferido de las notas.
     public static let idiomaPreferido = Locale(identifier: "es-ES")
 
@@ -61,6 +67,12 @@ public enum TranscriptorVoz {
     /// reconocedor; si no se oye a nadie, devuelve una lista vacia (y la
     /// nota queda con estado `mal`, como en Windows).
     public static func transcribir(_ url: URL, idioma: Locale? = nil) async throws -> [SegmentoVoz] {
+        try await transcribirConConfianza(url, idioma: idioma).segmentos
+    }
+
+    /// Lo mismo, con lo seguro que esta el reconocedor (0 a 1, la media de
+    /// sus palabras): con dos idiomas se queda el que mejor entendio.
+    static func transcribirConConfianza(_ url: URL, idioma: Locale? = nil) async throws -> Reconocido {
         guard await autorizar() else { throw ErrorVoz.sinPermisoTranscribir }
         guard let reconocedor = reconocedorLocal(idioma: idioma) else { throw ErrorVoz.sinReconocedor }
         let cola = OperationQueue()
@@ -77,17 +89,19 @@ public enum TranscriptorVoz {
 
         let unaVez = UnaVezTranscripcion()
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (c: CheckedContinuation<[SegmentoVoz], Error>) in
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<Reconocido, Error>) in
                 unaVez.poner(c)
                 let tarea = reconocedor.recognitionTask(with: pedido) { resultado, error in
                     // El reconocedor tiene que vivir hasta el final.
                     _ = reconocedor
                     if let resultado, resultado.isFinal {
-                        let trozos = resultado.bestTranscription.segments.map { (desde: $0.timestamp, texto: $0.substring) }
-                        unaVez.resolver(.success(segmentos(trozos)))
+                        let partes = resultado.bestTranscription.segments
+                        let trozos = partes.map { (desde: $0.timestamp, texto: $0.substring) }
+                        let confianza = partes.isEmpty ? 0 : partes.map { Double($0.confidence) }.reduce(0, +) / Double(partes.count)
+                        unaVez.resolver(.success(Reconocido(segmentos: segmentos(trozos), confianza: confianza)))
                     } else if let error {
                         if TranscriptorVoz.esSilencio(error) {
-                            unaVez.resolver(.success([]))
+                            unaVez.resolver(.success(Reconocido(segmentos: [], confianza: 0)))
                         } else {
                             unaVez.resolver(.failure(error))
                         }
@@ -112,7 +126,7 @@ public enum TranscriptorVoz {
 /// varias (resultado final y luego error, o cancelar a la vez).
 private final class UnaVezTranscripcion: @unchecked Sendable {
     private let cerrojo = NSLock()
-    private var continuacion: CheckedContinuation<[SegmentoVoz], Error>?
+    private var continuacion: CheckedContinuation<TranscriptorVoz.Reconocido, Error>?
     private var _tarea: SFSpeechRecognitionTask?
     private var cancelada = false
 
@@ -127,7 +141,7 @@ private final class UnaVezTranscripcion: @unchecked Sendable {
         }
     }
 
-    func poner(_ c: CheckedContinuation<[SegmentoVoz], Error>) {
+    func poner(_ c: CheckedContinuation<TranscriptorVoz.Reconocido, Error>) {
         cerrojo.lock()
         let yaCancelada = cancelada
         if !yaCancelada { continuacion = c }
@@ -135,7 +149,7 @@ private final class UnaVezTranscripcion: @unchecked Sendable {
         if yaCancelada { c.resume(throwing: CancellationError()) }
     }
 
-    func resolver(_ r: Result<[SegmentoVoz], Error>) {
+    func resolver(_ r: Result<TranscriptorVoz.Reconocido, Error>) {
         cerrojo.lock()
         let c = continuacion
         continuacion = nil

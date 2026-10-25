@@ -90,6 +90,23 @@ impl Comentarista {
         json!({"tipo": "comentarios", "hilos": hilos, "abiertos": self.mio.abiertos(), "yo": self.quien.aparato})
     }
 
+    /// Los hilos con donde estan ahora en `texto` (UTF-16), sin pasar por
+    /// JSON (el editor nativo del iPad).
+    pub fn hilos(&mut self, texto: &str) -> Vec<(mc::Hilo, Option<(usize, usize)>)> {
+        let sitios = self.mio.reanclar(&utf16(texto));
+        self.mio.comentarios.iter().cloned().zip(sitios).collect()
+    }
+
+    /// Cuantos hilos siguen abiertos.
+    pub fn abiertos(&self) -> usize {
+        self.mio.abiertos()
+    }
+
+    /// El aparato de quien comenta aqui (para saber que es «mio»).
+    pub fn aparato(&self) -> String {
+        self.quien.aparato.clone()
+    }
+
     pub fn nuevo(
         &mut self,
         texto: &str,

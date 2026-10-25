@@ -17,6 +17,12 @@ struct WidgetsPixPin: WidgetBundle {
     var body: some Widget {
         WidgetCapturas()
         WidgetTareasDeHoy()
+        // Los controles del Centro de control y de la pantalla de bloqueo
+        // (iPadOS 18, `ControlesPixPin.swift`).
+        ControlCapturar()
+        ControlNuevaNota()
+        ControlGrabarNota()
+        ControlTareas()
     }
 }
 

@@ -259,8 +259,8 @@ public final class Recordatorios {
         let desfase = desfaseLocalMs()
         lectura?.cancel()
         lectura = Task { [weak self] in
-            let (leidos, horario, llamadas) = await Task.detached(priority: .utility) {
-                () -> ([RecordatorioMac], [AvisoHorario], Set<String>) in
+            let (leidos, horario, llamadas, antelacion) = await Task.detached(priority: .utility) {
+                () -> ([RecordatorioMac], [AvisoHorario], Set<String>, UInt32) in
                 let leidos = (try? nucleo.recordatorios(desfaseLocalMs: desfase)) ?? []
                 // Las notas de voz (las llamadas secretas): su notificacion
                 // lleva el timbre. Solo las que aun no vencieron.
@@ -271,10 +271,15 @@ public final class Recordatorios {
                         llamadas.insert(r.chat + "\u{0}" + r.id)
                     }
                 }
-                return (leidos, nucleo.avisosDelHorario(desfaseMs: desfase), llamadas)
+                // Los minutos de antes del horario, para el calendario del iPad.
+                let antelacion = CalendarioDelIPad.compartidoActivo
+                    ? ((try? SemanaHorario.abrir(nucleo: nucleo))?.antelacionDelHorario() ?? 10) : 10
+                return (leidos, nucleo.avisosDelHorario(desfaseMs: desfase), llamadas, antelacion)
             }.value
             guard !Task.isCancelled, let self else { return }
-            let delHorario = horario.map {
+            // Los eventos del calendario del iPad (EventKit) llaman igual.
+            let delIPad = CalendarioDelIPad.compartido.avisos(antelacion: antelacion, evitando: horario)
+            let delHorario = (horario + delIPad).map {
                 var r = RecordatorioPuesto(chat: Self.chatHorario, nombreChat: "Horario", id: $0.id,
                                            cuando: fechaDe(ms: $0.cuandoUtcMs), texto: $0.nombre)
                 r.llamada = true
@@ -387,7 +392,7 @@ public final class Recordatorios {
             var aviso = AvisosRecordatorio.aviso(de: r)
             aviso.categoria = .mini
             aviso.titulo = a?.nombre ?? r.texto
-            aviso.texto = [a?.detalle, a?.texto].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
+            aviso.texto = [a?.detalle ?? CalendarioDelIPad.compartido.detalle(de: r.id), a?.texto].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
             if aviso.texto.isEmpty { aviso.texto = "Horario" }
             CentroAvisos.compartido.mostrarEnLaApp(aviso, sonar: true)
         }
@@ -403,7 +408,9 @@ public final class Recordatorios {
             }.value
             let l = LlamadaSecreta(audio: a?.audio ?? "", nombre: a?.nombre ?? nombre,
                                    chat: Self.chatHorario, mensaje: id)
-            Llamada.sonar(l, nucleo: nucleo, detalle: a?.detalle ?? "", texto: a?.texto, contestada: contestada)
+            // Un evento del calendario del iPad: su hora y su lugar.
+            let detalle = a?.detalle ?? CalendarioDelIPad.compartido.detalle(de: id) ?? ""
+            Llamada.sonar(l, nucleo: nucleo, detalle: detalle, texto: a?.texto, contestada: contestada)
         }
     }
 

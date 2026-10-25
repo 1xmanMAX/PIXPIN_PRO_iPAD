@@ -1,0 +1,16 @@
+[package]
+name = "pixpin-anki"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# Tarjetas de Anki desde lo que hay en PixPin (24-oct-2026): sacarlas de una
+# nota o de una clase grabada, mandarlas a Anki por AnkiConnect (su
+# complemento, que escucha en 127.0.0.1:8765) y, sin Anki abierto, dejarlas
+# en un fichero que Anki importa. Portable: solo `std` para la red.
+[dependencies]
+serde_json = "1.0"
+# AnkiConnect recibe las imagenes en base64 (`storeMediaFile`). Ya esta en
+# el arbol.
+base64 = "0.22"

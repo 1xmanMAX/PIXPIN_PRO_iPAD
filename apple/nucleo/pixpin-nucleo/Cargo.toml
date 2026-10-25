@@ -27,6 +27,9 @@ bindgen = ["uniffi/cli"]
 [dependencies]
 pixpin-motor2d = { version = "0.1.0", path = "../pixpin-motor2d" }
 pixpin-proyecto = { version = "0.1.0", path = "../pixpin-proyecto" }
+# Las tarjetas de Anki de una nota o una foto (Windows, 24-oct): el mismo
+# crate, Rust puro.
+pixpin-anki = { version = "0.1.0", path = "../pixpin-anki" }
 pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro" }
 pixpin-sistema = { version = "0.1.0", path = "../pixpin-sistema" }
 # Los ajustes en el mismo `pixpinmax.toml` que Windows (solo las claves que
@@ -67,6 +70,9 @@ pixpin-office = { version = "0.1.0", path = "../pixpin-office" }
 # La capa de texto de un PDF (buscar y anotar desde el asistente, E1): el
 # mismo lector que el de Windows, Rust puro.
 pixpin-pdf = { path = "../pixpin-pdf" }
+# Los graficos de un Excel (su ancla y sus valores en cache): el lector del
+# visor de hojas de Windows. Ya estaba en el arbol (`pixpin-ia`).
+pixpin-hojas = { path = "../pixpin-hojas" }
 pdfsqueeze-core = { workspace = true }
 rayon = "1"
 sha2 = "0.10"

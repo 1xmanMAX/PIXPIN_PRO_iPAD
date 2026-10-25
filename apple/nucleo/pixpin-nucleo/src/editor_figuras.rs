@@ -48,7 +48,7 @@ pub struct FiguraDeBiblioteca {
 /// **El pincel de ahora como estilo de figura** (`estilo_del_pincel` de
 /// Windows): el color, la letra y la opacidad que el panel dejo como
 /// «actuales».
-fn estilo_del_pincel(g: &Gesto) -> Estilo {
+pub(crate) fn estilo_del_pincel(g: &Gesto) -> Estilo {
     let tam = if g.estilo.tamano_letra > 0.0 {
         g.estilo.tamano_letra
     } else {
@@ -64,7 +64,7 @@ fn estilo_del_pincel(g: &Gesto) -> Estilo {
 
 /// Lo que mide un texto con la letra `familia`: la cuenta del motor (en el
 /// Mac no hay medidor de DirectWrite).
-fn medir(familia: &str) -> impl Fn(&str, f32) -> (f32, f32) + '_ {
+pub(crate) fn medir(familia: &str) -> impl Fn(&str, f32) -> (f32, f32) + '_ {
     move |texto, tam| pixpin_motor2d::texto::medida(texto, tam, familia, Default::default())
 }
 

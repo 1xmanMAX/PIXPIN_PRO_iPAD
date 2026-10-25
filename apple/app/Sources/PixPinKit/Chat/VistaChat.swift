@@ -363,6 +363,11 @@ public struct VistaChat: View {
         default:
             EmptyView()
         }
+        if VentanasDeVisor.sePuede, ChatAbierto.abreVisor(m) {
+            Button { abrir(m, enOtraVentana: true) } label: {
+                Label("Abrir en otra ventana", systemImage: "macwindow.on.rectangle")
+            }
+        }
     }
 
     /// Aquel al que responde `m`, si esta cargado.
@@ -396,8 +401,10 @@ public struct VistaChat: View {
     /// **Abre un mensaje** con su visor, como el clic de Windows: la foto en
     /// su lienzo, el dibujo en el editor, la nota en el suyo, la tabla en la
     /// hoja y un archivo segun su tipo.
-    private func abrir(_ m: MensajeChat) {
-        let (chat, almacen, nav) = (self.chat, self.almacen, self.nav)
+    private func abrir(_ m: MensajeChat, enOtraVentana: Bool = false) {
+        let (chat, almacen) = (self.chat, self.almacen)
+        // «Abrir en otra ventana»: el visor va a una ventana suya (Stage Manager).
+        let nav = enOtraVentana ? VentanasDeVisor.navegacionAparte() : self.nav
         switch m.clase {
         case "IMAGEN":
             Task {
@@ -429,7 +436,7 @@ public struct VistaChat: View {
                 ReproductorVoz.compartido.alternar(m.id, url: url, titulo: BurbujaVoz.titulo(de: m))
             }
         case "PAGINA":
-            abrirPagina(m)
+            abrirPagina(m, nav: nav)
         case "PROYECTO":
             if let f = BurbujaProyecto.ficha(m, en: almacen) {
                 nav.irAlChat(f.id)
@@ -437,7 +444,7 @@ public struct VistaChat: View {
                 menu.avisar("Este proyecto no está en este iPad")
             }
         case "CROQUIS":
-            abrirCroquis(m)
+            abrirCroquis(m, nav: nav)
         default:
             break
         }
@@ -446,8 +453,8 @@ public struct VistaChat: View {
     /// Como Windows al pulsar la hoja: en el lienzo, con la pagina de fondo,
     /// estrenando su dibujo si no lo tiene. Sin hoja en el proyecto, el
     /// documento en el lector.
-    private func abrirPagina(_ m: MensajeChat) {
-        let (nucleo, chat, nav) = (almacen.nucleo, chat, nav)
+    private func abrirPagina(_ m: MensajeChat, nav otra: Navegacion? = nil) {
+        let (nucleo, chat, nav) = (almacen.nucleo, chat, otra ?? self.nav)
         let id = m.id
         Task {
             let dibujo = await Task.detached(priority: .userInitiated) {
@@ -470,9 +477,9 @@ public struct VistaChat: View {
     }
 
     /// Un croquis 3D en el visor 3D (lo que el nucleo dice que es su fichero).
-    private func abrirCroquis(_ m: MensajeChat) {
+    private func abrirCroquis(_ m: MensajeChat, nav otra: Navegacion? = nil) {
         guard let r = m.referencia, !r.isEmpty else { return }
-        let (nucleo, chat, nav) = (almacen.nucleo, chat, nav)
+        let (nucleo, chat, nav) = (almacen.nucleo, chat, otra ?? self.nav)
         Task {
             let ruta = await Task.detached(priority: .userInitiated) {
                 nucleo.croquisDelChat(chat: chat, referencia: r)
@@ -673,6 +680,8 @@ public struct VistaChat: View {
             }
         case let .pegar(proveedores):
             Task { await EntradaDeFicheros.soltar(proveedores, en: chat, almacen: almacen) }
+        case let .voz(herramienta):
+            VozEnElChat.abrir(herramienta, chat: chat, almacen: almacen, borrador: borrador)
         }
     }
 
@@ -929,4 +938,15 @@ func mayusPulsada() -> Bool {
     guard let teclado = GCKeyboard.coalesced?.keyboardInput else { return false }
     return teclado.button(forKeyCode: .leftShift)?.isPressed == true
         || teclado.button(forKeyCode: .rightShift)?.isPressed == true
+}
+
+extension ChatAbierto {
+    /// Si tocar `m` abre un visor (y por tanto puede ir a otra ventana).
+    static func abreVisor(_ m: MensajeChat) -> Bool {
+        switch m.clase {
+        case "IMAGEN", "DIBUJO", "NOTA", "TABLA", "ARCHIVO", "PAGINA", "CROQUIS": return true
+        case "MINIAPP": return BurbujaTablaChat.esTabla(m)
+        default: return false
+        }
+    }
 }

@@ -38,7 +38,7 @@ public struct Pista: Equatable, Sendable {
 
 @MainActor
 public final class ReproductorVoz: NSObject, ObservableObject {
-    public static let compartido = ReproductorVoz()
+    public static let compartido = ReproductorVoz.deLaApp()
 
     /// Las cinco velocidades del movil, en su orden (`VELOCIDADES`).
     public nonisolated static let velocidades: [Float] = [1.0, 1.25, 1.5, 2.0, 0.75]
@@ -61,6 +61,18 @@ public final class ReproductorVoz: NSObject, ObservableObject {
     var mudo = false
 
     override public init() { super.init() }
+
+    /// Lo que se recuerda la velocidad (solo el de la app: las pruebas no
+    /// tocan las preferencias).
+    private var esDeLaApp = false
+
+    /// El de la app: con la velocidad de la ultima vez.
+    private static func deLaApp() -> ReproductorVoz {
+        let r = ReproductorVoz()
+        r.velocidad = VelocidadGuardada.leer(VelocidadGuardada.claveEscuchar, validas: velocidades)
+        r.esDeLaApp = true
+        return r
+    }
 
     /// iOS: la sesion de sonido para escuchar (suena aunque el iPad este en
     /// silencio, como un reproductor, y sigue con la app de fondo si se
@@ -162,6 +174,8 @@ public final class ReproductorVoz: NSObject, ObservableObject {
         titulo = p.titulo.isEmpty ? p.url.deletingPathExtension().lastPathComponent : p.titulo
         sonando = false
         MandosDelSistema.compartidos.tomar(self, porPasos: false)
+        // Fuera del chat, lo que suena sale en la barra flotante.
+        if esDeLaApp { ReproductorFlotante.compartido.vigilar() }
         if arrancar { seguir() } else { alDia() }
         return true
     }
@@ -223,6 +237,7 @@ public final class ReproductorVoz: NSObject, ObservableObject {
     @discardableResult
     public func otraVelocidad() -> Float {
         velocidad = ReproductorVoz.siguienteVelocidad(velocidad)
+        if esDeLaApp { VelocidadGuardada.guardar(velocidad, clave: VelocidadGuardada.claveEscuchar) }
         if let r = reproductor, sonando { r.rate = velocidad }
         alDia()
         return velocidad

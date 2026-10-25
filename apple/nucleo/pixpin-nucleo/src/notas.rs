@@ -19,6 +19,8 @@
 
 mod adjuntos;
 mod comentarios;
+mod comentarios_nativos;
+pub use comentarios_nativos::{ComentariosNota, HiloNota, RespuestaNota};
 pub mod vista;
 pub mod web;
 

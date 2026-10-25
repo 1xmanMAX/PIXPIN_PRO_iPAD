@@ -240,7 +240,9 @@ public final class HacerPedidos {
             }
             let url = URL(fileURLWithPath: r)
             nav.abrir(.medio(url: url, titulo: p.texto("titulo") ?? url.lastPathComponent))
-        case "lecciones": ir(.lecciones)
+        case "lecciones":
+            ir(.lecciones)
+            ConsultaPedida.lecciones.poner(p.texto("consulta"))
         case "leccion_nueva": await leccionNueva(p)
         case "sincronizar": await sincronizar(p)
         case "enviar_al_movil": await alMovil(p)
@@ -491,9 +493,6 @@ public final class HacerPedidos {
             }
             return
         }
-        if conImagenes {
-            avisar("En una lista de un proyecto la tarea va sin sus imágenes (en el Inbox sí van).")
-        }
         guard let c = await chat(p["proyecto"]) else { return }
         var lista = codigo
         if lista == nil {
@@ -502,6 +501,23 @@ public final class HacerPedidos {
         }
         if lista == nil { lista = await crearMiniapp("tareas", "Tareas", en: c)?.id }
         guard let lista else { return }
+        if conImagenes {
+            // Con sus imagenes, en esa lista (el nucleo las copia a ese chat).
+            guard let fotos = ficheros(p, ["imagenes"]) else { return }
+            let rutas = fotos.map(\.path)
+            let crudo = p.texto("texto") ?? texto
+            do {
+                _ = try await Task.detached {
+                    try nucleo.apuntarTareaConImagenesEn(chat: c, mensaje: lista, texto: crudo,
+                                                         imagenes: rutas, desfaseMs: desfase)
+                }.value
+                avisoDeTareas(c)
+                avisar("Apuntado en «\(nombre(de: c))»: «\(texto)».")
+            } catch {
+                avisar("No se pudo apuntar la tarea: \(textoDeError(error))")
+            }
+            return
+        }
         let hecho = await Task.detached { () -> Bool in
             guard let doc = try? nucleo.documentoMiniapp(chat: c, mensaje: lista) else { return false }
             let nuevo = miniTareasAnadir(documento: doc, texto: texto, desfaseMs: desfase)

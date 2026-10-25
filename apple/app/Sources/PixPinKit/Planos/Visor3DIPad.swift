@@ -390,7 +390,7 @@ final class VisorModelo3D: ObservableObject {
         }
         guard !lista.isEmpty else {
             v.foto { img in
-                if let img { hojas.append(UIImage(cgImage: img)) }
+                if let img = img.map({ v.tinta.conTinta($0) }) { hojas.append(UIImage(cgImage: img)) }
                 listo()
             }
             return
@@ -402,7 +402,7 @@ final class VisorModelo3D: ObservableObject {
             // Que lleguen los indices del filtro antes de la foto.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 v.foto { img in
-                    if let img {
+                    if let img = img.map({ v.tinta.conTinta($0) }) {
                         let r = Marcos3D.rect(m.caja, en: CGSize(width: img.width, height: img.height)).integral
                         if let c = img.cropping(to: r) { hojas.append(UIImage(cgImage: c)) }
                     }
@@ -430,7 +430,9 @@ final class VisorModelo3D: ObservableObject {
             return
         }
         v.foto { img in
-            guard let img, let datos = ExportarPlanoIPad.codificar(img, jpg: jpg) else { return }
+            // Con la tinta del marcador encima, si la vista es la de uno.
+            guard let img = img.map({ v.tinta.conTinta($0) }),
+                  let datos = ExportarPlanoIPad.codificar(img, jpg: jpg) else { return }
             let salida = carpeta.appendingPathComponent(base + (jpg ? ".jpg" : ".png"))
             guard (try? datos.write(to: salida)) != nil else { return }
             ExportarPlanoIPad.compartir([salida], carpeta: carpeta, desde: v)
@@ -1019,6 +1021,7 @@ public struct Visor3DIPad: View {
             }
             if let m = visor.modeloAnotar {
                 BarrasLienzoEncima(modelo: m, arriba: 58) { visor.vista?.tinta.setNeedsDisplay() }
+                ImagenAlAnotar(modelo: m) { visor.vista?.tinta.meterImagen($0) }
             }
             BarraVisorIPad(tipo: "Modelo 3D", icono: "cube", titulo: titulo,
                            alFijar: { GestorPinesIPad.compartido.pinearLoQueSeVe() }) { botones }

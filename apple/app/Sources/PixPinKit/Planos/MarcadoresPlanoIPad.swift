@@ -292,6 +292,56 @@ final class CapaTintaMarcador3DIPad: UIView, UIKeyInput, UIPencilInteractionDele
 
     override func draw(_ rect: CGRect) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        pintarTinta(en: ctx)
+    }
+
+    /// **La foto de la vista con esta tinta encima** (exportar e imprimir,
+    /// como Windows, que pinta la tinta en la misma foto): `foto` en
+    /// pixeles de la vista; sin tinta, tal cual.
+    func conTinta(_ foto: CGImage) -> CGImage {
+        guard bounds.width > 0, bounds.height > 0, modelo != nil || leido != nil else { return foto }
+        let w = foto.width, h = foto.height
+        guard let ctx = MapaLienzo.mapa(w, h) else { return foto }
+        ctx.draw(foto, in: CGRect(x: 0, y: 0, width: w, height: h))
+        // Y hacia abajo y en puntos de la vista, como al pintarla.
+        ctx.translateBy(x: 0, y: CGFloat(h))
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.scaleBy(x: CGFloat(w) / bounds.width, y: CGFloat(h) / bounds.height)
+        UIGraphicsPushContext(ctx)
+        pintarTinta(en: ctx)
+        UIGraphicsPopContext()
+        return ctx.makeImage() ?? foto
+    }
+
+    /// El boton de imagen de la barra del lienzo: la foto en el centro.
+    func meterImagen(_ datos: Data) {
+        guard let editor else { return }
+        let o = origen, z = zoom
+        let centro = CGPoint(x: o.x + bounds.midX / z, y: o.y + bounds.midY / z)
+        let ancho = Float(bounds.width / z), alto = Float(bounds.height / z)
+        _ = Task<Void, Never> { [weak self] in
+            let hecho = await Task.detached(priority: .userInitiated) { () -> ImagenDelLienzo? in
+                guard let png = ImagenPegadaLienzo.png(de: .datos(datos)) else { return nil }
+                return try? editor.pegarImagen(png: png, centroX: Float(centro.x), centroY: Float(centro.y),
+                                               anchoVista: ancho, altoVista: alto)
+            }.value
+            guard let self, let modelo = self.modelo else { return }
+            guard let foto = hecho else {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return
+            }
+            let url = URL(fileURLWithPath: foto.ruta)
+            modelo.anadirFoto(foto.idObjeto, url)
+            modelo.refrescarBarra()
+            modelo.revisarCambios()
+            self.clave = []
+            self.setNeedsDisplay()
+            if await Miniaturas.compartidas.cargar(url, lado: 2048) != nil { self.setNeedsDisplay() }
+        }
+    }
+
+    /// Lo dibujado en `ctx` (puntos de la vista, Y hacia abajo).
+    private func pintarTinta(en ctx: CGContext) {
         let o = origen, z = zoom
         let lienzo: LienzoLeido?
         if let editor {

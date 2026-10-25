@@ -480,6 +480,66 @@ impl Nucleo {
         };
         self.apuntar_en_lista(&ficha, INBOX, texto, &imagenes, desfase_ms)
     }
+
+    /// **Apunta una tarea con imagenes en la lista `mensaje` del chat
+    /// `chat`** (Windows `anadir_pedida` con una lista de un proyecto): lo
+    /// mismo que [`Nucleo::apuntar_tarea_con_imagenes`], pero en esa lista y
+    /// no en el Inbox. Cada imagen se copia a `archivos/` de ESE chat. Si
+    /// `mensaje` no es una lista de tareas, `NoExiste`.
+    pub fn apuntar_tarea_con_imagenes_en(
+        &self,
+        chat: String,
+        mensaje: String,
+        texto: String,
+        imagenes: Vec<String>,
+        desfase_ms: i64,
+    ) -> Result<ListaTareas, ErrorNucleo> {
+        validar_chat(&chat)?;
+        if mini::saneado(&texto).is_empty() && imagenes.is_empty() {
+            return Err(ErrorNucleo::Argumento {
+                detalle: "tarea vacia".into(),
+            });
+        }
+        if let Ok(a) = pixpin_store::ajustes::cargar(&self.ubicacion()) {
+            frase::fijar(a.tareas.palabras());
+        }
+        let entendida = frase::leer(&texto, frase::ahora(desfase_ms));
+        let texto = if entendida.titulo.is_empty() { texto } else { entendida.texto() };
+        let raiz = self.ruta();
+        let ficha = Indice::leer_si_esta(raiz)?
+            .proyectos
+            .into_iter()
+            .find(|f| f.id == chat)
+            .ok_or(ErrorNucleo::NoExiste { que: chat.clone() })?;
+        let carpeta = almacen::carpeta(raiz, &ficha.id);
+        let fichero = carpeta.join("guardados.jsonl");
+        if !listas_del_cuaderno(&fichero)?.iter().any(|m| m.id == mensaje) {
+            return Err(ErrorNucleo::NoExiste { que: mensaje });
+        }
+        let mut enlaces = Vec::with_capacity(imagenes.len());
+        for (i, r) in imagenes.iter().enumerate() {
+            enlaces.push((i as u32 + 1, guardar_imagen_de_tarea(raiz, &ficha.id, Path::new(r))?));
+        }
+        let texto = if enlaces.is_empty() { texto } else { mini::fichas_a_imagenes(mini::saneado(&texto).as_str(), &enlaces) };
+        let ahora = crate::ahora_ms();
+        let hoy = mini::Fecha::de_ms_locales(ahora + desfase_ms);
+        let nuevo = cuaderno::cambiar(&carpeta, &mensaje, |m| {
+            if !es_lista(m) {
+                return false;
+            }
+            m.texto = mini::anadir_el(&m.texto, &texto, hoy);
+            true
+        })?
+        .ok_or(ErrorNucleo::NoExiste { que: mensaje.clone() })?;
+        self.cache_tomada().quitar(&fichero);
+        let mut indice = Indice::leer_si_esta(raiz)?;
+        if let Some(f) = indice.proyectos.iter_mut().find(|f| f.id == ficha.id) {
+            f.tocado = ahora;
+            f.resumen = nombre_de_lista(&nuevo);
+            indice.guardar(raiz)?;
+        }
+        Ok(self.lista_de(&ficha, &nuevo, hoy))
+    }
 }
 
 impl Nucleo {

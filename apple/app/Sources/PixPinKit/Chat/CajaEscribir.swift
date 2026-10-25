@@ -250,6 +250,9 @@ enum AccionAdjuntar: Hashable {
     /// Una mini-app viva (contador, ruleta, gastos, relojes): nace en el
     /// chat y se abre en un pin.
     case mini(String)
+    /// Una ventanita de la voz (conversación, teleprónter, pronunciar,
+    /// grabar clase): `VozEnElChat.abrir`.
+    case voz(HerramientaDeVoz)
 
     static func == (a: AccionAdjuntar, b: AccionAdjuntar) -> Bool {
         switch (a, b) {
@@ -258,6 +261,7 @@ enum AccionAdjuntar: Hashable {
              (.pagina, .pagina): true
         case let (.pegar(x), .pegar(y)): x == y
         case let (.mini(x), .mini(y)): x == y
+        case let (.voz(x), .voz(y)): x == y
         default: false
         }
     }
@@ -275,6 +279,7 @@ enum AccionAdjuntar: Hashable {
         case .proyecto: h.combine(8)
         case .pagina: h.combine(9)
         case let .mini(m): h.combine(10); h.combine(m)
+        case let .voz(v): h.combine(11); h.combine(v)
         }
     }
 }
@@ -304,6 +309,10 @@ struct HojaAdjuntarChat: View {
         (.mini("cronometro"), "Cronómetro", "stopwatch"),
         (.mini("temporizador"), "Temporizador", "timer"),
         (.mini("alarma"), "Alarma", "alarm"),
+        (.voz(.conversacion), HerramientaDeVoz.conversacion.rotulo, HerramientaDeVoz.conversacion.simbolo),
+        (.voz(.telepronter), HerramientaDeVoz.telepronter.rotulo, HerramientaDeVoz.telepronter.simbolo),
+        (.voz(.pronunciar), HerramientaDeVoz.pronunciar.rotulo, HerramientaDeVoz.pronunciar.simbolo),
+        (.voz(.clase), HerramientaDeVoz.clase.rotulo, HerramientaDeVoz.clase.simbolo),
     ]
 
     var body: some View {

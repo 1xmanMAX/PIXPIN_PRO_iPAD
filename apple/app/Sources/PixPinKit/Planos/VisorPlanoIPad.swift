@@ -345,7 +345,8 @@ final class VisorPlano: ObservableObject {
             guard let self, let d = self.datos, let v = self.vista else { return }
             let marcos = self.anotado.marcos.isEmpty ? [v.cajaVisible()] : self.anotado.marcos
             let lamina = LaminaPlano(conMembrete: conMembrete, proyecto: CuentasLamina.proyecto(de: self.ruta),
-                                     titulo: (self.titulo as NSString).deletingPathExtension, autor: "",
+                                     titulo: (self.titulo as NSString).deletingPathExtension,
+                                     autor: self.quienDibuja(),
                                      fecha: CuentasLamina.hoy())
             let impresora = UIPrintInteractionController.shared
             let info = UIPrintInfo.printInfo()
@@ -361,6 +362,12 @@ final class VisorPlano: ObservableObject {
             _ = impresora.present(from: CGRect(x: v.bounds.maxX - 60, y: 60, width: 1, height: 1), in: v,
                                   animated: true) { c, _, _ in c.printPageRenderer = nil }
         }
+    }
+
+    /// El «Dibujó» del membrete: el nombre de quien imprime (Windows pone el
+    /// usuario de la sesion; aqui, el de los chats compartidos).
+    func quienDibuja() -> String {
+        ((try? nucleo?.nombreEnCompartidos()) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Los formatos que este plano puede dar (el DXF, solo de un DWG).
@@ -629,6 +636,9 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
     private var dedosMover = 0
     /// El trazo del lapiz en curso.
     private weak var trazando: UITouch?
+    /// La forma rapida: quedarse quieto trazando a mano convierte el trazo
+    /// en figura (como en el lienzo).
+    private let reloj = RelojFormaRapida(temblorPx: CGFloat(formaRapidaTemblorPx()))
 
     init(visor: VisorPlano, motor: MotorMetal) {
         self.visor = visor
@@ -661,6 +671,10 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
         }
         // Con raton o trackpad, la rueda mueve el plano.
         mover.allowedScrollTypesMask = .continuous
+        reloj.alPararse = { [weak self] in
+            // Vence en la cola principal (`RelojFormaRapida.conDispatch`).
+            MainActor.assumeIsolated { self?.alPararse() }
+        }
         // El doble toque del Pencil (o apretarlo): goma y vuelta.
         let lapiz = UIPencilInteraction()
         lapiz.delegate = self
@@ -1018,6 +1032,18 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
             a.puntero(fase, x: q.x, y: q.y, presion: presion, modificadores: mods, zoom: zoom)
         }
         encima.setNeedsDisplay()
+        // El gesto de pararse, solo trazando a mano.
+        let donde = t.type == .pencil ? t.preciseLocation(in: self) : t.location(in: self)
+        switch fase {
+        case .pulsar:
+            if HerramientaLienzo.aMano.contains(a.modelo.herramienta) {
+                reloj.pulsar(en: donde, esperaMs: a.editor.esperaFormaMs())
+            } else {
+                reloj.soltar()
+            }
+        case .mover: reloj.mover(a: donde)
+        default: reloj.soltar()
+        }
         if fase == .pulsar || fase == .soltar {
             a.trasCambio()
             ajustarTeclado()
@@ -1025,15 +1051,92 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
         if fase == .soltar { atenderPeticion(a) }
     }
 
+    /// Quieto con el lapiz: el trazo se vuelve figura.
+    private func alPararse() {
+        guard let a = visor.anotador, a.editor.formaRapida() else { return }
+        a.trasCambio()
+        encima.setNeedsDisplay()
+    }
+
+    /// **El boton de imagen** de la barra del lienzo: la foto en el centro
+    /// de lo que se ve, a la escala de la vista (como en el lienzo).
+    func meterImagen(_ datos: Data) {
+        guard let a = visor.anotador, a.encaje.u > 0, unidadesPorPunto > 0 else { return }
+        let centro = aCapa(CGPoint(x: bounds.midX, y: bounds.midY), encaje: a.encaje)
+        let zoom = a.encaje.u / unidadesPorPunto
+        let ancho = Float(Double(bounds.width) / zoom), alto = Float(Double(bounds.height) / zoom)
+        let editor = a.editor
+        Task { [weak self, weak a] in
+            let hecho = await Task.detached(priority: .userInitiated) { () -> ImagenDelLienzo? in
+                guard let png = ImagenPegadaLienzo.png(de: .datos(datos)) else { return nil }
+                return try? editor.pegarImagen(png: png, centroX: Float(centro.x), centroY: Float(centro.y),
+                                               anchoVista: ancho, altoVista: alto)
+            }.value
+            guard let self, let a else { return }
+            guard let foto = hecho else {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return
+            }
+            let url = URL(fileURLWithPath: foto.ruta)
+            a.modelo.anadirFoto(foto.idObjeto, url)
+            a.trasCambio()
+            a.olvidarLeido()
+            self.encima.setNeedsDisplay()
+            if await Miniaturas.compartidas.cargar(url, lado: 2048) != nil {
+                a.olvidarLeido()
+                self.encima.setNeedsDisplay()
+            }
+        }
+    }
+
+    /// **La foto de una zona** (la herramienta «zona» del lienzo): lo que
+    /// hay dentro de la caja (el plano con lo anotado), en papel; va al chat
+    /// si se pidio asi o entra encima como una copia, como en el lienzo.
+    private func sacarZona(_ a: AnotadorPlanoIPad, x0: Float, y0: Float, x1: Float, y1: Float) {
+        guard let d = visor.datos, a.encaje.u > 0, x1 > x0, y1 > y0 else { return }
+        let e = a.encaje
+        // De la capa al dibujo: x = cero_x + x * u, y = cero_y - y * u.
+        let region = CajaPlano(x0: e.ceroX + Double(x0) * e.u, y0: e.ceroY - Double(y1) * e.u,
+                               x1: e.ceroX + Double(x1) * e.u, y1: e.ceroY - Double(y0) * e.u)
+        var papel = visor.encimaParaPapel()
+        papel.tinta = try? leerLienzo(a.editor.plano())
+        papel.encaje = e
+        guard let img = ExportarPlanoIPad.imagen(d, visibles: visor.visibles, region: region, encima: papel),
+              let redonda = PintorDeHojas.enRedondo(img, papelDeNoche: false),
+              let png = PintorDeHojas.png(redonda) else {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
+        if a.modelo.zonaAlChat {
+            a.modelo.mandarZonaAlChat(png)
+            return
+        }
+        let zoom = unidadesPorPunto > 0 ? Float(e.u / unidadesPorPunto) : 1
+        guard let foto = try? a.editor.ponerCopiaDeZona(png: png, x0: x0, y0: y0, x1: x1, y1: y1, zoom: zoom) else {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
+        let url = URL(fileURLWithPath: foto.ruta)
+        a.modelo.anadirFoto(foto.idObjeto, url)
+        a.trasCambio()
+        a.olvidarLeido()
+        encima.setNeedsDisplay()
+        Task { [weak self, weak a] in
+            if await Miniaturas.compartidas.cargar(url, lado: 2048) != nil {
+                a?.olvidarLeido()
+                self?.encima.setNeedsDisplay()
+            }
+        }
+    }
+
     /// Tras soltar con una herramienta de medir del lienzo: el cajetin que
-    /// pida (calibrar, dictar la cota). La foto de una zona no se hace aqui
-    /// (sobre un plano no tiene sentido): se suelta la peticion.
+    /// pida (calibrar, dictar la cota) o la foto de la zona.
     private func atenderPeticion(_ a: AnotadorPlanoIPad) {
         guard let peticion = a.editor.tomarPeticion() else { return }
         let editor = a.editor
         switch peticion {
-        case .zona:
-            break
+        case let .zona(x0, y0, x1, y1):
+            sacarZona(a, x0: x0, y0: y0, x1: x1, y1: y1)
         case let .calibrar(largoPx):
             CajetinesLienzo.calibrar(unidades: editor.unidadesDeMedida(), desde: self) { [weak self, weak a] valor, unidad in
                 if editor.calibrar(largoPx: largoPx, valor: valor, unidad: unidad) {
@@ -1059,6 +1162,7 @@ final class VistaPlanoMetal: MTKView, UIGestureRecognizerDelegate, UIPencilInter
     private func cancelarTrazo() {
         guard trazando != nil else { return }
         trazando = nil
+        reloj.soltar()
         visor.anotador?.puntero(.cancelar, x: 0, y: 0, presion: nil, zoom: 1)
         encima.setNeedsDisplay()
     }
@@ -1358,6 +1462,10 @@ public struct VisorPlanoIPad: View {
     @ObservedObject private var noche = ModoNoche.compartido
     @State private var consulta = ""
     @FocusState private var enBuscador: Bool
+    /// La de esta ventana (en otra ventana, la suya).
+    @EnvironmentObject private var nav: Navegacion
+    /// «Abrir otro plano…»: el selector de Archivos.
+    @State private var eligiendoOtro = false
 
     public init(url: URL, titulo: String, nucleo: Nucleo) {
         self.url = url
@@ -1372,6 +1480,7 @@ public struct VisorPlanoIPad: View {
             contenido.ignoresSafeArea()
             if let m = visor.modeloAnotar {
                 BarrasLienzoEncima(modelo: m, arriba: 58) { visor.vista?.repintar() }
+                ImagenAlAnotar(modelo: m) { visor.vista?.meterImagen($0) }
             }
             VStack(spacing: 8) {
                 BarraVisorIPad(tipo: "Plano", icono: "square.grid.3x3", titulo: titulo,
@@ -1409,6 +1518,11 @@ public struct VisorPlanoIPad: View {
         .onDisappear { if visor.anotando { visor.terminarDeAnotar() } }
         .onChange(of: noche.activo) { _, _ in visor.vista?.repintar() }
         .sheet(isPresented: $visor.verLetras) { LetrasDelPlanoIPad(visor: visor) }
+        .fileImporter(isPresented: $eligiendoOtro, allowedContentTypes: OtroPlanoIPad.tipos,
+                      allowsMultipleSelection: true) { r in
+            guard case let .success(urls) = r else { return }
+            OtroPlanoIPad.abrir(urls)
+        }
     }
 
     @ViewBuilder private var botones: some View {
@@ -1485,10 +1599,20 @@ public struct VisorPlanoIPad: View {
                 Divider()
                 Button { visor.ponerMarcador() } label: { Label("Marcador aquí", systemImage: "bookmark") }
                     .keyboardShortcut("m", modifiers: .command)
-                Button { Navegacion.compartida.abrir(.modelo3d(url: url, titulo: titulo)) } label: {
+                Button { nav.abrir(.modelo3d(url: url, titulo: titulo)) } label: {
                     Label("Ver en 3D", systemImage: "cube")
                 }
                 .keyboardShortcut(tecla("3"))
+                if VentanasDeVisor.sePuede {
+                    Button { VentanasDeVisor.abrir(.modelo3d(url: url, titulo: titulo)) } label: {
+                        Label("Ver en 3D en otra ventana", systemImage: "macwindow.on.rectangle")
+                    }
+                }
+                Button { eligiendoOtro = true } label: {
+                    Label(VentanasDeVisor.sePuede ? "Abrir otro plano en otra ventana…" : "Abrir otro plano…",
+                          systemImage: "doc.badge.plus")
+                }
+                .keyboardShortcut("o", modifiers: .command)
                 Divider()
                 Button(role: .destructive) { visor.borrarCotas() } label: { Label("Borrar las cotas", systemImage: "ruler") }
                     .disabled(visor.anotado.cotas.isEmpty)

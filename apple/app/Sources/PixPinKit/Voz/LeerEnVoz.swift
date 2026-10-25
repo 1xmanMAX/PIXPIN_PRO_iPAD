@@ -130,8 +130,15 @@ public final class LeerEnVoz: ObservableObject {
     /// escuchar (`BarraEscuchar`) la pinta quien la quiera (el lector, la
     /// capa de pines) cuando `conLector` es falso.
     private static func deLaApp() -> LeerEnVoz {
-        LeerEnVoz(altavoz: AltavozMicrosoft())
+        let l = LeerEnVoz(altavoz: AltavozMicrosoft())
+        l.velocidad = VelocidadGuardada.leer(VelocidadGuardada.claveLeer, validas: VozAlta.velocidades)
+        l.recordarVelocidad = true
+        return l
     }
+
+    /// Se recuerda la velocidad (solo la de la app: las pruebas no tocan
+    /// las preferencias).
+    private var recordarVelocidad = false
 
     /// Si lo que suena (o esta en pausa) es este documento.
     public func suena(_ clave: String) -> Bool { self.clave == clave }
@@ -240,6 +247,7 @@ public final class LeerEnVoz: ObservableObject {
     @discardableResult
     public func otraVelocidad() -> Float {
         velocidad = VozAlta.siguienteVelocidad(velocidad)
+        if recordarVelocidad { VelocidadGuardada.guardar(velocidad, clave: VelocidadGuardada.claveLeer) }
         seguirConOtraVoz()
         return velocidad
     }

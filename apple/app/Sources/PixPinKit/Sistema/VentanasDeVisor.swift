@@ -13,6 +13,7 @@
 // cerrar (`BarraVisorIPad`) cierra ESA ventana y no el visor de la
 // principal.
 
+import Combine
 import Foundation
 import PixPinCore
 import SwiftUI
@@ -106,6 +107,23 @@ public enum VentanasDeVisor {
             return
         }
         abrirVentana(PeticionVentana(visor))
+    }
+
+    /// Una `Navegacion` de paso para «Abrir en otra ventana» desde quien
+    /// solo sabe abrir con `nav.abrir`/`nav.abrirFichero` (el menu del
+    /// mensaje del chat): el primer visor que se abra en ella va a una
+    /// ventana nueva. Si no se pueden varias ventanas, la compartida.
+    public static func navegacionAparte() -> Navegacion {
+        guard sePuede else { return Navegacion.compartida }
+        let nav = Navegacion()
+        var espera: AnyCancellable?
+        espera = nav.$visor.compactMap { $0 }.first().sink { visor in
+            abrir(visor)
+            _ = nav
+            espera?.cancel()
+            espera = nil
+        }
+        return nav
     }
 
     /// Pasa el visor de la ventana principal a una ventana suya: se cierra

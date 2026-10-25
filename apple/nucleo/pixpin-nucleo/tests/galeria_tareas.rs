@@ -598,3 +598,25 @@ fn una_tarea_de_una_asignatura_va_a_su_lista_del_chat_asignaturas() {
     assert!(n.apuntar_en_asignatura("".into(), "x".into(), vec![], 0).is_err());
     assert!(n.apuntar_en_asignatura("Física".into(), " ".into(), vec![], 0).is_err());
 }
+
+#[test]
+fn una_tarea_con_imagen_va_a_una_lista_de_un_proyecto() {
+    let tmp = Temporal::nueva("tarea-imagen-lista");
+    let n = tmp.nucleo();
+    let obra = n.crear_chat("Obra".into()).unwrap();
+    let id = lista(&n, &tmp.0, &obra.id, "Pendientes", &[t("medir", false)]);
+    let foto = tmp.0.join("grieta.png");
+    std::fs::write(&foto, b"\x89PNG de mentira").unwrap();
+    let l = n
+        .apuntar_tarea_con_imagenes_en(obra.id.clone(), id.clone(), "revisar grieta".into(), vec![foto.display().to_string()], 0)
+        .unwrap();
+    assert_eq!(l.mensaje, id, "en esa lista, no en el Inbox");
+    assert_eq!(l.tareas.len(), 2);
+    let t = &l.tareas[1];
+    assert!(t.crudo.starts_with("revisar grieta"), "{}", t.crudo);
+    assert_eq!(t.imagenes.len(), 1, "con su imagen");
+    assert!(t.imagenes[0].contains(&obra.id) || t.crudo.contains("/archivos/tarea-"), "{:?}", t.imagenes);
+    // Casos negativos: una lista que no esta y una tarea vacia.
+    assert!(n.apuntar_tarea_con_imagenes_en(obra.id.clone(), "no-esta".into(), "x".into(), vec![], 0).is_err());
+    assert!(n.apuntar_tarea_con_imagenes_en(obra.id.clone(), id, " ".into(), vec![], 0).is_err());
+}

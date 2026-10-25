@@ -21,6 +21,10 @@ public struct VistaLeccionesIPad: View {
     public var body: some View {
         CuerpoLeccionesConCabecera(modelo: modelo)
             .task { ArranqueOrganizar.apuntar() }
+            // `lecciones {consulta}`: abrir ya buscando.
+            .onReceive(ConsultaPedida.lecciones.$texto) { t in
+                if t != nil, let q = ConsultaPedida.lecciones.tomar() { modelo.texto = q }
+            }
     }
 }
 

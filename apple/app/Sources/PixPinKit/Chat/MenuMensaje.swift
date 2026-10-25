@@ -296,6 +296,7 @@ final class ChatAbierto: ObservableObject {
         let chat = self.chat
         Task {
             guard await almacen.cambiar(mensaje: m.id, en: chat, .recordar(cuando: ms)) != nil else { return }
+            QuienLlama.alPonerLaHora(m, nucleo: almacen.nucleo)
             ChatAbierto.programarAviso(chat: chat, id: m.id, texto: texto, cuando: cuando)
             avisar("Te aviso a las \(AtajosDeHora.legible(cuando, ahora: Date()))")
         }
@@ -537,6 +538,8 @@ struct MenuDeMensaje<Propias: View>: View {
                 Button { c.olvidar(m) } label: { Label("Quitar el recordatorio", systemImage: "alarm") }
             } else {
                 Menu {
+                    // Una nota de voz suena como una llamada: quien llama.
+                    EntradaQuienLlama(mensaje: m, nucleo: c.almacen.nucleo)
                     ForEach(AtajosDeHora.atajos(ahora: Date()), id: \.titulo) { h in
                         Button { c.recordar(m, en: h.cuando) } label: { Label(h.titulo, systemImage: "alarm") }
                     }

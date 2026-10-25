@@ -1595,6 +1595,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "pixpin-anki"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "serde_json",
+]
+
+[[package]]
 name = "pixpin-bim"
 version = "0.1.0"
 dependencies = [
@@ -1725,11 +1733,13 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.2.17",
  "pdfsqueeze-core",
+ "pixpin-anki",
  "pixpin-bim",
  "pixpin-cad",
  "pixpin-codec",
  "pixpin-docs",
  "pixpin-frase",
+ "pixpin-hojas",
  "pixpin-ia",
  "pixpin-lecciones",
  "pixpin-motor2d",

@@ -50,13 +50,17 @@ uniffi::setup_scaffolding!();
 
 pub mod adjuntos;
 pub mod ajustes;
+// Ajustes → Tareas, Lienzo y Pinear del iPad (25-oct), aparte de `AjustesMac`.
+pub mod ajustes_organizar;
 pub mod aligerar;
+pub mod anki;
 pub mod anotador_al_chat;
 pub mod aparatos;
 pub mod grafito_plano;
 pub mod asistente;
 pub mod automatizaciones;
 pub mod burbujas;
+pub mod carpetas;
 pub mod buscar;
 pub mod chats;
 pub mod compartir;
@@ -72,14 +76,25 @@ pub mod editor_figuras;
 pub mod editor_herramientas;
 pub mod editor_imagenes;
 pub mod editor_tapado;
+// Editar una tabla dibujada con su cajetin (iPad, 25-oct).
+pub mod editor_tabla;
 pub mod editor_ventana;
 pub mod envio;
 pub mod galeria;
+pub mod galeria_figuras;
 pub mod galeria_sincro;
 pub mod hojas;
 pub mod lecciones;
 pub mod lienzo;
 pub mod lienzo_suelto;
+// Medir el texto del lienzo con las letras de verdad (iPad, 25-oct).
+pub mod letras_lienzo;
+// Las palabras magicas de Pinear (iPad, 25-oct; `pixpin_pin::magia`).
+pub mod magia;
+// Fusionar paginas del PDF del proyecto en un lienzo (iPad, 25-oct).
+pub mod fusionar_paginas;
+// La zona al chat como sublienzo y el salto por su enlace (iPad, 25-oct).
+pub mod zona_al_chat;
 // El horario de clases que llama (Windows, 17-oct).
 // Google Calendar, solo para ver (Windows, 18-oct).
 pub mod calendario_google;

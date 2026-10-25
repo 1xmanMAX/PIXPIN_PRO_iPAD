@@ -133,6 +133,10 @@
 	<string>PixPin hace fotos y escanea documentos para tus proyectos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>PixPin mete fotos de tu fototeca en tus proyectos.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>PixPin te avisa de los eventos de tu calendario como de las clases del horario.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>PixPin te avisa de los eventos de tu calendario como de las clases del horario.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>PixPin guarda en Fotos las imágenes que exportas.</string>
 	<key>UIApplicationSceneManifest</key>
