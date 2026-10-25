@@ -92,7 +92,8 @@ public final class CapturadorIPad: ObservableObject {
                 cerrar()
                 guard let fuente else { return }
                 // Que se vaya la hoja antes de abrir la camara (o de fotografiar la app).
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
                     CapturadorIPad.compartido.capturar(fuente)
                 }
             }
@@ -181,7 +182,8 @@ public final class CapturadorIPad: ObservableObject {
         editorAbierto = false
         guard !pendientes.isEmpty else { return }
         let siguiente = pendientes.removeFirst()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
             CapturadorIPad.compartido.editar(siguiente)
         }
     }
@@ -367,7 +369,8 @@ public struct BotonCapturar: View {
             ForEach(CapturadorIPad.Fuente.allCases) { f in
                 Button {
                     // Que se cierre el menu antes de fotografiar la app.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + (f == .app ? 0.35 : 0.05)) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(f == .app ? 350 : 50))
                         CapturadorIPad.compartido.capturar(f)
                     }
                 } label: {

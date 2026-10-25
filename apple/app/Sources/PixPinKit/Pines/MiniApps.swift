@@ -8,10 +8,11 @@
 // **No hay formato nuevo.** El documento es el mismo texto que viaja por la
 // sincronizacion (`pixpin_proyecto::mini`) y cada toque lo reescribe el
 // nucleo de Rust (`miniTareasAlternar`, `miniContadorCambiar`...): Swift solo
-// ensena y guarda el texto que le devuelven. Como el Mac no tiene el almacen
-// de pines de Windows, una mini-app vive en un mensaje `MINIAPP` del chat
-// (de fabrica, «Mensajes guardados»): asi no se pierde al cerrar y el movil
-// la ve, como la lista «sacada a la pantalla» de Windows.
+// ensena y guarda el texto que le devuelven. Como en el Mac, una mini-app
+// vive en un mensaje `MINIAPP` del chat (de fabrica, «Mensajes guardados»):
+// asi no se pierde al cerrar y el movil la ve, como la lista «sacada a la
+// pantalla» de Windows; el almacen de pines solo apunta donde esta abierta
+// (`mini:<cual>@<mensaje>|<chat>`).
 //
 // Rendimiento: cada guardado va fuera del hilo principal y en orden (uno
 // detras de otro); nada corre mientras no se toca.
