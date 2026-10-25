@@ -12,9 +12,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Una ejecucion en marcha no se corta (compilar el nucleo la primera vez son
+# ~25 min y tiene que llegar a guardarse en la cache); de las que esperan
+# solo queda la ultima.
 concurrency:
   group: ipad-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
