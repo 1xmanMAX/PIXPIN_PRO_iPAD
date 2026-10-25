@@ -458,7 +458,7 @@ final class VisorPlano: ObservableObject {
         Task {
             let n = await Task.detached(priority: .userInitiated) { nucleo.anadirLetrasDePlanos(rutas: rutas) }.value
             try? FileManager.default.removeItem(at: carpeta)
-            if n > 0 { self.releer() } else { self.error = nil; UINotificationFeedbackGenerator().notificationOccurred(.error) }
+            if n > 0 { self.releer() } else { UINotificationFeedbackGenerator().notificationOccurred(.error) }
         }
     }
 

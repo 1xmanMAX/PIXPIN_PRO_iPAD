@@ -1504,7 +1504,7 @@ private struct CuerpoLectorIPad: View {
         }
         .statusBarHidden(modelo.completa)
         .sheet(isPresented: $modelo.viendoIndice) {
-            HojaIndiceIPad(entradas: c.indice, actual: modelo.pagina) { c.ir(a: $0) }
+            HojaIndiceIPad(entradas: c.indice, actual: modelo.pagina, ir: { c.ir(a: $0) })
         }
         .alert("Cambiar el nombre", isPresented: $modelo.renombrando) {
             TextField("Nombre", text: $modelo.nombreNuevo)

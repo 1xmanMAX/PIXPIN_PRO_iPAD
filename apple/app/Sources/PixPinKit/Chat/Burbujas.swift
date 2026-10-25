@@ -140,10 +140,14 @@ struct BurbujaImagen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let url {
-                MiniaturaVista(url: url, lado: ladoDeBurbuja * escala)
-            } else {
-                Label(mensaje.nombre, systemImage: "photo")
+            // Con lo dibujado encima, si la foto esta anotada (en el movil,
+            // en Windows o aqui): `Chat/FotoAnotadaChat.swift`.
+            FotoConLoAnotado(mensaje: mensaje, chat: chat, almacen: almacen, lado: ladoDeBurbuja * escala) {
+                if let url {
+                    MiniaturaVista(url: url, lado: ladoDeBurbuja * escala)
+                } else {
+                    Label(mensaje.nombre, systemImage: "photo")
+                }
             }
             // El pie de la foto (el `texto` de un IMAGEN, como en el movil).
             if !mensaje.texto.isEmpty {

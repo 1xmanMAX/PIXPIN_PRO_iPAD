@@ -4,11 +4,18 @@
 //
 //     GestorPinesIPad.compartido.pinear(imagen: foto)            // UIImage
 //     GestorPinesIPad.compartido.pinear(url: fichero)            // foto, PDF, video
+//     GestorPinesIPad.compartido.pinear(pdf: fichero, pagina: 3) // PDF por su pagina
 //     GestorPinesIPad.compartido.pinearDesdePortapapeles()
 //     GestorPinesIPad.compartido.pinearNota(texto: "")
 //     GestorPinesIPad.compartido.pinearMiniapp("tareas")
 //     GestorPinesIPad.compartido.pinearMiniapp(chat:mensaje:miniapp:documento:)
 //     GestorPinesIPad.compartido.mostrarPanelAbiertos()
+//     GestorPinesIPad.compartido.devolverUltimoCerrado()
+//
+// Un pin de PDF lleva todas sus paginas: se pasan desde su barra (◀ 3 / 12 ▶)
+// y una pagina (o todas) se puede sacar como pin propio. Al arrastrar un pin
+// salen las guias azules de los demas y al soltar se pega a ellas (el iman,
+// `GuiasPin.swift`).
 //
 // iOS no deja dibujar encima de otras apps, asi que los pines flotan **dentro
 // de PixPin**: en la capa de pines (`CapaPines`), encima de las secciones y
@@ -69,6 +76,10 @@ final class PinIPad: ObservableObject, Identifiable {
     private(set) var cerrado = false
     /// Picture in Picture de un pin de video (lo pone su vista).
     weak var pip: AVPictureInPictureController?
+    /// Las paginas de un pin de PDF (nil si no es un PDF).
+    @Published private(set) var paginas: PaginasPdfPin?
+    /// El PDF abierto, para pasar de pagina sin volver a leerlo.
+    var documentoPdf: PDFDocument?
 
     init(id: Int, contenido: ContenidoPinIPad, centro: CGPoint, tamanoBase: CGSize) {
         self.id = id
@@ -157,6 +168,31 @@ final class PinIPad: ObservableObject, Identifiable {
         rehacerVista()
     }
 
+    /// Otra pagina del PDF en el mismo pin: mismo ancho, su proporcion, y
+    /// el giro y los filtros que tenia.
+    func ponerPagina(_ nueva: CGImage, paginas p: PaginasPdfPin) {
+        guard case let .imagen(_, url) = contenido else { return }
+        paginas = p
+        contenido = .imagen(nueva, fichero: url)
+        let girada = giro.cuartos % 2 == 1
+        let ancho = tamanoBase.width
+        let proporcion = girada ? CGFloat(nueva.width) / CGFloat(max(nueva.height, 1))
+            : CGFloat(nueva.height) / CGFloat(max(nueva.width, 1))
+        tamanoBase = CGSize(width: ancho, height: (ancho * proporcion).rounded())
+        rehacerVista()
+    }
+
+    /// Lo hace PDF (al nacer o al volver).
+    func hacerPdf(_ documento: PDFDocument, paginas p: PaginasPdfPin) {
+        documentoPdf = documento
+        paginas = p
+    }
+
+    /// «Devolver el ultimo pin cerrado»: vuelve a estar vivo.
+    func reabrir() {
+        cerrado = false
+    }
+
     private func rehacerVista() {
         guard case let .imagen(original, _) = contenido else { return }
         vista = ReglasFiltros.aplicar(original, filtros: filtros, giro: giro)
@@ -201,9 +237,15 @@ final class PinIPad: ObservableObject, Identifiable {
         var detalle: String
         switch contenido {
         case let .imagen(_, url):
-            tipo = .foto
-            nombre = url?.lastPathComponent ?? "Captura"
-            detalle = conOpacidad(url == nil ? "Captura" : "Foto")
+            if let paginas {
+                tipo = .pdf
+                nombre = url?.lastPathComponent ?? "PDF"
+                detalle = conOpacidad("PDF · página \(paginas.rotulo)")
+            } else {
+                tipo = .foto
+                nombre = url?.lastPathComponent ?? "Captura"
+                detalle = conOpacidad(url == nil ? "Captura" : "Foto")
+            }
         case let .video(_, url, audio):
             tipo = audio ? .audio : .video
             nombre = url.lastPathComponent
@@ -231,6 +273,11 @@ public final class GestorPinesIPad: ObservableObject {
     @Published var busqueda = ""
     /// «Cerrar todos» se puede deshacer (30 s).
     @Published private(set) var puedeDeshacer = false
+    /// Las guias azules mientras se arrastra un pin.
+    @Published private(set) var guias: [GuiaPin] = []
+    /// El ultimo cerrado (uno a uno), para devolverlo.
+    @Published private(set) var ultimoCerrado: PinIPad?
+    private var guardadoUltimoCerrado: PinGuardado?
 
     /// El tamano de la capa (la ventana): alli nacen y alli se quedan.
     var area: CGSize = CGSize(width: 1024, height: 768) {
@@ -314,14 +361,36 @@ public final class GestorPinesIPad: ObservableObject {
                 self.abrirImagen(imagen, pixeles: nil, fichero: url, para: .foto(url))
             }
         case .pdf:
-            guard let pagina = Self.primeraPagina(url, lado: ReglasPin.ladoMiniatura(pantalla: area, escala: ArribaUIKit.escalaPantalla))
-            else { return false }
-            abrirImagen(pagina, pixeles: nil, fichero: url, para: .archivo(url))
+            return pinear(pdf: url)
         case .video, .audio:
             let audio = tipo == .audio
             let tam = audio ? CGSize(width: 360, height: 90) : CGSize(width: 480, height: 270)
             abrir(.video(AVPlayer(url: url), fichero: url, soloAudio: audio), tamano: tam, para: .archivo(url))
         }
+        return true
+    }
+
+    /// Pinea un PDF por su pagina `pagina` (desde 0) con todas las demas
+    /// detras: se pasan desde la barra del pin. `false` si no se pudo leer.
+    @discardableResult
+    public func pinear(pdf url: URL, pagina: Int = 0) -> Bool {
+        guard let documento = PDFDocument(url: url), documento.pageCount > 0 else { return false }
+        let paginas = PaginasPdfPin(actual: pagina, total: documento.pageCount)
+        guard let imagen = Self.pagina(documento, paginas.actual, lado: ladoPin) else { return false }
+        let pin = abrirImagen(imagen, pixeles: nil, fichero: url, para: .archivo(url))
+        pin.hacerPdf(documento, paginas: paginas)
+        guardarPagina(pin)
+        refrescar()
+        return true
+    }
+
+    /// Pinea una pagina de un PDF como foto suelta (sin las demas): para un
+    /// visor que quiere fijar solo lo que se ve. Se lee a buena resolucion.
+    @discardableResult
+    public func pinearSoloPagina(pdf url: URL, pagina: Int) -> Bool {
+        guard let documento = PDFDocument(url: url), pagina >= 0, pagina < documento.pageCount,
+              let imagen = Self.pagina(documento, pagina, lado: 2400) else { return false }
+        pinear(imagen: imagen, origen: "recorte")
         return true
     }
 
@@ -479,13 +548,126 @@ public final class GestorPinesIPad: ObservableObject {
     }
 
     func cerrar(_ pin: PinIPad) {
+        // Lo que tuviera por apuntar se apunta antes, para que vuelva igual.
+        if porGuardar[pin.id] != nil, let almacen, let id = pin.idAlmacen {
+            try? almacen.actualizarPin(id, pin.guardado(escalaPantalla: escalaPantalla))
+        }
         pin.marcarCerrado()
         porGuardar[pin.id] = nil
         if let p = porReescribir.removeValue(forKey: pin.id) { reescribir(p) }
-        if !apartados.contains(where: { $0 === pin }) { marcarCerrado(pin) }
+        if !apartados.contains(where: { $0 === pin }) {
+            guardadoUltimoCerrado = marcarCerrado(pin) ?? pin.guardado(escalaPantalla: escalaPantalla)
+            ultimoCerrado = pin
+        }
         pines.removeAll { $0 === pin }
         if elegido == pin.id { elegido = nil }
         refrescar()
+    }
+
+    /// Si hay un pin cerrado que se pueda devolver.
+    public var hayUltimoCerrado: Bool { ultimoCerrado != nil }
+
+    /// «Devolver el ultimo pin cerrado» (`pines devolver_ultimo` de
+    /// Windows): vuelve donde estaba, con lo que tenia.
+    public func devolverUltimoCerrado() {
+        guard let pin = ultimoCerrado else { return avisarFalloPin() }
+        ultimoCerrado = nil
+        olvidarApartadosYa()
+        pin.reabrir()
+        pin.oculto = false
+        pin.minimizado = false
+        pin.centro = ReglasCapa.centroDentro(pin.centro, tamano: pin.tamano, area: area)
+        pines.append(pin)
+        elegido = pin.id
+        if let id = pin.idAlmacen {
+            try? almacen?.actualizarPin(id, guardadoUltimoCerrado ?? pin.guardado(escalaPantalla: escalaPantalla))
+            _ = try? almacen?.ponerGrupo(id, color: pin.grupo.flatMap(ColorGrupo.porIndice))
+        }
+        guardadoUltimoCerrado = nil
+        refrescar()
+    }
+
+    // MARK: Guias e iman
+
+    /// Mientras se arrastra: las guias de donde iria el pin.
+    func guiar(_ pin: PinIPad, centro: CGPoint) {
+        let marco = ReglasGuias.marco(centro: centro, tamano: pin.tamano)
+        let nuevas = ReglasGuias.alinear(marco, otros: marcosDeLosDemas(pin)).guias
+        if nuevas != guias { guias = nuevas }
+    }
+
+    /// Al soltar: el centro pegado a las guias (el iman), y fuera las guias.
+    func iman(_ pin: PinIPad, centro: CGPoint) -> CGPoint {
+        if !guias.isEmpty { guias = [] }
+        let marco = ReglasGuias.marco(centro: centro, tamano: pin.tamano)
+        let ajuste = ReglasGuias.alinear(marco, otros: marcosDeLosDemas(pin))
+        return CGPoint(x: ajuste.rect.midX, y: ajuste.rect.midY)
+    }
+
+    func quitarGuias() {
+        if !guias.isEmpty { guias = [] }
+    }
+
+    private func marcosDeLosDemas(_ pin: PinIPad) -> [CGRect] {
+        pines.filter { $0 !== pin && !$0.oculto && !$0.minimizado }
+            .map { ReglasGuias.marco(centro: $0.centro, tamano: $0.tamano) }
+    }
+
+    // MARK: PDF
+
+    /// Pasa `pasos` paginas en un pin de PDF.
+    func pasarPagina(_ pin: PinIPad, _ pasos: Int) {
+        guard var p = pin.paginas, let documento = pin.documentoPdf, p.pasar(pasos),
+              let imagen = Self.pagina(documento, p.actual, lado: ladoPin) else { return }
+        pin.ponerPagina(imagen, paginas: p)
+        guardarPagina(pin)
+        cambio(pin)
+    }
+
+    /// «Pinear esta pagina»: la que se ve, como pin de foto propio.
+    func pinearPagina(de pin: PinIPad) {
+        guard let p = pin.paginas, let documento = pin.documentoPdf,
+              let imagen = Self.pagina(documento, p.actual, lado: 2400) else { return avisarFalloPin() }
+        pinear(imagen: imagen, origen: "recorte")
+    }
+
+    /// Cuantas paginas saca «Pinear todas las paginas» como mucho (cada una
+    /// es un pin: mas no se manejan en la capa).
+    static let topePaginasSueltas = 24
+
+    /// «Pinear todas las paginas»: cada una en su pin (escalonados).
+    func pinearTodasLasPaginas(de pin: PinIPad) {
+        guard let p = pin.paginas, let documento = pin.documentoPdf else { return avisarFalloPin() }
+        for n in 0 ..< min(p.total, Self.topePaginasSueltas) {
+            if let imagen = Self.pagina(documento, n, lado: 1600) { pinear(imagen: imagen, origen: "recorte") }
+        }
+    }
+
+    /// La pagina de cada pin de PDF se apunta aparte (el indice de Windows
+    /// no la tiene): asi vuelve por la misma al arrancar.
+    private static let clavePagina = "pines.pdf.pagina."
+
+    private func guardarPagina(_ pin: PinIPad) {
+        guard let id = pin.idAlmacen, let p = pin.paginas else { return }
+        UserDefaults.standard.set(p.actual, forKey: Self.clavePagina + String(id))
+    }
+
+    private func paginaGuardada(_ id: UInt64) -> Int {
+        UserDefaults.standard.integer(forKey: Self.clavePagina + String(id))
+    }
+
+    private var ladoPin: Int { ReglasPin.ladoMiniatura(pantalla: area, escala: ArribaUIKit.escalaPantalla) }
+
+    // MARK: Arrastrar fuera
+
+    /// Lo que lleva un pin al arrastrarlo a otra app (Split View, Slide
+    /// Over): la foto que se ve, el fichero o el texto.
+    func proveedorArrastre(_ pin: PinIPad) -> NSItemProvider {
+        if let texto = pin.textoHerramienta { return NSItemProvider(object: texto as NSString) }
+        if pin.paginas == nil, let vista = pin.vista { return NSItemProvider(object: UIImage(cgImage: vista)) }
+        if let url = pin.fichero, let p = NSItemProvider(contentsOf: url) { return p }
+        if let vista = pin.vista { return NSItemProvider(object: UIImage(cgImage: vista)) }
+        return NSItemProvider()
     }
 
     /// Cierra todos de forma que se puede deshacer: se apartan y se cierran
@@ -604,10 +786,11 @@ public final class GestorPinesIPad: ObservableObject {
         case nada
     }
 
-    private func abrirImagen(_ imagen: CGImage, pixeles: CGSize?, fichero: URL?, para: ParaAlmacen) {
+    @discardableResult
+    private func abrirImagen(_ imagen: CGImage, pixeles: CGSize?, fichero: URL?, para: ParaAlmacen) -> PinIPad {
         let px = pixeles ?? CGSize(width: imagen.width, height: imagen.height)
         let tam = ReglasPin.tamanoInicial(pixeles: px, escala: ArribaUIKit.escalaPantalla, visible: area)
-        abrir(.imagen(imagen, fichero: fichero), tamano: tam, para: para)
+        return abrir(.imagen(imagen, fichero: fichero), tamano: tam, para: para)
     }
 
     @discardableResult
@@ -735,6 +918,14 @@ public final class GestorPinesIPad: ObservableObject {
                                  para: .entrada(e.id), guardado: g)
             pin.grupo = grupo
         }
+        let ponerPdf: (CGImage, PDFDocument, PaginasPdfPin, URL) -> Void = { [weak self] imagen, doc, paginas, url in
+            guard let self else { return }
+            let pin = self.abrir(.imagen(imagen, fichero: url), tamano: sitio.tamanoBase, centro: sitio.centro,
+                                 escala: sitio.escala, para: .entrada(e.id), guardado: g)
+            pin.grupo = grupo
+            pin.hacerPdf(doc, paginas: paginas)
+            self.refrescar()
+        }
         let lado = ReglasPin.ladoMiniatura(pantalla: area, escala: escalaPantalla)
         switch e.tipo {
         case .imagen:
@@ -765,8 +956,10 @@ public final class GestorPinesIPad: ObservableObject {
             guard let ruta = e.ruta, let url = ReglasCapa.rutaVigente(ruta, datos: datos) else { return }
             switch TipoContenido.de(url) {
             case .pdf:
-                guard let pagina = Self.primeraPagina(url, lado: lado) else { return }
-                poner(.imagen(pagina, fichero: url))
+                guard let documento = PDFDocument(url: url), documento.pageCount > 0 else { return }
+                let paginas = PaginasPdfPin(actual: paginaGuardada(e.id), total: documento.pageCount)
+                guard let pagina = Self.pagina(documento, paginas.actual, lado: lado) else { return }
+                ponerPdf(pagina, documento, paginas, url)
             case .video, .audio:
                 let reproductor = AVPlayer(url: url)
                 reproductor.isMuted = true
@@ -783,9 +976,9 @@ public final class GestorPinesIPad: ObservableObject {
         }
     }
 
-    /// La primera pagina de un PDF como foto (PDFKit la pinta a `lado`).
-    private static func primeraPagina(_ url: URL, lado: Int) -> CGImage? {
-        guard let documento = PDFDocument(url: url), let pagina = documento.page(at: 0) else { return nil }
+    /// La pagina `n` (desde 0) de un PDF como foto (PDFKit la pinta a `lado`).
+    private static func pagina(_ documento: PDFDocument, _ n: Int, lado: Int) -> CGImage? {
+        guard let pagina = documento.page(at: n) else { return nil }
         let caja = pagina.bounds(for: .cropBox).size
         let mayor = max(caja.width, caja.height, 1)
         let f = CGFloat(min(lado, 2400)) / mayor

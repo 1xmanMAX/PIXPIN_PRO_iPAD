@@ -1131,3 +1131,89 @@ public enum GanchosSincro {
     /// aviso para ensenarlo en la app.
     public static var alLlegar: ((String, String) -> Void)?
 }
+
+// MARK: - Las personas de los chats compartidos (lo puro)
+
+/// Una persona de un chat compartido a la que llamar solo.
+public struct PersonaDelChat: Equatable, Sendable {
+    public var id: String
+    public var nombre: String
+    /// Su ultima direccion conocida (`sincro/direcciones.txt`), si hay.
+    public var recordada: Direccion?
+
+    public init(id: String, nombre: String, recordada: Direccion? = nil) {
+        self.id = id
+        self.nombre = nombre
+        self.recordada = recordada
+    }
+}
+
+/// **Con quien de los chats compartidos se sincroniza solo**
+/// (`personas_a_llamar` de Windows): las personas que estan dentro de un chat
+/// donde tambien estoy yo dentro, sin mis propios aparatos (con esos ya va
+/// la vuelta del grupo). Una vez cada una, en el orden de los chats.
+public func personasALlamar(_ chats: [ChatCompartidoMac], yo: String, mios: Set<String>) -> [PersonaDelChat] {
+    var salida: [PersonaDelChat] = []
+    for c in chats where c.estoyDentro {
+        for p in c.personas where p.dentro && !p.soyYo && p.id != yo && !mios.contains(p.id) {
+            if !salida.contains(where: { $0.id == p.id }) {
+                salida.append(PersonaDelChat(id: p.id, nombre: p.nombre))
+            }
+        }
+    }
+    return salida
+}
+
+/// Las personas a llamar con su direccion recordada, leidas del nucleo
+/// (bloqueante: fuera del hilo principal). Sin chats compartidos, nada.
+func personasDeLosChats(_ nucleo: Nucleo) -> [PersonaDelChat] {
+    guard let chats = try? nucleo.chatsCompartidos(), !chats.isEmpty,
+          let yo = try? nucleo.aparato().id else { return [] }
+    var mios = Set(((try? nucleo.miembrosDelGrupo()) ?? []).map(\.id))
+    mios.insert(yo)
+    let dirs = nucleo.direccionesRecordadas()
+    return personasALlamar(chats, yo: yo, mios: mios).map { p in
+        var p = p
+        if let d = dirs.first(where: { $0.id == p.id }) { p.recordada = Direccion(host: d.host, puerto: d.puerto) }
+        return p
+    }
+}
+
+/// Lo hecho con una persona, en una linea (`resumen` de Windows y el movil).
+public func resumenDePersona(_ r: ResumenPersona) -> String {
+    var v: [String] = []
+    if r.traidos > 0 { v.append("\(r.traidos) traídos") }
+    if r.enviados > 0 { v.append("\(r.enviados) enviados") }
+    return v.isEmpty ? "al día" : v.joined(separator: " · ")
+}
+
+/// Una direccion recordada con el nombre de quien es (un aparato del grupo o
+/// una persona de un chat compartido), si se sabe.
+public struct DireccionConNombre: Identifiable, Equatable, Sendable {
+    public var id: String
+    public var nombre: String?
+    public var direccion: Direccion
+    /// Si es de un aparato de mi grupo (si no, de una persona o de alguien
+    /// que ya no esta).
+    public var esDelGrupo: Bool
+}
+
+/// Junta `sincro/direcciones.txt` con los nombres: los del grupo primero y
+/// luego por nombre (los sin nombre al final).
+public func direccionesConNombre(_ dirs: [DireccionRecordada], miembros: [MiembroGrupo],
+                                 personas: [String: String]) -> [DireccionConNombre] {
+    let v = dirs.map { d -> DireccionConNombre in
+        let m = miembros.first { $0.id == d.id }
+        return DireccionConNombre(id: d.id, nombre: m?.nombre ?? personas[d.id],
+                                  direccion: Direccion(host: d.host, puerto: d.puerto), esDelGrupo: m != nil)
+    }
+    return v.sorted {
+        if $0.esDelGrupo != $1.esDelGrupo { return $0.esDelGrupo }
+        switch ($0.nombre, $1.nombre) {
+        case let (a?, b?): return a.localizedStandardCompare(b) == .orderedAscending
+        case (_?, nil): return true
+        case (nil, _?): return false
+        case (nil, nil): return $0.id < $1.id
+        }
+    }
+}

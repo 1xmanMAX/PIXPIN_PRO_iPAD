@@ -68,6 +68,9 @@ public final class ModeloCompartidos: ObservableObject {
     /// Quita a `id` de `chat` (o sale, si es uno mismo).
     public func quitar(chat: String, id: String) async {
         await trabajar("Hecho.") { _ = try $0.quitarDeChatCompartido(chat: chat, id: id) }
+        // iPad: si ya no queda ningun chat compartido (y no hay grupo), se
+        // cierra la puerta; si quedan, sigue abierta.
+        await sincro?.refrescar()
     }
 
     // MARK: - Invitar
@@ -191,8 +194,14 @@ public final class ModeloCompartidos: ObservableObject {
             let id = p.id
             let chat = c.chat
             do {
-                let r = try await Task.detached(priority: .utility) {
-                    try nucleo.sincronizarConPersona(host: d.host, puerto: d.puerto, id: id, chats: [chat])
+                let r = try await Task.detached(priority: .utility) { () throws -> ResumenPersona in
+                    let r = try nucleo.sincronizarConPersona(host: d.host, puerto: d.puerto, id: id, chats: [chat])
+                    // Donde contesto, para la sincronizacion sola con ella
+                    // (`apuntar_direccion` de Windows).
+                    if r.puertoDelOtro > 0 {
+                        _ = try? nucleo.apuntarDireccion(id: id, host: d.host, puerto: r.puertoDelOtro)
+                    }
+                    return r
                 }.value
                 hechos.append(r.otroNombre)
                 if r.trajoAlgo { sincro.alTraerCambios?() }
