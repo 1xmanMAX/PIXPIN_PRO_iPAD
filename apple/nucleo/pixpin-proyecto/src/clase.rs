@@ -329,6 +329,80 @@ pub fn pegar_a_senal(
         .map_or(ms, |(s, _)| s)
 }
 
+/// **El milisegundo bajo el raton en la barra**, desde el raton en
+/// pixeles de PANTALLA (`raton_x`) y la esquina de la ventana DE VERDAD
+/// (`origen_x`, la que Windows dice ahora). `barra_x` y `barra_ancho` van en
+/// pixeles de la ventana, ya multiplicados por la escala del monitor.
+///
+/// POR QUE el origen va aparte (25-oct-2026, el usuario: «el clic esta
+/// desplazado a la derecha, solo en esta linea de tiempo»): la ventana
+/// restaba al raton la esquina con la que se CREO, no la que tenia. Movida
+/// o estirada por fuera (AltSnap, Win+flecha, otro monitor con otro DPI) la
+/// diferencia caia entera en todos los clics; en los botones no se notaba,
+/// en una barra de seis pixeles de alto y un tirador de doce, si.
+pub fn ms_del_raton(
+    raton_x: i32,
+    origen_x: i32,
+    barra_x: f32,
+    barra_ancho: f32,
+    duracion_ms: i64,
+) -> i64 {
+    ms_de_la_barra(
+        (raton_x - origen_x) as f32 - barra_x,
+        barra_ancho,
+        duracion_ms,
+    )
+}
+
+/// Lo que se ensena como posicion mientras se arrastra la barra: donde esta
+/// el raton, no donde dice el video. El video, al buscar, cae en el
+/// fotograma clave mas cercano, y en una grabacion de pantalla (que solo
+/// guarda fotogramas cuando algo cambia) dos claves pueden estar a medio
+/// video: el tirador saltaba lejos del raton.
+pub fn posicion_a_la_vista(medio_ms: i64, arrastrando: Option<i64>) -> i64 {
+    arrastrando.unwrap_or(medio_ms)
+}
+
+// --- Las capturas de la nota -----------------------------------------------
+
+/// La clave de las capturas de una clase en `resto`: `[{ms, id}]`.
+pub const CAPTURAS: &str = "capturas";
+
+/// Las capturas `(ms, id)` de una nota (su `resto`), en orden.
+pub fn capturas_de(resto: &Map<String, Value>) -> Vec<(i64, String)> {
+    let mut v: Vec<(i64, String)> = resto
+        .get(CAPTURAS)
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|c| Some((c.get("ms")?.as_i64()?, c.get("id")?.as_str()?.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort_by_key(|(ms, _)| *ms);
+    v
+}
+
+/// **Anade una captura a la clase** (la de un fotograma del video anotado
+/// al estudiar): `id` del mensaje de la imagen en `ms`. Un id que ya estaba
+/// no se repite; lo demas que lleve cada captura se respeta.
+pub fn poner_captura(resto: &mut Map<String, Value>, ms: i64, id: &str) {
+    let mut lista: Vec<Value> = resto
+        .get(CAPTURAS)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if lista
+        .iter()
+        .any(|c| c.get("id").and_then(Value::as_str) == Some(id))
+    {
+        return;
+    }
+    lista.push(serde_json::json!({ "ms": ms.max(0), "id": id }));
+    lista.sort_by_key(|c| c.get("ms").and_then(Value::as_i64).unwrap_or(0));
+    resto.insert(CAPTURAS.into(), Value::Array(lista));
+}
+
 /// Salta `delta` desde `ms` sin salirse de la nota.
 pub fn saltar(ms: i64, delta: i64, duracion_ms: i64) -> i64 {
     let fin = if duracion_ms > 0 {
@@ -499,6 +573,70 @@ mod pruebas {
         assert_eq!(scroll_para(&t, &a, 400.0, 2_000, false), 0.0, "todo cabe");
         assert_eq!(acercar(0.0, 100.0, 0.5), 50.0);
         assert_eq!(acercar(99.5, 100.0, 0.5), 100.0);
+    }
+
+    #[test]
+    fn el_clic_en_la_barra_cae_bajo_el_raton_a_cualquier_escala() {
+        // La barra como la pone la ventana: a 16 logicos del borde y de
+        // 600 de ancho, a 100 %, 150 % y 175 %.
+        for e in [1.0f32, 1.5, 1.75] {
+            let (x, ancho) = (16.0 * e, 600.0 * e);
+            let origen = 300;
+            // El raton en la mitad de la barra, en pixeles de pantalla.
+            let mitad = origen + (x + ancho / 2.0) as i32;
+            assert_eq!(ms_del_raton(mitad, origen, x, ancho, 60_000), 30_000, "{e}");
+            // Ida y vuelta: donde se pinta el tirador es donde se pulso.
+            let ms = ms_del_raton(mitad, origen, x, ancho, 27_000);
+            let pintado = origen as f32 + x + x_en_la_barra(ms, ancho, 27_000);
+            assert!((pintado - mitad as f32).abs() <= 1.0, "{e}: {pintado}");
+            // Los extremos.
+            assert_eq!(ms_del_raton(origen + x as i32, origen, x, ancho, 60_000), 0);
+            assert_eq!(
+                ms_del_raton(origen + (x + ancho) as i32 + 40, origen, x, ancho, 60_000),
+                60_000
+            );
+        }
+        // Caso negativo, el fallo de antes: restar la esquina con la que se
+        // creo (300) a una ventana que AltSnap llevo a 240 corre el clic 60
+        // pixeles; con la esquina de verdad, no.
+        let (x, ancho) = (24.0, 900.0);
+        let raton = 240 + 24 + 450;
+        let viejo = ms_del_raton(raton, 300, x, ancho, 90_000);
+        let bueno = ms_del_raton(raton, 240, x, ancho, 90_000);
+        assert_eq!(bueno, 45_000);
+        assert_ne!(viejo, bueno, "con la esquina vieja el clic se corre");
+    }
+
+    #[test]
+    fn al_arrastrar_se_ve_donde_esta_el_raton() {
+        assert_eq!(posicion_a_la_vista(27_000, Some(4_000)), 4_000);
+        // Caso negativo: sin arrastrar manda el video.
+        assert_eq!(posicion_a_la_vista(27_000, None), 27_000);
+    }
+
+    #[test]
+    fn una_captura_nueva_entra_en_su_minuto_sin_repetirse() {
+        let mut r = Map::new();
+        r.insert(
+            CAPTURAS.into(),
+            serde_json::json!([{ "ms": 9_000, "id": "b" }, { "ms": 1_000, "id": "a" }]),
+        );
+        poner_captura(&mut r, 5_000, "c");
+        assert_eq!(
+            capturas_de(&r),
+            vec![
+                (1_000, "a".to_string()),
+                (5_000, "c".to_string()),
+                (9_000, "b".to_string())
+            ]
+        );
+        // Caso negativo: el mismo id no entra dos veces.
+        poner_captura(&mut r, 7_000, "c");
+        assert_eq!(capturas_de(&r).len(), 3);
+        // Una nota sin capturas estrena la lista.
+        let mut vacia = Map::new();
+        poner_captura(&mut vacia, -5, "x");
+        assert_eq!(capturas_de(&vacia), vec![(0, "x".to_string())]);
     }
 
     #[test]

@@ -2914,6 +2914,78 @@ fn una_carpeta_de_paginas_viaja_y_una_pagina_en_cada_aparato_deja_las_dos() {
     p.quieto(&chat);
 }
 
+/// **La carpeta de una clase grabada** (25-oct-2026): viaja con su tipo,
+/// su nota, su video, lo que duro y el minuto de cada pieza; un adjunto a
+/// la clase en cada aparato deja los dos, marcados como adjuntos y aparte
+/// de lo grabado, que no cambia.
+#[test]
+fn una_carpeta_de_grabacion_viaja_y_un_adjunto_en_cada_aparato_deja_los_dos() {
+    use pixpin_proyecto::carpeta_de_paginas::{self as cp, Carpeta};
+    let p = montar("carpeta-grabacion");
+    let raiz = p.raiz();
+    let ficha = ficha_pc(&p, "Clases");
+    let carpeta = almacen::carpeta(&raiz, &ficha.id);
+    // La nota, el video y una captura (aqui notas: lo que importa es la
+    // carpeta, los adjuntos de una clase ya se prueban arriba).
+    let voz = p.nota_pc(&ficha, "la nota de la clase");
+    let video = p.nota_pc(&ficha, "el video");
+    let foto = p.nota_pc(&ficha, "la captura");
+    let mut doc = Carpeta::grabacion(&voz.id, 5_400_000);
+    doc.video = video.id.clone();
+    doc.anadir_al_minuto(&voz.id, "", 0);
+    doc.anadir_al_minuto(&video.id, "", 0);
+    doc.anadir_al_minuto(&foto.id, "⏱ 1:05", 65_000);
+    let c = cp::mensaje_de_grabacion("Clase 25-10 10h58", &doc, &sello_pc(&p, &ficha, 4));
+    cuaderno::anadir(&carpeta, &c).unwrap();
+    let chat = vista::chat_de_ficha(&raiz, &ficha.id).unwrap();
+
+    p.vuelta_desde_pc();
+    let v = mensaje_movil(&p, &c.id);
+    assert_eq!(v["clase"], "MINIAPP");
+    assert_eq!(v["miniapp"], "carpeta");
+    assert_eq!(v["nombre"], "Clase 25-10 10h58");
+    let alli = Carpeta::leer(v["texto"].as_str().unwrap()).unwrap();
+    assert_eq!(alli, doc, "igual en el movil, campo a campo");
+    assert!(alli.es_grabacion());
+    assert_eq!(alli.paginas[2].ms, Some(65_000));
+
+    // El PC le adjunta unos apuntes; el movil, a la vez, una foto suya.
+    let apuntes = p.nota_pc(&ficha, "apuntes del profesor");
+    let mut m = mensaje_pc(&p, &ficha, &c.id);
+    let mut d = Carpeta::leer(&m.texto).unwrap();
+    d.adjuntar(&apuntes.id, "Apuntes");
+    m.texto = d.escribir();
+    cuaderno::reemplazar(&carpeta, &m).unwrap();
+    cambiar_en_movil(&p, &c.id, |v| {
+        let mut d = Carpeta::leer(v["texto"].as_str().unwrap()).unwrap();
+        d.adjuntar("foto-del-movil", "Pizarra");
+        v["texto"] = json!(d.escribir());
+    });
+
+    p.vuelta_desde_pc();
+    let en_pc = Carpeta::leer(&mensaje_pc(&p, &ficha, &c.id).texto).unwrap();
+    let ids = |v: Vec<&cp::Pagina>| v.into_iter().map(|p| p.id.clone()).collect::<Vec<_>>();
+    assert!(en_pc.es_grabacion());
+    assert_eq!(
+        (en_pc.voz.as_str(), en_pc.duracion_ms),
+        (voz.id.as_str(), 5_400_000)
+    );
+    assert_eq!(
+        ids(en_pc.de_la_grabacion().collect()),
+        [voz.id.clone(), video.id.clone(), foto.id.clone()],
+        "lo grabado no cambia"
+    );
+    let mut adjuntos = ids(en_pc.adjuntos().collect());
+    adjuntos.sort();
+    let mut esperados = vec![apuntes.id.clone(), "foto-del-movil".to_string()];
+    esperados.sort();
+    assert_eq!(adjuntos, esperados, "los dos adjuntos, marcados");
+    assert_eq!(en_pc.capturas().count(), 1, "un adjunto no es una captura");
+    let en_movil = Carpeta::leer(mensaje_movil(&p, &c.id)["texto"].as_str().unwrap()).unwrap();
+    assert_eq!(en_movil, en_pc);
+    p.quieto(&chat);
+}
+
 /// **La nota rica** (Markdown con fotos en `notas/`): llegan la nota y sus
 /// fotos, y en el movil la ruta de cada foto es un fichero que existe.
 #[test]
