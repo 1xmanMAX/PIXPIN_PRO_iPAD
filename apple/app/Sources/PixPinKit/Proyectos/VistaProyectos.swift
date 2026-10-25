@@ -32,6 +32,7 @@ public struct VistaProyectos: View {
     /// El proyecto al que se le elige la imagen de logo.
     @State private var logoPara: FichaChat?
     @State private var fotoLogo: [PhotosPickerItem] = []
+    @State private var eligiendoLogo = false
     @ObservedObject private var logos = LogosProyecto.compartidos
 
     public init(almacen: Almacen) { self.almacen = almacen }
@@ -46,7 +47,10 @@ public struct VistaProyectos: View {
                         Label("Compartir…", systemImage: "square.and.arrow.up")
                     }
                     if !chat.esAsistente {
-                        Button { logoPara = chat } label: {
+                        Button {
+                            logoPara = chat
+                            eligiendoLogo = true
+                        } label: {
                             Label("Poner imagen de logo…", systemImage: "photo.circle")
                         }
                         if logos.tiene(chat.id) {
@@ -103,8 +107,7 @@ public struct VistaProyectos: View {
             Text("Se borra también en tus otros aparatos la próxima vez que sincronices. "
                 + "Queda una copia en la papelera de PixPin por si te arrepientes.")
         }
-        .photosPicker(isPresented: Binding(get: { logoPara != nil }, set: { if !$0, fotoLogo.isEmpty { logoPara = nil } }),
-                      selection: $fotoLogo, maxSelectionCount: 1, matching: .images)
+        .photosPicker(isPresented: $eligiendoLogo, selection: $fotoLogo, maxSelectionCount: 1, matching: .images)
         .onChange(of: fotoLogo) { _, elegidas in
             guard let item = elegidas.first, let chat = logoPara else { return }
             fotoLogo = []
