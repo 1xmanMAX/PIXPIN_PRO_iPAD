@@ -58,7 +58,7 @@ use crate::credibilidad::creible;
 use crate::idiomas::lengua_de;
 use crate::motor::Transcripcion;
 use crate::pcm;
-use crate::tiempos::{Segmento, con_tiempos, estado_de};
+use crate::tiempos::{Segmento, con_tiempos, estado_de, lineas, trozos_de_frase};
 use crate::{ErrorVoz, HERCIOS, en};
 
 /// `SPDFID_WaveFormatEx` de `sapi.h`: «el formato va en el `WAVEFORMATEX`
@@ -246,9 +246,13 @@ fn montar(idioma: &str, entrada: &IUnknown, parciales: bool) -> Result<Montado, 
 /// Lo que interesa de un evento de SAPI, ya copiado y con su memoria
 /// liberada.
 enum Suceso {
-    /// Una frase cerrada: el texto y cuando empezo, en milisegundos desde
-    /// el principio del audio.
-    Frase { texto: String, desde_ms: i64 },
+    /// Una frase cerrada: el texto y cuando empezo y acabo, en milisegundos
+    /// desde el principio del audio.
+    Frase {
+        texto: String,
+        desde_ms: i64,
+        hasta_ms: i64,
+    },
     /// Lo que va entendiendo mientras se habla.
     Provisional(String),
     /// Se acabo el audio.
@@ -284,9 +288,11 @@ fn recoger(contexto: &ISpRecoContext, avance_bytes: &mut u64) -> Vec<Suceso> {
                 if let Ok(resultado) = objeto.cast::<ISpRecoResult>() {
                     let texto = texto_de(&resultado);
                     suceso = if id == SPEI_RECOGNITION.0 {
+                        let (desde_ms, hasta_ms) = tiempos_ms(&resultado);
                         Suceso::Frase {
                             texto,
-                            desde_ms: inicio_ms(&resultado),
+                            desde_ms,
+                            hasta_ms,
                         }
                     } else {
                         Suceso::Provisional(texto)
@@ -326,14 +332,17 @@ fn texto_de(resultado: &ISpRecoResult) -> String {
     }
 }
 
-/// Cuando empezo la frase, en milisegundos desde el principio del audio.
-/// `ullStart` va en unidades de 100 ns.
-fn inicio_ms(resultado: &ISpRecoResult) -> i64 {
+/// Cuando empezo y acabo la frase, en milisegundos desde el principio del
+/// audio. `ullStart` y `ullLength` van en unidades de 100 ns.
+fn tiempos_ms(resultado: &ISpRecoResult) -> (i64, i64) {
     let mut t = SPRECORESULTTIMES::default();
     // SAFETY: una estructura nuestra que SAPI rellena.
     match unsafe { resultado.GetResultTimes(&mut t) } {
-        Ok(()) => (t.ullStart / 10_000) as i64,
-        Err(_) => 0,
+        Ok(()) => {
+            let desde = (t.ullStart / 10_000) as i64;
+            (desde, desde + (t.ullLength / 10_000) as i64)
+        }
+        Err(_) => (0, 0),
     }
 }
 
@@ -389,6 +398,7 @@ pub fn transcribir_pcm(
 
     let mut segmentos: Vec<Segmento> = Vec::new();
     let mut avisos = 0usize;
+    let mut frases = 0usize;
     let mut por_donde = 0u64;
     'moler: loop {
         if cancelado.load(Ordering::Relaxed) {
@@ -398,12 +408,19 @@ pub fn transcribir_pcm(
         let _ = unsafe { montado.contexto.WaitForNotifyEvent(ESPERA_MS) };
         for suceso in recoger(&montado.contexto, &mut por_donde) {
             match suceso {
-                Suceso::Frase { texto, desde_ms } => {
+                Suceso::Frase {
+                    texto,
+                    desde_ms,
+                    hasta_ms,
+                } => {
                     if texto.is_empty() {
                         continue;
                     }
                     if creible(&texto, idioma) {
-                        segmentos.push(Segmento::nuevo(desde_ms, texto));
+                        frases += 1;
+                        // Una frase de mas de 15 s se parte por palabras
+                        // para que salga en lineas de 15 s (2026-10-25).
+                        segmentos.extend(trozos_de_frase(desde_ms, hasta_ms, &texto));
                     } else {
                         avisos += 1;
                     }
@@ -423,9 +440,9 @@ pub fn transcribir_pcm(
     }
     Ok(Transcripcion {
         texto: con_tiempos(&segmentos, ""),
-        estado: estado_de(segmentos.len(), avisos),
+        estado: estado_de(frases, avisos),
         duracion_ms: pcm::duracion_ms(muestras),
-        segmentos,
+        segmentos: lineas(&segmentos),
     })
 }
 

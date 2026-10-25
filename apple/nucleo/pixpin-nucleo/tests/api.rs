@@ -431,14 +431,17 @@ fn una_nota_de_voz_se_guarda_y_se_pasa_a_texto_como_en_windows() {
                 pixpin_nucleo::SegmentoVoz {
                     desde_ms: 0,
                     texto: "llamar al".into(),
+                    hasta_ms: 0,
                 },
                 pixpin_nucleo::SegmentoVoz {
                     desde_ms: 600,
                     texto: "aparejador".into(),
+                    hasta_ms: 0,
                 },
                 pixpin_nucleo::SegmentoVoz {
                     desde_ms: 83_000,
                     texto: "por los niveles".into(),
+                    hasta_ms: 0,
                 },
             ],
         )

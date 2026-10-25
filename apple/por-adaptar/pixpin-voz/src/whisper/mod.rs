@@ -2,7 +2,8 @@
 //!
 //! Puerto de `guardados/MotorWhisper.kt` del movil: **el mismo modelo**
 //! (Whisper *base* de sherpa-onnx, int8), los mismos tres ficheros bajados
-//! una vez de Hugging Face, las mismas tandas de 20 s y la misma lista negra
+//! una vez de Hugging Face, tandas cortadas en los silencios (de 15 s y no
+//! de 20 como el movil: ver abajo) y la misma lista negra
 //! contra lo que Whisper se inventa. El movil lo corre con la biblioteca de
 //! sherpa-onnx; aqui no hay sherpa: el decodificador es el de su ejemplo en
 //! Python (`scripts/whisper/test.py` y `offline-whisper-greedy-search-
@@ -17,8 +18,14 @@
 //!
 //! ## Como se transcribe una nota
 //!
-//! 1. El audio se parte en frases y las frases en tandas de hasta 20 s
-//!    ([`cortes`]); cada tanda sabe en que milisegundo empieza.
+//! 1. El audio se parte en frases y las frases en tandas de hasta 15 s,
+//!    cerrando en una pausa a partir de los 8 ([`cortes::tandas_de_lineas`]);
+//!    cada tanda sabe en que milisegundo empieza y acaba, y **es una linea
+//!    `[m:ss]`** del texto (2026-10-25: con tandas de 20 s una clase de
+//!    27 s salia en un solo bloque). No se usan las marcas de tiempo de
+//!    Whisper (`no_timestamps`): con el decoder voraz de aqui, sin las
+//!    reglas de marcas de `transcribe.py`, salen mal colocadas, y la tanda
+//!    de 15 s ya da la marca que se pidio.
 //! 2. Cada tanda pasa a log-mel de 30 s ([`mel`]) y por el **encoder**, que
 //!    devuelve las claves y valores de atencion cruzada.
 //! 3. El **decoder** escribe token a token, voraz (siempre el mas probable),
@@ -43,7 +50,7 @@ use crate::credibilidad::creible;
 use crate::dos_idiomas::{Idiomas, MINIMO_PARA_ADIVINAR_MS, Tarea};
 use crate::motor::Transcripcion;
 use crate::ort::{Runtime, Sesion, Valor};
-use crate::tiempos::{Segmento, con_tiempos, estado_de};
+use crate::tiempos::{Segmento, con_tiempos, estado_de, lineas};
 use crate::{ErrorVoz, HERCIOS, pcm};
 
 use fichas::Fichas;
@@ -68,10 +75,6 @@ pub const FICHEROS: [(&str, u64); 3] = [
 
 /// Lo que se ensena al usuario: «unos 160 MB».
 pub const MEGAS: u64 = 160;
-
-/// `TANDA_SEGUNDOS` del movil: cuesta casi lo mismo una tanda de 2 s que
-/// una de 20 (el encoder oye siempre 30), y con mas contexto inventa menos.
-const TANDA_SEGUNDOS: usize = 20;
 
 /// Los 99 idiomas de Whisper (`MotorWhisper.IDIOMAS`). Otro cualquiera no
 /// tiene token de idioma y no se puede forzar.
@@ -396,7 +399,11 @@ impl Whisper {
             let callado = oido.sin_voz > 0.6 && oido.confianza < -1.0;
             if !callado && !oido.texto.is_empty() {
                 if creible(&oido.texto, &lengua) {
-                    segmentos.push(Segmento::nuevo(pcm::ms_de_muestra(tanda.start), oido.texto));
+                    segmentos.push(Segmento::entre(
+                        pcm::ms_de_muestra(tanda.start),
+                        pcm::ms_de_muestra(tanda.end),
+                        oido.texto,
+                    ));
                 } else {
                     avisos += 1;
                 }
@@ -411,7 +418,7 @@ impl Whisper {
             texto: con_tiempos(&segmentos, ""),
             estado: estado_de(segmentos.len(), avisos),
             duracion_ms: pcm::duracion_ms(muestras),
-            segmentos,
+            segmentos: lineas(&segmentos),
         })
     }
 
@@ -600,9 +607,11 @@ impl Whisper {
     }
 }
 
-/// Las tandas de una nota: frases juntas hasta 20 s, y ninguna de mas de
-/// 30 (lo que oye el encoder; con cortes de 8 s no deberia pasar, pero una
-/// tanda mas larga perderia su final sin decir nada).
+/// Las tandas de una nota: frases juntas hasta 15 s
+/// ([`cortes::tandas_de_lineas`]; cada tanda es una linea `[m:ss]`), y
+/// ninguna de mas de 30 (lo que oye el encoder; con cortes de 8 s no
+/// deberia pasar, pero una tanda mas larga perderia su final sin decir
+/// nada).
 fn tandas(muestras: &[i16]) -> Vec<std::ops::Range<usize>> {
     tandas_con(muestras, None)
 }
@@ -614,20 +623,14 @@ const PAUSA_ENTRE_IDIOMAS_MS: usize = 700;
 /// Las tandas, cortando ademas en las pausas de `pausa_ms` si se da.
 fn tandas_con(muestras: &[i16], pausa_ms: Option<usize>) -> Vec<std::ops::Range<usize>> {
     let tope = mel::MUESTRAS_30S;
-    let frases = cortes::cortes(muestras);
-    match pausa_ms {
-        Some(p) => {
-            cortes::agrupar_por_frases(&frases, TANDA_SEGUNDOS, &cortes::pausas_largas(muestras, p))
-        }
-        None => cortes::agrupar(&frases, TANDA_SEGUNDOS),
-    }
-    .into_iter()
-    .flat_map(|r| {
-        (r.start..r.end)
-            .step_by(tope)
-            .map(move |a| a..(a + tope).min(r.end))
-    })
-    .collect()
+    cortes::tandas_de_lineas(muestras, pausa_ms)
+        .into_iter()
+        .flat_map(|r| {
+            (r.start..r.end)
+                .step_by(tope)
+                .map(move |a| a..(a + tope).min(r.end))
+        })
+        .collect()
 }
 
 /// El token mas probable que se puede escribir, y el logaritmo de su
@@ -737,11 +740,7 @@ pub fn transcribir_con(
         let mut parte = |f: f32| avance((n as f32 + f) / total);
         let segmentos =
             match w.transcribir_pcm_con(&muestras[r.clone()], idiomas, &mut parte, cancelado) {
-                Ok(t) => t
-                    .segmentos
-                    .into_iter()
-                    .map(|s| Segmento::nuevo(desde + s.desde_ms, s.texto))
-                    .collect(),
+                Ok(t) => t.segmentos.into_iter().map(|s| s.corrido(desde)).collect(),
                 // Un turno en el que no se entiende nada no tumba los demas.
                 Err(ErrorVoz::NoSeEntiendeNada | ErrorVoz::AudioVacio) => Vec::new(),
                 Err(e) => return Err(e),

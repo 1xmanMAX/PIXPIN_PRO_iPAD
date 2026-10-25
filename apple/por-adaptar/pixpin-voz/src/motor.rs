@@ -31,7 +31,7 @@ use windows::core::{PCSTR, PCWSTR};
 use crate::credibilidad::creible;
 use crate::idiomas;
 use crate::pcm;
-use crate::tiempos::{Segmento, con_tiempos, estado_de};
+use crate::tiempos::{Segmento, con_tiempos, estado_de, lineas};
 use crate::{ErrorVoz, HERCIOS};
 
 /// Cuantas muestras se le dan al reconocedor de una vez.
@@ -290,7 +290,7 @@ impl Motor {
             texto: con_tiempos(&segmentos, ""),
             estado: estado_de(segmentos.len(), avisos),
             duracion_ms: pcm::duracion_ms(muestras),
-            segmentos,
+            segmentos: lineas(&segmentos),
         })
     }
 
@@ -319,9 +319,10 @@ unsafe fn texto_de(puntero: &*const c_char) -> String {
 
 /// Mete en la lista lo que diga un resultado de Vosk, si es creible.
 ///
-/// El JSON es `{"text":"…","result":[{"word":"…","start":0.9,…}]}`. El
-/// milisegundo del segmento es el `start` de su primera palabra, igual que
-/// en el movil (`MotorVosk.apuntar`, `MotorVosk.kt:155-161`).
+/// El JSON es `{"text":"…","result":[{"word":"…","start":0.9,"end":1.2}]}`.
+/// Se apunta cada palabra con su tiempo; sin tiempos, la frase entera con
+/// el `start` de su primera palabra, que es lo que hace el movil
+/// (`MotorVosk.apuntar`, `MotorVosk.kt:155-161`).
 fn apuntar(json: &str, idioma: &str, segmentos: &mut Vec<Segmento>, avisos: &mut usize) {
     let Ok(valor) = serde_json::from_str::<serde_json::Value>(json) else {
         return;
@@ -340,14 +341,35 @@ fn apuntar(json: &str, idioma: &str, segmentos: &mut Vec<Segmento>, avisos: &mut
         *avisos += 1;
         return;
     }
-    let desde = valor
+    let palabras = valor
         .get("result")
         .and_then(|r| r.as_array())
-        .and_then(|r| r.first())
-        .and_then(|p| p.get("start"))
-        .and_then(|s| s.as_f64())
-        .unwrap_or(0.0);
-    segmentos.push(Segmento::nuevo((desde * 1000.0) as i64, texto));
+        .map(|r| r.as_slice())
+        .unwrap_or_default();
+    let ms = |p: &serde_json::Value, campo: &str| {
+        p.get(campo)
+            .and_then(|s| s.as_f64())
+            .map(|s| (s * 1000.0) as i64)
+    };
+    // **Palabra a palabra, con su tiempo** (2026-10-25): Vosk cierra un
+    // resultado en cada silencio, y quien habla de corrido deja resultados
+    // de un minuto. Con cada palabra suelta, `agrupar` los parte en lineas
+    // de 15 s. Si falta algun tiempo, la frase entera desde su primera
+    // palabra, como antes.
+    let sueltas: Option<Vec<Segmento>> = palabras
+        .iter()
+        .map(|p| {
+            let w = p.get("word")?.as_str()?.trim();
+            Some(Segmento::entre(ms(p, "start")?, ms(p, "end")?, w))
+        })
+        .collect();
+    match sueltas {
+        Some(v) if !v.is_empty() => segmentos.extend(v.into_iter().filter(|s| !s.texto.is_empty())),
+        _ => {
+            let desde = palabras.first().and_then(|p| ms(p, "start")).unwrap_or(0);
+            segmentos.push(Segmento::nuevo(desde, texto));
+        }
+    }
 }
 
 /// La ruta de la carpeta del modelo, en una cadena que el `fopen` de Kaldi
@@ -442,6 +464,30 @@ mod pruebas {
         );
         assert_eq!(segmentos, [Segmento::nuevo(1_500, "llamar al aparejador")]);
         assert_eq!(avisos, 0);
+    }
+
+    #[test]
+    fn con_el_tiempo_de_cada_palabra_se_apuntan_sueltas_para_partir_en_lineas() {
+        let mut segmentos = Vec::new();
+        let mut avisos = 0;
+        apuntar(
+            r#"{"text":"hola que tal","result":[
+                {"word":"hola","start":0.5,"end":0.9,"conf":1.0},
+                {"word":"que","start":1.0,"end":1.2},
+                {"word":"tal","start":1.2,"end":1.6}]}"#,
+            "es",
+            &mut segmentos,
+            &mut avisos,
+        );
+        assert_eq!(
+            segmentos,
+            [
+                Segmento::entre(500, 900, "hola"),
+                Segmento::entre(1_000, 1_200, "que"),
+                Segmento::entre(1_200, 1_600, "tal"),
+            ]
+        );
+        assert_eq!(con_tiempos(&segmentos, ""), "[0:00] hola que tal");
     }
 
     #[test]

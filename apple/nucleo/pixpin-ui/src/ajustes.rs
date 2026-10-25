@@ -33,8 +33,12 @@ pub const PIE_BOTON_ALTO: f32 = 40.0;
 pub const CONTENIDO_MARGEN: f32 = 28.0;
 /// Alto de la cabecera del contenido (titulo, subtitulo y «Restablecer»).
 pub const CABECERA_ALTO: f32 = 96.0;
-/// Una opcion: etiqueta y explicacion.
+/// Una opcion: etiqueta y explicacion. Es el alto MINIMO: una fila cuya
+/// explicacion ocupa varias lineas crece lo que haga falta (ver
+/// [`Fila::alto_de_textos`]).
 pub const FILA_ALTO: f32 = 60.0;
+/// Aire de arriba y de abajo de los textos de una fila que crece.
+pub const FILA_AIRE: f32 = 12.0;
 /// El titulo de un grupo de opciones.
 pub const GRUPO_ALTO: f32 = 38.0;
 /// Relleno a los lados dentro de una tarjeta.
@@ -100,6 +104,15 @@ pub struct Fila {
     pub cambiado: bool,
     /// Lleva boton de quitar (la fila es algo de una lista del usuario).
     pub quitar: bool,
+    /// **Lo que miden de verdad la etiqueta y la explicacion juntas**, en
+    /// pixeles logicos y redondeado hacia arriba. Lo pone quien sabe medir
+    /// texto (la ventana, con DirectWrite) ANTES de pintar y de repartir los
+    /// clics, y las dos cosas usan la misma fila: asi una explicacion de
+    /// cinco lineas (el motor de OCR, el de voz con su descarga) hace la
+    /// fila mas alta en el pintado Y en el acierto del raton, en vez de
+    /// desbordarse sobre las de al lado con los clics donde no se ve nada.
+    /// Cero: sin medir, la fila mide [`FILA_ALTO`].
+    pub alto_de_textos: u32,
 }
 
 impl Fila {
@@ -110,6 +123,7 @@ impl Fila {
             control: Control::Grupo,
             cambiado: false,
             quitar: false,
+            alto_de_textos: 0,
         }
     }
 
@@ -121,7 +135,7 @@ impl Fila {
         if self.es_grupo() {
             GRUPO_ALTO
         } else {
-            FILA_ALTO
+            FILA_ALTO.max(self.alto_de_textos as f32 + 2.0 * FILA_AIRE)
         }
     }
 }
@@ -317,6 +331,38 @@ pub fn rect_de_fila(filas: &[Fila], i: usize, desplazamiento: i32, zona: Recta) 
     }
 }
 
+/// **La fila que hay debajo de `(x, y)`** (logicos), con el desplazamiento
+/// ya contado y solo dentro de la zona de la lista. Es la misma cuenta que
+/// [`rect_de_fila`], fila a fila, asi que lo que se ve y lo que se pulsa no
+/// pueden discrepar.
+pub fn fila_en(x: f32, y: f32, filas: &[Fila], desplazamiento: i32, zona: Recta) -> Option<usize> {
+    if !zona.contiene(x, y) {
+        return None;
+    }
+    let mut arriba = zona.y - desplazamiento as f32;
+    for (i, fila) in filas.iter().enumerate() {
+        let alto = fila.alto();
+        if y >= arriba && y < arriba + alto {
+            return Some(i);
+        }
+        arriba += alto;
+    }
+    None
+}
+
+/// **De un punto de la pantalla (fisicos) a la ventana (logicos)**: se
+/// resta el origen de la ventana y se divide por la escala del monitor.
+/// Hacia abajo (`floor`), como los pixeles: el fisico 299 a escala 2 es el
+/// logico 149, no el 150, y con origen negativo (la ventana asomando por
+/// arriba del monitor) no se redondea hacia el cero.
+pub fn punto_logico(fisico: Punto, origen: Punto, escala: f32) -> Punto {
+    let e = if escala > 0.0 { escala } else { 1.0 };
+    Punto {
+        x: ((fisico.x - origen.x) as f32 / e).floor() as i32,
+        y: ((fisico.y - origen.y) as f32 / e).floor() as i32,
+    }
+}
+
 /// El ancho de un boton de una eleccion.
 fn ancho_de_opcion(texto: &str) -> f32 {
     (ancho_estimado(texto, 13.0) + 26.0).clamp(48.0, 150.0)
@@ -468,23 +514,19 @@ pub fn golpe_en(
     if !zona.contiene(x, y) {
         return None;
     }
-    for (i, fila) in filas.iter().enumerate() {
-        let r = rect_de_fila(filas, i, estado.desplazamiento, zona);
-        if !r.contiene(x, y) {
-            continue;
-        }
-        if let Some((parte, _)) = partes_de_fila(fila, r)
-            .into_iter()
-            .find(|(_, c)| c.contiene(x, y))
-        {
-            return Some(Golpe::Fila(i, parte));
-        }
-        // Un interruptor tambien se cambia pulsando su fila entera, como en
-        // Windows y en el movil: el objetivo pequeno se queda corto.
-        if matches!(fila.control, Control::Interruptor(_)) {
-            return Some(Golpe::Fila(i, Parte::Alternar));
-        }
-        return None;
+    let i = fila_en(x, y, filas, estado.desplazamiento, zona)?;
+    let fila = &filas[i];
+    let r = rect_de_fila(filas, i, estado.desplazamiento, zona);
+    if let Some((parte, _)) = partes_de_fila(fila, r)
+        .into_iter()
+        .find(|(_, c)| c.contiene(x, y))
+    {
+        return Some(Golpe::Fila(i, parte));
+    }
+    // Un interruptor tambien se cambia pulsando su fila entera, como en
+    // Windows y en el movil: el objetivo pequeno se queda corto.
+    if matches!(fila.control, Control::Interruptor(_)) {
+        return Some(Golpe::Fila(i, Parte::Alternar));
     }
     None
 }
@@ -574,6 +616,7 @@ mod pruebas {
             control,
             cambiado: false,
             quitar: false,
+            alto_de_textos: 0,
         }
     }
 
@@ -830,6 +873,119 @@ mod pruebas {
         // Caso negativo: sin boton (buscando) ese sitio no hace nada.
         let sin = golpe_en(punto_en(b), ANCHO, ALTO, 9, &muchas, &e, true, None);
         assert_eq!(sin, None);
+    }
+
+    /// El centro de cada fila, pulsado en la pantalla (fisicos) a escala
+    /// `e` con la ventana en `origen`, cae en esa misma fila: lo que comprueba
+    /// tambien la ventana con TODAS sus secciones.
+    fn cada_centro_cae_en_su_fila(f: &[Fila], e: f32, origen: Punto, desplazamiento: i32) {
+        let zona = contenido(ANCHO, ALTO);
+        let estado = Estado {
+            desplazamiento,
+            ..Estado::default()
+        };
+        for i in 0..f.len() {
+            let r = rect_de_fila(f, i, desplazamiento, zona);
+            let (cx, cy) = (r.x + r.ancho / 2.0, r.y + r.alto / 2.0);
+            if !zona.contiene(cx, cy) {
+                continue;
+            }
+            let fisico = Punto {
+                x: origen.x + (cx * e).round() as i32,
+                y: origen.y + (cy * e).round() as i32,
+            };
+            let l = punto_logico(fisico, origen, e);
+            assert_eq!(
+                fila_en(l.x as f32, l.y as f32, f, desplazamiento, zona),
+                Some(i),
+                "fila {i} ({}) a escala {e} bajada {desplazamiento}",
+                f[i].etiqueta
+            );
+            match golpe(l, f, &estado) {
+                None | Some(Golpe::Fila(_, _)) => {}
+                otro => panic!("fila {i}: {otro:?}"),
+            }
+            if let Some(Golpe::Fila(j, _)) = golpe(l, f, &estado) {
+                assert_eq!(j, i, "el golpe de la fila {i} a escala {e}");
+            }
+        }
+    }
+
+    #[test]
+    fn una_explicacion_larga_hace_la_fila_mas_alta_al_pintar_y_al_pulsar() {
+        let mut f = Vec::new();
+        for _ in 0..4 {
+            f.extend(filas());
+        }
+        // Explicaciones de una, tres y siete lineas (el motor de OCR con su
+        // licencia, el de voz con su descarga).
+        f[1].alto_de_textos = 36;
+        f[2].alto_de_textos = 70;
+        f[9].alto_de_textos = 130;
+        assert_eq!(f[1].alto(), FILA_ALTO, "cabe en el minimo");
+        assert_eq!(f[2].alto(), 70.0 + 2.0 * FILA_AIRE);
+        assert_eq!(f[9].alto(), 130.0 + 2.0 * FILA_AIRE);
+        // La fila de despues empieza donde acaba la alta, no 60 mas abajo.
+        let zona = contenido(ANCHO, ALTO);
+        let r2 = rect_de_fila(&f, 2, 0, zona);
+        assert_eq!(rect_de_fila(&f, 3, 0, zona).y, r2.y + r2.alto);
+        // Caso negativo: un titulo de grupo no crece aunque se le ponga.
+        let mut g = Fila::grupo("Ventanas");
+        g.alto_de_textos = 200;
+        assert_eq!(g.alto(), GRUPO_ALTO);
+
+        let tope = desplazamiento_maximo(&f, zona);
+        assert!(tope > 0, "hay que poder bajar");
+        for e in [1.0, 1.25, 1.5, 1.75, 2.0, 3.0] {
+            for origen in [
+                Punto { x: 0, y: 0 },
+                Punto { x: 312, y: 207 },
+                Punto { x: -40, y: -90 },
+            ] {
+                for des in [0, 1, 37, 59, 60, 61, tope / 2, tope - 1, tope] {
+                    cada_centro_cae_en_su_fila(&f, e, origen, des);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn el_punto_logico_redondea_hacia_abajo_tambien_con_origen_negativo() {
+        let o = Punto { x: 100, y: -50 };
+        assert_eq!(
+            punto_logico(Punto { x: 399, y: 249 }, o, 2.0),
+            Punto { x: 149, y: 149 }
+        );
+        assert_eq!(
+            punto_logico(Punto { x: 250, y: 100 }, o, 1.5),
+            Punto { x: 100, y: 100 }
+        );
+        // Por encima del origen es negativo, no cero.
+        assert_eq!(
+            punto_logico(Punto { x: 99, y: -51 }, o, 2.0),
+            Punto { x: -1, y: -1 }
+        );
+        // Caso negativo: una escala imposible no divide por cero.
+        assert_eq!(
+            punto_logico(Punto { x: 110, y: -40 }, o, 0.0),
+            Punto { x: 10, y: 10 }
+        );
+    }
+
+    #[test]
+    fn fuera_de_la_lista_no_hay_fila() {
+        let f = filas();
+        let zona = contenido(ANCHO, ALTO);
+        assert_eq!(fila_en(zona.x + 10.0, zona.y - 1.0, &f, 0, zona), None);
+        assert_eq!(fila_en(zona.x - 1.0, zona.y + 10.0, &f, 0, zona), None);
+        // Debajo de la ultima fila, dentro de la zona, tampoco.
+        let total = alto_total(&f);
+        assert!(total < zona.alto);
+        assert_eq!(
+            fila_en(zona.x + 10.0, zona.y + total + 1.0, &f, 0, zona),
+            None
+        );
+        assert_eq!(fila_en(zona.x + 10.0, zona.y + 1.0, &f, 0, zona), Some(0));
     }
 
     #[test]

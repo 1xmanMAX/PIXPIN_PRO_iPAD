@@ -258,22 +258,24 @@ pub fn filas_con_voz(datos: &[f32], ancho: usize) -> usize {
         .map_or(0, |f| f + 1)
 }
 
-/// Lo que se junta en una tanda: frases seguidas hasta 20 s. El frente
+/// Lo que se junta en una tanda: frases seguidas hasta 15 s, las mismas
+/// que con Whisper. Cada tanda es una linea `[m:ss]` del texto, y el
+/// usuario pidio una marca cada 15 s como mucho (antes eran 20). El frente
 /// aguanta mas, pero cada segundo son 13 tokens de audio en la cache del
 /// decoder y en la memoria del paso de entrada.
-pub const TANDA_SEGUNDOS: usize = 20;
+pub use crate::cortes::TANDA_SEGUNDOS;
 
 /// Ninguna tanda pasa de 30 s (lo que el modelo vio entrenando).
 pub const TOPE_SEGUNDOS: usize = 30;
 
 /// **Por donde se parte una nota**: en frases ([`crate::cortes`], las
-/// mismas que con Whisper) juntadas hasta 20 s, sin solapar, cortando
-/// siempre en un silencio o en el punto mas callado. Cada tanda sabe en
-/// que muestra empieza: de ahi sale su `[m:ss]`.
+/// mismas que con Whisper) juntadas hasta 15 s, cerrando en una pausa a
+/// partir de los 8 ([`crate::cortes::tandas_de_lineas`]), sin solapar,
+/// cortando siempre en un silencio o en el punto mas callado. Cada tanda
+/// sabe en que muestra empieza y acaba: de ahi sale su `[m:ss]`.
 pub fn tandas(muestras: &[i16]) -> Vec<Range<usize>> {
     let tope = TOPE_SEGUNDOS * HERCIOS as usize;
-    let frases = crate::cortes::cortes(muestras);
-    crate::cortes::agrupar(&frases, TANDA_SEGUNDOS)
+    crate::cortes::tandas_de_lineas(muestras, None)
         .into_iter()
         .flat_map(|r| {
             (r.start..r.end)

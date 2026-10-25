@@ -25,6 +25,9 @@ required-features = ["bindgen"]
 bindgen = ["uniffi/cli"]
 
 [dependencies]
+# El texto con tiempos de las notas de voz, el de Windows (`tiempos`): sus
+# partes puras compilan fuera de Windows.
+pixpin-voz = { path = "../../por-adaptar/pixpin-voz" }
 pixpin-motor2d = { version = "0.1.0", path = "../pixpin-motor2d" }
 pixpin-proyecto = { version = "0.1.0", path = "../pixpin-proyecto" }
 pixpin-sincro = { version = "0.1.0", path = "../pixpin-sincro" }

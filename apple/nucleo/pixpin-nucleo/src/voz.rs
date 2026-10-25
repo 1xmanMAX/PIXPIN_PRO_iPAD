@@ -12,15 +12,13 @@
 //!   con eso; aqui se escribe una sola vez.
 //! - El texto lo saca Swift (`SFSpeechRecognizer` en el aparato) y lo
 //!   guarda [`Nucleo::poner_transcripcion`] igual que `voz::aplicar` de
-//!   Windows: `transcripcion` con el formato `[1:23] lo dicho` (parrafos de
-//!   hasta 20 s separados por un renglon en blanco,
+//!   Windows: `transcripcion` con el formato `[1:23] lo dicho` (lineas de
+//!   hasta 15 s separadas por un renglon en blanco,
 //!   `pixpin_voz::tiempos::con_tiempos`) y `estadoDelTexto` en `resto`.
 //!
-//! `pixpin-voz` sigue en `por-adaptar/` (SAPI, ONNX), asi que lo poco que
-//! hace falta de el (`con_tiempos`, `marca_de_tiempo`, `estado_de`) esta
-//! copiado aqui **al caracter**: el campo viaja por la sincronizacion y el
-//! movil lo lee para saltar al minuto. Cuando `pixpin-voz` compile fuera de
-//! Windows, se usa el suyo y se borra esta copia.
+//! El texto con tiempos es el de `pixpin_voz::tiempos` de Windows (sus
+//! partes puras compilan fuera de Windows desde el 25-oct): el campo viaja
+//! por la sincronizacion y el movil lo lee para saltar al minuto.
 
 use pixpin_proyecto::almacen;
 use pixpin_proyecto::cuaderno::{self, Clase, Mensaje};
@@ -28,9 +26,9 @@ use pixpin_proyecto::cuaderno::{self, Clase, Mensaje};
 use crate::chats::validar_chat;
 use crate::{ErrorNucleo, MensajeChat, Nucleo};
 
-/// Cuanto abarca un parrafo del texto con tiempos, como mucho
-/// (`pixpin_voz::tiempos::PARRAFO_MS`, `Transcriptor.kt:100`).
-pub const PARRAFO_MS: i64 = 20_000;
+/// Cuanto abarca un parrafo del texto con tiempos, como mucho (15 s desde
+/// el 25-oct-2026, Windows 7df5532).
+pub const PARRAFO_MS: i64 = pixpin_voz::tiempos::PARRAFO_MS;
 
 /// Cuantos picos se guardan por nota, como mucho
 /// (`pixpin_audio::PICOS_GUARDADOS`, `Onda.kt:96`).
@@ -46,49 +44,31 @@ pub const PICO_MAXIMO: i32 = 32767;
 pub struct SegmentoVoz {
     pub desde_ms: i64,
     pub texto: String,
+    /// Cuando acaba (`SFTranscriptionSegment.duration`); 0 si no se sabe,
+    /// y entonces cuenta como un instante (`Segmento::nuevo`).
+    #[uniffi(default = 0)]
+    pub hasta_ms: i64,
 }
 
-/// `1:23`, `12:05`, `1:02:09`: sin cero delante en la primera cifra, como
-/// `marcaDeTiempo` del movil. Un negativo cuenta como cero.
+impl SegmentoVoz {
+    /// El `Segmento` de `pixpin_voz::tiempos`, el de Windows.
+    pub(crate) fn de_windows(&self) -> pixpin_voz::tiempos::Segmento {
+        pixpin_voz::tiempos::Segmento::entre(self.desde_ms, self.hasta_ms, self.texto.trim())
+    }
+}
+
+/// `1:23`, `12:05`, `1:02:09` (`pixpin_voz::tiempos::marca_de_tiempo`).
 pub fn marca_de_tiempo(ms: i64) -> String {
-    let s = ms.max(0) / 1000;
-    let h = s / 3600;
-    let m = (s % 3600) / 60;
-    let seg = s % 60;
-    if h > 0 {
-        format!("{h}:{m:02}:{seg:02}")
-    } else {
-        format!("{m}:{seg:02}")
-    }
+    pixpin_voz::tiempos::marca_de_tiempo(ms)
 }
 
-/// El texto con sus tiempos: una linea por parrafo de hasta [`PARRAFO_MS`],
-/// separadas por un renglon en blanco. Copia de
-/// `pixpin_voz::tiempos::con_tiempos` con el prefijo vacio (una nota normal).
+/// El texto con sus tiempos: los trozos juntados en lineas de hasta
+/// [`PARRAFO_MS`] (partiendo tras un punto, un silencio o una coma),
+/// separadas por un renglon en blanco. Es `pixpin_voz::tiempos::con_tiempos`
+/// de Windows con el prefijo vacio (una nota normal).
 pub fn con_tiempos(segmentos: &[SegmentoVoz]) -> String {
-    let mut lineas: Vec<String> = Vec::new();
-    let mut desde: i64 = -1;
-    let mut trozo = String::new();
-    for sg in segmentos {
-        if desde >= 0 && sg.desde_ms - desde >= PARRAFO_MS {
-            lineas.push(format!("[{}] {}", marca_de_tiempo(desde), trozo.trim()));
-            trozo.clear();
-            desde = -1;
-        }
-        if desde < 0 {
-            desde = sg.desde_ms;
-        }
-        trozo.push_str(&sg.texto);
-        trozo.push(' ');
-    }
-    if !trozo.trim().is_empty() {
-        lineas.push(format!(
-            "[{}] {}",
-            marca_de_tiempo(desde.max(0)),
-            trozo.trim()
-        ));
-    }
-    lineas.join("\n\n")
+    let trozos: Vec<_> = segmentos.iter().map(SegmentoVoz::de_windows).collect();
+    pixpin_voz::tiempos::con_tiempos(&trozos, "")
 }
 
 /// La palabra de `estadoDelTexto` para un texto reconocido: `bien` si hay
@@ -291,7 +271,34 @@ mod pruebas {
         SegmentoVoz {
             desde_ms: ms,
             texto: t.into(),
+            hasta_ms: 0,
         }
+    }
+
+    /// Windows 7df5532: una marca cada 15 s como mucho, partiendo tras un
+    /// punto; 27 s de clase ya no salen en un solo bloque `[0:00]`.
+    #[test]
+    fn una_clase_de_27_s_lleva_una_marca_cada_15_s_como_mucho() {
+        let trozos: Vec<SegmentoVoz> = (0..9)
+            .map(|i| SegmentoVoz {
+                desde_ms: i * 3_000,
+                texto: format!("frase {i}."),
+                hasta_ms: i * 3_000 + 2_500,
+            })
+            .collect();
+        let texto = con_tiempos(&trozos);
+        let marcas: Vec<&str> = texto.lines().filter(|l| l.starts_with('[')).collect();
+        assert!(marcas.len() >= 2, "{texto}");
+        assert!(marcas[0].starts_with("[0:00] frase 0."), "{texto}");
+        // Ninguna linea abarca mas de 15 s.
+        let ms: Vec<i64> = marcas
+            .iter()
+            .filter_map(|l| pixpin_voz::tiempos::tiempo_de(l).map(|(m, _)| m))
+            .collect();
+        assert!(ms.windows(2).all(|w| w[1] - w[0] <= PARRAFO_MS), "{ms:?}");
+        // Es exactamente lo de Windows.
+        let de_windows: Vec<_> = trozos.iter().map(SegmentoVoz::de_windows).collect();
+        assert_eq!(texto, pixpin_voz::tiempos::con_tiempos(&de_windows, ""));
     }
 
     #[test]

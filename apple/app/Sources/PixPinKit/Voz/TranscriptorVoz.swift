@@ -56,10 +56,19 @@ public enum TranscriptorVoz {
     /// Los segmentos de una transcripcion, en milisegundos desde el
     /// principio del audio. Puro: lo prueban las pruebas.
     public static func segmentos(_ trozos: [(desde: TimeInterval, texto: String)]) -> [SegmentoVoz] {
+        segmentos(trozos.map { (desde: $0.desde, dura: 0, texto: $0.texto) })
+    }
+
+    /// Con lo que dura cada trozo: Rust lo usa para partir las lineas de
+    /// 15 s tras un punto o un silencio, como Windows (7df5532). Sin
+    /// duracion (0), el trozo cuenta como un instante.
+    public static func segmentos(_ trozos: [(desde: TimeInterval, dura: TimeInterval, texto: String)]) -> [SegmentoVoz] {
         trozos.compactMap { t in
             let texto = t.texto.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !texto.isEmpty else { return nil }
-            return SegmentoVoz(desdeMs: Int64((max(t.desde, 0) * 1000).rounded()), texto: texto)
+            let desde = Int64((max(t.desde, 0) * 1000).rounded())
+            let hasta = t.dura > 0 ? Int64((max(t.desde + t.dura, 0) * 1000).rounded()) : 0
+            return SegmentoVoz(desdeMs: desde, texto: texto, hastaMs: hasta)
         }
     }
 
@@ -96,7 +105,8 @@ public enum TranscriptorVoz {
                     _ = reconocedor
                     if let resultado, resultado.isFinal {
                         let partes = resultado.bestTranscription.segments
-                        let trozos = partes.map { (desde: $0.timestamp, texto: $0.substring) }
+                        // Con lo que dura cada trozo (el Mac, f3d0752) y la confianza (el iPad, dos idiomas).
+                        let trozos = partes.map { (desde: $0.timestamp, dura: $0.duration, texto: $0.substring) }
                         let confianza = partes.isEmpty ? 0 : partes.map { Double($0.confidence) }.reduce(0, +) / Double(partes.count)
                         unaVez.resolver(.success(Reconocido(segmentos: segmentos(trozos), confianza: confianza)))
                     } else if let error {

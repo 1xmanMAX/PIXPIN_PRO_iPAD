@@ -20,7 +20,7 @@
 
 use pixpin_proyecto::cuaderno::Mensaje;
 
-use crate::voz::{SegmentoVoz, marca_de_tiempo};
+use crate::voz::SegmentoVoz;
 
 /// El nombre del campo en el JSONL: el del movil, no se traduce.
 pub const CAMPO: &str = "turnos";
@@ -156,33 +156,8 @@ pub fn de_un_mensaje(m: &Mensaje) -> Vec<TurnoVoz> {
 /// El texto con tiempos de un turno: `con_tiempos` de `pixpin_voz::tiempos`
 /// con el nombre delante de cada parrafo.
 fn con_tiempos(segmentos: &[SegmentoVoz], prefijo: &str) -> String {
-    let mut lineas: Vec<String> = Vec::new();
-    let mut desde: i64 = -1;
-    let mut trozo = String::new();
-    for sg in segmentos {
-        if desde >= 0 && sg.desde_ms - desde >= crate::voz::PARRAFO_MS {
-            lineas.push(format!(
-                "[{}] {prefijo}{}",
-                marca_de_tiempo(desde),
-                trozo.trim()
-            ));
-            trozo.clear();
-            desde = -1;
-        }
-        if desde < 0 {
-            desde = sg.desde_ms;
-        }
-        trozo.push_str(&sg.texto);
-        trozo.push(' ');
-    }
-    if !trozo.trim().is_empty() {
-        lineas.push(format!(
-            "[{}] {prefijo}{}",
-            marca_de_tiempo(desde.max(0)),
-            trozo.trim()
-        ));
-    }
-    lineas.join("\n\n")
+    let trozos: Vec<_> = segmentos.iter().map(SegmentoVoz::de_windows).collect();
+    pixpin_voz::tiempos::con_tiempos(&trozos, prefijo)
 }
 
 /// **Reparte lo reconocido de la nota entera entre sus turnos**: cada trozo
@@ -254,6 +229,7 @@ mod pruebas {
         SegmentoVoz {
             desde_ms: ms,
             texto: t.into(),
+            hasta_ms: 0,
         }
     }
 

@@ -9,8 +9,9 @@
 //!
 //! Por que partir: Whisper oye 30 s como mucho y **se inventa frases** en
 //! los silencios largos. Cortando en los silencios y juntando frases
-//! seguidas hasta 20 s, cada tanda es voz con poco hueco, y cada una sale
-//! con el minuto en que empieza para escribir `[m:ss]`.
+//! seguidas hasta 15 s ([`TANDA_SEGUNDOS`]), cada tanda es voz con poco
+//! hueco, y cada una sale con el minuto en que empieza para escribir
+//! `[m:ss]`: una linea del texto por tanda.
 //!
 //! Aritmetica pura: se prueba entero sin modelo.
 
@@ -190,9 +191,56 @@ pub fn agrupar_por_frases(
     segundos: usize,
     pausas: &[usize],
 ) -> Vec<Range<usize>> {
+    agrupar_en_pausas(trozos, segundos, 0, pausas)
+}
+
+/// Lo que dura como mucho una tanda de Whisper o de Qwen3-ASR: **cada
+/// tanda es una linea `[m:ss]`** del texto, y el usuario pidio una marca
+/// cada 15 s como mucho (2026-10-25). Antes eran los 20 s del movil.
+pub const TANDA_SEGUNDOS: usize = 15;
+
+/// Desde cuantos segundos una tanda se cierra en la primera pausa larga
+/// ([`PAUSA_DE_TANDA_MS`]) en vez de esperar al tope: entre 8 y 15 s se
+/// prefiere partir donde se callo, que es donde suele acabar una frase.
+pub const TANDA_MINIMA_SEGUNDOS: usize = 8;
+
+/// Lo que cuenta como pausa para cerrar una tanda de mas de
+/// [`TANDA_MINIMA_SEGUNDOS`]: mas que un respiro.
+pub const PAUSA_DE_TANDA_MS: usize = 500;
+
+/// **Las tandas de una nota para escribir una linea cada 15 s**: frases
+/// juntas hasta [`TANDA_SEGUNDOS`], cerrando en una pausa en cuanto pasan
+/// de [`TANDA_MINIMA_SEGUNDOS`]. Con `pausa_ms` (dos idiomas, B6) cualquier
+/// pausa de esas cierra la tanda, aunque sea corta.
+pub fn tandas_de_lineas(pcm: &[i16], pausa_ms: Option<usize>) -> Vec<Range<usize>> {
+    let frases = cortes(pcm);
+    match pausa_ms {
+        Some(p) => agrupar_por_frases(&frases, TANDA_SEGUNDOS, &pausas_largas(pcm, p)),
+        None => agrupar_en_pausas(
+            &frases,
+            TANDA_SEGUNDOS,
+            TANDA_MINIMA_SEGUNDOS,
+            &pausas_largas(pcm, PAUSA_DE_TANDA_MS),
+        ),
+    }
+}
+
+/// Como [`agrupar`], pero una tanda que ya dura `minimo` segundos o mas
+/// **se cierra en la primera pausa** de `pausas` que cruce. Con `minimo`
+/// cero es [`agrupar_por_frases`]: ninguna tanda cruza una pausa.
+pub fn agrupar_en_pausas(
+    trozos: &[Range<usize>],
+    segundos: usize,
+    minimo: usize,
+    pausas: &[usize],
+) -> Vec<Range<usize>> {
     let tope = segundos * HERCIOS as usize;
-    let cruza =
-        |r: &Range<usize>, t: &Range<usize>| pausas.iter().any(|&p| p > r.start && p <= t.start);
+    let minimo = minimo * HERCIOS as usize;
+    // La pausa tiene que caer entre la tanda y la frase nueva: una de
+    // dentro de la tanda (de antes de llegar al minimo) no cuenta.
+    let cruza = |r: &Range<usize>, t: &Range<usize>| {
+        r.len() >= minimo && pausas.iter().any(|&p| p >= r.end && p <= t.start)
+    };
     let mut salida = Vec::new();
     let mut tanda: Option<Range<usize>> = None;
     for t in trozos {
@@ -233,6 +281,44 @@ mod pruebas {
             vec![s(0.0, 3.1), s(3.1, 7.7), s(7.7, 12.0)]
         );
         assert!(agrupar_por_frases(&[], 20, &pausas).is_empty());
+    }
+
+    #[test]
+    fn pasados_ocho_segundos_la_tanda_se_cierra_en_la_primera_pausa() {
+        let s = |a: f32, b: f32| (a * S as f32) as usize..(b * S as f32) as usize;
+        let trozos = [s(0.0, 5.0), s(5.0, 9.0), s(9.0, 13.0)];
+        let pausas = [s(5.0, 5.0).start, s(9.0, 9.0).start];
+        // La pausa de los 5 s llega antes de los 8: no cierra.
+        assert_eq!(
+            agrupar_en_pausas(&trozos, 15, 8, &pausas),
+            vec![s(0.0, 9.0), s(9.0, 13.0)]
+        );
+        // Sin pausas, todo cabe en 15 s; y una pausa de antes de los 8 s no
+        // cierra luego donde no se callo.
+        assert_eq!(agrupar_en_pausas(&trozos, 15, 8, &[]), vec![s(0.0, 13.0)]);
+        assert_eq!(
+            agrupar_en_pausas(&trozos, 15, 8, &pausas[..1]),
+            vec![s(0.0, 13.0)]
+        );
+    }
+
+    #[test]
+    fn una_clase_seguida_sale_en_tandas_de_quince_segundos_como_mucho() {
+        // 4 s, pausa, 5 s, pausa, 4 s: cabria en una tanda de 15 s, pero
+        // pasados los 8 se cierra en la pausa.
+        let mut pcm = tono(4.0);
+        pcm.extend(silencio(0.6));
+        pcm.extend(tono(5.0));
+        pcm.extend(silencio(0.6));
+        pcm.extend(tono(4.0));
+        let t = tandas_de_lineas(&pcm, None);
+        assert_eq!(t.len(), 2, "{t:?}");
+        // Un minuto sin respirar: ninguna tanda pasa de 15 s.
+        let largo = tono(60.0);
+        let t = tandas_de_lineas(&largo, None);
+        assert!(t.len() >= 4, "{t:?}");
+        assert!(t.iter().all(|r| r.len() <= TANDA_SEGUNDOS * S), "{t:?}");
+        assert_eq!(t.last().unwrap().end, largo.len());
     }
 
     #[test]

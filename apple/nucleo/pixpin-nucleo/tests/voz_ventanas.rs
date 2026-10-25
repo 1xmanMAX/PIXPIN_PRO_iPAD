@@ -99,10 +99,12 @@ fn la_conversacion_se_pasa_a_texto_con_los_nombres_de_sus_turnos() {
                 SegmentoVoz {
                     desde_ms: 300,
                     texto: "buenos dias".into(),
+                    hasta_ms: 0,
                 },
                 SegmentoVoz {
                     desde_ms: 4_200,
                     texto: "hola Ana".into(),
+                    hasta_ms: 0,
                 },
             ],
         )

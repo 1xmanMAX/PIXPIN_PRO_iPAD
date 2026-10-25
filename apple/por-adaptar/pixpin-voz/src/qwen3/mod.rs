@@ -13,9 +13,10 @@
 //!
 //! La exportacion int8 de sherpa-onnx ([`catalogo`]): tres modelos ONNX.
 //!
-//! 1. El audio se parte en tandas de hasta 20 s por los silencios
-//!    ([`guion::tandas`], los mismos cortes que Whisper); cada tanda sabe en
-//!    que milisegundo empieza (`[m:ss]`).
+//! 1. El audio se parte en tandas de hasta 15 s por los silencios,
+//!    prefiriendo una pausa entre los 8 y los 15 ([`guion::tandas`], los
+//!    mismos cortes que Whisper); cada tanda sabe en que milisegundo empieza
+//!    y es una linea `[m:ss]` del texto.
 //! 2. Log-mel de 128 bandas sin rellenar ([`mel`]) → **frente
 //!    convolucional** → **encoder** de audio: ~13 vectores por segundo.
 //! 3. El **decoder** (el modelo de lenguaje de 0,6B) lee el guion de chat

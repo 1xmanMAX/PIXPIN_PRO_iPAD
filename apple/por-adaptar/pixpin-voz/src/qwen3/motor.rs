@@ -29,7 +29,7 @@ use super::guion::{self, Guion};
 use super::{Reparto, carpeta, catalogo, mel, modelo_listo};
 use crate::credibilidad::creible;
 use crate::ort::{Runtime, Sesion, Valor};
-use crate::tiempos::{Segmento, Transcripcion, con_tiempos, estado_de};
+use crate::tiempos::{Segmento, Transcripcion, con_tiempos, estado_de, lineas};
 use crate::{ErrorVoz, HERCIOS};
 
 /// Cabezas de clave/valor y su tamano en el decoder de 0,6B (`[.., 8, 128]`).
@@ -209,7 +209,11 @@ impl Qwen3 {
             let texto = oido.texto.trim();
             if !texto.is_empty() {
                 if creible(texto, &lengua) {
-                    segmentos.push(Segmento::nuevo(ms_de_muestra(tanda.start), texto));
+                    segmentos.push(Segmento::entre(
+                        ms_de_muestra(tanda.start),
+                        ms_de_muestra(tanda.end),
+                        texto,
+                    ));
                 } else {
                     avisos += 1;
                 }
@@ -224,7 +228,7 @@ impl Qwen3 {
             texto: con_tiempos(&segmentos, ""),
             estado: estado_de(segmentos.len(), avisos),
             duracion_ms: ms_de_muestra(muestras.len()),
-            segmentos,
+            segmentos: lineas(&segmentos),
         })
     }
 
@@ -563,11 +567,7 @@ pub fn transcribir_con(
         let mut parte = |f: f32| avance((n as f32 + f) / total);
         let segmentos =
             match q.transcribir_pcm(&muestras[r.clone()], idiomas, &mut parte, cancelado) {
-                Ok(t) => t
-                    .segmentos
-                    .into_iter()
-                    .map(|s| Segmento::nuevo(desde + s.desde_ms, s.texto))
-                    .collect(),
+                Ok(t) => t.segmentos.into_iter().map(|s| s.corrido(desde)).collect(),
                 Err(ErrorVoz::NoSeEntiendeNada | ErrorVoz::AudioVacio) => Vec::new(),
                 Err(e) => return Err(e),
             };

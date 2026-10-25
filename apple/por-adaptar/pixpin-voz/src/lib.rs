@@ -139,7 +139,8 @@ pub use dos_idiomas::{Idiomas, ModoDeIdiomas};
 pub use idiomas::{Disponibilidad, IDIOMAS, carpeta_de_modelos, enlace_del_modelo, modelo_de};
 pub use telepronter::{Desfile, parrafos_de};
 pub use tiempos::{
-    EstadoDelTexto, Segmento, Transcripcion, con_tiempos, marca_de_tiempo, tiempo_de,
+    EstadoDelTexto, Segmento, Transcripcion, agrupar, con_tiempos, lineas, marca_de_tiempo,
+    tiempo_de,
 };
 
 #[cfg(windows)]
