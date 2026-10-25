@@ -8,7 +8,8 @@
 // la imagen** al elegir que hacer con ella (`PintorMarcas.quemar`), fuera del
 // hilo principal.
 //
-// Con el teclado del iPad, los atajos de Windows: 1-5 herramientas, ⌘Z y
+// Con el teclado del iPad, los atajos de Windows con ⌘ (para no quitarle
+// teclas a una caja de texto): ⌘1-⌘5 herramientas, ⌘Z y
 // ⇧⌘Z, Intro copia, ⌘P pinea, ⌘M al chat, ⌘T texto, ⌘S guarda, Esc descarta.
 
 import SwiftUI
@@ -195,8 +196,8 @@ struct EditorCapturaIPad: View {
                         .overlay(RoundedRectangle(cornerRadius: 8)
                             .strokeBorder(herramienta == h ? Paleta.v2.acento : .clear, lineWidth: 1.5))
                 }
-                .keyboardShortcut(KeyEquivalent(h.tecla), modifiers: [])
-                .help("\(h.nombre) (\(h.tecla))")
+                .keyboardShortcut(KeyEquivalent(h.tecla), modifiers: .command)
+                .help("\(h.nombre) (⌘\(h.tecla))")
             }
             separador
             ForEach(ColoresCaptura.todos, id: \.self) { c in

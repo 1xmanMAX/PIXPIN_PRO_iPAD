@@ -64,7 +64,6 @@ struct VistaTextoSacado: View {
                     } label: {
                         Label("Copiar", systemImage: "doc.on.doc")
                     }
-                    .keyboardShortcut("c", modifiers: .command)
                     .disabled(texto.isEmpty)
                 }
             }

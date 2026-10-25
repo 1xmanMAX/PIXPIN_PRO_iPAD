@@ -14,6 +14,8 @@ struct PixPinApp: App {
     @Environment(\.scenePhase) private var fase
 
     init() {
+        // Antes de crear el entorno: lo que cada zona pone en marcha al abrir.
+        ArranqueOrganizar.apuntar()
         Tema.aplicarAlArrancar()
         SincroDeFondo.activar()
         LienzoDelIPad.activar()

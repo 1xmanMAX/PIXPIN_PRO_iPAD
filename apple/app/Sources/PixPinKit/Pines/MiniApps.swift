@@ -347,7 +347,6 @@ struct VistaContadorPin: View {
                 } label: {
                     Image(systemName: "plus").frame(width: 64, height: 32)
                 }
-                .keyboardShortcut(.space, modifiers: [])
                 .buttonStyle(.borderedProminent)
             }
             Spacer(minLength: 0)

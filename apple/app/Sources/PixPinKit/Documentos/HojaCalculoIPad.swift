@@ -18,6 +18,7 @@
 // y se piden otra vez solo los que se ven. Guardar va 1 s despues del
 // ultimo cambio, fuera del hilo principal.
 
+import Combine
 import PixPinCore
 import SwiftUI
 import UIKit
@@ -456,6 +457,9 @@ struct VistaHojaIPad: View {
         .background(Color(uiColor: .systemBackground).ignoresSafeArea())
         .modifier(NocheDelVisor(activo: noche.activo))
         .onDisappear { modelo.cerrar() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            modelo.cerrar()
+        }
     }
 
     private var barraDeFormulas: some View {

@@ -322,6 +322,15 @@ final class ControladorLectorIPad: NSObject, ObservableObject {
                 if let self, ruta == self.url.path { self.mirarElDisco() }
             }
         })
+        // Al irse la app al fondo se guarda ya (iOS puede cerrarla luego).
+        vigias.append(centro.addObserver(forName: UIApplication.willResignActiveNotification, object: nil,
+                                         queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.cerrado else { return }
+                self.guardarLectura()
+                if self.guardadoPendiente != nil { self.programarGuardado(espera: 0) }
+            }
+        })
     }
 
     // MARK: Abrir y cerrar

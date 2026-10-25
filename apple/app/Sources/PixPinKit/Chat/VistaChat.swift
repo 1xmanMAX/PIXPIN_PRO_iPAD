@@ -356,7 +356,7 @@ public struct VistaChat: View {
         case "IMAGEN":
             Task {
                 guard let url = await resolverFichero(m, chat, almacen) else { return }
-                nav.abrir(.lienzo(chat: chat, mensaje: nil, foto: url))
+                nav.abrir(.lienzo(chat: chat, mensaje: m, foto: url))
             }
         case "DIBUJO":
             nav.abrir(.lienzo(chat: chat, mensaje: m, foto: nil))

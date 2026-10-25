@@ -49,12 +49,10 @@ struct VistaCronometroPin: View {
                 Tablero(texto: c.tablero)
                 HStack(spacing: 10) {
                     Button(c.corriendo ? "Parar" : "Arrancar") { cambiar(.arrancarOParar) }
-                        .keyboardShortcut(.space, modifiers: [])
                         .buttonStyle(.borderedProminent)
                     // Solo en marcha, como el movil; parado se ve para que se
                     // sepa que existe.
                     Button("Vuelta") { cambiar(.vuelta) }
-                        .keyboardShortcut("v", modifiers: [])
                         .disabled(!c.corriendo)
                     Button("Reiniciar") { cambiar(.reiniciar) }
                         .disabled(!c.seReinicia)

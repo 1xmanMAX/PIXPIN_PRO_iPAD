@@ -218,7 +218,6 @@ public final class AvisosMini: ObservableObject {
         contenido.title = texto
         contenido.body = miniapp == "alarma" ? "Alarma" : "Tiempo cumplido"
         contenido.sound = .default
-        contenido.interruptionLevel = .timeSensitive
         let partes = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: cuando)
         let peticion = UNNotificationRequest(identifier: id, content: contenido,
                                              trigger: UNCalendarNotificationTrigger(dateMatching: partes, repeats: false))
