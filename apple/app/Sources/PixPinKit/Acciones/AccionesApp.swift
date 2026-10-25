@@ -64,7 +64,7 @@ public final class AccionesApp {
         do {
             let raiz = carpetaDeDatos()
             try FileManager.default.createDirectory(at: raiz, withIntermediateDirectories: true)
-            let n = try Nucleo.abrir(raiz: raiz.path, nombreDelAparato: Host.current().localizedName ?? "Mac")
+            let n = try Nucleo.abrir(raiz: raiz.path, nombreDelAparato: nombreDeEsteAparato())
             nucleoPropio = n
             return n
         } catch {

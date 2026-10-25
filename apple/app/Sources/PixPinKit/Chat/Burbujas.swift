@@ -57,6 +57,8 @@ struct BurbujaChat: View {
 
     @ViewBuilder private var contenido: some View {
         switch mensaje.clase {
+        case "NOTA" where mensaje.esDelAsistente:
+            NotaDelAsistente(mensaje: mensaje, chat: chat, almacen: almacen)
         case "NOTA" where BurbujaHojaNota.esHoja(mensaje):
             BurbujaHojaNota(mensaje: mensaje)
         case "NOTA":
