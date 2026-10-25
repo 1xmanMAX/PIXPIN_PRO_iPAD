@@ -246,23 +246,6 @@ pub enum Borde {
     AbajoDerecha,
 }
 
-/// Los botones redondos de la cabecera de la lista que van a la izquierda
-/// del de sincronizar (`Disposicion::boton_extra`), de derecha a izquierda.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Extra {
-    Tareas = 0,
-    Galeria = 1,
-    /// El timeline (5-oct-2026), con las lecciones dentro: el mas a la
-    /// izquierda, y por eso el primero que se retira en una lista estrecha
-    /// (tambien esta en la bandeja). Hubo un boton de lecciones aparte que
-    /// abria la misma ventana; se quito el 8-oct-2026 a peticion del usuario.
-    Timeline = 2,
-}
-
-impl Extra {
-    pub const TODOS: [Extra; 3] = [Extra::Tareas, Extra::Galeria, Extra::Timeline];
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Disposicion {
     /// La barra de titulo, arriba del todo.
@@ -529,16 +512,15 @@ impl Disposicion {
         let alto = e(BUSCADOR_ALTO).min(c.alto);
         // El sitio del boton se quita solo si el boton esta: en una lista
         // estrecha no cabe, y el buscador se queda con todo el ancho.
-        let ocupado: u32 = [
-            self.boton_sincro(escala_por_cien),
-            self.boton_extra(Extra::Tareas, escala_por_cien),
-            self.boton_extra(Extra::Galeria, escala_por_cien),
-            self.boton_extra(Extra::Timeline, escala_por_cien),
-        ]
-        .iter()
-        .filter(|b| b.ancho > 0)
-        .map(|b| b.ancho + e(BUSCADOR_MARGEN))
-        .sum();
+        //
+        // Tareas, la galeria y el timeline tenian aqui sus botones redondos
+        // hasta el 25-oct-2026: ahora viven en la pestana Funciones
+        // (`funciones`), y la cabecera es solo de los chats.
+        let ocupado: u32 = [self.boton_sincro(escala_por_cien)]
+            .iter()
+            .filter(|b| b.ancho > 0)
+            .map(|b| b.ancho + e(BUSCADOR_MARGEN))
+            .sum();
         Rect {
             x: c.x + e(BUSCADOR_MARGEN) as i32,
             y: c.y + (c.alto as i32 - alto as i32) / 2,
@@ -566,33 +548,6 @@ impl Disposicion {
             y: c.y + (c.alto as i32 - lado as i32) / 2,
             ancho: lado,
             alto: lado,
-        }
-    }
-
-    /// Los botones redondos de **lecciones, galeria de capturas y tareas**,
-    /// a la izquierda del de sincronizar y con su mismo aspecto, en el sitio
-    /// donde estaba el del universo (3-oct-2026; en el movil van junto a
-    /// Proyectos donde estaba el sistema solar), en el orden de `Extra`
-    /// contando desde el de sincronizar hacia la izquierda.
-    ///
-    /// Se retiran de izquierda a derecha en una lista estrecha: sincronizar
-    /// tiene la preferencia, y los tres tambien estan en la bandeja. Con
-    /// cada uno de mas, el buscador tiene que seguir midiendo lo que dos
-    /// botones.
-    pub fn boton_extra(&self, extra: Extra, escala_por_cien: u32) -> Rect {
-        let e = |v: u32| v * escala_por_cien / 100;
-        let sincro = self.boton_sincro(escala_por_cien);
-        let c = self.cabecera_lista;
-        let lado = sincro.ancho;
-        let i = extra as u32;
-        // Botones a la vista con este: los extra hasta el y el de sincronizar.
-        let n = i + 2;
-        if lado == 0 || c.ancho < (n + 2) * (lado + e(BUSCADOR_MARGEN)) {
-            return vacio();
-        }
-        Rect {
-            x: sincro.x - ((i + 1) * (lado + e(BUSCADOR_MARGEN))) as i32,
-            ..sincro
         }
     }
 
@@ -1138,56 +1093,9 @@ mod pruebas_ventana {
     }
 
     #[test]
-    fn timeline_galeria_y_tareas_van_a_la_izquierda_de_sincronizar_sin_pisar_el_buscador() {
-        let d = Disposicion::calcular(1000, 700, 100, 320, Vista::Ambas);
-        let (b, s) = (d.buscador(100), d.boton_sincro(100));
-        let [t, g, tl] = Extra::TODOS.map(|x| d.boton_extra(x, 100));
-        for u in [t, g, tl] {
-            assert_eq!((u.ancho, u.alto), (s.ancho, s.alto), "el mismo boton");
-            assert_eq!(u.y, s.y);
-            assert!(d.cabecera_lista.contiene(Punto {
-                x: u.x + u.ancho as i32 / 2,
-                y: u.y + u.alto as i32 / 2,
-            }));
-        }
-        assert!(b.derecha() < tl.x, "el buscador acaba antes");
-        assert!(
-            tl.derecha() < g.x && g.derecha() < t.x && t.derecha() < s.x,
-            "en fila, sin tocarse"
-        );
-    }
-
-    #[test]
-    fn en_una_lista_estrecha_se_retiran_de_izquierda_a_derecha_antes_que_sincronizar() {
-        let paso = BUSCADOR_ALTO + BUSCADOR_MARGEN;
-        let mut d = Disposicion::calcular(1000, 700, 100, 320, Vista::Ambas);
-        // Caben tareas y galeria pero no el timeline.
-        d.cabecera_lista.ancho = 5 * paso + 4;
-        assert!(d.boton_extra(Extra::Galeria, 100).ancho > 0);
-        assert_eq!(d.boton_extra(Extra::Timeline, 100).ancho, 0);
-        // Caso negativo: caben tres botones de ancho pero no cuatro, y no
-        // queda ninguno.
-        d.cabecera_lista.ancho = 3 * paso + 4;
-        assert!(d.boton_sincro(100).ancho > 0);
-        for x in Extra::TODOS {
-            assert_eq!(d.boton_extra(x, 100).ancho, 0);
-        }
-        // Y el buscador no les guarda un sitio que no ocupan.
-        assert_eq!(
-            d.buscador(100).derecha() + BUSCADOR_MARGEN as i32,
-            d.boton_sincro(100).x
-        );
-    }
-
-    #[test]
     fn con_la_lista_plegada_no_hay_boton_y_el_buscador_no_le_guarda_sitio() {
         let d = Disposicion::calcular(1200, 800, 100, LISTA_PLEGADA, Vista::Ambas);
         assert_eq!(d.boton_sincro(100).ancho, 0);
-        assert!(
-            Extra::TODOS
-                .iter()
-                .all(|x| d.boton_extra(*x, 100).ancho == 0)
-        );
         // Un punto cualquiera no cae en un boton que no esta.
         assert!(!d.boton_sincro(100).contiene(Punto { x: 0, y: 0 }));
     }

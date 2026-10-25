@@ -50,6 +50,10 @@ enum IdFormato {
     static let editable = "editable"
     static let pixpin = "pixpin"
     static let texto = "texto"
+    /// Los propios de una grabacion (y `word` de una nota en Windows).
+    static let word = "word"
+    static let md = "md"
+    static let anki = "anki"
 }
 
 /// Un formato que se ofrece.

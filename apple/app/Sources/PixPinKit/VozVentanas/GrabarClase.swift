@@ -14,8 +14,11 @@
 // 3. **Guardar**: `Nucleo.guardarClase` deja en el chat lo mismo que
 //    Windows y el Mac: la nota de voz `Clase 24-10 18h05.m4a` y cada foto
 //    detras como captura con su minuto, enlazadas (`capturas` y
-//    `enGrabacion`), asi que sincroniza tal cual y se estudia con sus
-//    capturas («Estudiar la clase») en los demas aparatos.
+//    `enGrabacion`), y detras **su carpeta** (Windows e015e2b: un `MINIAPP`
+//    «carpeta» con `tipo: "grabacion"`, que el chat ensena como una sola
+//    tarjeta), asi que sincroniza tal cual y se estudia con sus capturas
+//    («Estudiar la clase») en los demas aparatos. Si la nota no se cerro,
+//    lo demas entra igual (en su carpeta, sin nota).
 // 4. **Pasar a texto**, con el dictado del iPad; «Dejarlo sin texto» lo
 //    corta (luego se puede pedir con «Pasar a texto» en la nota).
 // 5. **«Abrir para estudiar»** (o ↩): la clase en su pantalla
@@ -231,7 +234,8 @@ final class ModeloClase: ObservableObject {
                 fase = .preparar
                 return
             }
-            let nuevos = [clase.voz].compactMap { $0 } + clase.capturas
+            // Y detras, la carpeta que lo lleva todo (una sola tarjeta).
+            let nuevos = [clase.voz].compactMap { $0 } + clase.capturas + [clase.carpeta].compactMap { $0 }
             if almacen.mensajes[chat] != nil { almacen.anadir(nuevos, en: chat) }
             await almacen.cargarChats()
             guardadas = clase.capturas.count

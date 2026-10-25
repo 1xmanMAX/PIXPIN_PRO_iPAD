@@ -222,7 +222,7 @@ pub fn medios_en(anki2: &Path) -> Option<PathBuf> {
 }
 
 /// La de este Mac (`~/Library/Application Support/Anki2`), si Anki esta.
-fn medios_de_anki() -> Option<PathBuf> {
+pub(crate) fn medios_de_anki() -> Option<PathBuf> {
     let casa = PathBuf::from(std::env::var_os("HOME")?);
     medios_en(&casa.join("Library").join("Application Support").join("Anki2"))
 }

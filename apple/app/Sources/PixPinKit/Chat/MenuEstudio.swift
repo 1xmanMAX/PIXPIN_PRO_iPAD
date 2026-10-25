@@ -50,11 +50,14 @@ struct EntradasDeEstudio: View {
         Menu {
             ForEach(CarpetasChat.delChat(c.cargados), id: \.id) { carpeta in
                 let ya = CarpetasChat.paginas(carpeta).contains(m.id)
+                // Las de las grabaciones tambien: lo que entra en una es un
+                // adjunto a la clase, aparte de lo grabado.
+                let icono = ya ? "checkmark.square" : CarpetasDelChat.esGrabacion(carpeta) ? "mic" : "book"
                 Button {
                     AccionesCarpeta.anadir(m, a: carpeta, en: c.chat, almacen: c.almacen, avisar: c.avisar)
                 } label: {
                     Label(carpeta.nombre.isEmpty ? CarpetasChat.nombreDeSerie : carpeta.nombre,
-                          systemImage: ya ? "checkmark.square" : "book")
+                          systemImage: icono)
                 }
             }
             Divider()

@@ -21,10 +21,19 @@
 //!   `pixpin_proyecto::clase` (el mismo crate que Windows).
 //! - **Las cuentas de la ventana** (`clase_*`): que toca en cada minuto, el
 //!   scroll que se sigue, la barra del tiempo y los saltos, por el puente.
+//! - **Acercar lo que se ve como en un lienzo** (Windows 8d7fe93 y fe0c9c4,
+//!   `encuadre_*`): `pixpin_ui::encuadre`, el mismo crate que Windows.
+//! - **Anotar el fotograma del video** ([`Nucleo::guardar_fotograma_de_clase`]):
+//!   se guarda como una captura mas de la clase, en su minuto
+//!   (`clase::poner_captura`), y se abre en su lienzo como cualquier foto.
+//! - **La carpeta de una grabacion** tambien se estudia
+//!   ([`clase_que_estudia`]): su nota, desde el principio.
 
 use pixpin_proyecto::almacen;
+use pixpin_proyecto::carpeta_de_paginas::Carpeta;
 use pixpin_proyecto::clase::{self as puro, Fila, Marcador};
 use pixpin_proyecto::cuaderno::{self, Mensaje};
+use pixpin_ui::encuadre::{self, Encuadre};
 
 use crate::chats::validar_chat;
 use crate::clase::{CAMPO_EN_GRABACION, CAMPO_GRABACION, CAMPO_VIDEO, capturas_de};
@@ -124,6 +133,17 @@ pub fn de_una_clase(m: &Mensaje) -> Option<(String, i64)> {
     Some((de, en.get("ms").and_then(|v| v.as_i64()).unwrap_or(0)))
 }
 
+/// **La clase que estudia un mensaje** (`clase_que_estudia` de Windows):
+/// la nota, una captura o el video de una clase ([`de_una_clase`]), o la
+/// carpeta de una grabacion (su nota, desde el principio; sin nota, nada).
+pub fn clase_que_estudia(m: &Mensaje) -> Option<(String, i64)> {
+    de_una_clase(m).or_else(|| {
+        Carpeta::de_mensaje(m)
+            .filter(|c| c.es_grabacion() && !c.voz.is_empty())
+            .map(|c| (c.voz, 0))
+    })
+}
+
 /// La clase a la que pertenece un mensaje: su nota de voz y donde empezar.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct EnUnaClase {
@@ -167,6 +187,9 @@ pub struct CapturaParaEstudiar {
     pub ms: i64,
     pub id: String,
     pub ruta: String,
+    /// El id de su lienzo propio (`lienzo_de_la_foto::id_del_lienzo`: su
+    /// `referencia` o `foto-<id>`), para ensenar encima lo anotado.
+    pub lienzo: String,
 }
 
 /// **Todo lo de una clase**, leido del cuaderno (la `Clase` de Windows).
@@ -367,7 +390,7 @@ impl Nucleo {
             .iter()
             .find(|m| m.id == mensaje)
             .ok_or_else(no_esta)?;
-        let voz = match de_una_clase(m) {
+        let voz = match clase_que_estudia(m) {
             Some((de, _)) if de != m.id => {
                 mensajes.iter().find(|v| v.id == de).ok_or_else(no_esta)?
             }
@@ -384,9 +407,11 @@ impl Nucleo {
         let capturas = capturas_de(voz)
             .into_iter()
             .filter_map(|(ms, id)| {
+                let m = mensajes.iter().find(|c| c.id == id)?;
                 Some(CapturaParaEstudiar {
                     ms,
-                    ruta: ruta_del_id(&id)?,
+                    ruta: ruta_de(m)?,
+                    lienzo: pixpin_proyecto::lienzo_de_la_foto::id_del_lienzo(m),
                     id,
                 })
             })
@@ -465,7 +490,7 @@ impl Nucleo {
         Ok(c.mensajes
             .iter()
             .find(|m| m.id == mensaje)
-            .and_then(de_una_clase)
+            .and_then(clase_que_estudia)
             .map(|(voz, ms)| EnUnaClase { voz, ms }))
     }
 
@@ -512,6 +537,52 @@ impl Nucleo {
         })
     }
 
+    /// **Guarda el fotograma que se ve** (el PNG de `ruta_png`, escrito por
+    /// Swift) como una captura mas de la clase `voz` en `ms`
+    /// (`estudiar_clase::guardar_fotograma` de Windows): una imagen en el
+    /// chat `clase-<ahora>-<ms>.png` con el pie `⏱ 1:05 · Clase …`,
+    /// enlazada a la nota (`enGrabacion`) y en la lista de capturas de la
+    /// nota. Devuelve la imagen (para abrirla en su lienzo) y la clase como
+    /// quedo. Bloqueante.
+    pub fn guardar_fotograma_de_clase(
+        &self,
+        chat: String,
+        voz: String,
+        ms: i64,
+        ruta_png: String,
+    ) -> Result<FotogramaDeClase, ErrorNucleo> {
+        validar_chat(&chat)?;
+        let carpeta = almacen::carpeta(self.ruta(), &chat);
+        let nota = cuaderno::Cuaderno::leer_de(&carpeta)?
+            .mensajes
+            .into_iter()
+            .find(|m| m.id == voz)
+            .ok_or_else(|| ErrorNucleo::NoExiste {
+                que: "la nota de la clase ya no esta".into(),
+            })?;
+        let ms = ms.max(0);
+        let fichero = format!("clase-{}-{ms}.png", crate::ahora_ms());
+        let pie = format!(
+            "⏱ {} · {}",
+            crate::voz::marca_de_tiempo(ms),
+            nombre_de_la_nota(&nota)
+        );
+        let de = voz.clone();
+        let imagen = self.adjuntar_con(chat.clone(), ruta_png, Some(fichero), |m| {
+            m.texto = pie;
+            m.resto.insert(
+                crate::clase::CAMPO_EN_GRABACION.into(),
+                serde_json::json!({ "de": de, "ms": ms }),
+            );
+        })?;
+        let id = imagen.id.clone();
+        let clase = self.cambiar_la_nota(&chat, &voz, |n| {
+            puro::poner_captura(&mut n.resto, ms, &id);
+            true
+        })?;
+        Ok(FotogramaDeClase { imagen, clase })
+    }
+
     /// **Quita la senal de `ms`**: la banderita del movil si lo es, o el
     /// marcador, cada una de su campo. Devuelve la clase como quedo.
     pub fn quitar_senal_de_clase(
@@ -532,7 +603,142 @@ impl Nucleo {
     }
 }
 
+/// Lo que deja guardar un fotograma para anotarlo.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FotogramaDeClase {
+    /// La imagen nueva del chat (la captura).
+    pub imagen: crate::MensajeChat,
+    /// La clase como quedo, con la captura en su minuto.
+    pub clase: ClaseParaEstudiar,
+}
+
+/// El nombre de una nota para el pie de sus capturas (el de
+/// `ClaseParaEstudiar::nombre`).
+fn nombre_de_la_nota(voz: &Mensaje) -> String {
+    if voz.nombre.trim().is_empty() {
+        voz.texto.clone()
+    } else {
+        voz.nombre.trim_end_matches(".m4a").to_string()
+    }
+}
+
+// --- Acercar lo que se ve (`pixpin_ui::encuadre`) --------------------------------
+
+/// **Como se ve la imagen en su caja**: el aumento (1 = encajada) y lo
+/// movida que esta desde el centro, en puntos de la vista.
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
+pub struct EncuadreDeClase {
+    pub aumento: f32,
+    pub dx: f32,
+    pub dy: f32,
+}
+
+/// Un rectangulo en puntos de la vista (`encuadre::Caja`).
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
+pub struct CajaDeClase {
+    pub x: f32,
+    pub y: f32,
+    pub ancho: f32,
+    pub alto: f32,
+}
+
+impl From<EncuadreDeClase> for Encuadre {
+    fn from(e: EncuadreDeClase) -> Encuadre {
+        Encuadre {
+            aumento: e.aumento,
+            dx: e.dx,
+            dy: e.dy,
+        }
+    }
+}
+
+impl From<Encuadre> for EncuadreDeClase {
+    fn from(e: Encuadre) -> EncuadreDeClase {
+        EncuadreDeClase {
+            aumento: e.aumento,
+            dx: e.dx,
+            dy: e.dy,
+        }
+    }
+}
+
+fn caja(c: CajaDeClase) -> encuadre::Caja {
+    (c.x, c.y, c.ancho, c.alto)
+}
+
+/// Encajada y en el centro, como al abrir.
+#[uniffi::export]
+pub fn encuadre_encajado() -> EncuadreDeClase {
+    Encuadre::default().into()
+}
+
+/// Si esta como al abrir (⎋ primero encaja; si ya lo esta, cierra).
+#[uniffi::export]
+pub fn encuadre_esta_encajado(e: EncuadreDeClase) -> bool {
+    Encuadre::from(e).encajado()
+}
+
+/// Lo que acerca un paso de rueda o un boton (`encuadre::PASO`).
+#[uniffi::export]
+pub fn encuadre_paso() -> f32 {
+    encuadre::PASO
+}
+
+/// **Donde se pinta la imagen** `w x h` en `caja`.
+#[uniffi::export]
+pub fn encuadre_destino(e: EncuadreDeClase, caja_vista: CajaDeClase, w: f32, h: f32) -> CajaDeClase {
+    let (x, y, ancho, alto) = Encuadre::from(e).destino(caja(caja_vista), w, h);
+    CajaDeClase { x, y, ancho, alto }
+}
+
+/// El tanto por ciento de la pastilla: 100 es un pixel de la imagen por
+/// punto de la vista.
+#[uniffi::export]
+pub fn encuadre_por_ciento(e: EncuadreDeClase, caja_vista: CajaDeClase, w: f32, h: f32) -> u32 {
+    Encuadre::from(e).por_ciento(caja(caja_vista), w, h)
+}
+
+/// **Acerca (`factor` > 1) o aleja hacia el punto** (`px`, `py`): lo que
+/// hay bajo el raton se queda bajo el raton.
+#[uniffi::export]
+pub fn encuadre_acercar(
+    e: EncuadreDeClase,
+    caja_vista: CajaDeClase,
+    w: f32,
+    h: f32,
+    factor: f32,
+    px: f32,
+    py: f32,
+) -> EncuadreDeClase {
+    let mut n = Encuadre::from(e);
+    n.acercar(caja(caja_vista), w, h, factor, (px, py));
+    n.into()
+}
+
+/// La lleva con el raton (arrastrar), sin perderla de vista.
+#[uniffi::export]
+pub fn encuadre_mover(
+    e: EncuadreDeClase,
+    caja_vista: CajaDeClase,
+    w: f32,
+    h: f32,
+    dx: f32,
+    dy: f32,
+) -> EncuadreDeClase {
+    let mut n = Encuadre::from(e);
+    n.mover(caja(caja_vista), w, h, dx, dy);
+    n.into()
+}
+
 // --- Las cuentas de la ventana, para Swift --------------------------------------
+
+/// Lo que se ensena como posicion mientras se arrastra la barra
+/// (`clase::posicion_a_la_vista`): donde esta el raton, no donde dice el
+/// video (que cae en el fotograma clave mas cercano).
+#[uniffi::export]
+pub fn clase_posicion_a_la_vista(medio_ms: i64, arrastrando: Option<i64>) -> i64 {
+    puro::posicion_a_la_vista(medio_ms, arrastrando)
+}
 
 /// La linea del texto que suena en `ms` (la ultima con minuto que ya paso).
 #[uniffi::export]
@@ -900,5 +1106,120 @@ mod pruebas {
         assert_eq!(n.de_una_clase(chat.clone(), nota.id).unwrap(), None);
         assert!(n.clase_para_estudiar(chat, "nadie".into()).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn el_fotograma_anotado_entra_como_una_captura_de_la_clase_en_su_minuto() {
+        let (dir, n) = nucleo("fotograma");
+        let chat = n.chat_guardados().unwrap().id;
+        let audio = dir.join("clase.m4a");
+        std::fs::write(&audio, b"m4a").unwrap();
+        let png = dir.join("a.png");
+        std::fs::write(&png, b"png").unwrap();
+        let hecho = n
+            .guardar_clase(
+                chat.clone(),
+                Some(audio.display().to_string()),
+                90_000,
+                vec![],
+                None,
+                vec![crate::CapturaClase {
+                    ms: 9_000,
+                    ruta_png: png.display().to_string(),
+                }],
+                0,
+            )
+            .unwrap();
+        let voz = hecho.voz.unwrap();
+        let fotograma = dir.join("fotograma.png");
+        std::fs::write(&fotograma, b"png-del-video").unwrap();
+        let f = n
+            .guardar_fotograma_de_clase(
+                chat.clone(),
+                voz.id.clone(),
+                65_000,
+                fotograma.display().to_string(),
+            )
+            .unwrap();
+        // La imagen, como la de Windows: su fichero, su pie y su enlace.
+        assert_eq!(f.imagen.clase, "IMAGEN");
+        assert!(
+            f.imagen.nombre.starts_with("clase-") && f.imagen.nombre.ends_with("-65000.png"),
+            "{}",
+            f.imagen.nombre
+        );
+        let nombre = voz.nombre.trim_end_matches(".m4a").to_string();
+        assert_eq!(f.imagen.texto, format!("⏱ 1:05 · {nombre}"));
+        let carpeta = almacen::carpeta(&dir, &chat);
+        let c = cuaderno::Cuaderno::leer_de(&carpeta).unwrap();
+        let m = c.mensajes.iter().find(|m| m.id == f.imagen.id).unwrap();
+        assert_eq!(
+            m.resto.get(CAMPO_EN_GRABACION),
+            Some(&serde_json::json!({ "de": voz.id, "ms": 65_000 }))
+        );
+        // En la nota, en su minuto entre las que habia.
+        let nota = c.mensajes.iter().find(|m| m.id == voz.id).unwrap();
+        assert_eq!(
+            capturas_de(nota).into_iter().map(|(ms, _)| ms).collect::<Vec<_>>(),
+            vec![9_000, 65_000]
+        );
+        assert_eq!(f.clase.capturas.len(), 2);
+        // Caso negativo: sin nota no hay clase a la que sumarlo.
+        assert!(
+            n.guardar_fotograma_de_clase(chat, "nadie".into(), 0, fotograma.display().to_string())
+                .is_err()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn la_carpeta_de_una_grabacion_se_estudia_desde_su_nota() {
+        let s = cuaderno::Sello {
+            cuando: 1_761_400_000_004,
+            numero: 4,
+            aparato: "PC".into(),
+            proyecto: "p".into(),
+        };
+        let mut c = Carpeta::grabacion("v", 65_000);
+        c.anadir_al_minuto("v", "", 0);
+        let m = pixpin_proyecto::carpeta_de_paginas::mensaje_de_grabacion("Clase", &c, &s);
+        assert_eq!(clase_que_estudia(&m), Some(("v".into(), 0)));
+        // Caso negativo: sin nota (solo video y capturas), ni una de paginas.
+        let sin = pixpin_proyecto::carpeta_de_paginas::mensaje_de_grabacion(
+            "Clase",
+            &Carpeta::grabacion("", 0),
+            &s,
+        );
+        assert_eq!(clase_que_estudia(&sin), None);
+        let normal = pixpin_proyecto::carpeta_de_paginas::mensaje_nuevo("Diario", &s);
+        assert_eq!(clase_que_estudia(&normal), None);
+    }
+
+    #[test]
+    fn lo_que_se_ve_se_acerca_como_un_lienzo() {
+        let caja = CajaDeClase {
+            x: 0.0,
+            y: 0.0,
+            ancho: 800.0,
+            alto: 450.0,
+        };
+        let e = encuadre_encajado();
+        assert!(encuadre_esta_encajado(e));
+        // Encajada, un video de 1600x900 se ve entero a la mitad.
+        assert_eq!(encuadre_destino(e, caja, 1600.0, 900.0).ancho, 800.0);
+        assert_eq!(encuadre_por_ciento(e, caja, 1600.0, 900.0), 50);
+        // Acercar hacia una esquina deja esa esquina donde estaba.
+        let a = encuadre_acercar(e, caja, 1600.0, 900.0, 2.0, 0.0, 0.0);
+        let d = encuadre_destino(a, caja, 1600.0, 900.0);
+        assert!((d.x, d.y) == (0.0, 0.0) && d.ancho == 1600.0, "{d:?}");
+        assert!(!encuadre_esta_encajado(a));
+        // Caso negativo: no se aleja de encajada ni se pierde de vista.
+        let lejos = encuadre_acercar(e, caja, 1600.0, 900.0, 0.5, 400.0, 225.0);
+        assert!(encuadre_esta_encajado(lejos));
+        let movida = encuadre_mover(a, caja, 1600.0, 900.0, 5_000.0, 0.0);
+        assert!(encuadre_destino(movida, caja, 1600.0, 900.0).x <= 0.0);
+        assert!(encuadre_paso() > 1.0);
+        assert_eq!(clase_posicion_a_la_vista(27_000, Some(4_000)), 4_000);
+        assert_eq!(clase_posicion_a_la_vista(27_000, None), 27_000);
     }
 }

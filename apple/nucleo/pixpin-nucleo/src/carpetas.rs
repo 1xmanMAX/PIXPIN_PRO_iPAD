@@ -22,6 +22,16 @@
 //!
 //! Lo del asistente (`anadir_a_carpeta`, `pagina_nueva_de_carpeta`) usa
 //! [`anadir_por_nombre`] y [`pagina_siguiente`], sin ventana.
+//!
+//! **La carpeta de una grabacion** (Windows e1150e8, 25-oct-2026): la que
+//! deja «Grabar clase» ([`crate::clase`]) lleva `tipo: "grabacion"`, su
+//! nota, su video, lo que duro y el minuto de cada pieza. Se lee igual, con
+//! lo grabado delante (cada pieza con su minuto en la esquina) y **lo
+//! adjuntado a la clase** detras (`adjunto: true`); lo que se le anade
+//! desde el chat, o con «Adjuntar a la clase», entra como adjunto
+//! ([`Nucleo::adjuntar_a_la_clase`]). Y **lo de dentro de cualquier
+//! carpeta no sale suelto en el chat** ([`dentro_de_carpetas`]): lo
+//! representa la tarjeta de su carpeta.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -50,6 +60,14 @@ pub struct PaginaDeCarpeta {
     /// Su titulo en la carpeta, o el nombre del mensaje si no lleva.
     pub titulo: String,
     pub mensaje: MensajeChat,
+    /// En una grabacion: su minuto en ella (la nota y el video, 0).
+    pub ms: Option<i64>,
+    /// En una grabacion: que se adjunto a la clase y no es de lo grabado.
+    pub adjunto: bool,
+    /// Lo que va en su esquina: el numero de la pagina o, en una grabacion,
+    /// su minuto («⏱ 1:05») o lo que dura la nota (vacio en el video y en
+    /// lo adjuntado).
+    pub esquina: String,
 }
 
 /// **Una carpeta leida**: su nombre y sus paginas vivas, en orden.
@@ -61,6 +79,41 @@ pub struct CarpetaDePaginas {
     pub paginas: Vec<PaginaDeCarpeta>,
     /// El mensaje de la carpeta como esta en el disco (para la tarjeta).
     pub mensaje: MensajeChat,
+    /// Si es la carpeta de una grabacion (lo de abajo, solo entonces).
+    pub grabacion: bool,
+    /// El `id` de su nota de voz (vacio si no entro): lo que se estudia.
+    pub voz: String,
+    /// El `id` de su video (vacio si no se grabo).
+    pub video: String,
+    pub duracion_ms: i64,
+    /// Lo que se dice debajo del nombre: «1:30:00 · 5 capturas» en una
+    /// grabacion, «3 páginas» en las demas.
+    pub detalle: String,
+}
+
+/// **La carpeta de una grabacion**, de su `texto` (la tarjeta del chat, sin
+/// leer el cuaderno).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct GrabacionDeCarpeta {
+    /// El `id` de su nota (vacio si no entro).
+    pub voz: String,
+    pub video: String,
+    pub duracion_ms: i64,
+    /// Las capturas, en su orden (la primera es la foto de la tarjeta).
+    pub capturas: Vec<String>,
+    /// «1:30:00 · 5 capturas» (`carpeta-grabacion-detalle`).
+    pub detalle: String,
+}
+
+/// Lo que deja «Adjuntar a la clase».
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct AdjuntadoALaClase {
+    /// El mensaje nuevo del chat (no sale suelto: esta en la carpeta).
+    pub mensaje: MensajeChat,
+    /// La carpeta como quedo.
+    pub carpeta: MensajeChat,
+    /// El nombre del fichero, para el aviso.
+    pub nombre: String,
 }
 
 /// Una carpeta del chat para el menu «Añadir a carpeta…».
@@ -70,6 +123,8 @@ pub struct CarpetaDelChat {
     pub nombre: String,
     /// Si la pagina por la que se pregunta ya esta dentro.
     pub la_lleva: bool,
+    /// Si es la de una grabacion: lo que entra en ella es un adjunto.
+    pub grabacion: bool,
 }
 
 /// Lo que deja «Añadir a carpeta…».
@@ -126,6 +181,58 @@ pub fn paginas_de_carpeta(texto: String) -> Vec<String> {
     Carpeta::leer(&texto)
         .map(|c| c.paginas.into_iter().map(|p| p.id).collect())
         .unwrap_or_default()
+}
+
+/// **El detalle de una grabacion** (`carpetas::detalle_de_grabacion` de
+/// Windows, `carpeta-grabacion-detalle`): «1:30:00 · 5 capturas».
+pub fn detalle_de_grabacion(c: &Carpeta) -> String {
+    let n = c.capturas().count();
+    let capturas = if n == 1 {
+        "1 captura".to_string()
+    } else {
+        format!("{n} capturas")
+    };
+    format!("{} · {capturas}", crate::clase::minuto(c.duracion_ms))
+}
+
+/// Lo que dice una carpeta de paginas debajo de su nombre (`carpeta-paginas`
+/// y `carpeta-vacia-detalle`).
+fn detalle_de_paginas(n: usize) -> String {
+    match n {
+        0 => "Vacía".into(),
+        1 => "1 página".into(),
+        n => format!("{n} páginas"),
+    }
+}
+
+/// **Si el `texto` de una carpeta es el de una grabacion**, lo que lleva.
+/// `None` en una carpeta de paginas o si no se entiende.
+#[uniffi::export]
+pub fn grabacion_de_carpeta(texto: String) -> Option<GrabacionDeCarpeta> {
+    let c = Carpeta::leer(&texto).ok().filter(Carpeta::es_grabacion)?;
+    Some(GrabacionDeCarpeta {
+        voz: c.voz.clone(),
+        video: c.video.clone(),
+        duracion_ms: c.duracion_ms,
+        capturas: c.capturas().map(|p| p.id.clone()).collect(),
+        detalle: detalle_de_grabacion(&c),
+    })
+}
+
+/// **Los `id` de lo que esta dentro de alguna carpeta**, de los `texto` de
+/// las carpetas cargadas (`carpeta_de_paginas::dentro_de_carpetas`): lo que
+/// el chat no ensena suelto, porque lo representa la tarjeta de su carpeta.
+/// Es una regla de lo que se ensena, no del formato.
+#[uniffi::export]
+pub fn dentro_de_carpetas(textos: Vec<String>) -> Vec<String> {
+    let mut v: Vec<String> = textos
+        .iter()
+        .filter_map(|t| Carpeta::leer(t).ok())
+        .flat_map(|c| c.paginas.into_iter().map(|p| p.id))
+        .collect();
+    v.sort();
+    v.dedup();
+    v
 }
 
 /// El nombre del PDF de una carpeta (`compartir::carpeta::nombre_de_fichero`
@@ -213,7 +320,12 @@ pub fn carpeta_por_nombre(mensajes: &[Mensaje], nombre: &str) -> Option<usize> {
     if buscado.is_empty() {
         return None;
     }
-    let todas = carpetas::carpetas_de(mensajes);
+    // Las de las grabaciones no son cuadernos: el asistente no escribe en
+    // ellas por su nombre (Windows 40daac7).
+    let todas: Vec<usize> = carpetas::carpetas_de(mensajes)
+        .into_iter()
+        .filter(|&i| !carpetas::es_grabacion(&mensajes[i]))
+        .collect();
     let nombre_de = |i: &usize| plegar(mensajes[*i].nombre.trim());
     todas
         .iter()
@@ -272,7 +384,7 @@ impl Nucleo {
 
     /// Escribe un mensaje nuevo al final y sube el chat en la lista con
     /// `resumen`.
-    fn anadir_carpeta_al_chat(
+    pub(crate) fn anadir_carpeta_al_chat(
         &self,
         chat: &str,
         dir: &Path,
@@ -365,23 +477,45 @@ impl Nucleo {
         let Some(c) = Carpeta::de_mensaje(m) else {
             return Ok(None);
         };
-        let paginas = c
-            .vivas(&mensajes)
+        let grabacion = c.es_grabacion();
+        let mut vivas = c.vivas(&mensajes);
+        // En una grabacion, lo grabado delante y lo adjuntado detras.
+        if grabacion {
+            vivas.sort_by_key(|(_, p)| p.adjunto);
+        }
+        let paginas: Vec<PaginaDeCarpeta> = vivas
             .into_iter()
-            .map(|(i, p)| PaginaDeCarpeta {
-                titulo: if p.titulo.trim().is_empty() {
-                    nombre_visible(&mensajes[i])
-                } else {
-                    p.titulo.clone()
-                },
-                mensaje: MensajeChat::from(mensajes[i].clone()),
+            .enumerate()
+            .map(|(k, (i, p))| {
+                let pm = &mensajes[i];
+                PaginaDeCarpeta {
+                    titulo: if p.titulo.trim().is_empty() {
+                        nombre_visible(pm)
+                    } else {
+                        p.titulo.clone()
+                    },
+                    mensaje: MensajeChat::from(pm.clone()),
+                    ms: p.ms,
+                    adjunto: grabacion && p.adjunto,
+                    esquina: esquina_de(grabacion, k, p, pm),
+                }
             })
             .collect();
+        let detalle = if grabacion {
+            detalle_de_grabacion(&c)
+        } else {
+            detalle_de_paginas(paginas.len())
+        };
         Ok(Some(CarpetaDePaginas {
             id: m.id.clone(),
             nombre: nombre_visible(m),
             paginas,
             mensaje: MensajeChat::from(m.clone()),
+            grabacion,
+            voz: c.voz.clone(),
+            video: c.video.clone(),
+            duracion_ms: c.duracion_ms,
+            detalle,
         }))
     }
 
@@ -400,6 +534,7 @@ impl Nucleo {
                 id: mensajes[i].id.clone(),
                 nombre: nombre_visible(&mensajes[i]),
                 la_lleva: Carpeta::de_mensaje(&mensajes[i]).is_some_and(|c| c.contiene(&pagina)),
+                grabacion: carpetas::es_grabacion(&mensajes[i]),
             })
             .collect())
     }
@@ -442,6 +577,12 @@ impl Nucleo {
                 titulo = c.paginas[i].titulo.clone();
                 return false;
             }
+            // A una grabacion entra como adjunto a la clase, con su nombre:
+            // no es de lo grabado y no lleva minuto.
+            if c.es_grabacion() {
+                titulo = nombre.clone();
+                return c.adjuntar(&pagina, &titulo);
+            }
             titulo = c.titulo_al_anadir(&nombre, PAGINA_DE_SERIE);
             c.anadir(&pagina, &titulo)
         })?;
@@ -452,6 +593,33 @@ impl Nucleo {
             titulo,
             creada: false,
             ya_estaba: ya,
+        }))
+    }
+
+    /// **«Adjuntar a la clase»** (`carpetas::adjuntar_a_la_clase` de
+    /// Windows): el fichero `ruta` entra en el chat como si se soltara (se
+    /// copia) y en la carpeta `carpeta` de la grabacion como adjunto, con su
+    /// nombre sin extension de titulo. No sale suelto en el chat: esta en
+    /// la carpeta. `None` si la carpeta ya no esta. Bloqueante.
+    pub fn adjuntar_a_la_clase(
+        &self,
+        chat: String,
+        carpeta: String,
+        ruta: String,
+    ) -> Result<Option<AdjuntadoALaClase>, ErrorNucleo> {
+        let dir = self.dir_de(&chat)?;
+        let nombre = Path::new(&ruta)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .ok_or_else(|| no_existe(&ruta))?;
+        let m = self.adjuntar_con(chat, ruta, Some(nombre.clone()), |_| {})?;
+        let titulo = pixpin_docs::sin_extension(&nombre);
+        let id = m.id.clone();
+        let hecha = self.cambiar_en_disco(&dir, &carpeta, |c| c.adjuntar(&id, &titulo))?;
+        Ok(hecha.map(|c| AdjuntadoALaClase {
+            mensaje: m,
+            carpeta: MensajeChat::from(c),
+            nombre,
         }))
     }
 
@@ -506,6 +674,22 @@ impl Nucleo {
             .collect();
         Ok(hojas_de_cuaderno(lienzo.escena(), &fotos))
     }
+}
+
+/// Lo que va en la esquina de una pagina (`PaginaVista::esquina` de
+/// Windows): su numero en un cuaderno; en una grabacion, lo que dura la
+/// nota o el minuto de la captura, y nada en el video y en lo adjuntado.
+fn esquina_de(grabacion: bool, k: usize, p: &carpetas::Pagina, m: &Mensaje) -> String {
+    if !grabacion {
+        return (k + 1).to_string();
+    }
+    if p.adjunto || cuaderno::es_video(m) {
+        return String::new();
+    }
+    if m.clase == Some(Clase::Voz) {
+        return crate::clase::minuto(m.duracion_ms.max(0));
+    }
+    format!("⏱ {}", crate::clase::minuto(p.ms.unwrap_or(0)))
 }
 
 /// Las hojas de una escena con la regla del cuaderno, listas para Swift.
@@ -952,5 +1136,91 @@ mod pruebas {
         assert_eq!(carpeta_por_nombre(&v, "obra"), None);
         assert_eq!(carpeta_por_nombre(&v, "  "), None);
         assert_eq!(nombre_libre("Diario", &v), "Diario");
+    }
+
+    /// La carpeta de una clase grabada (Windows e1150e8): se lee con lo
+    /// grabado delante y su minuto en la esquina, lo que se le anade es un
+    /// adjunto (detras, aparte), y no es un cuaderno para el asistente.
+    #[test]
+    fn la_carpeta_de_una_grabacion_lleva_lo_grabado_y_lo_adjuntado_aparte() {
+        let (n, d, chat) = nucleo("grabacion");
+        let audio = d.join("v.m4a");
+        std::fs::write(&audio, b"m4a").unwrap();
+        let png = d.join("f.png");
+        std::fs::write(&png, b"png").unwrap();
+        let hecho = n
+            .guardar_clase(
+                chat.clone(),
+                Some(audio.display().to_string()),
+                65_000,
+                vec![],
+                None,
+                vec![crate::CapturaClase {
+                    ms: 5_000,
+                    ruta_png: png.display().to_string(),
+                }],
+                0,
+            )
+            .unwrap();
+        let carpeta = hecho.carpeta.unwrap();
+        let (voz, foto) = (hecho.voz.unwrap(), hecho.capturas[0].clone());
+        // La tarjeta, de su texto: lo que duro y cuantas capturas.
+        let g = grabacion_de_carpeta(carpeta.texto.clone()).unwrap();
+        assert_eq!(g.voz, voz.id);
+        assert_eq!(g.capturas, vec![foto.id.clone()]);
+        assert_eq!(g.detalle, "1:05 · 1 captura");
+        // Una nota del chat entra como adjunto, con su nombre y sin minuto.
+        let nota = n.escribir_nota(chat.clone(), "Apuntes".into(), None).unwrap();
+        let a = n
+            .anadir_a_carpeta(chat.clone(), carpeta.id.clone(), nota.id.clone())
+            .unwrap()
+            .unwrap();
+        assert!(!a.ya_estaba);
+        // Y un fichero con «Adjuntar a la clase».
+        let pdf = d.join("Temario.pdf");
+        std::fs::write(&pdf, b"%PDF").unwrap();
+        let adj = n
+            .adjuntar_a_la_clase(chat.clone(), carpeta.id.clone(), pdf.display().to_string())
+            .unwrap()
+            .unwrap();
+        assert_eq!(adj.nombre, "Temario.pdf");
+        assert_eq!(adj.mensaje.clase, "ARCHIVO");
+        let leida = n.carpeta_de_paginas(chat.clone(), carpeta.id.clone()).unwrap().unwrap();
+        assert!(leida.grabacion);
+        assert_eq!((leida.voz.as_str(), leida.video.as_str()), (voz.id.as_str(), ""));
+        assert_eq!(leida.detalle, "1:05 · 1 captura", "lo adjuntado no es una captura");
+        let filas: Vec<(&str, bool, &str, &str)> = leida
+            .paginas
+            .iter()
+            .map(|p| (p.mensaje.id.as_str(), p.adjunto, p.esquina.as_str(), p.titulo.as_str()))
+            .collect();
+        assert_eq!(
+            filas,
+            vec![
+                (voz.id.as_str(), false, "1:05", voz.nombre.as_str()),
+                (foto.id.as_str(), false, "⏱ 0:05", "⏱ 0:05"),
+                (nota.id.as_str(), true, "", "Apuntes"),
+                (adj.mensaje.id.as_str(), true, "", "Temario"),
+            ]
+        );
+        assert_eq!(leida.paginas[1].ms, Some(5_000));
+        // En el disco, el adjunto lleva `adjunto: true` y no lleva `ms`.
+        let texto = adj.carpeta.texto.clone();
+        assert!(
+            texto.contains(&format!(r#"{{"id":"{}","titulo":"Apuntes","adjunto":true}}"#, nota.id)),
+            "{texto}"
+        );
+        // Lo de dentro no sale suelto, tampoco lo adjuntado.
+        let dentro = dentro_de_carpetas(vec![texto]);
+        for id in [&voz.id, &foto.id, &nota.id, &adj.mensaje.id] {
+            assert!(dentro.contains(id), "{id}");
+        }
+        // Caso negativo: el asistente no escribe en una grabacion por su
+        // nombre, y una carpeta de paginas no es una grabacion.
+        let mensajes = mensajes_de(&almacen::carpeta(&d, &chat)).unwrap();
+        assert_eq!(carpeta_por_nombre(&mensajes, &carpeta.nombre), None);
+        assert!(grabacion_de_carpeta(r#"{"formato":1,"paginas":[]}"#.into()).is_none());
+        assert!(dentro_de_carpetas(vec!["no es json".into()]).is_empty());
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

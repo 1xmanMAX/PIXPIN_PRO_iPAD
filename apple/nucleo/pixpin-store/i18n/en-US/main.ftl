@@ -1393,9 +1393,25 @@ lienzo-panel-zona-foco = Lit area
 lienzo-pista-foco = Spotlight (F): tap a closed shape and the area around it darkens, inside its frame
 lienzo-pista-serie = Numbered steps: each click places the next number
 
-## The Chat / Shapes switch in the chat title bar
+## The Chat / Functions switch in the chat title bar
 proyectos-interruptor-chat = Chat
-proyectos-interruptor-figuras = Shapes
+proyectos-interruptor-funciones = Functions
+## The Functions screen: its tiles, in order
+funciones-titulo = Functions
+funciones-grabar = Record meeting
+funciones-grabar-detalle = Class or meeting, with screenshots and transcript
+funciones-lienzo = New canvas
+funciones-lienzo-detalle = A blank canvas to draw or trace on
+funciones-tareas = Tasks
+funciones-tareas-detalle = The task lists of all your chats
+funciones-timeline = Timeline
+funciones-timeline-detalle = Your day minute by minute, and your lessons
+funciones-horario = Timetable
+funciones-horario-detalle = Your classes this week, with a reminder before
+funciones-galeria = Screenshots
+funciones-galeria-detalle = Every screenshot you have saved
+funciones-figuras = Shapes
+funciones-figuras-detalle = Your shape library for canvases
 figuras-mias = My shapes
 figuras-todas = All
 figuras-vacia = No shapes yet. On a canvas, select something and “Save as a shape”.
@@ -2566,6 +2582,7 @@ tareas5-guardar = Save
 tareas5-corregida = Task updated
 tareas5-vista-lista = List · Ctrl+L
 tareas5-vista-tarjetas = Cards · Ctrl+T
+tareas5-vista-horario = Timetable · Ctrl+H
 tareas5-vista-kanban = Kanban board · Ctrl+K
 tareas5-marcar = Mark as done
 tareas5-desmarcar = Mark as pending

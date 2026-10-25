@@ -38,8 +38,8 @@ final class ChatEstudioTests: XCTestCase {
 
     func testElTituloDeUnaPaginaEsElSuyoOElDeSuFila() {
         let m = mensajeEstudio("a", clase: "NOTA", texto: "Plan", nombre: "")
-        XCTAssertEqual(CarpetasChat.titulo(PaginaDeCarpeta(titulo: "Día 2", mensaje: m)), "Día 2")
-        XCTAssertFalse(CarpetasChat.titulo(PaginaDeCarpeta(titulo: "  ", mensaje: m)).isEmpty)
+        XCTAssertEqual(CarpetasChat.titulo(PaginaDeCarpeta(titulo: "Día 2", mensaje: m, ms: nil, adjunto: false, esquina: "2")), "Día 2")
+        XCTAssertFalse(CarpetasChat.titulo(PaginaDeCarpeta(titulo: "  ", mensaje: m, ms: nil, adjunto: false, esquina: "")).isEmpty)
     }
 
     @MainActor

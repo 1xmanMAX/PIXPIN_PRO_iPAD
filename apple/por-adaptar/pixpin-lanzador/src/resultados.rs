@@ -68,6 +68,8 @@ pub mod glifo {
     pub const ASISTENTE: &str = "\u{E99A}";
     /// `Play`: correr una automatizacion.
     pub const AUTOMATIZACION: &str = "\u{E768}";
+    /// `Library`: una carpeta de paginas (un cuaderno).
+    pub const CARPETA_PAGINAS: &str = "\u{E8F1}";
 }
 
 /// El pedido `soltar`: el recuadro flotante donde se sueltan archivos, que
@@ -567,6 +569,18 @@ fn resultado_funcion(f: Funcion, ctx: &Contexto) -> Resultado {
             glifo::GRABAR,
             Accion::Consulta(ctx.consulta("grabar ")),
         ),
+        Funcion::Clase => (
+            "Grabar clase o reunión",
+            "Audio, vídeo de la pantalla y capturas; al acabar entra en el chat · «clase»",
+            glifo::GRABAR,
+            Accion::Pedido(pedido_ventana("clase")),
+        ),
+        Funcion::Carpeta => (
+            "Carpetas de páginas",
+            "Ábrelas, crea una o añádeles una página · «carpeta <nombre>»",
+            glifo::CARPETA_PAGINAS,
+            Accion::Consulta(ctx.consulta("carpeta ")),
+        ),
         Funcion::Soltar => (
             "Añadir a proyecto",
             "Un recuadro flotante: suelta archivos en él y van al chat · «añadir <proyecto>»",
@@ -644,6 +658,18 @@ fn resultado_funcion(f: Funcion, ctx: &Contexto) -> Resultado {
 /// `lecciones`).
 pub(crate) fn pedido_ventana(cual: &str) -> Value {
     pedido("ventana", json!({ "cual": cual }))
+}
+
+/// «Grabar clase o reunión…», como la bandeja: la app pregunta que grabar.
+fn resultado_clase() -> Resultado {
+    let mut r = Resultado::nuevo(
+        "Grabar clase o reunión",
+        "Intro: audio, vídeo de la pantalla y capturas; al acabar entra en el chat",
+        glifo::GRABAR,
+        Accion::Pedido(pedido_ventana("clase")),
+    );
+    r.clave = Some("funcion/clase".into());
+    r
 }
 
 /// El pedido de recortar una zona de la pantalla.
@@ -1032,6 +1058,16 @@ fn de_mensaje_sin_clave(
             r.subtitulo = unir(&["Lista de tareas", &cuenta_de(l), &cuando]);
             let dentro: Vec<&str> = l.tareas.iter().map(|t| t.texto.as_str()).collect();
             pieza(Tipo::Lista, l.titulo.clone(), dentro.join("\n"), r)
+        }
+        // Una carpeta de paginas: su ventana, no su JSON como mini-app.
+        "MINIAPP" if crate::cuadernos::es_carpeta(m) => {
+            let r = crate::cuadernos::resultado(p, m);
+            pieza(
+                Tipo::Nota,
+                crate::cuadernos::nombre(m).to_string(),
+                String::new(),
+                r,
+            )
         }
         "MINIAPP" => {
             let mut titulo = datos::titulo_del_documento(m.texto());
@@ -1746,6 +1782,7 @@ fn verbo(
                 );
                 r.autocompletar = Some(ctx.consulta("grabar "));
                 v.push(r);
+                v.push(resultado_clase());
             } else {
                 v.push(Resultado::nuevo(
                     format!("Grabar audio: {resto}"),
@@ -1995,6 +2032,15 @@ fn verbo(
             v.push(resultado_ultima(ctx));
         }
         Funcion::Ultima => v.push(resultado_ultima(ctx)),
+        Funcion::Clase => v.push(resultado_clase()),
+        Funcion::Carpeta => v.extend(crate::cuadernos::resultados(
+            proyectos,
+            resto,
+            elegido.map(|(p, _)| p.id.as_str()),
+            destino_id.clone(),
+            &destino,
+            ctx,
+        )),
         Funcion::Sincronizar => v.extend(crate::al_movil::resultados(resto, ctx)),
         Funcion::Asistente => v.extend(crate::asistente::resultados(
             proyectos,
@@ -2026,6 +2072,8 @@ fn verbo(
         Funcion::Abrir => &[Tipo::Proyecto],
         Funcion::Chat
         | Funcion::Tareas
+        | Funcion::Clase
+        | Funcion::Carpeta
         | Funcion::Soltar
         | Funcion::Leccion
         | Funcion::Lecciones

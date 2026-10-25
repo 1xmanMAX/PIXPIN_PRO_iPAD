@@ -34,9 +34,39 @@
 // como lo demas de `resto`; las banderitas del movil (`marcas`) se ensenan
 // con ellos y cada una se quita de su campo.
 //
+// **Como los visores** (Windows fe0c9c4, 25-oct-2026, el usuario: «el
+// visualizador de las grabaciones deberia ser como el previsualizador, con
+// la misma interfaz»; del Mac, `BarraVisor`): arriba la barra de los
+// visores del iPad (`BarraVisorIPad`: el nombre, «Anotar», «Compartir», la
+// luna/sol, que es la de todos los visores, y cerrar), y **claro u oscuro**
+// como ellos (`ModoNoche`).
+//
+// **Acercar lo que se ve como en un lienzo** (`encuadre*` del nucleo, que
+// es `pixpin_ui::encuadre` de Windows): el pellizco encima del video o de la
+// captura acerca hacia los dedos, arrastrar la lleva, el doble toque la
+// vuelve a encajar; abajo a la derecha, −, el tanto por ciento, + y encajar.
+// Al cambiar de captura o de video a captura, vuelve a encajada.
+//
+// **Anotar encima** con el lienzo de siempre: «Anotar» abre la captura que
+// se ve en SU lienzo (`foto-<id>`, el de las fotos del chat), encima de
+// esta pantalla, y lo anotado se ve aqui encima de la captura. Con el
+// video, «Anotar» lo para y guarda el fotograma que se ve como una captura
+// mas de la clase, en su minuto (`Nucleo.guardarFotogramaDeClase`), y la
+// abre para anotar.
+//
+// **Compartir** la grabacion con la hoja de toda la app
+// (`CompartirGrabacion.swift`: su pagina web, PDF, Word, Markdown, Texto,
+// Anki y los originales).
+//
+// Al arrastrar la barra del tiempo el tirador va con el dedo y el fotograma
+// exacto se busca cada 70 ms (el aproximado caia en fotogramas clave
+// lejanos).
+//
 // Con teclado: espacio o K reproduce y para, ← → cinco segundos, J/L diez,
 // ↑ ↓ el trozo anterior y el siguiente, M pone un marcador (se escribe su
-// nota e ↩ lo guarda; ⎋ lo deja), S enciende y apaga «Seguir», ⎋ cierra.
+// nota e ↩ lo guarda; ⎋ lo deja), S enciende y apaga «Seguir», A anota,
+// ⌘0 encaja, ⌘+ / ⌘− acercan y alejan; ⎋ primero encaja lo acercado, luego
+// cierra.
 //
 // Los textos son los de Windows (`estudiar-*` de `main.ftl`).
 
@@ -45,6 +75,7 @@ import ImageIO
 import PixPinCore
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// La pantalla de estudiar una clase: una sola.
 @MainActor
@@ -75,17 +106,14 @@ enum EstudiarClase {
         let m = ModeloEstudiar(almacen: almacen, clase: clase, ms: ms)
         modelo = m
         ArribaUIKit.presentar(estilo: .fullScreen) { cerrar in
-            NavigationStack {
+            // Como los visores: su barra arriba, sin la de navegacion. La
+            // navegacion es suya (la barra la pide; «Abrir en otra ventana»
+            // no va aqui).
+            VStack(spacing: 0) {
+                BarraEstudiar(m: m, cerrar: cerrar)
                 VistaEstudiarClase(m: m, d: m.desplazar, cerrar: cerrar)
-                    .navigationTitle("Estudiar la clase")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cerrar", action: cerrar)
-                        }
-                        ToolbarItem(placement: .principal) { TituloDeLaClase(m: m) }
-                    }
             }
+            .environmentObject(Navegacion())
             .onDisappear {
                 m.cerrar()
                 if modelo === m { modelo = nil }
@@ -94,16 +122,23 @@ enum EstudiarClase {
     }
 }
 
-/// El titulo de arriba y, debajo, el nombre de la clase (el `subtitle` de
-/// la ventana del Mac).
-private struct TituloDeLaClase: View {
+/// **La barra de los visores** (`lector_pin` de Windows, `BarraVisor` del
+/// Mac): el nombre de la clase, «Anotar», «Compartir», la luna/sol y cerrar.
+private struct BarraEstudiar: View {
     @ObservedObject var m: ModeloEstudiar
+    let cerrar: () -> Void
+    @ObservedObject private var noche = ModoNoche.compartido
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Estudiar la clase").font(.headline)
-            Text(m.clase.nombre).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        BarraVisorIPad(tipo: "Estudiar la clase", icono: m.esVideo ? "video" : "mic", titulo: m.clase.nombre,
+                       alCerrar: cerrar) {
+            Button { m.anotar() } label: { Label("Anotar", systemImage: "pencil") }
+                .help("Anotar (A)")
+            Button { m.compartir() } label: { Image(systemName: "square.and.arrow.up") }
+                .help("Compartir")
         }
+        .environment(\.colorScheme, noche.activo ? .dark : .light)
+        .background(Color(uiColor: .systemBackground))
     }
 }
 
@@ -158,6 +193,14 @@ final class ModeloEstudiar: ObservableObject {
     @Published private(set) var aviso: String?
     @Published private(set) var miniaturas: [String: UIImage] = [:]
     @Published private(set) var grande: (ruta: String, imagen: UIImage)?
+    /// Como se ve lo de la izquierda: acercado y movido como en un lienzo.
+    @Published private(set) var encuadre = encuadreEncajado()
+    /// Lo que mide el video (pixeles), cuando ya se sabe.
+    @Published private(set) var tamanoVideo = CGSize.zero
+    /// Se esta arrastrando la barra del tiempo: el minuto bajo el dedo.
+    @Published private(set) var arrastrando: Int64?
+    /// La captura que se ve con lo anotado en su lienzo propio, ya pintada.
+    @Published private(set) var anotada: (lienzo: String, imagen: CGImage)?
 
     /// Lo de las listas que no se pinta: por donde van, lo que se ve de
     /// ellas y lo alto de cada fila del texto.
@@ -169,6 +212,16 @@ final class ModeloEstudiar: ObservableObject {
     /// Se esta moviendo una lista con el dedo.
     var tocandoTexto = false
     var tocandoFotos = false
+
+    /// Lo que mide la caja de lo que se ve (puntos).
+    var cajaMedio = CGSize.zero
+    /// Lo que se ve en grande ahora: al cambiar, se vuelve a encajar.
+    private var visto: String?
+    /// Cuando se busco el ultimo fotograma arrastrando la barra.
+    private var buscadoAl = Date.distantPast
+    /// El lienzo cuya anotacion se pidio (o ya se tiene).
+    private var anotadaPedida: String?
+    private var vigias: [NSObjectProtocol] = []
 
     /// Hasta cuando no se sigue al sonido: se movio una lista a mano.
     private var aManoHasta: Date?
@@ -193,6 +246,14 @@ final class ModeloEstudiar: ObservableObject {
                 self.latido()
             }
         }
+        // Se anoto la captura en su lienzo: se vuelve a leer lo anotado.
+        vigias.append(NotificationCenter.default.addObserver(forName: .pixpinLienzoGuardado, object: nil,
+                                                             queue: .main) { [weak self] n in
+            let r = n.object as? String
+            MainActor.assumeIsolated {
+                if let self, let r, r == self.anotadaPedida { self.anotadaPedida = nil }
+            }
+        })
     }
 
     // MARK: La clase
@@ -206,6 +267,12 @@ final class ModeloEstudiar: ObservableObject {
         altosTexto = [:]
         grande = nil
         pedida = nil
+        anotada = nil
+        anotadaPedida = nil
+        visto = nil
+        arrastrando = nil
+        tamanoVideo = .zero
+        encuadre = encuadreEncajado()
         leido = almacen.nucleo.cambioDelCuadernoMs(chat: c.chat)
         abrirElMedio(video: true)
         cargarMiniaturas()
@@ -269,6 +336,234 @@ final class ModeloEstudiar: ObservableObject {
     var capturaALaVista: Int? {
         if esVideo, !verCapturas { return nil }
         return claseUltimoAntes(tiempos: tiemposCapturas, ms: posicionMs).map(Int.init)
+    }
+
+    // MARK: Acercar lo que se ve
+
+    /// Lo que mide la imagen que se ve (pixeles): la captura grande, su
+    /// miniatura mientras llega, o el video. `nil` si aun no se sabe.
+    var medidaVista: CGSize? {
+        if let i = capturaALaVista, clase.capturas.indices.contains(i) {
+            let ruta = clase.capturas[i].ruta
+            let img = grande?.ruta == ruta ? grande?.imagen : miniaturas[ruta]
+            return img.flatMap(ModeloEstudiar.pixeles)
+        }
+        if esVideo, tamanoVideo.width > 0, tamanoVideo.height > 0 { return tamanoVideo }
+        return nil
+    }
+
+    /// Los pixeles de una imagen (no sus puntos).
+    nonisolated static func pixeles(_ i: UIImage) -> CGSize? {
+        let t = CGSize(width: i.size.width * i.scale, height: i.size.height * i.scale)
+        return t.width > 0 && t.height > 0 ? t : nil
+    }
+
+    private func caja(_ t: CGSize) -> CajaDeClase {
+        CajaDeClase(x: 0, y: 0, ancho: Float(t.width), alto: Float(t.height))
+    }
+
+    /// **Donde se pinta lo que se ve** en una caja de `tam`; `nil` si aun
+    /// no se sabe lo que mide.
+    func destino(en tam: CGSize) -> CGRect? {
+        guard let t = medidaVista, tam.width > 0, tam.height > 0 else { return nil }
+        let d = encuadreDestino(e: encuadre, cajaVista: caja(tam), w: Float(t.width), h: Float(t.height))
+        return CGRect(x: CGFloat(d.x), y: CGFloat(d.y), width: CGFloat(d.ancho), height: CGFloat(d.alto))
+    }
+
+    /// El tanto por ciento de la pastilla (pixeles de la imagen por punto).
+    var porCiento: UInt32 {
+        guard let t = medidaVista, cajaMedio.width > 0 else { return 100 }
+        return encuadrePorCiento(e: encuadre, cajaVista: caja(cajaMedio), w: Float(t.width), h: Float(t.height))
+    }
+
+    var encajado: Bool { encuadreEstaEncajado(e: encuadre) }
+
+    /// Si lo que se ve es el video (no una captura).
+    var veVideo: Bool {
+        guard esVideo, jugador != nil else { return false }
+        return !(capturaALaVista.map { clase.capturas.indices.contains($0) } ?? false)
+    }
+
+    /// Acerca (`factor` > 1) o aleja hacia `punto` (el centro, sin el).
+    func acercar(_ factor: Float, en punto: CGPoint? = nil) {
+        guard let t = medidaVista, cajaMedio.width > 0, cajaMedio.height > 0 else { return }
+        let p = punto ?? CGPoint(x: cajaMedio.width / 2, y: cajaMedio.height / 2)
+        encuadre = encuadreAcercar(e: encuadre, cajaVista: caja(cajaMedio), w: Float(t.width), h: Float(t.height),
+                                   factor: factor, px: Float(p.x), py: Float(p.y))
+    }
+
+    /// La lleva con el dedo, sin perderla de vista.
+    func mover(_ dx: CGFloat, _ dy: CGFloat) {
+        guard let t = medidaVista, cajaMedio.width > 0, cajaMedio.height > 0 else { return }
+        encuadre = encuadreMover(e: encuadre, cajaVista: caja(cajaMedio), w: Float(t.width), h: Float(t.height),
+                                 dx: Float(dx), dy: Float(dy))
+    }
+
+    func encajar() {
+        if !encajado { encuadre = encuadreEncajado() }
+    }
+
+    /// Si cambio lo que se ve (otra captura, del video a la captura), vuelve
+    /// a encajada: acercar una no es acercar la otra.
+    private func alDiaLoVisto() {
+        let ahora: String? = capturaALaVista.map { "captura-\($0)" } ?? (esVideo ? "video" : nil)
+        guard let ahora, ahora != visto else { return }
+        visto = ahora
+        encuadre = encuadreEncajado()
+    }
+
+    /// ⎋: acercado, primero lo encaja; si no, cierra, como los visores.
+    func escapar(_ cerrar: () -> Void) {
+        if !encajado { return encajar() }
+        cerrar()
+    }
+
+    // MARK: Anotar
+
+    /// **«Anotar»** (o A): la captura que se ve, en su lienzo; con el video,
+    /// se para, se guarda el fotograma como una captura de la clase en su
+    /// minuto y se abre esa.
+    func anotar() {
+        if let i = capturaALaVista, clase.capturas.indices.contains(i) {
+            let c = clase.capturas[i]
+            return anotarCaptura(c.id, ruta: c.ruta, ya: nil)
+        }
+        guard esVideo, let video = clase.video else { return avisar("Aún no hay nada que anotar aquí") }
+        // Se para: se anota lo que se esta viendo, no lo que viene.
+        if sonando { alternar() }
+        let ms = ahoraMs
+        let (nucleo, chat, voz, almacen) = (self.almacen.nucleo, clase.chat, clase.id, self.almacen)
+        _ = Task<Void, Never> {
+            guard let png = await ModeloEstudiar.fotograma(video, ms: ms) else { return avisar("No se pudo guardar") }
+            let hecho = await Task.detached(priority: .userInitiated) { () -> FotogramaDeClase? in
+                defer { try? FileManager.default.removeItem(at: png) }
+                return try? nucleo.guardarFotogramaDeClase(chat: chat, voz: voz, ms: ms, rutaPng: png.path)
+            }.value
+            guard let hecho else { return avisar("No se pudo guardar") }
+            avisar("Fotograma guardado como captura: anótalo en el lienzo")
+            leido = nucleo.cambioDelCuadernoMs(chat: chat)
+            // Que se vea la captura nueva y no el video.
+            verCapturas = true
+            if hecho.clase.id == clase.id { aplicar(hecho.clase) }
+            ClaseEnElChat.olvidar(chat: chat, mensaje: voz)
+            if almacen.mensajes[chat] != nil { almacen.anadir([hecho.imagen], en: chat) }
+            let ruta = hecho.clase.capturas.first { $0.id == hecho.imagen.id }?.ruta
+            anotarCaptura(hecho.imagen.id, ruta: ruta, ya: hecho.imagen)
+        }
+    }
+
+    /// **Abre la captura `id` en SU lienzo**, como al tocarla en el chat:
+    /// el `foto-<id>` que viaja con ella, con todas las herramientas, encima
+    /// de esta pantalla. Al cerrarlo se vuelve aqui.
+    private func anotarCaptura(_ id: String, ruta: String?, ya: MensajeChat?) {
+        let (nucleo, chat, almacen) = (self.almacen.nucleo, clase.chat, self.almacen)
+        if sonando { alternar() }
+        _ = Task<Void, Never> {
+            let lienzo = await Task.detached(priority: .userInitiated) {
+                try? nucleo.asegurarLienzoDeFoto(chat: chat, id: id)
+            }.value
+            guard let lienzo else { return avisar("No se pudo guardar") }
+            // La foto del chat (cargada, o leida del cuaderno por su lienzo).
+            var foto = ya ?? almacen.mensajes[chat]?.first { $0.id == id }
+            if foto == nil {
+                foto = await Task.detached(priority: .userInitiated) {
+                    nucleo.mensajeDelDibujo(chat: chat, dibujo: lienzo)
+                }.value
+            }
+            guard let foto else { return avisar("No se pudo guardar") }
+            let url = ruta.map { URL(fileURLWithPath: $0) }
+            ArribaUIKit.presentar(estilo: .fullScreen) { cerrar in
+                LienzoSobreLaClase(visor: .lienzo(chat: chat, mensaje: foto, foto: url), almacen: almacen,
+                                   cerrar: cerrar)
+            }
+        }
+    }
+
+    /// El fotograma de `video` en `ms`, exacto, en un PNG temporal.
+    nonisolated static func fotograma(_ video: String, ms: Int64) async -> URL? {
+        let generador = AVAssetImageGenerator(asset: AVURLAsset(url: URL(fileURLWithPath: video)))
+        generador.appliesPreferredTrackTransform = true
+        generador.requestedTimeToleranceBefore = .zero
+        generador.requestedTimeToleranceAfter = .zero
+        guard let imagen = try? await generador.image(at: CMTime(value: ms, timescale: 1000)).image else { return nil }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pixpin-fotograma-\(UUID().uuidString).png")
+        guard let destino = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(destino, imagen, nil)
+        guard CGImageDestinationFinalize(destino) else { return nil }
+        return url
+    }
+
+    /// Lo mas que mide la captura anotada al pintarla aqui.
+    nonisolated static let ladoAnotada = 2048
+
+    /// **Lo anotado encima de la captura que se ve**, al dia: se lee de su
+    /// lienzo propio (`Nucleo.fotoAnotada`, recortado a la foto) si cambio
+    /// la captura o se guardo el lienzo.
+    private func pedirLoAnotado() {
+        guard let i = capturaALaVista, clase.capturas.indices.contains(i) else {
+            if anotada != nil { anotada = nil }
+            anotadaPedida = nil
+            return
+        }
+        let lienzo = clase.capturas[i].lienzo
+        guard anotadaPedida != lienzo else { return }
+        anotadaPedida = lienzo
+        if anotada?.lienzo != lienzo { anotada = nil }
+        let (chat, almacen) = (clase.chat, self.almacen)
+        _ = Task<Void, Never> {
+            let hecha = await ModeloEstudiar.pintarAnotada(chat: chat, lienzo: lienzo, almacen: almacen)
+            guard anotadaPedida == lienzo else { return }
+            anotada = hecha.map { (lienzo: lienzo, imagen: $0) }
+        }
+    }
+
+    /// La captura con lo dibujado en su lienzo, recortada a la foto; `nil`
+    /// si no tiene nada encima (se ensena la captura de siempre).
+    private static func pintarAnotada(chat: String, lienzo id: String, almacen: Almacen) async -> CGImage? {
+        guard !id.isEmpty else { return nil }
+        let nucleo = almacen.nucleo
+        let leida = await Task.detached(priority: .utility) {
+            try? nucleo.fotoAnotada(chat: chat, lienzo: id)
+        }.value ?? nil
+        guard let leida, let dibujo = await almacen.dibujo(leida.lienzo, en: chat) else { return nil }
+        var lienzo = dibujo.lienzo
+        let foto = leida.foto.map {
+            CGRect(x: CGFloat($0.x0), y: CGFloat($0.y0), width: CGFloat($0.x1 - $0.x0), height: CGFloat($0.y1 - $0.y0))
+        }
+        lienzo.caja = cajaDeFotoAnotada(foto: foto, todo: lienzo.caja, soloLaFoto: true)
+        guard let caja = lienzo.caja, caja.width > 0, caja.height > 0 else { return nil }
+        let tam = tamanoDeFotoAnotada(caja.size, lado: CGFloat(ladoAnotada))
+        let w = max(1, Int(tam.width.rounded())), h = max(1, Int(tam.height.rounded()))
+        var fotos: [UInt64: CGImage] = [:]
+        for (i, url) in dibujo.fotos {
+            if let img = await Miniaturas.compartidas.cargar(url, lado: max(w, h)) { fotos[i] = img }
+        }
+        let listas = fotos
+        let leido = lienzo
+        return await Task.detached(priority: .utility) {
+            MapaLienzo.imagen(leido, ancho: w, alto: h, margen: 0) { listas[$0] }
+        }.value
+    }
+
+    // MARK: Compartir
+
+    /// **«Compartir»**: la grabacion en la hoja de toda la app, con su
+    /// pagina web, sus hojas, Word, Markdown, Texto, Anki y los originales
+    /// (`PrepararCompartir.deGrabacion`, lo mismo que desde el chat).
+    func compartir() {
+        let (nucleo, chat, id, almacen) = (self.almacen.nucleo, clase.chat, clase.id, self.almacen)
+        if sonando { alternar() }
+        _ = Task<Void, Never> {
+            let leida = await Task.detached(priority: .userInitiated) {
+                try? nucleo.grabacionParaCompartir(chat: chat, mensaje: id)
+            }.value
+            guard var g = leida else { return avisar("No se pudo: mira el registro de PixPin") }
+            if g.cuando > 0 { g.fecha = PrepararCompartir.fechaDeGrabacion(g.cuando) }
+            let p = await PrepararCompartir.deGrabacion(g, chat: chat, almacen: almacen)
+            HojaCompartir.abrir(p)
+        }
     }
 
     /// La linea del texto que suena.
@@ -365,15 +660,35 @@ final class ModeloEstudiar: ObservableObject {
             irPendiente = nil
             j.seek(to: CMTime(value: ms, timescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero)
         }
+        if esVideo, let t = j.currentItem?.presentationSize, t != tamanoVideo, t.width > 0 { tamanoVideo = t }
         let suena = j.rate != 0
         if suena != sonando { sonando = suena }
-        // Mientras carga, se ensena a donde se va.
-        let p = ahoraMs
+        // Mientras carga, se ensena a donde se va; arrastrando la barra,
+        // donde esta el dedo (`clase::posicion_a_la_vista`).
+        let p = clasePosicionALaVista(medioMs: ahoraMs, arrastrando: arrastrando)
         // Lo que se pinta va a saltos de 0,1 s: de sobra para la barra y el
         // resaltado, y la pantalla no se repinta entera en cada vuelta.
         if abs(p - posicionMs) >= 100 || (!sonando && p != posicionMs) { posicionMs = p }
         pedirLaGrande()
+        alDiaLoVisto()
+        pedirLoAnotado()
         seguirAlSonido()
+    }
+
+    /// **Arrastrando la barra del tiempo**: el tirador va con el dedo y el
+    /// fotograma exacto se busca cada 70 ms (Windows fe0c9c4).
+    func arrastrarBarra(a ms: Int64) {
+        arrastrando = ms
+        posicionMs = ms
+        guard Date().timeIntervalSince(buscadoAl) >= 0.07 else { return }
+        buscadoAl = Date()
+        irA(ms)
+    }
+
+    /// Se solto la barra: alli se queda.
+    func soltarBarra() {
+        if let ms = arrastrando { irA(ms) }
+        arrastrando = nil
     }
 
     /// La imagen grande de la captura del minuto, cuando cambia.
@@ -473,6 +788,8 @@ final class ModeloEstudiar: ObservableObject {
         if otrasCapturas {
             grande = nil
             pedida = nil
+            // El lienzo de una captura pudo estrenarse (su `referencia`).
+            anotadaPedida = nil
             cargarMiniaturas()
         }
     }
@@ -564,7 +881,7 @@ final class ModeloEstudiar: ObservableObject {
         case .rightArrow: saltar(ModeloEstudiar.saltoCorto)
         case .upArrow: otroTrozo(adelante: false)
         case .downArrow: otroTrozo(adelante: true)
-        case .escape: cerrar()
+        case .escape: escapar(cerrar)
         default:
             // Solo al pulsar (no al repetir) las letras.
             guard k.phase == .down else { return false }
@@ -574,6 +891,7 @@ final class ModeloEstudiar: ObservableObject {
             case "l": saltar(ModeloEstudiar.saltoLargo)
             case "m": empezarMarcador()
             case "s": alternarSeguir()
+            case "a": anotar()
             default: return false
             }
         }
@@ -585,6 +903,39 @@ final class ModeloEstudiar: ObservableObject {
         reloj = nil
         jugador?.pause()
         sonando = false
+        for v in vigias { NotificationCenter.default.removeObserver(v) }
+        vigias = []
+    }
+}
+
+/// **El lienzo de una captura, encima de la clase**: el editor de siempre
+/// con su propia navegacion; al cerrarlo (su ✕ cierra el visor) se vuelve a
+/// la clase, que sigue abierta debajo.
+private struct LienzoSobreLaClase: View {
+    @StateObject private var nav: Navegacion
+    let almacen: Almacen
+    let cerrar: () -> Void
+
+    init(visor: Visor, almacen: Almacen, cerrar: @escaping () -> Void) {
+        let n = Navegacion()
+        n.abrir(visor)
+        _nav = StateObject(wrappedValue: n)
+        self.almacen = almacen
+        self.cerrar = cerrar
+    }
+
+    var body: some View {
+        Group {
+            if let visor = nav.visor {
+                VistaDelVisor(visor: visor, almacen: almacen)
+            } else {
+                Color.clear
+            }
+        }
+        .environmentObject(nav)
+        .onChange(of: nav.visor == nil) { _, cerrado in
+            if cerrado { cerrar() }
+        }
     }
 }
 
@@ -602,6 +953,7 @@ struct VistaEstudiarClase: View {
     let d: DesplazamientoDeClase
     let cerrar: () -> Void
     @FocusState private var foco: Bool
+    @ObservedObject private var noche = ModoNoche.compartido
 
     var body: some View {
         GeometryReader { geo in
@@ -633,6 +985,8 @@ struct VistaEstudiarClase: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
+        // Claro u oscuro, como los visores (la luna/sol de la barra).
+        .environment(\.colorScheme, noche.activo ? .dark : .light)
         .overlay(alignment: .bottom) {
             if let a = m.aviso { AvisoDelChat(texto: a).padding(.bottom, 12) }
         }
@@ -648,6 +1002,9 @@ struct VistaEstudiarClase: View {
 /// Lo que se ve, la barra del tiempo, los mandos y los marcadores.
 private struct ColumnaDelMedio: View {
     @ObservedObject var m: ModeloEstudiar
+    /// Lo ya llevado de este arrastre y lo ya acercado de este pellizco.
+    @State private var llevado = CGSize.zero
+    @State private var acercado: CGFloat = 1
 
     var body: some View {
         GeometryReader { geo in
@@ -670,10 +1027,33 @@ private struct ColumnaDelMedio: View {
     private var medio: some View {
         ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: 10).fill(fondoOscuro)
-            contenido
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .contentShape(Rectangle())
-                .onTapGesture { m.alternar() }
+            GeometryReader { geo in
+                encuadrado(geo.size)
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .contentShape(Rectangle())
+                    .onAppear { m.cajaMedio = geo.size }
+                    .onChange(of: geo.size) { _, t in m.cajaMedio = t }
+                    // Con los dedos, como en un lienzo: un toque reproduce o
+                    // para, el doble toque encaja, el pellizco acerca hacia
+                    // los dedos y arrastrar la lleva.
+                    .gesture(arrastrar)
+                    .simultaneousGesture(pellizco)
+                    .onTapGesture(count: 2) { m.encajar() }
+                    .onTapGesture { m.alternar() }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            // Arriba a la izquierda, «Anotar»: la captura en su lienzo o el
+            // fotograma del video como captura.
+            ficha("Anotar", "pencil") { m.anotar() }
+                .help("Anotar (A)")
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(10)
+            // Abajo a la derecha, −, el tanto por ciento, + y encajar.
+            if m.medidaVista != nil {
+                pastillaDelZoom
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(10)
+            }
             // Con video y capturas, una ficha cambia entre los dos.
             if m.esVideo, !m.clase.capturas.isEmpty {
                 Button { m.verCapturas.toggle() } label: {
@@ -692,18 +1072,108 @@ private struct ColumnaDelMedio: View {
         }
     }
 
+    private var arrastrar: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { v in
+                m.mover(v.translation.width - llevado.width, v.translation.height - llevado.height)
+                llevado = v.translation
+            }
+            .onEnded { _ in llevado = .zero }
+    }
+
+    private var pellizco: some Gesture {
+        MagnifyGesture()
+            .onChanged { v in
+                let factor = v.magnification / max(acercado, 0.01)
+                acercado = v.magnification
+                m.acercar(Float(max(0.2, factor)), en: v.startLocation)
+            }
+            .onEnded { _ in acercado = 1 }
+    }
+
+    /// Lo que se ve, en el sitio que dice el encuadre (encajado, lo de
+    /// siempre: entero y centrado).
+    @ViewBuilder private func encuadrado(_ tam: CGSize) -> some View {
+        let d = m.destino(en: tam)
+        if m.veVideo, let j = m.jugador {
+            VideoDeLaClase(jugador: j, destino: d)
+        } else if let d {
+            ZStack(alignment: .topLeading) {
+                contenido
+                    .frame(width: d.width, height: d.height)
+                    .position(x: d.midX, y: d.midY)
+            }
+            .frame(width: tam.width, height: tam.height, alignment: .topLeading)
+        } else {
+            contenido
+        }
+    }
+
+    /// Una ficha oscura sobre lo que se ve (como «Ver el vídeo»).
+    private func ficha(_ rotulo: String, _ simbolo: String, _ accion: @escaping () -> Void) -> some View {
+        Button(action: accion) {
+            Label(rotulo, systemImage: simbolo)
+                .font(.system(size: 13))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(Color.black.opacity(0.65), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+    }
+
+    /// **La pastilla del zoom**: −, el tanto por ciento, + y encajar.
+    private var pastillaDelZoom: some View {
+        HStack(spacing: 2) {
+            botonDelZoom("minus", "Alejar (⌘−)") { m.acercar(1 / encuadrePaso()) }
+                .keyboardShortcut("-", modifiers: .command)
+            Text("\(m.porCiento) %")
+                .font(.system(size: 13).monospacedDigit())
+                .foregroundStyle(.white)
+                .frame(minWidth: 50)
+            botonDelZoom("plus", "Acercar (⌘+)") { m.acercar(encuadrePaso()) }
+                .keyboardShortcut("+", modifiers: .command)
+            botonDelZoom("arrow.up.left.and.arrow.down.right", "Encajar (⌘0 o doble toque)") { m.encajar() }
+                .keyboardShortcut("0", modifiers: .command)
+                .disabled(m.encajado)
+                .opacity(m.encajado ? 0.45 : 1)
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 32)
+        .background(Color.black.opacity(0.65), in: Capsule())
+        .fixedSize()
+    }
+
+    private func botonDelZoom(_ simbolo: String, _ ayuda: String, _ accion: @escaping () -> Void) -> some View {
+        Button(action: accion) {
+            Image(systemName: simbolo)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(ayuda)
+        .accessibilityLabel(ayuda)
+    }
+
     @ViewBuilder private var contenido: some View {
         if let i = m.capturaALaVista, m.clase.capturas.indices.contains(i) {
             let ruta = m.clase.capturas[i].ruta
-            if let g = m.grande, g.ruta == ruta {
-                Image(uiImage: g.imagen).resizable().scaledToFit()
+            if let a = m.anotada, a.lienzo == m.clase.capturas[i].lienzo {
+                // Lo anotado en su lienzo, encima de la captura.
+                Image(decorative: a.imagen, scale: 1).resizable().interpolation(.high).scaledToFit()
+            } else if let g = m.grande, g.ruta == ruta {
+                Image(uiImage: g.imagen).resizable().interpolation(.high).scaledToFit()
             } else if let mini = m.miniaturas[ruta] {
                 Image(uiImage: mini).resizable().scaledToFit()
             } else {
                 vacio("photo", "Cargando…")
             }
         } else if m.esVideo, let j = m.jugador {
-            VideoDeLaClase(jugador: j)
+            VideoDeLaClase(jugador: j, destino: nil)
         } else if m.jugador == nil {
             vacio("mic", "No se encuentra el audio de esta clase")
         } else {
@@ -778,13 +1248,34 @@ private struct ColumnaDelMedio: View {
 }
 
 /// El video de la clase, sin mandos propios (los de abajo mandan; un toque
-/// reproduce y para).
+/// reproduce y para), en su encuadre (`destino`; sin el, la caja entera) y
+/// recortado a su caja: acercado no se sale de su sitio.
 private struct VideoDeLaClase: UIViewRepresentable {
     let jugador: AVPlayer
+    let destino: CGRect?
 
     final class Lienzo: UIView {
-        override static var layerClass: AnyClass { AVPlayerLayer.self }
-        var capa: AVPlayerLayer { layer as! AVPlayerLayer }
+        let capa = AVPlayerLayer()
+        var destino: CGRect? {
+            didSet { if destino != oldValue { setNeedsLayout() } }
+        }
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            clipsToBounds = true
+            layer.addSublayer(capa)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) no se usa") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            capa.frame = destino ?? bounds
+            CATransaction.commit()
+        }
     }
 
     func makeUIView(context: Context) -> Lienzo {
@@ -792,11 +1283,13 @@ private struct VideoDeLaClase: UIViewRepresentable {
         v.backgroundColor = .clear
         v.capa.videoGravity = .resizeAspect
         v.capa.player = jugador
+        v.destino = destino
         return v
     }
 
     func updateUIView(_ v: Lienzo, context: Context) {
         if v.capa.player !== jugador { v.capa.player = jugador }
+        v.destino = destino
     }
 }
 
@@ -844,10 +1337,13 @@ private struct BarraDelTiempo: View {
                 .onChanged { g in
                     arrastrando = true
                     let senales = m.clase.capturas.map(\.ms) + m.clase.senales.map(\.ms)
-                    m.irA(clasePegarASenal(x: Float(g.location.x), ancho: ancho, duracionMs: duracion,
-                                           senales: senales, tolerancia: ModeloEstudiar.pegar))
+                    m.arrastrarBarra(a: clasePegarASenal(x: Float(g.location.x), ancho: ancho, duracionMs: duracion,
+                                                         senales: senales, tolerancia: ModeloEstudiar.pegar))
                 }
-                .onEnded { _ in arrastrando = false })
+                .onEnded { _ in
+                    arrastrando = false
+                    m.soltarBarra()
+                })
             .accessibilityElement()
             .accessibilityLabel("Posición")
             .accessibilityValue(FormatoVoz.marca(ms: m.posicionMs))

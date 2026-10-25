@@ -66,6 +66,9 @@ pub mod chats;
 pub mod clase;
 pub mod compartidos;
 pub mod compartir;
+/// Compartir una grabacion: su pagina web, sus hojas A4, Word, Markdown,
+/// texto y Anki (Windows 2921a1d).
+pub mod compartir_grabacion;
 pub mod conversacion;
 pub mod copias;
 pub mod diapositivas;

@@ -35,10 +35,12 @@ enum ClaseEnElChat {
     }
 
     /// **De que clase es `m`**: su nota de voz y el minuto donde abrirla.
-    /// `nil` si no es de ninguna. Solo una nota de voz, una foto o un
-    /// archivo (el video) pueden serlo. La primera vez lee el cuaderno.
+    /// `nil` si no es de ninguna. Solo una nota de voz, una foto, un archivo
+    /// (el video) o la carpeta de una grabacion (su nota, al principio)
+    /// pueden serlo. La primera vez lee el cuaderno.
     static func deUnaClase(_ m: MensajeChat, chat: String, nucleo: Nucleo) -> EnUnaClase? {
-        guard m.clase == "VOZ" || m.clase == "IMAGEN" || m.clase == "ARCHIVO" else { return nil }
+        guard m.clase == "VOZ" || m.clase == "IMAGEN" || m.clase == "ARCHIVO" || CarpetasDelChat.esCarpeta(m)
+        else { return nil }
         let k = clave(chat, m.id)
         if let ya = clases[k] { return ya }
         let v: EnUnaClase? = try? nucleo.deUnaClase(chat: chat, mensaje: m.id)

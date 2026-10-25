@@ -24,8 +24,14 @@
 //! 4. la voz lleva en `resto` `grabacion: "clase"`, `capturas: [{ms, id}]`
 //!    en orden (**siempre**, aunque este vacia) y `video: {id}` si entro.
 //!
+//! 5. y detras de todo, **la carpeta de la grabacion** (Windows e015e2b y
+//!    40daac7, 25-oct-2026): un `MINIAPP` «carpeta» con el nombre de la
+//!    clase, `tipo: "grabacion"`, `voz`, `video`, `duracionMs` y cada pieza
+//!    con su minuto ([`carpeta_de_la_grabacion`]). En el chat se ve UNA
+//!    tarjeta y no la nota, el video y cada captura sueltos.
+//!
 //! Sin nota (no se pudo cerrar o fue un resbalon) entran igual las capturas
-//! y el video, sueltos. Un video que no entra en el chat no se tira: queda
+//! y el video, sueltos (y su carpeta, sin `voz`, como Windows). Un video que no entra en el chat no se tira: queda
 //! en la carpeta del proyecto como `Clase {fecha}.mp4`.
 //!
 //! La pantalla de la letra de Windows (el texto a un lado y la imagen del
@@ -33,7 +39,8 @@
 //! [`captura_de_la_clase_en`].
 
 use pixpin_proyecto::almacen;
-use pixpin_proyecto::cuaderno::{self, Mensaje};
+use pixpin_proyecto::carpeta_de_paginas::{self as carpetas, Carpeta};
+use pixpin_proyecto::cuaderno::{self, Mensaje, Sello};
 
 use crate::chats::validar_chat;
 use crate::voz::{acotar_picos, marca_de_tiempo};
@@ -223,12 +230,37 @@ pub struct CapturaClase {
 }
 
 /// Lo que dejo la clase en el chat, en el orden del cuaderno: la voz como
-/// quedo (si entro), su video (si lo habia y entro) y sus capturas.
+/// quedo (si entro), su video (si lo habia y entro), sus capturas y la
+/// carpeta que lo lleva todo (si entro algo y se pudo escribir).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ClaseGuardada {
     pub voz: Option<MensajeChat>,
     pub video: Option<MensajeChat>,
     pub capturas: Vec<MensajeChat>,
+    pub carpeta: Option<MensajeChat>,
+}
+
+/// **La carpeta de una clase** (`grabar_clase::carpeta_de_la_grabacion` de
+/// Windows): la nota, el video y las capturas en el orden de la grabacion,
+/// cada una con su minuto (las capturas con el suyo de titulo, «⏱ 1:05»;
+/// la nota y el video, sin titulo: van con su nombre).
+pub fn carpeta_de_la_grabacion(
+    voz: Option<&str>,
+    duracion_ms: i64,
+    video: Option<&str>,
+    capturas: &[(i64, String)],
+) -> Carpeta {
+    let mut c = Carpeta::grabacion(voz.unwrap_or_default(), duracion_ms);
+    c.video = video.unwrap_or_default().to_string();
+    for id in voz.into_iter().chain(video) {
+        c.anadir_al_minuto(id, "", 0);
+    }
+    let mut capturas = capturas.to_vec();
+    capturas.sort_by_key(|(ms, _)| *ms);
+    for (ms, id) in &capturas {
+        c.anadir_al_minuto(id, &format!("⏱ {}", minuto(*ms)), *ms);
+    }
+    c
 }
 
 /// Una captura de una clase para la pantalla de su letra (o sus tarjetas):
@@ -353,45 +385,94 @@ impl Nucleo {
                 Err(_) => continue,
             }
         }
-        let Some(voz) = voz else {
-            return Ok(ClaseGuardada {
-                voz: None,
-                video,
-                capturas: hechas.into_iter().map(|(_, m)| m).collect(),
-            });
-        };
         let enlazadas: Vec<(i64, String)> =
             hechas.iter().map(|(ms, m)| (*ms, m.id.clone())).collect();
         let video_id = video.as_ref().map(|v| v.id.clone());
         let carpeta = almacen::carpeta(self.ruta(), chat);
-        let fichero = carpeta.join("guardados.jsonl");
-        let mut cache = self.cache_tomada();
-        // Siempre, aunque no haya capturas: es lo que dice que la nota es de
-        // una clase y no una nota de voz cualquiera.
-        let cambiada = cuaderno::cambiar(&carpeta, &voz.id, |m| {
-            m.resto
-                .insert(CAMPO_GRABACION.into(), serde_json::json!("clase"));
-            m.resto
-                .insert(CAMPO_CAPTURAS.into(), capturas_en_json(&enlazadas));
-            if let Some(id) = &video_id {
-                m.resto
-                    .insert(CAMPO_VIDEO.into(), serde_json::json!({ "id": id }));
+        let voz = match voz {
+            Some(voz) => {
+                let fichero = carpeta.join("guardados.jsonl");
+                let mut cache = self.cache_tomada();
+                // Siempre, aunque no haya capturas: es lo que dice que la
+                // nota es de una clase y no una nota de voz cualquiera.
+                let cambiada = cuaderno::cambiar(&carpeta, &voz.id, |m| {
+                    m.resto
+                        .insert(CAMPO_GRABACION.into(), serde_json::json!("clase"));
+                    m.resto
+                        .insert(CAMPO_CAPTURAS.into(), capturas_en_json(&enlazadas));
+                    if let Some(id) = &video_id {
+                        m.resto
+                            .insert(CAMPO_VIDEO.into(), serde_json::json!({ "id": id }));
+                    }
+                    true
+                });
+                cache.quitar(&fichero);
+                drop(cache);
+                // La nota y sus adjuntos ya estan dentro; si solo falta el
+                // enlace, se devuelve igual (Windows lo apunta y sigue).
+                Some(match cambiada {
+                    Ok(Some(m)) => MensajeChat::from(m),
+                    _ => voz,
+                })
             }
-            true
-        });
-        cache.quitar(&fichero);
-        drop(cache);
-        // La nota y sus adjuntos ya estan dentro; si solo falta el enlace,
-        // se devuelve igual (Windows lo apunta y sigue).
-        let voz = match cambiada {
-            Ok(Some(m)) => MensajeChat::from(m),
-            _ => voz,
+            None => None,
         };
+        // Y todo dentro de su carpeta: en el chat se ve UNA tarjeta y no la
+        // nota, el video y cada captura sueltos.
+        // Sin nota, lo que duro no se sabe (Windows: sin grabacion, 0).
+        let doc = carpeta_de_la_grabacion(
+            voz.as_ref().map(|v| v.id.as_str()),
+            if voz.is_some() { duracion_ms } else { 0 },
+            video_id.as_deref(),
+            &enlazadas,
+        );
+        // Si no se pudo escribir, lo de dentro ya esta en el chat, suelto:
+        // como antes.
+        let en_carpeta = (!doc.is_empty())
+            .then(|| self.meter_la_carpeta_de_la_clase(chat, nombre, &doc).ok())
+            .flatten()
+            .map(MensajeChat::from);
         Ok(ClaseGuardada {
-            voz: Some(voz),
+            voz,
             video,
             capturas: hechas.into_iter().map(|(_, m)| m).collect(),
+            carpeta: en_carpeta,
         })
+    }
+
+    /// Escribe al final del chat la carpeta `doc` de la clase `nombre`, con
+    /// el numero siguiente y una hora que no es el `id` de lo que lleva, y
+    /// sube el chat en la lista con su nombre (como Windows).
+    fn meter_la_carpeta_de_la_clase(
+        &self,
+        chat: &str,
+        nombre: &str,
+        doc: &Carpeta,
+    ) -> Result<Mensaje, ErrorNucleo> {
+        let carpeta = almacen::carpeta(self.ruta(), chat);
+        let numero = {
+            let mut cache = self.cache_tomada();
+            cache
+                .indice(&carpeta.join("guardados.jsonl"))?
+                .map_or(0, |i| i.mayor_numero)
+                + 1
+        };
+        let mut cuando = crate::chats::hora_unica();
+        while doc.contiene(&cuando.to_string()) {
+            cuando = crate::chats::hora_unica();
+        }
+        let m = carpetas::mensaje_de_grabacion(
+            nombre,
+            doc,
+            &Sello {
+                cuando,
+                numero,
+                aparato: self.identidad()?.yo.codigo(),
+                proyecto: chat.to_string(),
+            },
+        );
+        self.anadir_carpeta_al_chat(chat, &carpeta, &m, &m.nombre.clone())?;
+        Ok(m)
     }
 }
 

@@ -265,6 +265,8 @@ fn vacio_da_las_funciones_y_los_proyectos_recientes() {
             "Lienzo nuevo",
             "Nota nueva",
             "Grabar audio",
+            "Grabar clase o reunión",
+            "Carpetas de páginas",
             "Añadir a proyecto",
             "Nueva lección",
             "Lecciones aprendidas",
@@ -283,9 +285,9 @@ fn vacio_da_las_funciones_y_los_proyectos_recientes() {
         ]
     );
     assert_eq!(v[0].accion, Accion::Consulta("pp tareas ".into()));
-    assert_eq!(v[5].accion, Accion::Consulta("pp lección ".into()));
-    assert_eq!(v[6].accion, Accion::Consulta("pp lecciones ".into()));
-    assert_eq!(v[7].accion, Accion::Consulta("pp repasar ".into()));
+    assert_eq!(v[7].accion, Accion::Consulta("pp lección ".into()));
+    assert_eq!(v[8].accion, Accion::Consulta("pp lecciones ".into()));
+    assert_eq!(v[9].accion, Accion::Consulta("pp repasar ".into()));
     assert_eq!(pedido_de(&v[1])["accion"], "lienzo_nuevo");
     assert!(
         v[3].subtitulo.contains("micrófono flotante"),
@@ -294,15 +296,15 @@ fn vacio_da_las_funciones_y_los_proyectos_recientes() {
     );
     // Un proyecto ya no abre la app: entra en su chat.
     assert_eq!(
-        v[15].accion,
+        v[17].accion,
         Accion::Consulta("pp Gestión de proyectos > ".into())
     );
     assert_eq!(
-        v[15].autocompletar.as_deref(),
+        v[17].autocompletar.as_deref(),
         Some("pp Gestión de proyectos > ")
     );
     assert_eq!(
-        v[17].accion,
+        v[19].accion,
         Accion::Consulta("pp Mensajes guardados > ".into())
     );
 }
@@ -386,6 +388,79 @@ fn verbos_con_texto_y_proyecto() {
     assert_eq!(v[0].accion, Accion::Consulta("pp grabar ".into()));
     let v = buscar(&r, "chat @nadaparecido");
     assert!(v[0].subtitulo.contains("no hay ningún proyecto"));
+}
+
+/// 26-oct: `p clase` y `p carpeta` (las carpetas de paginas del chat).
+#[test]
+fn clase_y_carpetas_de_paginas() {
+    let r = raiz("carpetas");
+    let v = buscar(&r, "clase");
+    assert_eq!(
+        *pedido_de(&v[0]),
+        json!({ "pixpin": 1, "accion": "ventana", "cual": "clase" })
+    );
+    let v = buscar(&r, "grabar");
+    assert!(
+        v.iter().any(|x| x.titulo == "Grabar clase o reunión"),
+        "«grabar» ofrece tambien la clase"
+    );
+
+    // Sin carpetas: solo crear una, en Mensajes guardados.
+    let v = buscar(&r, "carpeta");
+    assert_eq!(v[0].titulo, "Nueva carpeta de páginas");
+    assert_eq!(
+        *pedido_de(&v[0]),
+        json!({ "pixpin": 1, "accion": "carpeta_paginas", "hacer": "nueva", "proyecto": null, "nombre": "" })
+    );
+
+    let carpeta = json!({ "id": "c1", "cuando": 300, "clase": "MINIAPP", "miniapp": "carpeta",
+        "nombre": "Diario de obra",
+        "texto": r#"{"formato":1,"paginas":[{"id":"a","titulo":"Día 1"},{"id":"b","titulo":"Día 2"}]}"# });
+    fs::write(r.join("proyectos/P2/guardados.jsonl"), carpeta.to_string()).unwrap();
+    let v = buscar(&r, "cuaderno diario de obra");
+    assert_eq!(v[0].titulo, "Diario de obra");
+    assert!(v[0].subtitulo.contains("2 páginas"), "{}", v[0].subtitulo);
+    assert_eq!(
+        *pedido_de(&v[0]),
+        json!({ "pixpin": 1, "accion": "carpeta_paginas", "hacer": "abrir", "proyecto": "P2", "carpeta": "c1" })
+    );
+    assert_eq!(v[1].titulo, "Nueva página en «Diario de obra»");
+    assert_eq!(pedido_de(&v[1])["hacer"], "pagina");
+    assert!(
+        !v.iter().any(|x| x.titulo.starts_with("Nueva carpeta")),
+        "con el nombre entero no se ofrece otra igual"
+    );
+    // Con otro nombre: crearla en el proyecto del `@`.
+    let v = buscar(&r, "carpeta Recetas @thesis");
+    let nueva = v
+        .iter()
+        .find(|x| x.titulo == "Nueva carpeta «Recetas»")
+        .unwrap();
+    assert_eq!(
+        *pedido_de(nueva),
+        json!({ "pixpin": 1, "accion": "carpeta_paginas", "hacer": "nueva", "proyecto": "P2", "nombre": "Recetas" })
+    );
+    // La carpeta de una clase grabada se abre, pero no se le anaden paginas.
+    let clase = json!({ "id": "c2", "cuando": 301, "clase": "MINIAPP", "miniapp": "carpeta",
+        "nombre": "Clase 25-10",
+        "texto": r#"{"formato":1,"tipo":"grabacion","voz":"v","paginas":[]}"# });
+    fs::write(
+        r.join("proyectos/P2/guardados.jsonl"),
+        format!("{carpeta}\n{clase}"),
+    )
+    .unwrap();
+    let v = buscar(&r, "carpeta clase 25");
+    assert_eq!(v[0].titulo, "Clase 25-10");
+    assert!(v[0].subtitulo.contains("grabada"), "{}", v[0].subtitulo);
+    assert!(
+        !v.iter()
+            .any(|x| x.titulo == "Nueva página en «Clase 25-10»")
+    );
+    // En el chat del proyecto sale como carpeta, no como una mini-app con su
+    // JSON.
+    let v = buscar(&r, "Thesis > diario");
+    let c = v.iter().find(|x| x.titulo == "Diario de obra").unwrap();
+    assert_eq!(pedido_de(c)["accion"], "carpeta_paginas");
 }
 
 #[test]

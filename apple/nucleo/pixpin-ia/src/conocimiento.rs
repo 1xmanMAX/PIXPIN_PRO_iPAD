@@ -341,7 +341,7 @@ pub const INDICE: &[Entrada] = &[
     e(
         "Tareas",
         &["tarea", "pendiente", "todo", "lista", "inbox", "checklist"],
-        "Las tareas estan en la ventana de Tareas: se abre en la bandeja con «Tareas…». Escribe arriba y pulsa Intro: la tarea va al Inbox. Ctrl+L la ve en lista y Ctrl+T en tarjetas. Las listas nuevas se crean en un chat con Adjuntar → «Lista de tareas».",
+        "Las tareas estan en la ventana de Tareas: se abre en la bandeja con «Tareas…». Escribe arriba y pulsa Intro: la tarea va al Inbox. Ctrl+T la ve en tarjetas, Ctrl+K en Kanban y Ctrl+H en el horario de clases de la semana. Las listas nuevas se crean en un chat con Adjuntar → «Lista de tareas».",
     ),
     e(
         "Marcar y mover tareas",

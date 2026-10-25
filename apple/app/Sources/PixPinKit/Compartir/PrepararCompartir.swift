@@ -9,7 +9,10 @@
 // - un **fichero**: solo, un PDF en paginas; entre otros mensajes va entero,
 //   en «Originales» (un PDF de trescientas paginas no puede colarse en el
 //   PDF de un chat);
-// - una **nota de voz**: su texto, si ya se paso;
+// - una **grabacion** sola (una nota de voz o la carpeta de una
+//   grabacion): su pagina web, sus hojas A4, Word, Markdown, Texto y Anki
+//   (`CompartirGrabacion.swift`); una nota de voz entre otros mensajes, su
+//   texto, si ya se paso;
 // - una **nota** o lo demas: su texto en paginas A4 y, sola, el `.txt`;
 // - los ficheros de los mensajes, en «Original» u «Originales», y el
 //   proyecto del chat entero como `.pixpin`.
@@ -109,6 +112,14 @@ enum PrepararCompartir {
 
     static func deMensajes(chat: String, titulo: String, _ mensajes: [MensajeChat],
                            almacen: Almacen?) async -> PreparadoCompartir {
+        // Una grabacion sola (una clase, una reunion, una nota de voz, o la
+        // carpeta de una grabacion): con su video, sus capturas y sus
+        // marcadores, y su pagina web propia (`CompartirGrabacion.swift`).
+        if mensajes.count == 1, let m = mensajes.first, let almacen,
+           m.clase == "VOZ" || CarpetasDelChat.esCarpeta(m),
+           let g = await grabacion(m, chat: chat, almacen: almacen) {
+            return await deGrabacion(g, chat: chat, almacen: almacen)
+        }
         let solo = mensajes.count == 1
         let clasesDeFichero: Set<String> = ["IMAGEN", "ARCHIVO", "VOZ"]
         let nombre: String

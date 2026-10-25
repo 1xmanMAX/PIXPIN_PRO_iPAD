@@ -27,6 +27,10 @@ pub enum Funcion {
     Lienzo,
     Nota,
     Grabar,
+    /// «Grabar clase o reunión…» (26-oct, pedido `ventana {cual:"clase"}`).
+    Clase,
+    /// Las carpetas de paginas del chat (26-oct, pedido `carpeta_paginas`).
+    Carpeta,
     /// El recuadro flotante donde se sueltan archivos (pedido `soltar`).
     Soltar,
     /// Apuntar una leccion aprendida (pedido `leccion_nueva`).
@@ -54,12 +58,14 @@ pub enum Funcion {
 }
 
 impl Funcion {
-    pub const TODAS: [Funcion; 16] = [
+    pub const TODAS: [Funcion; 18] = [
         Funcion::Chat,
         Funcion::Tareas,
         Funcion::Lienzo,
         Funcion::Nota,
         Funcion::Grabar,
+        Funcion::Clase,
+        Funcion::Carpeta,
         Funcion::Soltar,
         Funcion::Leccion,
         Funcion::Lecciones,
@@ -78,11 +84,13 @@ impl Funcion {
     /// encontraba dejaba «Chat» elegido, e Intro lo mandaba a Mensajes
     /// guardados. Escribir en un chat es entrar en el (`<proyecto> > texto`)
     /// o, a proposito, `chat <texto>`.
-    pub const OFRECIDAS: [Funcion; 15] = [
+    pub const OFRECIDAS: [Funcion; 17] = [
         Funcion::Tareas,
         Funcion::Lienzo,
         Funcion::Nota,
         Funcion::Grabar,
+        Funcion::Clase,
+        Funcion::Carpeta,
         Funcion::Soltar,
         Funcion::Leccion,
         Funcion::Lecciones,
@@ -115,6 +123,16 @@ impl Funcion {
             Funcion::Lienzo => &["lienzo", "canvas", "dibujo", "dibujar", "pizarra"],
             Funcion::Nota => &["nota", "note", "notas"],
             Funcion::Grabar => &["grabar", "audio", "voz", "record", "grabacion"],
+            // «reunión» normalizado es «reunion».
+            Funcion::Clase => &["clase", "reunion", "class", "meeting"],
+            Funcion::Carpeta => &[
+                "carpeta",
+                "carpetas",
+                "cuaderno",
+                "cuadernos",
+                "folder",
+                "notebook",
+            ],
             // «añadir» normalizado es «anadir».
             Funcion::Soltar => &["anadir", "soltar", "agregar", "subir", "adjuntar", "drop"],
             Funcion::Leccion => &["leccion", "aprendi", "aprendido", "lesson"],

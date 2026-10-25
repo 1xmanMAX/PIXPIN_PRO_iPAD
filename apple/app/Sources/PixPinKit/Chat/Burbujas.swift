@@ -86,6 +86,9 @@ struct BurbujaChat: View {
             BurbujaTareas(mensaje: mensaje)
         case "MINIAPP" where BurbujaTablaChat.esTabla(mensaje):
             BurbujaTablaChat(mensaje: mensaje)
+        // La de una clase grabada, una sola tarjeta que la abre para estudiarla.
+        case "MINIAPP" where CarpetasDelChat.esGrabacion(mensaje):
+            BurbujaGrabacion(mensaje: mensaje, chat: chat, almacen: almacen)
         case "MINIAPP" where BurbujaCarpeta.esCarpeta(mensaje):
             BurbujaCarpeta(mensaje: mensaje, chat: chat, almacen: almacen)
         case "IMAGEN" where mensaje.ruta != nil:

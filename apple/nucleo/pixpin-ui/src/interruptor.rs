@@ -1,9 +1,10 @@
-//! El **interruptor Chat · Figuras** de la barra de titulo del chat: las
+//! El **interruptor Chat · Funciones** de la barra de titulo del chat: las
 //! cuentas, sin pintar nada.
 //!
 //! Hasta el 25-oct-2026 tenia tres partes (Chat · Proyectos · Figuras). La
-//! pantalla de Proyectos se quito (el usuario: «los proyectos no sirven»);
-//! Figuras se queda y abre su ventana aparte.
+//! pantalla de Proyectos se quito (el usuario: «los proyectos no sirven»), y
+//! «Figuras» paso a ser «Funciones»: la rejilla de las funciones fuertes
+//! (`funciones`), con las figuras dentro.
 
 use pixpin_geom::Rect;
 
@@ -12,8 +13,8 @@ use pixpin_geom::Rect;
 pub struct Interruptor {
     pub caja: Rect,
     pub chat: Rect,
-    /// La galeria de las figuras guardadas (24-oct-2026).
-    pub figuras: Rect,
+    /// Las funciones (`funciones`); hasta el 25-oct-2026, las figuras.
+    pub funciones: Rect,
 }
 
 /// Lo que mide cada parte del interruptor.
@@ -53,7 +54,7 @@ pub fn interruptor(barra: Rect, desde: i32, hasta: i32, escala: u32) -> Interrup
             ancho: mitad,
             ..caja
         },
-        figuras: Rect {
+        funciones: Rect {
             x: caja.x + mitad as i32,
             ancho: mitad,
             ..caja
@@ -74,8 +75,8 @@ mod pruebas {
         let barra = r(0, 0, 1024, 24);
         let i = interruptor(barra, 80, 1024 - 108, 100);
         assert_eq!(i.caja.x, (1024 - 2 * 76) / 2);
-        assert_eq!(i.chat.derecha(), i.figuras.x);
-        assert_eq!(i.figuras.derecha(), i.caja.derecha());
+        assert_eq!(i.chat.derecha(), i.funciones.x);
+        assert_eq!(i.funciones.derecha(), i.caja.derecha());
         assert!(i.caja.alto < 24);
         // Estrecha: se corre a la izquierda de los botones, pero nunca encima
         // del nombre del programa.

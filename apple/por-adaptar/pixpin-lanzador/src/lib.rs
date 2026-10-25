@@ -23,6 +23,7 @@ pub mod asistente;
 pub mod capturas;
 pub mod chat;
 pub mod consulta;
+pub mod cuadernos;
 pub mod datos;
 pub mod fecha;
 pub mod iconos;
