@@ -144,6 +144,13 @@ public enum TipoDeFichero: Equatable, Sendable {
     case plano, modelo3d, documento, medio, imagen, otro
 
     public init(_ url: URL) {
+        // Un LandXML o unos puntos (.csv/.txt) son terreno: lo dice el nucleo
+        // mirando lo que traen dentro.
+        let e = url.pathExtension.lowercased()
+        if ["xml", "csv", "txt"].contains(e), url.isFileURL, claseDeModelo(ruta: url.path) == .modelo3d {
+            self = .modelo3d
+            return
+        }
         self.init(extension: url.pathExtension)
     }
 

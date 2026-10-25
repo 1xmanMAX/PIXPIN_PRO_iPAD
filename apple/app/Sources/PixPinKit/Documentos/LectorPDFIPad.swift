@@ -1409,6 +1409,8 @@ private struct CuerpoLectorIPad: View {
     @ObservedObject var marcos: MarcosDoc
     @ObservedObject var avance: AvanceLectorIPad
     @ObservedObject private var noche = ModoNoche.compartido
+    /// Presentando el PowerPoint a pantalla completa.
+    @State private var presentando = false
 
     private var icono: String {
         switch c.url.pathExtension.lowercased() {
@@ -1503,6 +1505,12 @@ private struct CuerpoLectorIPad: View {
             .padding(.bottom, modelo.miniaturas && !modelo.completa ? 100 : 14)
         }
         .statusBarHidden(modelo.completa)
+        .fullScreenCover(isPresented: $presentando) {
+            PresentarDiapositivasIPad(url: c.url, desde: modelo.pagina) { i in
+                presentando = false
+                c.irAPagina("\(i + 1)")
+            }
+        }
         .sheet(isPresented: $modelo.viendoIndice) {
             HojaIndiceIPad(entradas: c.indice, actual: modelo.pagina, ir: { c.ir(a: $0) })
         }
@@ -1530,6 +1538,11 @@ private struct CuerpoLectorIPad: View {
                 _ = GestorPinesIPad.compartido.pinear(documentoPdf: doc, pagina: c.modelo.pagina)
             }
         }) {
+            if CuentasDiapositivas.sePresenta(c.url) {
+                Button { presentando = true } label: { Image(systemName: "play.rectangle") }
+                    .keyboardShortcut(.return, modifiers: [.command, .option])
+                    .help("Presentar (⌥⌘↩)")
+            }
             Button { c.buscar() } label: { Image(systemName: "magnifyingglass") }
                 .keyboardShortcut("f", modifiers: .command)
                 .help("Buscar (⌘F)")

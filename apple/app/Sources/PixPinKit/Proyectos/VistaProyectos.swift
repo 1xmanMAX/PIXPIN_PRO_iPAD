@@ -112,7 +112,7 @@ public struct VistaProyectos: View {
             guard let item = elegidas.first, let chat = logoPara else { return }
             fotoLogo = []
             logoPara = nil
-            let (logos, nucleo, almacen) = (self.logos, almacen.nucleo, self.almacen)
+            let (logos, nucleo, almacen) = (self.logos, self.almacen.nucleo, self.almacen)
             Task {
                 guard let datos = try? await item.loadTransferable(type: Data.self),
                       await logos.poner(chat.id, datos: datos, nucleo: nucleo) else {

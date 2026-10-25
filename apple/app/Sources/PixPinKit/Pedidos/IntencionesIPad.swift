@@ -1,22 +1,30 @@
 // App Intents del iPad: lo que PixPin ofrece a Siri, Atajos y Spotlight
-// (las del Mac, `apple/xcode/App/Intenciones.swift`, sin «Capturar zona»:
-// iOS no deja capturar otras apps). Viven en PixPinKit (no en la app) para
-// usar el mismo almacen y el mismo sincronizador que la app:
+// (las del Mac, `apple/xcode/App/Intenciones.swift`; «Capturar» abre la hoja
+// de capturar del iPad, que iOS no deja capturar otras apps). Viven en
+// PixPinKit (no en la app) para usar el mismo almacen y el mismo
+// sincronizador que la app:
 //
 // - «Nueva nota en proyecto», «Buscar en PixPin» y «Sincronizar ahora» van
 //   por `AccionesApp` (funcionan sin abrir la app: si aun no hay almacen,
 //   `AccionesApp` abre su propio nucleo sobre la carpeta de datos);
-// - los pedidos de Windows (tarea, lienzo, abrir proyecto, preguntar al
-//   asistente) arman el mismo pedido que `pixpinmax://` y lo hace
-//   `HacerPedidos`, sin preguntar (quien usa Atajos ya esta delante).
+// - los pedidos de Windows (tarea, lienzo, grabar, capturar, abrir proyecto,
+//   timeline, al lienzo, al movil, preguntar al asistente) arman el mismo
+//   pedido que `pixpinmax://` y lo hace `HacerPedidos`, sin preguntar (quien
+//   usa Atajos ya esta delante).
 //
-// Para que el sistema las vea, la app declara el paquete:
-// `struct PaqueteDeLaApp: AppIntentsPackage { static var includedPackages:
-// [any AppIntentsPackage.Type] { [IntencionesPixPin.self] } }`.
+// **Lo que pone la app** (`Sources/PixPin/PixPinApp.swift`), porque el
+// extractor de metadatos de App Intents mira el destino de la app:
+//
+// - el paquete, para que el sistema vea las intenciones de aqui:
+//   `struct PaqueteDeLaApp: AppIntentsPackage { static var includedPackages:
+//   [any AppIntentsPackage.Type] { [IntencionesPixPin.self] } }`;
+// - las frases de Siri y Spotlight (`AppShortcutsProvider`, una sola por app
+//   y en la app): `AtajosDeLaApp`.
 
 import AppIntents
 import Foundation
 import PixPinCore
+import UniformTypeIdentifiers
 
 /// El paquete de intenciones de PixPinKit (lo incluye la app).
 public struct IntencionesPixPin: AppIntentsPackage {}
@@ -226,55 +234,153 @@ public struct PreguntarAlAsistente: AppIntent {
     }
 }
 
-// MARK: - Frases para Siri y Spotlight
+public struct GrabarNotaDeVoz: AppIntent {
+    public static let title: LocalizedStringResource = "Grabar nota de voz"
+    public static let description = IntentDescription(
+        "Abre el chat y graba una nota de voz con el micrófono flotante («Guardar» la deja en el chat).")
+    public static let openAppWhenRun: Bool = true
 
-public struct AtajosPixPin: AppShortcutsProvider {
-    public static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: NuevaNotaEnProyecto(),
-            phrases: [
-                "Nueva nota en \(.applicationName)",
-                "Apuntar una nota en \(.applicationName)",
-            ],
-            shortTitle: "Nueva nota",
-            systemImageName: "square.and.pencil")
-        AppShortcut(
-            intent: BuscarEnPixPin(),
-            phrases: [
-                "Buscar en \(.applicationName)",
-            ],
-            shortTitle: "Buscar",
-            systemImageName: "magnifyingglass")
-        AppShortcut(
-            intent: SincronizarAhora(),
-            phrases: [
-                "Sincronizar \(.applicationName)",
-                "Sincronizar \(.applicationName) ahora",
-            ],
-            shortTitle: "Sincronizar ahora",
-            systemImageName: "arrow.triangle.2.circlepath")
-        AppShortcut(
-            intent: NuevaTarea(),
-            phrases: [
-                "Nueva tarea en \(.applicationName)",
-                "Apuntar una tarea en \(.applicationName)",
-            ],
-            shortTitle: "Nueva tarea",
-            systemImageName: "checklist")
-        AppShortcut(
-            intent: NuevoLienzo(),
-            phrases: ["Nuevo lienzo en \(.applicationName)"],
-            shortTitle: "Nuevo lienzo",
-            systemImageName: "scribble.variable")
-        AppShortcut(
-            intent: AbrirProyecto(),
-            phrases: ["Abrir un proyecto de \(.applicationName)"],
-            shortTitle: "Abrir proyecto",
-            systemImageName: "folder")
-        AppShortcut(
-            intent: PreguntarAlAsistente(),
-            phrases: ["Preguntar al asistente de \(.applicationName)"],
-            shortTitle: "Preguntar al asistente",
-            systemImageName: "sparkles")
+    @Parameter(title: "Proyecto")
+    public var proyecto: ProyectoEntidad?
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        hacerPedido("grabar", ["nombre": .texto("Nota de voz"), "proyecto": .t(proyecto?.id)])
+        return .result()
     }
 }
+
+public struct CapturarConPixPin: AppIntent {
+    public static let title: LocalizedStringResource = "Capturar"
+    public static let description = IntentDescription(
+        "Abre la hoja de capturar de PixPin: cámara, escáner de documentos, Fotos, pegar o la propia app.")
+    public static let openAppWhenRun: Bool = true
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        hacerPedido("capturar", [:])
+        return .result()
+    }
+}
+
+public struct ApuntarEnElTimeline: AppIntent {
+    public static let title: LocalizedStringResource = "Apuntar en el timeline"
+    public static let description = IntentDescription(
+        "Apunta un momento en el timeline de PixPin (su primera frase es el título).")
+    public static let openAppWhenRun: Bool = true
+
+    @Parameter(title: "Qué pasó")
+    public var texto: String
+
+    public init() {}
+
+    public static var parameterSummary: some ParameterSummary {
+        Summary("Apuntar \(\.$texto) en el timeline")
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        hacerPedido("timeline", ["texto": .texto(texto)])
+        return .result()
+    }
+}
+
+/// Los ficheros de Atajos, copiados a una carpeta temporal de PixPin: lo
+/// que llega de otra app puede no tener ruta, o tenerla solo un rato.
+@MainActor
+private func rutasDe(_ ficheros: [IntentFile], carpeta: String) throws -> [String] {
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(carpeta, isDirectory: true)
+    try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+    var rutas: [String] = []
+    for (i, f) in ficheros.enumerated() {
+        let nombre = f.filename.isEmpty ? "fichero-\(i + 1)" : f.filename
+        let url = tmp.appendingPathComponent(String(UUID().uuidString.prefix(8)) + "-" + nombre)
+        try f.data.write(to: url)
+        rutas.append(url.path)
+    }
+    return rutas
+}
+
+public struct MandarAlLienzo: AppIntent {
+    public static let title: LocalizedStringResource = "Mandar al lienzo"
+    public static let description = IntentDescription(
+        "Apila fotos y texto en una columna libre del lienzo de ese nombre (si no existe, lo crea).")
+    public static let openAppWhenRun: Bool = true
+
+    @Parameter(title: "Lienzo")
+    public var lienzo: String
+
+    @Parameter(title: "Texto")
+    public var texto: String?
+
+    @Parameter(title: "Fotos", supportedContentTypes: [.image])
+    public var fotos: [IntentFile]?
+
+    @Parameter(title: "Proyecto")
+    public var proyecto: ProyectoEntidad?
+
+    public init() {}
+
+    public static var parameterSummary: some ParameterSummary {
+        Summary("Mandar al lienzo \(\.$lienzo)") {
+            \.$texto
+            \.$fotos
+            \.$proyecto
+        }
+    }
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        let rutas = try rutasDe(fotos ?? [], carpeta: "pixpin-al-lienzo")
+        var campos: [String: ValorPedido] = ["lienzo": .texto(lienzo), "texto": .texto(texto ?? ""),
+                                             "imagenes": .textos(rutas)]
+        if let proyecto { campos["proyecto"] = .texto(proyecto.id) }
+        hacerPedido("al_lienzo", campos)
+        return .result()
+    }
+}
+
+public struct MandarAlMovil: AppIntent {
+    public static let title: LocalizedStringResource = "Mandar al móvil"
+    public static let description = IntentDescription(
+        "Manda ficheros a tus aparatos del grupo: las imágenes a su lienzo, lo demás a su chat.")
+    public static let openAppWhenRun: Bool = true
+
+    @Parameter(title: "Ficheros", supportedContentTypes: [.item])
+    public var ficheros: [IntentFile]
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        let rutas = try rutasDe(ficheros, carpeta: "pixpin-al-movil")
+        hacerPedido("enviar_al_movil", ["aparato": .texto("todos"),
+                                        "imagenes": .textos(rutas.filter(Verbos.esImagen)),
+                                        "archivos": .textos(rutas.filter { !Verbos.esImagen($0) })])
+        return .result()
+    }
+}
+
+public struct PinearUltimaCaptura: AppIntent {
+    public static let title: LocalizedStringResource = "Pinear la última captura"
+    public static let description = IntentDescription("Deja flotando como pin la captura más reciente de la galería.")
+    public static let openAppWhenRun: Bool = true
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        hacerPedido("pinear_ultima", [:])
+        return .result()
+    }
+}
+
+// MARK: - Frases para Siri y Spotlight
+
+// Las frases (`AppShortcutsProvider`) van en la app, no aqui: solo puede
+// haber una por app y el extractor de metadatos la busca en el destino de
+// la app. Ver `AtajosDeLaApp` en `Sources/PixPin/PixPinApp.swift`.

@@ -158,7 +158,10 @@ struct HojaEnviarFotos: View {
         .onChange(of: mas) { _, nuevas in
             guard !nuevas.isEmpty else { return }
             mas = []
-            Task { lote.fotos += await OrdenDeEnvio.leer(nuevas) }
+            Task {
+                let leidas = await OrdenDeEnvio.leer(nuevas)
+                lote.fotos += leidas
+            }
         }
         .presentationDetents([.medium, .large])
     }

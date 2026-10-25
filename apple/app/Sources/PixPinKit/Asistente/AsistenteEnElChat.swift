@@ -482,6 +482,8 @@ public struct BarraDelAsistente: View {
     @State private var recetas: [RecetaIa] = []
     /// La receta que se cambia (su hoja).
     @State private var cambiando: RecetaIa?
+    /// La hoja de una receta nueva («+» al final de la fila).
+    @State private var nueva = false
     @State private var poniendoClave = false
     @Environment(\.escalaChat) private var f
 
@@ -522,7 +524,7 @@ public struct BarraDelAsistente: View {
                         .keyboardShortcut(".", modifiers: .command)
                 }
             }
-            if esSuChat, !recetas.isEmpty, escrito == nil {
+            if esSuChat, escrito == nil {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6 * f) {
                         ForEach(Array(recetas.enumerated()), id: \.element.id) { i, r in
@@ -534,6 +536,14 @@ public struct BarraDelAsistente: View {
                             .disabled(ia.ocupado(chat))
                             .contextMenu { menu(r, i) }
                         }
+                        // Una receta desde cero (`asistente/recetas.rs`).
+                        Button { nueva = true } label: {
+                            if recetas.isEmpty { Label("Receta", systemImage: "plus") } else { Image(systemName: "plus") }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Una receta nueva: un pedido que se repite, como botón encima de la caja")
+                        .accessibilityLabel("Receta nueva")
                     }
                 }
             }
@@ -564,6 +574,15 @@ public struct BarraDelAsistente: View {
                 guard let nueva else { return }
                 ia.cambiarRecetas(almacen.nucleo, en: chat) {
                     try $0.iaRecetaCambiar(id: nueva.id, nombre: nueva.nombre, icono: nueva.icono, pedido: nueva.pedido)
+                }
+            }
+        }
+        .sheet(isPresented: $nueva) {
+            HojaReceta(receta: RecetaIa(id: "", nombre: "", icono: "", pedido: ""), nueva: true) { hecha in
+                nueva = false
+                guard let hecha else { return }
+                ia.cambiarRecetas(almacen.nucleo, en: chat) {
+                    _ = try $0.iaRecetaNueva(nombre: hecha.nombre, icono: hecha.icono, pedido: hecha.pedido)
                 }
             }
         }
@@ -633,6 +652,9 @@ extension RecetaIa: Identifiable {}
 /// **Cambiar una receta**: su nombre, su icono y lo que pide.
 struct HojaReceta: View {
     let receta: RecetaIa
+    /// Una desde cero: sin nombre ni icono los pone el nucleo (el principio
+    /// del pedido y uno segun lo que pide).
+    var nueva = false
     let acabar: (RecetaIa?) -> Void
     @State private var nombre = ""
     @State private var icono = ""
@@ -643,16 +665,17 @@ struct HojaReceta: View {
             Form {
                 Section {
                     Picker("Icono", selection: $icono) {
+                        if nueva { Text("Según lo que pide").tag("") }
                         ForEach(iaIconosDeReceta(), id: \.self) { Text($0).tag($0) }
-                        if !iaIconosDeReceta().contains(icono) { Text(icono).tag(icono) }
+                        if !icono.isEmpty, !iaIconosDeReceta().contains(icono) { Text(icono).tag(icono) }
                     }
-                    TextField("Nombre", text: $nombre)
+                    TextField(nueva ? "Nombre (si no, el principio del pedido)" : "Nombre", text: $nombre)
                 }
                 Section("Lo que pide") {
                     TextEditor(text: $pedido).frame(minHeight: 120)
                 }
             }
-            .navigationTitle("Receta")
+            .navigationTitle(nueva ? "Receta nueva" : "Receta")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -662,7 +685,7 @@ struct HojaReceta: View {
                     Button("Guardar") {
                         acabar(RecetaIa(id: receta.id, nombre: nombre, icono: icono, pedido: pedido))
                     }
-                    .disabled(nombre.trimmingCharacters(in: .whitespaces).isEmpty
+                    .disabled((!nueva && nombre.trimmingCharacters(in: .whitespaces).isEmpty)
                         || pedido.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

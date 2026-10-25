@@ -57,8 +57,8 @@ final class FotosAnotadas {
         anotadas[chat + "\u{0}" + lienzoDeLaFoto(m)]
     }
 
-    private static func clave(_ chat: String, _ lienzo: String, _ lado: Int) -> String {
-        chat + "\u{0}" + lienzo + "\u{0}\(lado)"
+    private static func clave(_ chat: String, _ lienzo: String, _ lado: Int, _ soloLaFoto: Bool) -> String {
+        chat + "\u{0}" + lienzo + "\u{0}\(lado)" + (soloLaFoto ? "" : "+")
     }
 
     /// Olvida lo pintado del lienzo `lienzo` (se guardo, o llego de fuera).
@@ -79,7 +79,8 @@ final class FotosAnotadas {
 
     /// Lo hecho ya, si lo esta (`nil` por dentro: no tiene anotacion).
     func hecha(_ m: MensajeChat, chat: String, lado: Int) -> CGImage?? {
-        guard let c = cache.object(forKey: Self.clave(chat, lienzoDeLaFoto(m), lado) as NSString) else { return nil }
+        guard let c = cache.object(forKey: Self.clave(chat, lienzoDeLaFoto(m), lado, m.soloLaFoto) as NSString)
+        else { return nil }
         return .some(c.imagen)
     }
 
@@ -87,12 +88,13 @@ final class FotosAnotadas {
     /// `nil` si no tiene nada encima (entonces se ensena la foto de siempre).
     func imagen(_ m: MensajeChat, chat: String, almacen: Almacen, lado: Int) async -> CGImage? {
         let lienzo = lienzoDeLaFoto(m)
-        let k = Self.clave(chat, lienzo, lado)
+        let solo = m.soloLaFoto
+        let k = Self.clave(chat, lienzo, lado, solo)
         if let c = cache.object(forKey: k as NSString) { return c.imagen }
         if let t = enCurso[k] { return await t.value }
         let mio = turno[k, default: 0]
         let t = Task<CGImage?, Never> { @MainActor in
-            await FotosAnotadas.pintar(chat: chat, lienzo: lienzo, almacen: almacen, lado: lado)
+            await FotosAnotadas.pintar(chat: chat, lienzo: lienzo, almacen: almacen, lado: lado, soloLaFoto: solo)
         }
         enCurso[k] = t
         let hecha = await t.value
@@ -105,7 +107,8 @@ final class FotosAnotadas {
     }
 
     /// Lee el lienzo de la foto y lo pinta recortado a la foto.
-    private static func pintar(chat: String, lienzo id: String, almacen: Almacen, lado: Int) async -> CGImage? {
+    private static func pintar(chat: String, lienzo id: String, almacen: Almacen, lado: Int,
+                               soloLaFoto: Bool) async -> CGImage? {
         let nucleo = almacen.nucleo
         let anotada = await Task.detached(priority: .utility) {
             try? nucleo.fotoAnotada(chat: chat, lienzo: id)
@@ -115,7 +118,7 @@ final class FotosAnotadas {
         let foto = anotada.foto.map {
             CGRect(x: CGFloat($0.x0), y: CGFloat($0.y0), width: CGFloat($0.x1 - $0.x0), height: CGFloat($0.y1 - $0.y0))
         }
-        lienzo.caja = cajaDeFotoAnotada(foto: foto, todo: lienzo.caja, soloLaFoto: true)
+        lienzo.caja = cajaDeFotoAnotada(foto: foto, todo: lienzo.caja, soloLaFoto: soloLaFoto)
         guard let caja = lienzo.caja, caja.width > 0, caja.height > 0 else { return nil }
         let tam = tamanoDeFotoAnotada(caja.size, lado: CGFloat(lado))
         let w = max(1, Int(tam.width.rounded())), h = max(1, Int(tam.height.rounded()))

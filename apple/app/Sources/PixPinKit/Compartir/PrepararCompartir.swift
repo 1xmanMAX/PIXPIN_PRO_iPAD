@@ -160,11 +160,14 @@ enum PrepararCompartir {
             return (hoja, anotada.foto, fotos)
         }.value
         guard let (hoja, foto, rutas) = leido else { return nil }
-        let caja = foto.map {
+        let todo = CGRect(x: CGFloat(hoja.x0), y: CGFloat(hoja.y0), width: CGFloat(hoja.x1 - hoja.x0),
+                          height: CGFloat(hoja.y1 - hoja.y0))
+        let soloFoto = foto.map {
             CGRect(x: CGFloat($0.x0), y: CGFloat($0.y0), width: CGFloat($0.x1 - $0.x0), height: CGFloat($0.y1 - $0.y0))
-        } ?? CGRect(x: CGFloat(hoja.x0), y: CGFloat(hoja.y0), width: CGFloat(hoja.x1 - hoja.x0),
-                    height: CGFloat(hoja.y1 - hoja.y0))
-        guard caja.width > 0, caja.height > 0 else { return nil }
+        }
+        // La foto sola o con lo dibujado alrededor, como se ve en la burbuja.
+        guard let caja = cajaDeFotoAnotada(foto: soloFoto, todo: todo, soloLaFoto: m.soloLaFoto),
+              caja.width > 0, caja.height > 0 else { return nil }
         // A los pixeles de la foto de verdad (en el lienzo suele ir reducida),
         // sin pasar de 4 por unidad.
         let pixeles = fichero.flatMap(PiezasCompartir.anchoEnPixeles) ?? caja.width * 2

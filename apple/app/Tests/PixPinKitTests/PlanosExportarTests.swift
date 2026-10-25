@@ -72,6 +72,7 @@ final class PlanosLaminaTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(estrecho.recuadro.minX, 100)
     }
 
+    @MainActor
     func testLaHojaDelPdfTieneElLadoLargoDeUnA3() {
         let t = ExportarPlanoIPad.tamanoDeHoja(CajaPlano(x0: 0, y0: 0, x1: 200, y1: 100), lado: 1190.55, margen: 28)
         XCTAssertEqual(t.width, 1190.55, accuracy: 1e-6)
@@ -133,7 +134,8 @@ final class PlanosMarcadoresTests: XCTestCase {
         let t = CGSize(width: 1000, height: 500)
         let caja = Marcos3D.caja(CGPoint(x: 600, y: 100), CGPoint(x: 400, y: 300), en: t)
         XCTAssertEqual(caja[0], -0.2, accuracy: 1e-9)
-        XCTAssertEqual(caja[3], -0.1, accuracy: 1e-9)
+        XCTAssertEqual(caja[1], -0.3, accuracy: 1e-9)
+        XCTAssertEqual(caja[3], 0.1, accuracy: 1e-9)
         let r = Marcos3D.rect(caja, en: t)
         XCTAssertEqual(r.minX, 400, accuracy: 1e-9)
         XCTAssertEqual(r.height, 200, accuracy: 1e-9)

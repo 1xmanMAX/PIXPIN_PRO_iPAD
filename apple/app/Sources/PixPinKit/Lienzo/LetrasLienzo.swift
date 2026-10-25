@@ -104,14 +104,14 @@ public enum LetrasLienzo {
             if (CTFontCopyPostScriptName(ya) as String) == tronco { continue }
             let url = Bundle.main.url(forResource: tronco, withExtension: "ttf")
                 ?? Bundle.main.url(forResource: tronco, withExtension: "ttf", subdirectory: "Fuentes")
-            if let url { CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil) }
+            if let url { _ = CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil) }
         }
     }
 
     /// Si la familia esta en este iPad (instalada o de la app).
     public static func existe(_ familia: String) -> Bool {
         registrar()
-        let d = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute: familia] as CFDictionary)
+        let d = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute as String: familia] as CFDictionary)
         let f = CTFontCreateWithFontDescriptor(d, 12, nil)
         return (CTFontCopyFamilyName(f) as String).caseInsensitiveCompare(familia) == .orderedSame
     }
@@ -125,7 +125,7 @@ public enum LetrasLienzo {
         defer { cerrojo.unlock() }
         if let c = hechas[clave] { return c }
         registrarSinCerrojo()
-        let d = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute: nombre] as CFDictionary)
+        let d = CTFontDescriptorCreateWithAttributes([kCTFontFamilyNameAttribute as String: nombre] as CFDictionary)
         var base = CTFontCreateWithFontDescriptor(d, tam, nil)
         if (CTFontCopyFamilyName(base) as String).caseInsensitiveCompare(nombre) != .orderedSame {
             base = CTFontCreateUIFontForLanguage(.system, tam, nil) ?? CTFontCreateWithName("Helvetica" as CFString, tam, nil)

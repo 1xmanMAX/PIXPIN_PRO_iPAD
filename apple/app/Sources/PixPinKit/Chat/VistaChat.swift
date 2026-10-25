@@ -467,6 +467,7 @@ public struct VistaChat: View {
                 menu.avisar("Este croquis aún no ha llegado a este iPad")
                 return
             }
+            CroquisDelChatIPad.apuntar(ruta: ruta, chat: chat, referencia: r)
             nav.abrir(.modelo3d(url: URL(fileURLWithPath: ruta), titulo: BurbujaCroquis.titulo(m)))
         }
     }

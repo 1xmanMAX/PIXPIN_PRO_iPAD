@@ -86,8 +86,8 @@ struct FondoHistoria: View {
 
     var body: some View {
         ZStack {
-            let (a, b) = EstiloHistoria.degradado(id: momento.id)
-            LinearGradient(colors: [Color(hex: a), Color(hex: b)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            let d = EstiloHistoria.degradado(id: momento.id)
+            LinearGradient(colors: [Color(hex: d.0), Color(hex: d.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
             if let imagen {
                 GeometryReader { geo in
                     Image(decorative: imagen, scale: 1).resizable().scaledToFill()
@@ -452,8 +452,8 @@ final class PdfDelTimeline: NSObject, WKNavigationDelegate {
         try? await Task.sleep(for: .milliseconds(400))
         let r = UIPrintPageRenderer()
         r.addPrintFormatter(w.viewPrintFormatter(), startingAtPageAt: 0)
-        r.setValue(Self.papel, forKey: "paperRect")
-        r.setValue(Self.papel.insetBy(dx: Self.margen, dy: Self.margen), forKey: "printableRect")
+        r.setValue(NSValue(cgRect: Self.papel), forKey: "paperRect")
+        r.setValue(NSValue(cgRect: Self.papel.insetBy(dx: Self.margen, dy: Self.margen)), forKey: "printableRect")
         let datos = NSMutableData()
         UIGraphicsBeginPDFContextToData(datos, Self.papel, nil)
         let paginas = max(1, r.numberOfPages)
